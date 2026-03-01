@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MUD — Zelda-style Adventure</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d1117;
+    color: #c9d1d9;
+    font-family: "Fira Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 15px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  /* ---------- Login screen ---------- */
+  #login-screen {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
+  #login-screen.hidden { display: none; }
+
+  .login-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 2rem;
+    width: 380px;
+    max-width: 90vw;
+  }
+  .login-card h1 { color: #e6b422; font-size: 1.6rem; margin-bottom: .3rem; }
+  .login-card p.subtitle { color: #8b949e; font-size: .85rem; margin-bottom: 1.5rem; }
+  .login-card label { display: block; color: #8b949e; font-size: .8rem; margin-bottom: .3rem; }
+  .login-card input {
+    width: 100%; padding: .5rem .7rem; margin-bottom: 1rem;
+    background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+    color: #c9d1d9; font-family: inherit; font-size: .95rem;
+  }
+  .login-card input:focus { outline: none; border-color: #e6b422; }
+  .login-card button {
+    width: 100%; padding: .6rem; background: #e6b422; color: #0d1117;
+    border: none; border-radius: 6px; font-family: inherit;
+    font-size: 1rem; font-weight: 700; cursor: pointer;
+  }
+  .login-card button:hover { background: #d4a31c; }
+  #login-error { color: #f85149; font-size: .85rem; margin-bottom: .8rem; min-height: 1.2em; }
+
+  /* ---------- Game screen ---------- */
+  #game-screen { display: none; flex-direction: column; align-items: center; }
+  #game-screen.active { display: flex; }
+
+  canvas {
+    border: 2px solid #30363d;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+
+  /* ---------- Chat bar ---------- */
+  #chat-bar {
+    display: flex;
+    width: 720px;
+    background: #161b22;
+    border: 2px solid #30363d;
+    border-top: none;
+  }
+  #chat-bar.focused { border-color: #e6b422; }
+  #chat-input {
+    flex: 1; padding: .5rem .7rem;
+    background: transparent; border: none;
+    color: #c9d1d9; font-family: inherit; font-size: .9rem;
+    outline: none;
+  }
+  #chat-input::placeholder { color: #484f58; }
+  #chat-hint {
+    padding: .5rem .7rem;
+    color: #484f58; font-size: .8rem;
+    align-self: center;
+  }
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-screen">
+  <div class="login-card">
+    <h1>Enter the MUD</h1>
+    <p class="subtitle">A Zelda-style multiplayer adventure</p>
+    <div id="login-error"></div>
+    <label for="name-input">Your name</label>
+    <input id="name-input" type="text" maxlength="20" placeholder="e.g. Aldric" autofocus>
+    <label for="desc-input">Short description</label>
+    <input id="desc-input" type="text" maxlength="80" placeholder="e.g. A wandering bard with a lute">
+    <button id="connect-btn">Connect</button>
+  </div>
+</div>
+
+<!-- Game -->
+<div id="game-screen">
+  <canvas id="game" width="720" height="528"></canvas>
+  <div id="chat-bar">
+    <input id="chat-input" type="text" placeholder="Press Enter to chat..." autocomplete="off">
+    <span id="chat-hint">ESC to close</span>
+  </div>
+</div>
+
+<script src="tiles.js"></script>
+<script src="sprites.js"></script>
+<script src="music.js"></script>
+<script>
+(function () {
+  // ---------------------------------------------------------------------------
+  // Constants
+  // ---------------------------------------------------------------------------
+  const TILE = 16;
+  const SCALE = 3;
+  const TS = TILE * SCALE; // 48 — tile size on screen
+  const COLS = 15;
+  const ROWS = 11;
+  const CW = COLS * TS; // 720
+  const CH = ROWS * TS; // 528
+
+  // ---------------------------------------------------------------------------
+  // DOM
+  // ---------------------------------------------------------------------------
+  const loginScreen = document.getElementById("login-screen");
+  const gameScreen  = document.getElementById("game-screen");
+  const loginError  = document.getElementById("login-error");
+  const nameInput   = document.getElementById("name-input");
+  const descInput   = document.getElementById("desc-input");
+  const connectBtn  = document.getElementById("connect-btn");
+  const canvas      = document.getElementById("game");
+  const ctx         = canvas.getContext("2d");
+  const chatInput   = document.getElementById("chat-input");
+  const chatBar     = document.getElementById("chat-bar");
+  const chatHint    = document.getElementById("chat-hint");
+
+  // ---------------------------------------------------------------------------
+  // State
+  // ---------------------------------------------------------------------------
+  let ws = null;
+  let myName = "";
+  let myColorIndex = 0;
+  let myPlayer = null;        // {x, y, direction, color_index}
+  let otherPlayers = {};      // name -> {x, y, direction, color_index, displayX, displayY}
+  let currentRoom = null;     // {name, tilemap, room_id}
+  let speechBubbles = [];     // [{from, text, expires}]
+  let keysDown = {};
+  let lastMoveTime = 0;
+  let chatFocused = false;
+  let infoMessages = [];      // [{text, expires}]
+
+  // Transition state
+  let transition = null;      // {direction, oldCanvas, startTime, duration}
+
+
+
+  // ---------------------------------------------------------------------------
+  // Rendering
+  // ---------------------------------------------------------------------------
+  let animFrame = 0;
+  let animTimer = 0;
+  let isMoving = false;
+
+  // Smooth movement interpolation
+  let displayX = 0, displayY = 0;
+  const MOVE_LERP = 0.3;
+
+  function renderRoom() {
+    if (!currentRoom) return;
+    const tm = currentRoom.tilemap;
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        ctx.drawImage(getTileCanvas(tm[r][c], TS, TILE, SCALE), c * TS, r * TS);
+      }
+    }
+  }
+
+  function renderPlayers() {
+    if (!myPlayer) return;
+
+    // Collect all players
+    const all = [];
+    all.push({
+      name: myName,
+      x: displayX,
+      y: displayY,
+      direction: myPlayer.direction,
+      color_index: myPlayer.color_index,
+    });
+    for (const [name, p] of Object.entries(otherPlayers)) {
+      all.push({
+        name: name,
+        x: p.displayX,
+        y: p.displayY,
+        direction: p.direction,
+        color_index: p.color_index,
+      });
+    }
+
+    // Sort by Y for depth
+    all.sort((a, b) => a.y - b.y);
+
+    for (const p of all) {
+      const px = p.x * TS;
+      const py = p.y * TS;
+      const moving = (p.name === myName) ? isMoving : (otherPlayers[p.name]?.moving || false);
+      drawPlayer(ctx, px, py, p.direction, p.color_index, moving ? animFrame : 0, SCALE);
+
+      // Name label
+      ctx.font = "bold 11px monospace";
+      const tw = ctx.measureText(p.name).width;
+      const labelX = px + TS / 2 - tw / 2;
+      const labelY = py - 6;
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(labelX - 3, labelY - 10, tw + 6, 14);
+      ctx.fillStyle = "#fff";
+      ctx.fillText(p.name, labelX, labelY);
+    }
+  }
+
+  function renderSpeechBubbles() {
+    const now = Date.now();
+    speechBubbles = speechBubbles.filter(b => now < b.expires);
+
+    for (const bubble of speechBubbles) {
+      // Find player position
+      let px, py;
+      if (bubble.from === myName) {
+        px = displayX * TS + TS / 2;
+        py = displayY * TS - 16;
+      } else if (otherPlayers[bubble.from]) {
+        const p = otherPlayers[bubble.from];
+        px = p.displayX * TS + TS / 2;
+        py = p.displayY * TS - 16;
+      } else {
+        continue;
+      }
+
+      // Fade out in last 500ms
+      const timeLeft = bubble.expires - now;
+      const alpha = timeLeft < 500 ? timeLeft / 500 : 1;
+      ctx.globalAlpha = alpha;
+
+      // Measure text
+      ctx.font = "11px monospace";
+      const maxWidth = 200;
+      const words = bubble.text.split(" ");
+      const lines = [];
+      let line = "";
+      for (const word of words) {
+        const test = line ? line + " " + word : word;
+        if (ctx.measureText(test).width > maxWidth) {
+          if (line) lines.push(line);
+          line = word;
+        } else {
+          line = test;
+        }
+      }
+      if (line) lines.push(line);
+      if (lines.length > 3) lines.length = 3;
+
+      const lineHeight = 14;
+      const pad = 6;
+      const bw = Math.min(maxWidth, Math.max(...lines.map(l => ctx.measureText(l).width))) + pad * 2;
+      const bh = lines.length * lineHeight + pad * 2;
+      const bx = px - bw / 2;
+      const by = py - bh - 8;
+
+      // Background
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.beginPath();
+      roundRect(ctx, bx, by, bw, bh, 6);
+      ctx.fill();
+
+      // Tail
+      ctx.beginPath();
+      ctx.moveTo(px - 5, by + bh);
+      ctx.lineTo(px, by + bh + 6);
+      ctx.lineTo(px + 5, by + bh);
+      ctx.fill();
+
+      // Border
+      ctx.strokeStyle = "rgba(0,0,0,0.2)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      roundRect(ctx, bx, by, bw, bh, 6);
+      ctx.stroke();
+
+      // Text
+      ctx.fillStyle = "#111";
+      for (let i = 0; i < lines.length; i++) {
+        ctx.fillText(lines[i], bx + pad, by + pad + 10 + i * lineHeight);
+      }
+
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+  }
+
+  function renderUI() {
+    if (!currentRoom) return;
+
+    // Room name — top left
+    ctx.font = "bold 13px monospace";
+    const name = currentRoom.name;
+    const tw = ctx.measureText(name).width;
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillRect(8, 8, tw + 16, 22);
+    ctx.fillStyle = "#e6b422";
+    ctx.fillText(name, 16, 24);
+
+    // Exit arrows
+    const exits = getExitDirs();
+    ctx.font = "bold 20px monospace";
+    ctx.fillStyle = "rgba(255,255,255,0.4)";
+    if (exits.has("north")) ctx.fillText("\u25B2", CW/2 - 8, 20);
+    if (exits.has("south")) ctx.fillText("\u25BC", CW/2 - 8, CH - 6);
+    if (exits.has("west"))  ctx.fillText("\u25C0", 4, CH/2 + 6);
+    if (exits.has("east"))  ctx.fillText("\u25B6", CW - 18, CH/2 + 6);
+
+    // Info messages
+    const now = Date.now();
+    infoMessages = infoMessages.filter(m => now < m.expires);
+    ctx.font = "12px monospace";
+    for (let i = 0; i < infoMessages.length; i++) {
+      const msg = infoMessages[i];
+      const alpha = Math.min(1, (msg.expires - now) / 1000);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      const mw = ctx.measureText(msg.text).width;
+      ctx.fillRect(CW/2 - mw/2 - 8, CH - 60 - i*20, mw + 16, 18);
+      ctx.fillStyle = "#79c0ff";
+      ctx.fillText(msg.text, CW/2 - mw/2, CH - 47 - i*20);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function getExitDirs() {
+    if (!currentRoom || !currentRoom.room_id) return new Set();
+    // We don't store exits explicitly, but we can check the tilemap edges for DOOR tiles
+    const tm = currentRoom.tilemap;
+    const dirs = new Set();
+    // North
+    if (tm[0][6] === 15 || tm[0][7] === 15 || tm[0][8] === 15) dirs.add("north");
+    // South
+    if (tm[10][6] === 15 || tm[10][7] === 15 || tm[10][8] === 15) dirs.add("south");
+    // West
+    if (tm[4][0] === 15 || tm[5][0] === 15 || tm[6][0] === 15) dirs.add("west");
+    // East
+    if (tm[4][14] === 15 || tm[5][14] === 15 || tm[6][14] === 15) dirs.add("east");
+    return dirs;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Transitions
+  // ---------------------------------------------------------------------------
+  function renderTransition(now) {
+    if (!transition) return;
+    const elapsed = now - transition.startTime;
+    const progress = Math.min(1, elapsed / transition.duration);
+
+    if (transition.type === "fade") {
+      // Fade for stairs
+      if (progress < 0.5) {
+        // Draw old room snapshot, fade to black
+        ctx.drawImage(transition.oldCanvas, 0, 0);
+        ctx.fillStyle = `rgba(0,0,0,${progress * 2})`;
+        ctx.fillRect(0, 0, CW, CH);
+      } else {
+        // Draw new room, fade from black
+        renderRoom();
+        renderPlayers();
+        renderUI();
+        ctx.fillStyle = `rgba(0,0,0,${(1 - progress) * 2})`;
+        ctx.fillRect(0, 0, CW, CH);
+      }
+    } else {
+      // Slide transition — the old room slides off-screen and the new room
+      // slides in from the direction the player is travelling toward.
+      //
+      // "north" means the player walked north, so the old room slides DOWN
+      // (positive Y) and the new room enters from the TOP (negative Y).
+      const dir = transition.direction;
+      let ox = 0, oy = 0;
+      if (dir === "north") oy =  CH * progress;
+      if (dir === "south") oy = -CH * progress;
+      if (dir === "west")  ox =  CW * progress;
+      if (dir === "east")  ox = -CW * progress;
+
+      // Draw the new room first (it will be partially hidden behind the old room)
+      ctx.save();
+      if (dir === "north") ctx.translate(0, oy - CH);   // enters from top
+      if (dir === "south") ctx.translate(0, oy + CH);   // enters from bottom
+      if (dir === "west")  ctx.translate(ox - CW, 0);   // enters from left
+      if (dir === "east")  ctx.translate(ox + CW, 0);   // enters from right
+      renderRoom();
+      renderPlayers();
+      renderUI();
+      ctx.restore();
+
+      // Draw old room snapshot sliding out on top
+      ctx.drawImage(transition.oldCanvas, ox, oy);
+    }
+
+    if (progress >= 1) {
+      transition = null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Game loop
+  // ---------------------------------------------------------------------------
+  function gameLoop(timestamp) {
+    requestAnimationFrame(gameLoop);
+
+    // Animation timer
+    animTimer++;
+    if (animTimer % 10 === 0) {
+      animFrame = (animFrame + 1) % 2;
+    }
+
+    // Process movement
+    if (!chatFocused && !transition) {
+      processMovement(timestamp);
+    }
+
+    // Interpolate positions
+    if (myPlayer) {
+      displayX += (myPlayer.x - displayX) * MOVE_LERP;
+      displayY += (myPlayer.y - displayY) * MOVE_LERP;
+      // Snap when very close
+      if (Math.abs(myPlayer.x - displayX) < 0.05) displayX = myPlayer.x;
+      if (Math.abs(myPlayer.y - displayY) < 0.05) displayY = myPlayer.y;
+      isMoving = (displayX !== myPlayer.x || displayY !== myPlayer.y);
+    }
+
+    for (const p of Object.values(otherPlayers)) {
+      p.displayX += (p.x - p.displayX) * MOVE_LERP;
+      p.displayY += (p.y - p.displayY) * MOVE_LERP;
+      if (Math.abs(p.x - p.displayX) < 0.05) p.displayX = p.x;
+      if (Math.abs(p.y - p.displayY) < 0.05) p.displayY = p.y;
+      p.moving = (p.displayX !== p.x || p.displayY !== p.y);
+    }
+
+    // Render
+    ctx.clearRect(0, 0, CW, CH);
+
+    if (transition) {
+      renderTransition(Date.now());
+    } else {
+      renderRoom();
+      renderPlayers();
+      renderSpeechBubbles();
+      renderUI();
+    }
+  }
+
+  function processMovement(timestamp) {
+    if (timestamp - lastMoveTime < 125) return;
+
+    let dir = null;
+    if (keysDown["ArrowUp"] || keysDown["KeyW"]) dir = "up";
+    else if (keysDown["ArrowDown"] || keysDown["KeyS"]) dir = "down";
+    else if (keysDown["ArrowLeft"] || keysDown["KeyA"]) dir = "left";
+    else if (keysDown["ArrowRight"] || keysDown["KeyD"]) dir = "right";
+
+    if (dir && ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "move", direction: dir }));
+      lastMoveTime = timestamp;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // WebSocket
+  // ---------------------------------------------------------------------------
+  function connect(name, description) {
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    ws = new WebSocket(`${proto}//${location.host}/ws`);
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: "login", name, description }));
+    };
+
+    ws.onmessage = (ev) => {
+      const msg = JSON.parse(ev.data);
+      handleMessage(msg);
+    };
+
+    ws.onclose = () => {
+      infoMessages.push({ text: "Disconnected from server.", expires: Date.now() + 5000 });
+    };
+
+    ws.onerror = () => {
+      loginError.textContent = "Could not connect to server.";
+    };
+  }
+
+  function handleMessage(msg) {
+    switch (msg.type) {
+      case "login_ok":
+        myColorIndex = msg.color_index;
+        loginScreen.classList.add("hidden");
+        gameScreen.classList.add("active");
+        MusicPlayer.start();
+        requestAnimationFrame(gameLoop);
+        break;
+
+      case "room_enter": {
+        // Capture the old room as a canvas snapshot (drawImage works with
+        // negative coordinates and compositing; putImageData does not).
+        let oldCanvas = null;
+        const prevRoom = currentRoom;
+        if (prevRoom) {
+          oldCanvas = document.createElement("canvas");
+          oldCanvas.width = CW;
+          oldCanvas.height = CH;
+          oldCanvas.getContext("2d").drawImage(canvas, 0, 0);
+        }
+
+        currentRoom = {
+          name: msg.name,
+          tilemap: msg.tilemap,
+          room_id: msg.room_id,
+        };
+        myPlayer = {
+          x: msg.your_pos.x,
+          y: msg.your_pos.y,
+          direction: myPlayer ? myPlayer.direction : "down",
+          color_index: myColorIndex,
+        };
+
+        MusicPlayer.setRoom(msg.room_id);
+
+        // Reset other players for this room
+        otherPlayers = {};
+        for (const p of msg.players) {
+          otherPlayers[p.name] = {
+            x: p.x, y: p.y,
+            displayX: p.x, displayY: p.y,
+            direction: p.direction,
+            color_index: p.color_index,
+            moving: false,
+          };
+        }
+
+        // Snap display position immediately so the new room renders correctly
+        displayX = myPlayer.x;
+        displayY = myPlayer.y;
+
+        if (oldCanvas && prevRoom) {
+          // Determine transition direction
+          const transDir = guessTransitionDir(prevRoom.room_id, msg.room_id);
+          const isFade = transDir === "up" || transDir === "down";
+          transition = {
+            type: isFade ? "fade" : "slide",
+            direction: transDir,
+            oldCanvas: oldCanvas,
+            startTime: Date.now(),
+            duration: isFade ? 500 : 300,
+          };
+        }
+        break;
+      }
+
+      case "player_moved":
+        if (msg.name === myName) {
+          myPlayer.x = msg.x;
+          myPlayer.y = msg.y;
+          myPlayer.direction = msg.direction;
+        } else if (otherPlayers[msg.name]) {
+          otherPlayers[msg.name].x = msg.x;
+          otherPlayers[msg.name].y = msg.y;
+          otherPlayers[msg.name].direction = msg.direction;
+        }
+        break;
+
+      case "player_entered":
+        if (msg.name !== myName) {
+          otherPlayers[msg.name] = {
+            x: msg.x, y: msg.y,
+            displayX: msg.x, displayY: msg.y,
+            direction: msg.direction,
+            color_index: msg.color_index,
+            moving: false,
+          };
+        }
+        break;
+
+      case "player_left":
+        delete otherPlayers[msg.name];
+        break;
+
+      case "chat":
+        speechBubbles.push({
+          from: msg.from,
+          text: msg.text,
+          expires: Date.now() + 4000,
+        });
+        break;
+
+      case "info":
+        const lines = msg.text.split("\n");
+        for (const line of lines) {
+          infoMessages.push({ text: line, expires: Date.now() + 5000 });
+        }
+        break;
+
+      case "error":
+        loginError.textContent = msg.text;
+        break;
+    }
+  }
+
+  // Guess transition direction based on where player came from
+  // We track previous room_id to figure out which direction the transition should animate
+  const ROOM_CONNECTIONS = {
+    "town_square->blacksmith": "north",
+    "blacksmith->town_square": "south",
+    "town_square->forest_path": "south",
+    "forest_path->town_square": "north",
+    "town_square->tavern": "east",
+    "tavern->town_square": "west",
+    "town_square->old_chapel": "west",
+    "old_chapel->town_square": "east",
+    "forest_path->clearing": "south",
+    "clearing->forest_path": "north",
+    "tavern->tavern_upstairs": "up",
+    "tavern_upstairs->tavern": "down",
+  };
+
+  function guessTransitionDir(fromId, toId) {
+    return ROOM_CONNECTIONS[fromId + "->" + toId] || "north";
+  }
+
+  // ---------------------------------------------------------------------------
+  // Input
+  // ---------------------------------------------------------------------------
+  document.addEventListener("keydown", (e) => {
+    if (e.target === nameInput || e.target === descInput) return;
+
+    keysDown[e.code] = true;
+
+    // Enter focuses chat
+    if (e.key === "Enter" && !chatFocused) {
+      e.preventDefault();
+      chatInput.focus();
+      chatFocused = true;
+      chatBar.classList.add("focused");
+      return;
+    }
+
+    // Escape blurs chat
+    if (e.key === "Escape" && chatFocused) {
+      e.preventDefault();
+      chatInput.blur();
+      chatFocused = false;
+      chatBar.classList.remove("focused");
+      return;
+    }
+
+    // Toggle music with M
+    if (e.key === "m" && !chatFocused) {
+      const on = MusicPlayer.toggle();
+      infoMessages.push({ text: on ? "Music on" : "Music off", expires: Date.now() + 2000 });
+      return;
+    }
+
+    // Prevent arrow keys from scrolling
+    if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key) && !chatFocused) {
+      e.preventDefault();
+    }
+  });
+
+  document.addEventListener("keyup", (e) => {
+    delete keysDown[e.code];
+  });
+
+  // Chat input
+  chatInput.addEventListener("focus", () => {
+    chatFocused = true;
+    chatBar.classList.add("focused");
+  });
+
+  chatInput.addEventListener("blur", () => {
+    chatFocused = false;
+    chatBar.classList.remove("focused");
+  });
+
+  chatInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      const text = chatInput.value.trim();
+      if (text && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "chat", text }));
+      }
+      chatInput.value = "";
+      chatInput.blur();
+      chatFocused = false;
+      chatBar.classList.remove("focused");
+      e.preventDefault();
+    }
+    if (e.key === "Escape") {
+      chatInput.blur();
+      chatFocused = false;
+      chatBar.classList.remove("focused");
+      e.preventDefault();
+    }
+    // Stop propagation so arrow keys work in input
+    e.stopPropagation();
+  });
+
+  // Login
+  connectBtn.addEventListener("click", () => {
+    const name = nameInput.value.trim();
+    if (!name) {
+      loginError.textContent = "Please enter a name.";
+      return;
+    }
+    myName = name;
+    loginError.textContent = "";
+    connect(name, descInput.value.trim());
+  });
+
+  [nameInput, descInput].forEach(el => {
+    el.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") connectBtn.click();
+      e.stopPropagation();
+    });
+  });
+
+})();
+</script>
+</body>
+</html>
