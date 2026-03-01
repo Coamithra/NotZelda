@@ -10,7 +10,7 @@ A browser-based multiplayer MUD (Multi-User Dungeon) rendered as a Zelda-style t
 
 Multi-file architecture, no build tools or external assets:
 
-- **`mud_server.py`** — Python server handling everything: WebSocket game logic (asyncio + websockets), room/player state, command dispatch, and HTTP static file serving. Binds to port 8080 with auto-ngrok tunneling for internet access. Static file routes are defined in `STATIC_FILES` dict.
+- **`mud_server.py`** — Python server handling everything: WebSocket game logic (asyncio + websockets), room/player state, command dispatch, and HTTP static file serving. Binds to port 8080. Static file routes are defined in `STATIC_FILES` dict.
 - **`client.html`** — Browser client (HTML + CSS + core game JS). Login overlay, game loop, rendering, input handling, WebSocket connection to `/ws` endpoint.
 - **`sprites.js`** — Player sprite drawing. Procedural 16x16 character rendering with directional poses and walk animation. Exposes `drawPlayer(ctx, px, py, direction, colorIndex, animFrame, SCALE)`.
 - **`tiles.js`** — Tile rendering. Procedural tile textures (grass, stone, wood, water, etc.) cached to offscreen canvases. Exposes `getTileCanvas(tileId, TS, TILE, SCALE)` and `TILE_COLORS`.
@@ -32,11 +32,25 @@ Multi-file architecture, no build tools or external assets:
 python mud_server.py
 ```
 
-Opens on http://localhost:8080. Automatically creates an ngrok tunnel for public access (requires `pyngrok` + auth token configured).
-Always print the ngrok server URL to the command line when running so that I can invite my good friend.
+Opens on http://localhost:8080.
+
+## Hosting (Hetzner Cloud VPS)
+
+- **Server:** Hetzner CX22, Ubuntu 24.04
+- **IP:** `46.225.218.207`
+- **Live URL:** http://46.225.218.207:8080
+- **SSH:** `ssh root@46.225.218.207`
+- **Code on server:** `/opt/NotZelda/` (cloned from GitHub)
+- **Python venv:** `/opt/NotZelda/venv/` (websockets 12.0 pinned — v16 breaks the `process_request` API)
+- **Systemd service:** `notzelda` — auto-starts on boot, restarts on crash
+  - `systemctl status notzelda` — check status
+  - `systemctl restart notzelda` — restart after changes
+  - `journalctl -u notzelda -f` — tail logs
+- **Deploying updates:** `cd /opt/NotZelda && git pull && systemctl restart notzelda`
+- **Web redirect:** `haraldmaassen.com/notzelda` redirects to the game (static HTML hosted on separate Hetzner shared hosting, uploaded via WebFTP)
 
 ## Dependencies
 
 - Python 3.12+
-- `websockets` (12.0)
-- `pyngrok` (optional, for public internet access)
+- `websockets` (12.0 — pinned, v16+ breaks the `process_request` API)
+- `pyngrok` (optional, for local dev tunneling)
