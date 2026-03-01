@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>MUD — Zelda-style Adventure</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -87,6 +87,79 @@
     color: #484f58; font-size: .8rem;
     align-self: center;
   }
+
+  /* ---------- Mobile D-pad ---------- */
+  #dpad {
+    display: none;
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 150px;
+    height: 150px;
+    z-index: 20;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .dpad-btn {
+    position: absolute;
+    width: 50px;
+    height: 50px;
+    background: rgba(255,255,255,0.15);
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    color: rgba(255,255,255,0.7);
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .dpad-btn:active, .dpad-btn.active {
+    background: rgba(230,180,34,0.4);
+    border-color: #e6b422;
+  }
+  .dpad-up    { top: 0;   left: 50px; }
+  .dpad-down  { bottom: 0; left: 50px; }
+  .dpad-left  { top: 50px; left: 0; }
+  .dpad-right { top: 50px; right: 0; }
+
+  /* ---------- Mobile chat button ---------- */
+  #mobile-chat-btn {
+    display: none;
+    position: fixed;
+    bottom: 70px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    background: rgba(255,255,255,0.15);
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    font-size: 22px;
+    color: rgba(255,255,255,0.7);
+    z-index: 20;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: pointer;
+  }
+
+  /* ---------- Mobile overrides ---------- */
+  body.mobile #dpad { display: block; }
+  body.mobile #mobile-chat-btn { display: flex; align-items: center; justify-content: center; }
+  body.mobile #chat-bar { display: none; }
+  body.mobile #chat-bar.focused {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    z-index: 30;
+    border: 2px solid #e6b422;
+  }
 </style>
 </head>
 <body>
@@ -114,6 +187,15 @@
   </div>
 </div>
 
+<!-- Mobile controls -->
+<div id="dpad">
+  <div class="dpad-btn dpad-up" data-dir="up">&#9650;</div>
+  <div class="dpad-btn dpad-down" data-dir="down">&#9660;</div>
+  <div class="dpad-btn dpad-left" data-dir="left">&#9664;</div>
+  <div class="dpad-btn dpad-right" data-dir="right">&#9654;</div>
+</div>
+<button id="mobile-chat-btn">&#128172;</button>
+
 <script src="tiles.js"></script>
 <script src="sprites.js"></script>
 <script src="music.js"></script>
@@ -129,6 +211,35 @@
   const ROWS = 11;
   const CW = COLS * TS; // 720
   const CH = ROWS * TS; // 528
+
+  // ---------------------------------------------------------------------------
+  // Mobile detection & scaling
+  // ---------------------------------------------------------------------------
+  const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+    || (navigator.maxTouchPoints > 1 && window.innerWidth < 1024);
+
+  if (isMobile) {
+    document.body.classList.add("mobile");
+  }
+
+  function scaleForMobile() {
+    if (!isMobile) return;
+    const gameCanvas = document.getElementById("game");
+    const vw = window.innerWidth;
+    // Leave room for the D-pad at the bottom (~180px)
+    const vh = window.innerHeight - 180;
+    const scaleX = vw / CW;
+    const scaleY = vh / CH;
+    const s = Math.min(scaleX, scaleY);
+    gameCanvas.style.width = (CW * s) + "px";
+    gameCanvas.style.height = (CH * s) + "px";
+  }
+
+  if (isMobile) {
+    window.addEventListener("resize", scaleForMobile);
+    // Initial scale after DOM is ready
+    scaleForMobile();
+  }
 
   // ---------------------------------------------------------------------------
   // DOM
@@ -748,6 +859,74 @@
       e.stopPropagation();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Mobile D-pad controls
+  // ---------------------------------------------------------------------------
+  if (isMobile) {
+    let dpadInterval = null;
+    let activeDir = null;
+
+    function startDpad(dir) {
+      if (activeDir === dir) return;
+      stopDpad();
+      activeDir = dir;
+      // Send immediately, then repeat
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "move", direction: dir }));
+      }
+      dpadInterval = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "move", direction: dir }));
+        }
+      }, 150);
+    }
+
+    function stopDpad() {
+      if (dpadInterval) {
+        clearInterval(dpadInterval);
+        dpadInterval = null;
+      }
+      activeDir = null;
+      document.querySelectorAll(".dpad-btn").forEach(b => b.classList.remove("active"));
+    }
+
+    document.querySelectorAll(".dpad-btn").forEach(btn => {
+      const dir = btn.dataset.dir;
+
+      btn.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        btn.classList.add("active");
+        startDpad(dir);
+      });
+
+      btn.addEventListener("touchend", (e) => {
+        e.preventDefault();
+        stopDpad();
+      });
+
+      btn.addEventListener("touchcancel", (e) => {
+        e.preventDefault();
+        stopDpad();
+      });
+    });
+
+    // Mobile chat button
+    document.getElementById("mobile-chat-btn").addEventListener("click", () => {
+      chatInput.focus();
+      chatFocused = true;
+      chatBar.classList.add("focused");
+    });
+
+    // Re-scale when login completes and game screen appears
+    const origHandleMsg = handleMessage;
+    handleMessage = function(msg) {
+      origHandleMsg(msg);
+      if (msg.type === "login_ok") {
+        setTimeout(scaleForMobile, 50);
+      }
+    };
+  }
 
 })();
 </script>
