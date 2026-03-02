@@ -15,12 +15,13 @@ Multi-file architecture, no build tools or external assets:
 - **`sprites.js`** — Player sprite drawing. Procedural 16x16 character rendering with directional poses and walk animation. Exposes `drawPlayer(ctx, px, py, direction, colorIndex, animFrame, SCALE)`.
 - **`tiles.js`** — Tile rendering. Procedural tile textures (grass, stone, wood, water, etc.) cached to offscreen canvases. Exposes `getTileCanvas(tileId, TS, TILE, SCALE)` and `TILE_COLORS`.
 - **`music.js`** — Background music. Procedural chiptune loop using Web Audio API (square + triangle wave oscillators). Exposes `MusicPlayer.start()`, `.stop()`, `.toggle()`, `.isPlaying()`. Auto-starts on login, toggled with M key.
+- **`download_log.py`** — Local utility script. Fetches the server's event log via `/get-log`, saves it to `log_YYYYMMDD_HHMMSS.txt`, and clears the log on the server. Defaults to the Hetzner server; pass `http://localhost:8080` as arg for local dev.
 
 **Protocol:** JSON over WebSocket.
 - Client → Server: `login` (name, description), `move` (direction), `chat` (text)
 - Server → Client: `login_ok`, `room_enter` (tilemap + players), `player_moved`, `player_entered`, `player_left`, `chat`, `info`, `error`
 
-**State:** All in-memory. Players tracked in `dict[websocket, Player]`. Rooms defined in the `ROOMS` dict with 15x11 tilemaps. State resets on server restart.
+**State:** All in-memory. Players tracked in `dict[websocket, Player]`. Rooms defined in the `ROOMS` dict with 15x11 tilemaps. State resets on server restart. An `event_log` list records joins, leaves, and chat messages (with timestamps); exposed via `GET /get-log` which returns the log as plain text and clears it.
 
 **World map:** Town Square (center) connects to Blacksmith (north), Forest Path (south), Tavern (east), Old Chapel (west). Forest Path leads to Clearing (south). Tavern has stairs up to Tavern Upper Floor.
 

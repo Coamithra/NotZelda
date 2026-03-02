@@ -62,12 +62,12 @@ function drawPlayer(ctx, px, py, direction, colorIndex, animFrame, S) {
     }
   } else if (direction === "left") {
     ctx.fillStyle = HAIR;
-    ctx.fillRect(sx+5*S, sy+0*S, 5*S, 2*S);
-    ctx.fillRect(sx+4*S, sy+2*S, 2*S, 4*S);
+    ctx.fillRect(sx+4*S, sy+0*S, 6*S, 2*S);
+    ctx.fillRect(sx+8*S, sy+2*S, 2*S, 4*S);
     ctx.fillStyle = SKIN;
-    ctx.fillRect(sx+6*S, sy+2*S, 4*S, 4*S);
+    ctx.fillRect(sx+4*S, sy+2*S, 4*S, 4*S);
     ctx.fillStyle = "#222";
-    ctx.fillRect(sx+6*S, sy+3*S, S, S);
+    ctx.fillRect(sx+4*S, sy+3*S, S, S);
     ctx.fillStyle = shirt;
     ctx.fillRect(sx+5*S, sy+6*S, 6*S, 5*S);
     ctx.fillRect(sx+4*S, sy+7*S, S, 3*S);
@@ -84,12 +84,12 @@ function drawPlayer(ctx, px, py, direction, colorIndex, animFrame, S) {
   } else {
     // Right — mirror of left
     ctx.fillStyle = HAIR;
-    ctx.fillRect(sx+6*S, sy+0*S, 5*S, 2*S);
-    ctx.fillRect(sx+10*S, sy+2*S, 2*S, 4*S);
+    ctx.fillRect(sx+6*S, sy+0*S, 6*S, 2*S);
+    ctx.fillRect(sx+6*S, sy+2*S, 2*S, 4*S);
     ctx.fillStyle = SKIN;
-    ctx.fillRect(sx+6*S, sy+2*S, 4*S, 4*S);
+    ctx.fillRect(sx+8*S, sy+2*S, 4*S, 4*S);
     ctx.fillStyle = "#222";
-    ctx.fillRect(sx+9*S, sy+3*S, S, S);
+    ctx.fillRect(sx+11*S, sy+3*S, S, S);
     ctx.fillStyle = shirt;
     ctx.fillRect(sx+5*S, sy+6*S, 6*S, 5*S);
     ctx.fillRect(sx+11*S, sy+7*S, S, 3*S);

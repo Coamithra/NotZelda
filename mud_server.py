@@ -9,6 +9,7 @@ import asyncio
 import json
 import html
 import time
+from datetime import datetime
 from http import HTTPStatus
 from pathlib import Path
 
@@ -239,6 +240,14 @@ class Player:
 # websocket -> Player
 players: dict = {}
 
+# Activity log — entries appended on join/leave/chat, cleared on download
+event_log: list[str] = []
+
+
+def log_event(kind: str, text: str):
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    event_log.append(f"[{ts}] {kind}: {text}")
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -429,6 +438,8 @@ async def handle_chat(player: Player, text: str):
         return
 
     # Normal chat — broadcast to room
+    room_name = ROOMS[player.room]["name"]
+    log_event("CHAT", f"{player.name} ({room_name}): {text}")
     await broadcast_to_room(player.room, {
         "type": "chat",
         "from": player.name,
@@ -466,6 +477,7 @@ async def handle_connection(websocket):
         spawn = ROOMS[STARTING_ROOM]["spawn_points"]["default"]
         player.x, player.y = spawn
         players[websocket] = player
+        log_event("JOIN", f"{name} ({player.description})")
 
         await send_to(player, {"type": "login_ok", "color_index": color_index})
         await send_room_enter(player)
@@ -488,6 +500,7 @@ async def handle_connection(websocket):
     finally:
         if player and websocket in players:
             del players[websocket]
+            log_event("LEAVE", player.name)
             await broadcast_to_room(
                 player.room,
                 {"type": "player_left", "name": player.name},
@@ -514,6 +527,11 @@ STATIC_FILES = {
 async def process_request(path, request_headers):
     if path == "/ws":
         return None
+    if path == "/get-log":
+        lines = event_log.copy()
+        event_log.clear()
+        body = "\n".join(lines).encode()
+        return HTTPStatus.OK, [("Content-Type", "text/plain; charset=utf-8")], body
     if path in STATIC_FILES:
         filename, content_type = STATIC_FILES[path]
         body = (CLIENT_DIR / filename).read_bytes()
