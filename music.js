@@ -101,7 +101,19 @@ const MusicPlayer = (function () {
 
     // Fade in new track
     currentTrack = url;
-    fadeIn(url, FADE_MS);
+    const audio = getOrCreateAudio(url);
+    if (audio.readyState >= 4) {
+      // Already buffered enough — play immediately
+      fadeIn(url, FADE_MS);
+    } else {
+      // Wait for the file to buffer, then fade in
+      audio.addEventListener("canplaythrough", function () {
+        // Only play if this is still the current track
+        if (currentTrack === url && playing) {
+          fadeIn(url, FADE_MS);
+        }
+      }, { once: true });
+    }
   }
 
   function start() {
