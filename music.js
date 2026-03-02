@@ -43,16 +43,16 @@ const MusicPlayer = (function () {
     cancelFade(url);
     const audio = getOrCreateAudio(url);
     audio.volume = 0;
+    audio.muted = true;   // muted play is always allowed regardless of autoplay policy
     const playPromise = audio.play();
     if (playPromise) {
-      playPromise.catch(function () {
-        // Browser blocked autoplay — ignore silently
-      });
+      playPromise.catch(function () {});
     }
     const start = performance.now();
     function step(now) {
       const t = Math.min(1, (now - start) / duration);
       audio.volume = t * VOLUME;
+      audio.muted = false; // unmute on first frame so the fade-in is audible
       if (t < 1) {
         fadeIds[url] = requestAnimationFrame(step);
       } else {
