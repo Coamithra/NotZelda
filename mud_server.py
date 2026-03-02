@@ -525,6 +525,7 @@ STATIC_FILES = {
 
 
 async def process_request(path, request_headers):
+    path = path.split("?")[0]  # strip query string for cache-busting support
     if path == "/ws":
         return None
     if path == "/get-log":
