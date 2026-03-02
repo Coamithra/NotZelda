@@ -122,8 +122,9 @@ const MusicPlayer = (function () {
     if (playing) return;
     playing = true;
     ensureAudioContext();
-    if (!currentTrack) currentTrack = "music.mp3";
-    fadeIn(currentTrack, FADE_MS);
+    if (currentTrack) {
+      fadeIn(currentTrack, FADE_MS);
+    }
   }
 
   function stop() {
