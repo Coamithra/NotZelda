@@ -850,6 +850,7 @@
     }
     myName = name;
     loginError.textContent = "";
+    MusicPlayer.start(); // must be called during a user gesture for autoplay policy
     connect(name, descInput.value.trim());
   });
 
