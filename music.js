@@ -15,8 +15,8 @@ const MusicPlayer = (function () {
   // Map room IDs to music tracks
   const ROOM_MUSIC = {
     "town_square":      "music.mp3",
-    "tavern":           "music.mp3",
-    "tavern_upstairs":  "music.mp3",
+    "tavern":           "music_tavern.mp3",
+    "tavern_upstairs":  "music_tavern.mp3",
     "blacksmith":       "music.mp3",
     "old_chapel":       "music.mp3",
     "forest_path":      "music_forest.mp3",

@@ -521,6 +521,7 @@ STATIC_FILES = {
     "/music.js":    ("music.js",    "application/javascript; charset=utf-8"),
     "/music.mp3":         ("not zelda.mp3",          "audio/mpeg"),
     "/music_forest.mp3":  ("not zelda (forest).mp3", "audio/mpeg"),
+    "/music_tavern.mp3":  ("not zelda (tavern).mp3", "audio/mpeg"),
 }
 
 
