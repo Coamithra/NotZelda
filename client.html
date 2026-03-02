@@ -198,7 +198,7 @@
 
 <script src="tiles.js?v=2"></script>
 <script src="sprites.js?v=2"></script>
-<script src="music.js?v=4"></script>
+<script src="music.js?v=5"></script>
 <script>
 (function () {
   // ---------------------------------------------------------------------------
@@ -441,6 +441,13 @@
     ctx.fillRect(8, 8, tw + 16, 22);
     ctx.fillStyle = "#e6b422";
     ctx.fillText(name, 16, 24);
+
+    // Version — top right
+    const version = "v0.4";
+    ctx.font = "10px monospace";
+    const vw = ctx.measureText(version).width;
+    ctx.fillStyle = "rgba(255,255,255,0.3)";
+    ctx.fillText(version, CW - vw - 10, 20);
 
     // Exit arrows
     const exits = getExitDirs();
