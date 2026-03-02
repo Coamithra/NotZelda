@@ -9,6 +9,7 @@ const MusicPlayer = (function () {
   const fadeIds = {};      // url -> requestAnimationFrame ID (for cancellation)
   const FADE_MS = 800;
   const VOLUME = 0.4;
+  let pendingPlay = null;  // audio element awaiting user gesture to unlock
 
   // Map room IDs to music tracks
   const ROOM_MUSIC = {
@@ -39,20 +40,33 @@ const MusicPlayer = (function () {
     }
   }
 
+  // If play() was blocked by autoplay, retry on the next user interaction
+  function unlockAudio() {
+    if (!pendingPlay) return;
+    const audio = pendingPlay;
+    pendingPlay = null;
+    audio.play().catch(function () {});
+    document.removeEventListener("click", unlockAudio);
+    document.removeEventListener("keydown", unlockAudio);
+  }
+
   function fadeIn(url, duration) {
     cancelFade(url);
     const audio = getOrCreateAudio(url);
     audio.volume = 0;
-    audio.muted = true;   // muted play is always allowed regardless of autoplay policy
     const playPromise = audio.play();
     if (playPromise) {
-      playPromise.catch(function () {});
+      playPromise.catch(function () {
+        // Autoplay blocked — retry on the very next user interaction
+        pendingPlay = audio;
+        document.addEventListener("click", unlockAudio, { once: true });
+        document.addEventListener("keydown", unlockAudio, { once: true });
+      });
     }
     const start = performance.now();
     function step(now) {
       const t = Math.min(1, (now - start) / duration);
       audio.volume = t * VOLUME;
-      audio.muted = false; // unmute on first frame so the fade-in is audible
       if (t < 1) {
         fadeIds[url] = requestAnimationFrame(step);
       } else {
@@ -114,6 +128,7 @@ const MusicPlayer = (function () {
   function stop() {
     if (!playing) return;
     playing = false;
+    pendingPlay = null;
     for (const url of Object.keys(tracks)) {
       fadeOut(url, FADE_MS);
     }
