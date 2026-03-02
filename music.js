@@ -1,6 +1,5 @@
 // ---------------------------------------------------------------------------
 // Background music — per-room MP3 playback with crossfade
-// Uses AudioContext for reliable playback across all browsers
 // ---------------------------------------------------------------------------
 
 const MusicPlayer = (function () {
@@ -10,7 +9,6 @@ const MusicPlayer = (function () {
   const fadeIds = {};      // url -> requestAnimationFrame ID (for cancellation)
   const FADE_MS = 800;
   const VOLUME = 0.4;
-  let audioCtx = null;
 
   // Map room IDs to music tracks
   const ROOM_MUSIC = {
@@ -23,24 +21,11 @@ const MusicPlayer = (function () {
     "clearing":         "music_forest.mp3",
   };
 
-  function ensureAudioContext() {
-    if (!audioCtx) {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    if (audioCtx.state === "suspended") {
-      audioCtx.resume();
-    }
-  }
-
   function getOrCreateAudio(url) {
     if (!tracks[url]) {
-      ensureAudioContext();
       const a = new Audio(url);
       a.loop = true;
       a.volume = 0;
-      // Route through AudioContext so resume() unlocks playback
-      const source = audioCtx.createMediaElementSource(a);
-      source.connect(audioCtx.destination);
       tracks[url] = a;
     }
     return tracks[url];
@@ -56,12 +41,13 @@ const MusicPlayer = (function () {
 
   function fadeIn(url, duration) {
     cancelFade(url);
-    ensureAudioContext();
     const audio = getOrCreateAudio(url);
     audio.volume = 0;
     const playPromise = audio.play();
     if (playPromise) {
-      playPromise.catch(function () {});
+      playPromise.catch(function () {
+        // Browser blocked autoplay — ignore silently
+      });
     }
     const start = performance.now();
     function step(now) {
@@ -121,7 +107,6 @@ const MusicPlayer = (function () {
   function start() {
     if (playing) return;
     playing = true;
-    ensureAudioContext();
     if (currentTrack) {
       fadeIn(currentTrack, FADE_MS);
     }
