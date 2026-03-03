@@ -453,10 +453,14 @@ async def handle_chat(player: Player, text: str):
 async def handle_connection(websocket):
     global next_color_index
     player = None
+    remote = websocket.remote_address
+    addr = f"{remote[0]}:{remote[1]}" if remote else "unknown"
+    print(f"[CONN] New connection from {addr}")
     try:
         raw = await websocket.recv()
         data = json.loads(raw)
         if data.get("type") != "login":
+            print(f"[CONN] {addr} sent non-login first message, dropping")
             return
 
         name = html.escape(data.get("name", "").strip()[:20])
@@ -478,6 +482,7 @@ async def handle_connection(websocket):
         player.x, player.y = spawn
         players[websocket] = player
         log_event("JOIN", f"{name} ({player.description})")
+        print(f"[JOIN] {name} from {addr}")
 
         await send_to(player, {"type": "login_ok", "color_index": color_index})
         await send_room_enter(player)
@@ -488,19 +493,37 @@ async def handle_connection(websocket):
         )
 
         async for raw in websocket:
-            data = json.loads(raw)
-            msg_type = data.get("type")
-            if msg_type == "move":
-                await handle_move(player, data.get("direction", ""))
-            elif msg_type == "chat":
-                await handle_chat(player, data.get("text", ""))
+            try:
+                data = json.loads(raw)
+                msg_type = data.get("type")
+                if msg_type == "move":
+                    await handle_move(player, data.get("direction", ""))
+                elif msg_type == "chat":
+                    await handle_chat(player, data.get("text", ""))
+                elif msg_type == "ping":
+                    await player.ws.send(json.dumps({"type": "pong"}))
+            except json.JSONDecodeError:
+                print(f"[WARN] {name}: bad JSON: {raw[:200]}")
+            except websockets.ConnectionClosed:
+                raise  # re-raise so the outer handler logs it
+            except Exception as e:
+                print(f"[ERROR] {name}: message handler error: {type(e).__name__}: {e}")
+                # Don't break the loop — keep the connection alive
 
-    except websockets.ConnectionClosed:
-        pass
+    except websockets.ConnectionClosed as e:
+        reason = f"code={e.code} reason='{e.reason}'" if e.code else "no close frame"
+        who = player.name if player else addr
+        print(f"[DISC] {who} disconnected: {reason}")
+        log_event("DISCONNECT", f"{who} — {reason}")
+    except Exception as e:
+        who = player.name if player else addr
+        print(f"[ERROR] {who} error: {type(e).__name__}: {e}")
+        log_event("ERROR", f"{who} — {type(e).__name__}: {e}")
     finally:
         if player and websocket in players:
             del players[websocket]
             log_event("LEAVE", player.name)
+            print(f"[LEAVE] {player.name}")
             await broadcast_to_room(
                 player.room,
                 {"type": "player_left", "name": player.name},
@@ -549,6 +572,8 @@ async def main():
     server = await websockets.serve(
         handle_connection, "0.0.0.0", port,
         process_request=process_request,
+        ping_interval=30,    # send WebSocket ping every 30s
+        ping_timeout=60,     # close if no pong within 60s (lenient for mobile)
     )
     print("MUD server running!")
     print(f"Local:  http://localhost:{port}")

@@ -270,6 +270,7 @@
   let lastMoveTime = 0;
   let chatFocused = false;
   let infoMessages = [];      // [{text, expires}]
+  let showDebug = false;      // toggle with backtick key
 
   // Transition state
   let transition = null;      // {direction, oldCanvas, startTime, duration}
@@ -473,6 +474,20 @@
       ctx.fillText(msg.text, CW/2 - mw/2, CH - 47 - i*20);
       ctx.globalAlpha = 1;
     }
+
+    // Debug overlay — shows connection events on screen (toggle with backtick key)
+    if (showDebug && debugLog.length > 0) {
+      ctx.font = "9px monospace";
+      const lineH = 12;
+      const padding = 4;
+      const boxH = debugLog.length * lineH + padding * 2;
+      ctx.fillStyle = "rgba(0,0,0,0.75)";
+      ctx.fillRect(4, CH - boxH - 4, CW - 8, boxH);
+      ctx.fillStyle = "#0f0";
+      for (let i = 0; i < debugLog.length; i++) {
+        ctx.fillText(debugLog[i], 8, CH - boxH + padding + (i + 1) * lineH - 2);
+      }
+    }
   }
 
   function getExitDirs() {
@@ -613,27 +628,92 @@
   // ---------------------------------------------------------------------------
   // WebSocket
   // ---------------------------------------------------------------------------
+  // Debug log — on-screen overlay so mobile users can screenshot it
+  // ---------------------------------------------------------------------------
+  const debugLog = [];
+  const MAX_DEBUG_LINES = 8;
+  function dbg(msg) {
+    const ts = new Date().toLocaleTimeString();
+    const line = `${ts} ${msg}`;
+    console.log("[WS] " + msg);
+    debugLog.push(line);
+    if (debugLog.length > MAX_DEBUG_LINES) debugLog.shift();
+  }
+
+  // ---------------------------------------------------------------------------
+  let lastLoginName = "";
+  let lastLoginDesc = "";
+  let reconnectTimer = null;
+  let pingInterval = null;
+  let reconnectCount = 0;
+
   function connect(name, description) {
+    lastLoginName = name;
+    lastLoginDesc = description;
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    if (pingInterval) { clearInterval(pingInterval); pingInterval = null; }
+
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    dbg(`Connecting...`);
     ws = new WebSocket(`${proto}//${location.host}/ws`);
 
     ws.onopen = () => {
+      dbg(`Connected, logging in`);
+      reconnectCount = 0;
       ws.send(JSON.stringify({ type: "login", name, description }));
+      // App-level keepalive every 15s (helps keep mobile connections alive)
+      pingInterval = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "ping" }));
+        }
+      }, 15000);
     };
 
     ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);
+      if (msg.type === "pong") return; // keepalive response, ignore
       handleMessage(msg);
     };
 
-    ws.onclose = () => {
-      infoMessages.push({ text: "Disconnected from server.", expires: Date.now() + 5000 });
+    ws.onclose = (ev) => {
+      dbg(`Closed: code=${ev.code} reason='${ev.reason}' clean=${ev.wasClean}`);
+      if (pingInterval) { clearInterval(pingInterval); pingInterval = null; }
+      // Only auto-reconnect if we were logged in (past the login screen)
+      if (!loginScreen.classList.contains("hidden")) return;
+      infoMessages.push({ text: "Disconnected — reconnecting...", expires: Date.now() + 4000 });
+      scheduleReconnect();
     };
 
-    ws.onerror = () => {
+    ws.onerror = (ev) => {
+      dbg(`Error event`);
       loginError.textContent = "Could not connect to server.";
     };
   }
+
+  function scheduleReconnect() {
+    if (reconnectTimer) return;
+    reconnectCount++;
+    // Back off: 2s, 4s, 6s... up to 10s
+    const delay = Math.min(reconnectCount * 2000, 10000);
+    dbg(`Reconnect #${reconnectCount} in ${delay/1000}s`);
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      connect(lastLoginName, lastLoginDesc);
+    }, delay);
+  }
+
+  // Mobile phones suspend WebSocket when tab goes to background.
+  // When user comes back, check connection and reconnect if needed.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && loginScreen.classList.contains("hidden")) {
+      dbg(`Tab visible, ws.readyState=${ws ? ws.readyState : 'null'}`);
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        dbg(`Connection dead on resume, reconnecting`);
+        infoMessages.push({ text: "Reconnecting...", expires: Date.now() + 3000 });
+        connect(lastLoginName, lastLoginDesc);
+      }
+    }
+  });
 
   function handleMessage(msg) {
     switch (msg.type) {
@@ -802,6 +882,12 @@
     if (e.key === "m" && !chatFocused) {
       const on = MusicPlayer.toggle();
       infoMessages.push({ text: on ? "Music on" : "Music off", expires: Date.now() + 2000 });
+      return;
+    }
+
+    // Toggle debug overlay with backtick
+    if (e.key === "`" && !chatFocused) {
+      showDebug = !showDebug;
       return;
     }
 
