@@ -811,6 +811,7 @@
 
         // Reset other players for this room
         otherPlayers = {};
+        dancingPlayers = {};
         for (const p of msg.players) {
           otherPlayers[p.name] = {
             x: p.x, y: p.y,
@@ -819,6 +820,7 @@
             color_index: p.color_index,
             moving: false,
           };
+          if (p.dancing) startDance(p.name);
         }
 
         // Snap display position immediately so the new room renders correctly
@@ -862,11 +864,13 @@
             color_index: msg.color_index,
             moving: false,
           };
+          if (msg.dancing) startDance(msg.name);
         }
         break;
 
       case "player_left":
         delete otherPlayers[msg.name];
+        stopDance(msg.name);
         break;
 
       case "dance":

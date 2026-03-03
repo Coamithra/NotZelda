@@ -235,6 +235,7 @@ class Player:
         self.direction = "down"
         self.color_index = color_index
         self.last_move_time = 0.0
+        self.dancing = False
 
 
 # websocket -> Player
@@ -269,13 +270,16 @@ def players_in_room(room_id: str, exclude=None):
 
 
 def player_info(p: Player) -> dict:
-    return {
+    info = {
         "name": p.name,
         "x": p.x,
         "y": p.y,
         "direction": p.direction,
         "color_index": p.color_index,
     }
+    if p.dancing:
+        info["dancing"] = True
+    return info
 
 
 async def send_room_enter(player: Player):
@@ -344,6 +348,7 @@ async def handle_move(player: Player, direction: str):
         return
 
     player.direction = direction
+    player.dancing = False
     new_x = player.x + dx
     new_y = player.y + dy
 
@@ -429,6 +434,7 @@ async def handle_chat(player: Player, text: str):
                 "/help — Show this message"
             )})
         elif cmd == "dance":
+            player.dancing = True
             await broadcast_to_room(player.room, {
                 "type": "dance", "name": player.name,
             })
