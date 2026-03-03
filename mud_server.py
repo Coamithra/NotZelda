@@ -550,6 +550,7 @@ STATIC_FILES = {
     "/music.mp3":         ("not zelda.mp3",          "audio/mpeg"),
     "/music_forest.mp3":  ("not zelda (forest).mp3", "audio/mpeg"),
     "/music_tavern.mp3":  ("not zelda (tavern).mp3", "audio/mpeg"),
+    "/music_chapel.mp3":  ("not zelda (chapel).mp3", "audio/mpeg"),
 }
 
 

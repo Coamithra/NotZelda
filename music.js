@@ -15,8 +15,8 @@ const MusicPlayer = (function () {
     "town_square":      "music.mp3",
     "tavern":           "music_tavern.mp3",
     "tavern_upstairs":  "music_tavern.mp3",
-    "blacksmith":       "music.mp3",
-    "old_chapel":       "music.mp3",
+    "blacksmith":       "music_chapel.mp3",
+    "old_chapel":       "music_chapel.mp3",
     "forest_path":      "music_forest.mp3",
     "clearing":         "music_forest.mp3",
   };
