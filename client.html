@@ -324,7 +324,6 @@
   }
 
   const DANCE_FRAME_MS = 200;  // time per dance frame
-  const DANCE_TOTAL_FRAMES = 12; // 4 frames x 3 loops
 
   function startDance(name) {
     dancingPlayers[name] = { frame: 0, nextTime: Date.now() };
@@ -335,15 +334,15 @@
     });
   }
 
+  function stopDance(name) {
+    delete dancingPlayers[name];
+  }
+
   function updateDances() {
     const now = Date.now();
     for (const [name, d] of Object.entries(dancingPlayers)) {
       if (now >= d.nextTime) {
         d.frame++;
-        if (d.frame >= DANCE_TOTAL_FRAMES) {
-          delete dancingPlayers[name];
-          continue;
-        }
         d.nextTime = now + DANCE_FRAME_MS;
       }
     }
@@ -678,6 +677,7 @@
     else if (keysDown["ArrowRight"] || keysDown["KeyD"]) dir = "right";
 
     if (dir && ws && ws.readyState === WebSocket.OPEN) {
+      stopDance(myName);
       ws.send(JSON.stringify({ type: "move", direction: dir }));
       lastMoveTime = timestamp;
     }
@@ -841,6 +841,7 @@
       }
 
       case "player_moved":
+        stopDance(msg.name);
         if (msg.name === myName) {
           myPlayer.x = msg.x;
           myPlayer.y = msg.y;
@@ -1026,6 +1027,7 @@
     function startDpad(dir) {
       if (activeDir === dir) return;
       stopDpad();
+      stopDance(myName);
       activeDir = dir;
       // Send immediately, then repeat
       if (ws && ws.readyState === WebSocket.OPEN) {
