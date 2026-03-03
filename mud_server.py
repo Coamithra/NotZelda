@@ -206,6 +206,18 @@ ROOMS = {
 
 STARTING_ROOM = "town_square"
 
+# ---------------------------------------------------------------------------
+# NPC Guards
+# ---------------------------------------------------------------------------
+
+GUARDS = {
+    "town_square": [
+        {"name": "Guard", "x": 7, "y": 8, "dialog": "Welcome to Corneria!"},
+    ],
+}
+
+GUARD_COOLDOWN = 10  # seconds between repeated guard messages per player
+
 # Maps direction player walked to the direction they should enter from
 ENTRY_DIR = {
     "north": "south",
@@ -236,6 +248,7 @@ class Player:
         self.color_index = color_index
         self.last_move_time = 0.0
         self.dancing = False
+        self.guard_cooldowns = {}  # guard_key -> last_trigger_time
 
 
 # websocket -> Player
@@ -285,6 +298,7 @@ def player_info(p: Player) -> dict:
 async def send_room_enter(player: Player):
     room = ROOMS[player.room]
     others = [player_info(p) for p in players_in_room(player.room, exclude=player.ws)]
+    guards = GUARDS.get(player.room, [])
     await send_to(player, {
         "type": "room_enter",
         "room_id": player.room,
@@ -292,6 +306,7 @@ async def send_room_enter(player: Player):
         "tilemap": room["tilemap"],
         "your_pos": {"x": player.x, "y": player.y},
         "players": others,
+        "guards": [{"name": g["name"], "x": g["x"], "y": g["y"]} for g in guards],
     })
 
 # ---------------------------------------------------------------------------
@@ -335,6 +350,24 @@ def check_edge_exit(player, new_x, new_y, room):
     if new_x > 14 and "east" in exits and 4 <= player.y <= 6:
         return "east"
     return None
+
+
+async def check_guard_proximity(player: Player):
+    """If adjacent to a guard and cooldown has passed, send guard dialog."""
+    now = time.monotonic()
+    for guard in GUARDS.get(player.room, []):
+        dx = abs(player.x - guard["x"])
+        dy = abs(player.y - guard["y"])
+        if dx + dy == 1:  # adjacent (not diagonal)
+            key = f"{player.room}:{guard['name']}:{guard['x']},{guard['y']}"
+            last = player.guard_cooldowns.get(key, 0)
+            if now - last >= GUARD_COOLDOWN:
+                player.guard_cooldowns[key] = now
+                await broadcast_to_room(player.room, {
+                    "type": "chat",
+                    "from": guard["name"],
+                    "text": guard["dialog"],
+                })
 
 
 async def handle_move(player: Player, direction: str):
@@ -393,6 +426,18 @@ async def handle_move(player: Player, direction: str):
         })
         return
 
+    # Guard collision — can't walk onto a guard's tile
+    for guard in GUARDS.get(player.room, []):
+        if new_x == guard["x"] and new_y == guard["y"]:
+            await broadcast_to_room(player.room, {
+                "type": "player_moved",
+                "name": player.name,
+                "x": player.x,
+                "y": player.y,
+                "direction": player.direction,
+            })
+            return
+
     player.x = new_x
     player.y = new_y
 
@@ -403,6 +448,9 @@ async def handle_move(player: Player, direction: str):
         "y": player.y,
         "direction": player.direction,
     })
+
+    # Guard proximity chat
+    await check_guard_proximity(player)
 
 # ---------------------------------------------------------------------------
 # Chat commands (typed in chat bar)

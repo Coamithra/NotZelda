@@ -118,6 +118,43 @@ function drawPlayerDance(ctx, px, py, colorIndex, danceFrame, S) {
   }
 }
 
+function drawGuard(ctx, px, py, S) {
+  const sx = px;
+  const sy = py;
+  const HELMET = "#8090a0";
+  const HELMET_DARK = "#606e7a";
+  const ARMOR = "#9aa8b8";
+  // Helmet — wider and lower than hair, with visor band
+  ctx.fillStyle = HELMET;
+  ctx.fillRect(sx+4*S, sy+0*S, 8*S, 2*S);  // top of helmet (wider)
+  ctx.fillRect(sx+4*S, sy+2*S, 8*S, 1*S);  // helmet extends down over forehead
+  ctx.fillStyle = HELMET_DARK;
+  ctx.fillRect(sx+4*S, sy+2*S, 8*S, S);     // visor band
+  // Face
+  ctx.fillStyle = SKIN;
+  ctx.fillRect(sx+5*S, sy+3*S, 6*S, 3*S);
+  // Eyes
+  ctx.fillStyle = "#222";
+  ctx.fillRect(sx+6*S, sy+3*S, S, S);
+  ctx.fillRect(sx+9*S, sy+3*S, S, S);
+  // Armor torso
+  ctx.fillStyle = ARMOR;
+  ctx.fillRect(sx+4*S, sy+6*S, 8*S, 5*S);
+  ctx.fillRect(sx+3*S, sy+6*S, S, 4*S);
+  ctx.fillRect(sx+12*S, sy+6*S, S, 4*S);
+  // Hands
+  ctx.fillStyle = SKIN;
+  ctx.fillRect(sx+3*S, sy+10*S, S, S);
+  ctx.fillRect(sx+12*S, sy+10*S, S, S);
+  // Pants
+  ctx.fillStyle = PANTS;
+  ctx.fillRect(sx+5*S, sy+11*S, 6*S, 2*S);
+  // Boots
+  ctx.fillStyle = BOOTS;
+  ctx.fillRect(sx+5*S, sy+13*S, 2*S, 2*S);
+  ctx.fillRect(sx+9*S, sy+13*S, 2*S, 2*S);
+}
+
 function drawPlayer(ctx, px, py, direction, colorIndex, animFrame, S) {
   const sx = px;
   const sy = py;

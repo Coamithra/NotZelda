@@ -296,6 +296,7 @@
   let infoMessages = [];      // [{text, expires}]
   let showDebug = false;      // toggle with backtick key
   let dancingPlayers = {};    // name -> {dirs, step, nextTime}
+  let guards = [];            // [{name, x, y}] — NPCs in current room
 
   // Transition state
   let transition = null;      // {direction, oldCanvas, startTime, duration}
@@ -370,13 +371,20 @@
       });
     }
 
+    // Add guards to render list
+    for (const g of guards) {
+      all.push({ name: g.name, x: g.x, y: g.y, isGuard: true });
+    }
+
     // Sort by Y for depth
     all.sort((a, b) => a.y - b.y);
 
     for (const p of all) {
       const px = p.x * TS;
       const py = p.y * TS;
-      if (dancingPlayers[p.name]) {
+      if (p.isGuard) {
+        drawGuard(ctx, px, py, SCALE);
+      } else if (dancingPlayers[p.name]) {
         drawPlayerDance(ctx, px, py, p.color_index, dancingPlayers[p.name].frame, SCALE);
       } else {
         const moving = (p.name === myName) ? isMoving : (otherPlayers[p.name]?.moving || false);
@@ -410,7 +418,14 @@
         px = p.displayX * TS + TS / 2;
         py = p.displayY * TS - 16;
       } else {
-        continue;
+        // Check if it's a guard
+        const guard = guards.find(g => g.name === bubble.from);
+        if (guard) {
+          px = guard.x * TS + TS / 2;
+          py = guard.y * TS - 16;
+        } else {
+          continue;
+        }
       }
 
       // Fade out in last 500ms
@@ -809,9 +824,10 @@
 
         MusicPlayer.setRoom(msg.room_id);
 
-        // Reset other players for this room
+        // Reset other players and guards for this room
         otherPlayers = {};
         dancingPlayers = {};
+        guards = msg.guards || [];
         for (const p of msg.players) {
           otherPlayers[p.name] = {
             x: p.x, y: p.y,
