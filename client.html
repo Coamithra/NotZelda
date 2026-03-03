@@ -147,9 +147,32 @@
     cursor: pointer;
   }
 
+  #debug-btn {
+    position: fixed;
+    bottom: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 50%;
+    font-size: 14px;
+    color: rgba(255,255,255,0.3);
+    z-index: 20;
+    cursor: pointer;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+
   /* ---------- Mobile overrides ---------- */
   body.mobile #dpad { display: block; }
   body.mobile #mobile-chat-btn { display: flex; align-items: center; justify-content: center; }
+  body.mobile #debug-btn { bottom: 20px; right: 20px; width: 36px; height: 36px; font-size: 18px; }
   body.mobile #chat-bar { display: none; }
   body.mobile #chat-bar.focused {
     display: flex;
@@ -195,6 +218,7 @@
   <div class="dpad-btn dpad-right" data-dir="right">&#9654;</div>
 </div>
 <button id="mobile-chat-btn">&#128172;</button>
+<button id="debug-btn">&pi;</button>
 
 <script src="tiles.js?v=2"></script>
 <script src="sprites.js?v=2"></script>
@@ -1021,6 +1045,11 @@
       }
     };
   }
+
+  // Debug overlay toggle — works on all devices
+  document.getElementById("debug-btn").addEventListener("click", () => {
+    showDebug = !showDebug;
+  });
 
 })();
 </script>
