@@ -295,6 +295,7 @@
   let chatFocused = false;
   let infoMessages = [];      // [{text, expires}]
   let showDebug = false;      // toggle with backtick key
+  let dancingPlayers = {};    // name -> {dirs, step, nextTime}
 
   // Transition state
   let transition = null;      // {direction, oldCanvas, startTime, duration}
@@ -318,6 +319,32 @@
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         ctx.drawImage(getTileCanvas(tm[r][c], TS, TILE, SCALE), c * TS, r * TS);
+      }
+    }
+  }
+
+  const DANCE_FRAME_MS = 200;  // time per dance frame
+  const DANCE_TOTAL_FRAMES = 12; // 4 frames x 3 loops
+
+  function startDance(name) {
+    dancingPlayers[name] = { frame: 0, nextTime: Date.now() };
+    speechBubbles.push({
+      from: name,
+      text: "* dances *",
+      expires: Date.now() + 3000,
+    });
+  }
+
+  function updateDances() {
+    const now = Date.now();
+    for (const [name, d] of Object.entries(dancingPlayers)) {
+      if (now >= d.nextTime) {
+        d.frame++;
+        if (d.frame >= DANCE_TOTAL_FRAMES) {
+          delete dancingPlayers[name];
+          continue;
+        }
+        d.nextTime = now + DANCE_FRAME_MS;
       }
     }
   }
@@ -350,8 +377,12 @@
     for (const p of all) {
       const px = p.x * TS;
       const py = p.y * TS;
-      const moving = (p.name === myName) ? isMoving : (otherPlayers[p.name]?.moving || false);
-      drawPlayer(ctx, px, py, p.direction, p.color_index, moving ? animFrame : 0, SCALE);
+      if (dancingPlayers[p.name]) {
+        drawPlayerDance(ctx, px, py, p.color_index, dancingPlayers[p.name].frame, SCALE);
+      } else {
+        const moving = (p.name === myName) ? isMoving : (otherPlayers[p.name]?.moving || false);
+        drawPlayer(ctx, px, py, p.direction, p.color_index, moving ? animFrame : 0, SCALE);
+      }
 
       // Name label
       ctx.font = "bold 11px monospace";
@@ -603,6 +634,9 @@
       processMovement(timestamp);
     }
 
+    // Update dance animations
+    updateDances();
+
     // Interpolate positions
     if (myPlayer) {
       displayX += (myPlayer.x - displayX) * MOVE_LERP;
@@ -832,6 +866,10 @@
 
       case "player_left":
         delete otherPlayers[msg.name];
+        break;
+
+      case "dance":
+        startDance(msg.name);
         break;
 
       case "chat":

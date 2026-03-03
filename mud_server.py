@@ -425,8 +425,13 @@ async def handle_chat(player: Player, text: str):
                 "Escape — Close chat\n"
                 "M — Toggle music\n"
                 "/who — List online players\n"
+                "/dance — Bust a move\n"
                 "/help — Show this message"
             )})
+        elif cmd == "dance":
+            await broadcast_to_room(player.room, {
+                "type": "dance", "name": player.name,
+            })
         elif cmd == "me":
             action = parts[1] if len(parts) > 1 else ""
             if action:
