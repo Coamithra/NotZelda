@@ -12,20 +12,24 @@ Multi-file architecture, no build tools or external assets:
 
 - **`mud_server.py`** — Python server handling everything: WebSocket game logic (asyncio + websockets), room/player state, command dispatch, and HTTP static file serving. Binds to port 8080. Static file routes are defined in `STATIC_FILES` dict.
 - **`client.html`** — Browser client (HTML + CSS + core game JS). Login overlay, game loop, rendering, input handling, WebSocket connection to `/ws` endpoint.
-- **`sprites.js`** — Player sprite drawing. Procedural 16x16 character rendering with directional poses and walk animation. Exposes `drawPlayer(ctx, px, py, direction, colorIndex, animFrame, SCALE)`.
+- **`sprites.js`** — Player & NPC sprite drawing. Procedural 16x16 character rendering with directional poses and walk animation. Exposes `drawPlayer(ctx, px, py, direction, colorIndex, animFrame, SCALE)`, `drawPlayerDance(ctx, px, py, colorIndex, danceFrame, SCALE)`, and `drawGuard(ctx, px, py, SCALE)`.
 - **`tiles.js`** — Tile rendering. Procedural tile textures (grass, stone, wood, water, etc.) cached to offscreen canvases. Exposes `getTileCanvas(tileId, TS, TILE, SCALE)` and `TILE_COLORS`.
 - **`music.js`** — Background music. Procedural chiptune loop using Web Audio API (square + triangle wave oscillators). Exposes `MusicPlayer.start()`, `.stop()`, `.toggle()`, `.isPlaying()`. Auto-starts on login, toggled with M key.
 - **`download_log.py`** — Local utility script. Fetches the server's event log via `/get-log`, saves it to `log_YYYYMMDD_HHMMSS.txt`, and clears the log on the server. Defaults to the Hetzner server; pass `http://localhost:8080` as arg for local dev.
 
 **Protocol:** JSON over WebSocket.
-- Client → Server: `login` (name, description), `move` (direction), `chat` (text)
-- Server → Client: `login_ok`, `room_enter` (tilemap + players), `player_moved`, `player_entered`, `player_left`, `chat`, `info`, `error`
+- Client → Server: `login` (name, description), `move` (direction), `chat` (text), `ping`
+- Server → Client: `login_ok`, `room_enter` (tilemap + players + guards), `player_moved`, `player_entered`, `player_left`, `chat`, `dance`, `info`, `error`, `pong`
 
 **State:** All in-memory. Players tracked in `dict[websocket, Player]`. Rooms defined in the `ROOMS` dict with 15x11 tilemaps. State resets on server restart. An `event_log` list records joins, leaves, and chat messages (with timestamps); exposed via `GET /get-log` which returns the log as plain text and clears it.
 
 **World map:** Town Square (center) connects to Blacksmith (north), Forest Path (south), Tavern (east), Old Chapel (west). Forest Path leads to Clearing (south). Tavern has stairs up to Tavern Upper Floor.
 
-**Music:** Two mp3 tracks served as `/music.mp3` and `/music_forest.mp3` (mapped from `not zelda.mp3` and `not zelda (forest).mp3` in `STATIC_FILES`). Toggled with M key.
+**NPCs:** Guard NPCs defined in `GUARDS` dict in `mud_server.py`. Each guard has a name, position, and dialog line. Guards are rendered client-side with `drawGuard()` (helmet + armor sprite). Players can't walk on guard tiles. Walking adjacent triggers the guard's dialog as a chat bubble (broadcast to room), with a 10-second per-player cooldown to prevent spam.
+
+**Music:** Four mp3 tracks served as `/music.mp3`, `/music_forest.mp3`, `/music_tavern.mp3`, and `/music_chapel.mp3` (mapped from `not zelda*.mp3` files in `STATIC_FILES`). `music.js` switches tracks per room via `MusicPlayer.setRoom()`. Toggled with M key.
+
+**Emotes:** `/dance` makes the player do a looping boogie animation (4 frames). Dance stops when the player moves. Dancing state is synced — new players entering a room see ongoing dances.
 
 ## Running
 

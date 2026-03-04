@@ -254,13 +254,15 @@ class Player:
 # websocket -> Player
 players: dict = {}
 
-# Activity log — entries appended on join/leave/chat, cleared on download
-event_log: list[str] = []
+# Activity log — appended on join/leave/chat, persisted to disk
+LOG_FILE = CLIENT_DIR / "event_log.txt"
 
 
 def log_event(kind: str, text: str):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    event_log.append(f"[{ts}] {kind}: {text}")
+    line = f"[{ts}] {kind}: {text}"
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(line + "\n")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -613,10 +615,11 @@ async def process_request(path, request_headers):
     if path == "/ws":
         return None
     if path == "/get-log":
-        lines = event_log.copy()
-        event_log.clear()
-        body = "\n".join(lines).encode()
+        body = LOG_FILE.read_bytes() if LOG_FILE.exists() else b""
         return HTTPStatus.OK, [("Content-Type", "text/plain; charset=utf-8")], body
+    if path == "/clear-log":
+        LOG_FILE.write_text("", encoding="utf-8")
+        return HTTPStatus.OK, [("Content-Type", "text/plain; charset=utf-8")], b"Log cleared."
     if path in STATIC_FILES:
         filename, content_type = STATIC_FILES[path]
         body = (CLIENT_DIR / filename).read_bytes()

@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 venv/
 .claude/
+collab_package/
+notzelda_collab_rudy.zip
+event_log.txt
