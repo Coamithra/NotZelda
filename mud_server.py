@@ -229,6 +229,99 @@ ENTRY_DIR = {
 }
 
 MOVE_COOLDOWN = 0.125  # seconds between moves
+ATTACK_COOLDOWN = 0.4  # seconds between attacks
+
+# ---------------------------------------------------------------------------
+# Monsters
+# ---------------------------------------------------------------------------
+
+MONSTER_HOP_INTERVAL = 2.0    # seconds between random hops
+ROOM_RESET_COOLDOWN = 10.0   # seconds after all-killed + empty before respawn
+
+import random
+
+class Monster:
+    def __init__(self, x, y, kind="slime"):
+        self.x = x
+        self.y = y
+        self.kind = kind
+        self.alive = True
+        self.last_hop_time = time.monotonic()
+
+# Templates — define what monsters belong in each room (never mutated)
+MONSTER_TEMPLATES = {
+    "clearing": [
+        {"kind": "slime", "x": 7, "y": 5},
+    ],
+}
+
+# Live monster instances per room — only populated while players are present
+# room_id -> [Monster, ...]
+room_monsters: dict[str, list[Monster]] = {}
+
+# Room cooldown — when all monsters were killed and all players left
+# room_id -> timestamp when cooldown started
+room_cooldowns: dict[str, float] = {}
+
+
+def spawn_monsters(room_id: str) -> list[Monster]:
+    """Create fresh Monster instances from templates for a room."""
+    templates = MONSTER_TEMPLATES.get(room_id, [])
+    now = time.monotonic()
+    monsters = []
+    for t in templates:
+        m = Monster(t["x"], t["y"], t["kind"])
+        m.last_hop_time = now
+        monsters.append(m)
+    return monsters
+
+
+def get_room_monsters(room_id: str) -> list[Monster]:
+    """Get the live monster list for a room (may be empty list)."""
+    return room_monsters.get(room_id, [])
+
+
+async def on_player_enter_room(room_id: str):
+    """Called when a player enters a room. Spawns monsters if needed."""
+    if room_id not in MONSTER_TEMPLATES:
+        return
+    if room_id in room_monsters:
+        return  # already active (other players present)
+
+    # Check cooldown
+    if room_id in room_cooldowns:
+        elapsed = time.monotonic() - room_cooldowns[room_id]
+        if elapsed < ROOM_RESET_COOLDOWN:
+            # Still on cooldown — room stays empty, reset timer
+            room_cooldowns[room_id] = time.monotonic()
+            room_monsters[room_id] = []
+            return
+        else:
+            del room_cooldowns[room_id]
+
+    # Spawn fresh monsters
+    monsters = spawn_monsters(room_id)
+    room_monsters[room_id] = monsters
+    # No need to broadcast monster_spawned here — room_enter message includes them
+
+
+async def on_player_leave_room(room_id: str):
+    """Called after a player leaves a room. Cleans up if room is now empty."""
+    if players_in_room(room_id):
+        return  # still has players
+
+    if room_id in room_monsters:
+        monster_list = room_monsters[room_id]
+        all_killed = len(monster_list) > 0 and all(not m.alive for m in monster_list)
+        empty_list = len(monster_list) == 0
+        del room_monsters[room_id]
+
+        if all_killed:
+            # First time all killed — start cooldown
+            room_cooldowns[room_id] = time.monotonic()
+        elif empty_list and room_id in room_cooldowns:
+            # Was on cooldown, player visited empty room and left — reset timer
+            room_cooldowns[room_id] = time.monotonic()
 
 # ---------------------------------------------------------------------------
 # Player
@@ -247,6 +340,7 @@ class Player:
         self.direction = "down"
         self.color_index = color_index
         self.last_move_time = 0.0
+        self.last_attack_time = 0.0
         self.dancing = False
         self.guard_cooldowns = {}  # guard_key -> last_trigger_time
 
@@ -301,6 +395,11 @@ async def send_room_enter(player: Player):
     room = ROOMS[player.room]
     others = [player_info(p) for p in players_in_room(player.room, exclude=player.ws)]
     guards = GUARDS.get(player.room, [])
+    monsters = [
+        {"id": i, "kind": m.kind, "x": m.x, "y": m.y}
+        for i, m in enumerate(get_room_monsters(player.room))
+        if m.alive
+    ]
     await send_to(player, {
         "type": "room_enter",
         "room_id": player.room,
@@ -309,6 +408,7 @@ async def send_room_enter(player: Player):
         "your_pos": {"x": player.x, "y": player.y},
         "players": others,
         "guards": [{"name": g["name"], "x": g["x"], "y": g["y"]} for g in guards],
+        "monsters": monsters,
     })
 
 # ---------------------------------------------------------------------------
@@ -328,6 +428,10 @@ async def do_room_transition(player: Player, exit_direction: str):
     entry = ENTRY_DIR.get(exit_direction, "default")
     spawn = new_room["spawn_points"].get(entry, new_room["spawn_points"]["default"])
     player.x, player.y = spawn
+
+    # Monster lifecycle — leave old room, enter new room
+    await on_player_leave_room(old_room)
+    await on_player_enter_room(new_room_id)
 
     # Send new room to player
     await send_room_enter(player)
@@ -455,6 +559,80 @@ async def handle_move(player: Player, direction: str):
     await check_guard_proximity(player)
 
 # ---------------------------------------------------------------------------
+# Attack
+# ---------------------------------------------------------------------------
+
+async def handle_attack(player: Player):
+    now = time.monotonic()
+    if now - player.last_attack_time < ATTACK_COOLDOWN:
+        return
+    player.last_attack_time = now
+    player.dancing = False
+
+    await broadcast_to_room(player.room, {
+        "type": "attack",
+        "name": player.name,
+        "direction": player.direction,
+    })
+
+    # Hit detection — check if sword hits a monster
+    dx, dy = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0, 1)}.get(player.direction, (0, 0))
+    hit_x = player.x + dx
+    hit_y = player.y + dy
+    for i, monster in enumerate(get_room_monsters(player.room)):
+        if monster.alive and monster.x == hit_x and monster.y == hit_y:
+            monster.alive = False
+            await broadcast_to_room(player.room, {
+                "type": "monster_killed",
+                "id": i,
+                "x": monster.x,
+                "y": monster.y,
+            })
+
+# ---------------------------------------------------------------------------
+# Monster AI tick
+# ---------------------------------------------------------------------------
+
+async def monster_tick():
+    """Background loop — hops alive monsters in rooms that have players."""
+    while True:
+        await asyncio.sleep(1.0)
+        now = time.monotonic()
+        for room_id, monster_list in list(room_monsters.items()):
+            # Only simulate rooms with players
+            if not players_in_room(room_id):
+                continue
+            tilemap = ROOMS[room_id]["tilemap"]
+            guards = GUARDS.get(room_id, [])
+            for i, monster in enumerate(monster_list):
+                if not monster.alive:
+                    continue
+                if now - monster.last_hop_time < MONSTER_HOP_INTERVAL:
+                    continue
+                monster.last_hop_time = now
+
+                # Pick a random walkable adjacent tile
+                directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+                random.shuffle(directions)
+                for ddx, ddy in directions:
+                    nx, ny = monster.x + ddx, monster.y + ddy
+                    if nx < 0 or nx >= 15 or ny < 0 or ny >= 11:
+                        continue
+                    if tilemap[ny][nx] not in WALKABLE_TILES:
+                        continue
+                    if any(g["x"] == nx and g["y"] == ny for g in guards):
+                        continue
+                    monster.x = nx
+                    monster.y = ny
+                    await broadcast_to_room(room_id, {
+                        "type": "monster_moved",
+                        "id": i,
+                        "x": nx,
+                        "y": ny,
+                    })
+                    break
+
+# ---------------------------------------------------------------------------
 # Chat commands (typed in chat bar)
 # ---------------------------------------------------------------------------
 
@@ -476,6 +654,7 @@ async def handle_chat(player: Player, text: str):
         elif cmd == "help":
             await send_to(player, {"type": "info", "text": (
                 "Arrow keys / WASD — Move\n"
+                "Space — Attack\n"
                 "Enter — Open chat\n"
                 "Escape — Close chat\n"
                 "M — Toggle music\n"
@@ -546,6 +725,7 @@ async def handle_connection(websocket):
         print(f"[JOIN] {name} from {addr}")
 
         await send_to(player, {"type": "login_ok", "color_index": color_index})
+        await on_player_enter_room(player.room)
         await send_room_enter(player)
         await broadcast_to_room(
             player.room,
@@ -559,6 +739,8 @@ async def handle_connection(websocket):
                 msg_type = data.get("type")
                 if msg_type == "move":
                     await handle_move(player, data.get("direction", ""))
+                elif msg_type == "attack":
+                    await handle_attack(player)
                 elif msg_type == "chat":
                     await handle_chat(player, data.get("text", ""))
                 elif msg_type == "ping":
@@ -582,13 +764,15 @@ async def handle_connection(websocket):
         log_event("ERROR", f"{who} — {type(e).__name__}: {e}")
     finally:
         if player and websocket in players:
+            leaving_room = player.room
             del players[websocket]
             log_event("LEAVE", player.name)
             print(f"[LEAVE] {player.name}")
             await broadcast_to_room(
-                player.room,
+                leaving_room,
                 {"type": "player_left", "name": player.name},
             )
+            await on_player_leave_room(leaving_room)
 
 # ---------------------------------------------------------------------------
 # HTTP server for client.html
@@ -638,6 +822,7 @@ async def main():
         ping_interval=30,    # send WebSocket ping every 30s
         ping_timeout=60,     # close if no pong within 60s (lenient for mobile)
     )
+    asyncio.create_task(monster_tick())
     print("MUD server running!")
     print(f"Local:  http://localhost:{port}")
 

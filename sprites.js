@@ -155,6 +155,252 @@ function drawGuard(ctx, px, py, S) {
   ctx.fillRect(sx+9*S, sy+13*S, 2*S, 2*S);
 }
 
+// Attack animation — player thrust pose (2 frames)
+function drawPlayerAttack(ctx, px, py, direction, colorIndex, attackFrame, S) {
+  const sx = px;
+  const sy = py;
+  const shirt = SHIRT_COLORS[colorIndex % SHIRT_COLORS.length];
+  const thrust = attackFrame === 1; // frame 0 = wind-up, frame 1 = full thrust
+
+  if (direction === "down") {
+    // Hair
+    ctx.fillStyle = HAIR;
+    ctx.fillRect(sx+5*S, sy+0*S, 6*S, 2*S);
+    // Face
+    ctx.fillStyle = SKIN;
+    ctx.fillRect(sx+5*S, sy+2*S, 6*S, 4*S);
+    ctx.fillStyle = "#222";
+    ctx.fillRect(sx+6*S, sy+3*S, S, S);
+    ctx.fillRect(sx+9*S, sy+3*S, S, S);
+    // Torso — shifted down slightly on thrust
+    const tOff = thrust ? S : 0;
+    ctx.fillStyle = shirt;
+    ctx.fillRect(sx+4*S, sy+6*S+tOff, 8*S, 5*S);
+    // Left arm normal
+    ctx.fillRect(sx+3*S, sy+6*S+tOff, S, 4*S);
+    // Right arm — extends down (holding sword)
+    ctx.fillRect(sx+12*S, sy+6*S+tOff, S, 4*S);
+    ctx.fillStyle = SKIN;
+    ctx.fillRect(sx+3*S, sy+10*S+tOff, S, S);
+    ctx.fillRect(sx+12*S, sy+10*S+tOff, S, S);
+    // Pants & boots
+    ctx.fillStyle = PANTS;
+    ctx.fillRect(sx+5*S, sy+11*S+tOff, 6*S, 2*S);
+    ctx.fillStyle = BOOTS;
+    ctx.fillRect(sx+5*S, sy+13*S+tOff, 2*S, 2*S);
+    ctx.fillRect(sx+9*S, sy+13*S+tOff, 2*S, 2*S);
+  } else if (direction === "up") {
+    ctx.fillStyle = HAIR;
+    ctx.fillRect(sx+5*S, sy+0*S, 6*S, 5*S);
+    ctx.fillStyle = SKIN;
+    ctx.fillRect(sx+4*S, sy+3*S, S, 2*S);
+    ctx.fillRect(sx+11*S, sy+3*S, S, 2*S);
+    const tOff = thrust ? -S : 0;
+    ctx.fillStyle = shirt;
+    ctx.fillRect(sx+4*S, sy+6*S+tOff, 8*S, 5*S);
+    ctx.fillRect(sx+3*S, sy+6*S+tOff, S, 4*S);
+    ctx.fillRect(sx+12*S, sy+6*S+tOff, S, 4*S);
+    ctx.fillStyle = SKIN;
+    ctx.fillRect(sx+3*S, sy+10*S+tOff, S, S);
+    ctx.fillRect(sx+12*S, sy+10*S+tOff, S, S);
+    ctx.fillStyle = PANTS;
+    ctx.fillRect(sx+5*S, sy+11*S, 6*S, 2*S);
+    ctx.fillStyle = BOOTS;
+    ctx.fillRect(sx+5*S, sy+13*S, 2*S, 2*S);
+    ctx.fillRect(sx+9*S, sy+13*S, 2*S, 2*S);
+  } else if (direction === "left") {
+    ctx.fillStyle = HAIR;
+    ctx.fillRect(sx+4*S, sy+0*S, 6*S, 2*S);
+    ctx.fillRect(sx+8*S, sy+2*S, 2*S, 4*S);
+    ctx.fillStyle = SKIN;
+    ctx.fillRect(sx+4*S, sy+2*S, 4*S, 4*S);
+    ctx.fillStyle = "#222";
+    ctx.fillRect(sx+4*S, sy+3*S, S, S);
+    const tOff = thrust ? -S : 0;
+    ctx.fillStyle = shirt;
+    ctx.fillRect(sx+5*S+tOff, sy+6*S, 6*S, 5*S);
+    // Left arm extends out (holding sword)
+    ctx.fillRect(sx+3*S+tOff, sy+7*S, 2*S, 3*S);
+    ctx.fillStyle = SKIN;
+    ctx.fillRect(sx+2*S+tOff, sy+8*S, S, S);
+    ctx.fillStyle = PANTS;
+    ctx.fillRect(sx+5*S, sy+11*S, 5*S, 2*S);
+    ctx.fillStyle = BOOTS;
+    ctx.fillRect(sx+5*S, sy+13*S, 3*S, 2*S);
+  } else {
+    // Right
+    ctx.fillStyle = HAIR;
+    ctx.fillRect(sx+6*S, sy+0*S, 6*S, 2*S);
+    ctx.fillRect(sx+6*S, sy+2*S, 2*S, 4*S);
+    ctx.fillStyle = SKIN;
+    ctx.fillRect(sx+8*S, sy+2*S, 4*S, 4*S);
+    ctx.fillStyle = "#222";
+    ctx.fillRect(sx+11*S, sy+3*S, S, S);
+    const tOff = thrust ? S : 0;
+    ctx.fillStyle = shirt;
+    ctx.fillRect(sx+5*S+tOff, sy+6*S, 6*S, 5*S);
+    // Right arm extends out (holding sword)
+    ctx.fillRect(sx+11*S+tOff, sy+7*S, 2*S, 3*S);
+    ctx.fillStyle = SKIN;
+    ctx.fillRect(sx+13*S+tOff, sy+8*S, S, S);
+    ctx.fillStyle = PANTS;
+    ctx.fillRect(sx+6*S, sy+11*S, 5*S, 2*S);
+    ctx.fillStyle = BOOTS;
+    ctx.fillRect(sx+8*S, sy+13*S, 3*S, 2*S);
+  }
+}
+
+// Sword sprite — drawn on the tile in front of the attacking player
+function drawSwordAttack(ctx, px, py, direction, attackFrame, S) {
+  const BLADE = "#C0C0C0";
+  const HILT = "#8B4513";
+  const GUARD = "#DAA520";
+  const thrust = attackFrame === 1;
+  const ext = thrust ? 4*S : 2*S;  // extension distance
+
+  if (direction === "down") {
+    const sx = px + 7*S;   // center of tile
+    const sy = py + 16*S;  // just below the player tile
+    // Hilt
+    ctx.fillStyle = HILT;
+    ctx.fillRect(sx - S, sy, 2*S, 3*S);
+    // Guard
+    ctx.fillStyle = GUARD;
+    ctx.fillRect(sx - 2*S, sy + 3*S, 4*S, S);
+    // Blade
+    ctx.fillStyle = BLADE;
+    ctx.fillRect(sx - S, sy + 4*S, 2*S, ext);
+    // Tip
+    ctx.fillRect(sx, sy + 4*S + ext, S, S);
+  } else if (direction === "up") {
+    const sx = px + 7*S;
+    const sy = py - S;     // just above the player tile
+    // Hilt
+    ctx.fillStyle = HILT;
+    ctx.fillRect(sx - S, sy - 2*S, 2*S, 3*S);
+    // Guard
+    ctx.fillStyle = GUARD;
+    ctx.fillRect(sx - 2*S, sy - 3*S, 4*S, S);
+    // Blade
+    ctx.fillStyle = BLADE;
+    ctx.fillRect(sx - S, sy - 3*S - ext, 2*S, ext);
+    // Tip
+    ctx.fillRect(sx, sy - 4*S - ext, S, S);
+  } else if (direction === "left") {
+    const sx = px - S;     // just left of player tile
+    const sy = py + 7*S;
+    // Hilt
+    ctx.fillStyle = HILT;
+    ctx.fillRect(sx - 2*S, sy - S, 3*S, 2*S);
+    // Guard
+    ctx.fillStyle = GUARD;
+    ctx.fillRect(sx - 3*S, sy - 2*S, S, 4*S);
+    // Blade
+    ctx.fillStyle = BLADE;
+    ctx.fillRect(sx - 3*S - ext, sy - S, ext, 2*S);
+    // Tip
+    ctx.fillRect(sx - 4*S - ext, sy, S, S);
+  } else {
+    // Right
+    const sx = px + 16*S;  // just right of player tile
+    const sy = py + 7*S;
+    // Hilt
+    ctx.fillStyle = HILT;
+    ctx.fillRect(sx, sy - S, 3*S, 2*S);
+    // Guard
+    ctx.fillStyle = GUARD;
+    ctx.fillRect(sx + 3*S, sy - 2*S, S, 4*S);
+    // Blade
+    ctx.fillStyle = BLADE;
+    ctx.fillRect(sx + 4*S, sy - S, ext, 2*S);
+    // Tip
+    ctx.fillRect(sx + 4*S + ext, sy, S, S);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Slime sprite — green blob with hop animation
+// ---------------------------------------------------------------------------
+function drawSlime(ctx, px, py, hopFrame, S) {
+  const BODY = "#44cc44";
+  const DARK = "#228822";
+  const EYES = "#222";
+  const HIGHLIGHT = "#88ee88";
+
+  if (hopFrame === 0) {
+    // Squished — wider, shorter, on ground
+    // Dark outline/shadow
+    ctx.fillStyle = DARK;
+    ctx.fillRect(px+2*S, py+9*S, 12*S, 6*S);
+    // Body
+    ctx.fillStyle = BODY;
+    ctx.fillRect(px+3*S, py+8*S, 10*S, 6*S);
+    ctx.fillRect(px+4*S, py+7*S, 8*S, S);
+    // Eyes
+    ctx.fillStyle = EYES;
+    ctx.fillRect(px+5*S, py+9*S, 2*S, 2*S);
+    ctx.fillRect(px+9*S, py+9*S, 2*S, 2*S);
+    // Highlight
+    ctx.fillStyle = HIGHLIGHT;
+    ctx.fillRect(px+5*S, py+8*S, 2*S, S);
+  } else {
+    // Stretched — taller, narrower, lifted up
+    // Dark outline/shadow on ground
+    ctx.fillStyle = DARK;
+    ctx.fillRect(px+4*S, py+12*S, 8*S, 2*S);
+    // Body
+    ctx.fillStyle = BODY;
+    ctx.fillRect(px+4*S, py+4*S, 8*S, 9*S);
+    ctx.fillRect(px+5*S, py+3*S, 6*S, S);
+    ctx.fillRect(px+5*S, py+13*S, 6*S, S);
+    // Dark bottom edge
+    ctx.fillStyle = DARK;
+    ctx.fillRect(px+4*S, py+11*S, 8*S, 2*S);
+    // Eyes
+    ctx.fillStyle = EYES;
+    ctx.fillRect(px+5*S, py+6*S, 2*S, 2*S);
+    ctx.fillRect(px+9*S, py+6*S, 2*S, 2*S);
+    // Highlight
+    ctx.fillStyle = HIGHLIGHT;
+    ctx.fillRect(px+5*S, py+4*S, 2*S, S);
+  }
+}
+
+function drawSlimeDeath(ctx, px, py, deathFrame, S) {
+  const SPLAT = "#44cc44";
+  const DARK = "#228822";
+
+  if (deathFrame === 0) {
+    // Flat splat
+    ctx.fillStyle = DARK;
+    ctx.fillRect(px+2*S, py+12*S, 12*S, 2*S);
+    ctx.fillStyle = SPLAT;
+    ctx.fillRect(px+3*S, py+11*S, 10*S, 2*S);
+    ctx.fillRect(px+1*S, py+12*S, 14*S, S);
+  } else if (deathFrame === 1) {
+    // Particles spreading
+    ctx.fillStyle = SPLAT;
+    ctx.fillRect(px+1*S, py+12*S, 3*S, 2*S);
+    ctx.fillRect(px+6*S, py+11*S, 4*S, 2*S);
+    ctx.fillRect(px+12*S, py+12*S, 3*S, 2*S);
+    ctx.fillRect(px+3*S, py+9*S, 2*S, 2*S);
+    ctx.fillRect(px+10*S, py+8*S, 2*S, 2*S);
+    ctx.fillStyle = DARK;
+    ctx.fillRect(px+5*S, py+13*S, 2*S, S);
+    ctx.fillRect(px+9*S, py+13*S, 2*S, S);
+  } else {
+    // Fading particles
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = SPLAT;
+    ctx.fillRect(px+0*S, py+13*S, 2*S, S);
+    ctx.fillRect(px+6*S, py+12*S, 3*S, S);
+    ctx.fillRect(px+13*S, py+13*S, 2*S, S);
+    ctx.fillRect(px+3*S, py+8*S, S, S);
+    ctx.fillRect(px+11*S, py+7*S, S, S);
+    ctx.globalAlpha = 1;
+  }
+}
+
 function drawPlayer(ctx, px, py, direction, colorIndex, animFrame, S) {
   const sx = px;
   const sy = py;

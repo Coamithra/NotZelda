@@ -296,7 +296,12 @@
   let infoMessages = [];      // [{text, expires}]
   let showDebug = false;      // toggle with backtick key
   let dancingPlayers = {};    // name -> {dirs, step, nextTime}
+  let attackingPlayers = {};  // name -> {direction, frame, nextTime}
   let guards = [];            // [{name, x, y}] — NPCs in current room
+  let monsters = [];          // [{id, kind, x, y, displayX, displayY}]
+  let dyingMonsters = [];     // [{kind, x, y, frame, nextTime}]
+  let monsterHopFrame = 0;    // global hop frame toggled on timer
+  let monsterHopTimer = 0;
 
   // Transition state
   let transition = null;      // {direction, oldCanvas, startTime, duration}
@@ -349,6 +354,41 @@
     }
   }
 
+  const DYING_MONSTER_FRAME_MS = 150;
+
+  function updateDyingMonsters() {
+    const now = Date.now();
+    dyingMonsters = dyingMonsters.filter(dm => {
+      if (now >= dm.nextTime) {
+        dm.frame++;
+        dm.nextTime = now + DYING_MONSTER_FRAME_MS;
+      }
+      return dm.frame < 3;
+    });
+  }
+
+  const ATTACK_FRAME_MS = 150;  // time per attack frame
+  const ATTACK_FRAMES = 2;      // total frames in attack animation
+
+  function startAttack(name, direction) {
+    stopDance(name);
+    attackingPlayers[name] = { direction, frame: 0, nextTime: Date.now() + ATTACK_FRAME_MS };
+  }
+
+  function updateAttacks() {
+    const now = Date.now();
+    for (const [name, a] of Object.entries(attackingPlayers)) {
+      if (now >= a.nextTime) {
+        a.frame++;
+        if (a.frame >= ATTACK_FRAMES) {
+          delete attackingPlayers[name];
+        } else {
+          a.nextTime = now + ATTACK_FRAME_MS;
+        }
+      }
+    }
+  }
+
   function renderPlayers() {
     if (!myPlayer) return;
 
@@ -376,14 +416,31 @@
       all.push({ name: g.name, x: g.x, y: g.y, isGuard: true });
     }
 
+    // Add monsters to render list
+    for (const m of monsters) {
+      all.push({ x: m.displayX, y: m.displayY, isMonster: true, kind: m.kind });
+    }
+
     // Sort by Y for depth
     all.sort((a, b) => a.y - b.y);
+
+    // Draw dying monsters (behind everything)
+    for (const dm of dyingMonsters) {
+      drawSlimeDeath(ctx, dm.x * TS, dm.y * TS, dm.frame, SCALE);
+    }
 
     for (const p of all) {
       const px = p.x * TS;
       const py = p.y * TS;
-      if (p.isGuard) {
+      if (p.isMonster) {
+        drawSlime(ctx, px, py, monsterHopFrame, SCALE);
+        continue;
+      } else if (p.isGuard) {
         drawGuard(ctx, px, py, SCALE);
+      } else if (attackingPlayers[p.name]) {
+        const atk = attackingPlayers[p.name];
+        drawPlayerAttack(ctx, px, py, atk.direction, p.color_index, atk.frame, SCALE);
+        drawSwordAttack(ctx, px, py, atk.direction, atk.frame, SCALE);
       } else if (dancingPlayers[p.name]) {
         drawPlayerDance(ctx, px, py, p.color_index, dancingPlayers[p.name].frame, SCALE);
       } else {
@@ -643,13 +700,21 @@
       animFrame = (animFrame + 1) % 2;
     }
 
-    // Process movement
-    if (!chatFocused && !transition) {
+    // Process movement (freeze while attacking)
+    if (!chatFocused && !transition && !attackingPlayers[myName]) {
       processMovement(timestamp);
     }
 
-    // Update dance animations
+    // Update dance, attack, and monster animations
     updateDances();
+    updateAttacks();
+    updateDyingMonsters();
+
+    // Toggle monster hop frame every ~500ms
+    monsterHopTimer++;
+    if (monsterHopTimer % 30 === 0) {
+      monsterHopFrame = (monsterHopFrame + 1) % 2;
+    }
 
     // Interpolate positions
     if (myPlayer) {
@@ -667,6 +732,13 @@
       if (Math.abs(p.x - p.displayX) < 0.05) p.displayX = p.x;
       if (Math.abs(p.y - p.displayY) < 0.05) p.displayY = p.y;
       p.moving = (p.displayX !== p.x || p.displayY !== p.y);
+    }
+
+    for (const m of monsters) {
+      m.displayX += (m.x - m.displayX) * MOVE_LERP;
+      m.displayY += (m.y - m.displayY) * MOVE_LERP;
+      if (Math.abs(m.x - m.displayX) < 0.05) m.displayX = m.x;
+      if (Math.abs(m.y - m.displayY) < 0.05) m.displayY = m.y;
     }
 
     // Render
@@ -824,10 +896,15 @@
 
         MusicPlayer.setRoom(msg.room_id);
 
-        // Reset other players and guards for this room
+        // Reset other players, guards, and monsters for this room
         otherPlayers = {};
         dancingPlayers = {};
+        attackingPlayers = {};
         guards = msg.guards || [];
+        dyingMonsters = [];
+        monsters = (msg.monsters || []).map(m => ({
+          id: m.id, kind: m.kind, x: m.x, y: m.y, displayX: m.x, displayY: m.y,
+        }));
         for (const p of msg.players) {
           otherPlayers[p.name] = {
             x: p.x, y: p.y,
@@ -860,6 +937,7 @@
 
       case "player_moved":
         stopDance(msg.name);
+        delete attackingPlayers[msg.name];
         if (msg.name === myName) {
           myPlayer.x = msg.x;
           myPlayer.y = msg.y;
@@ -889,6 +967,10 @@
         stopDance(msg.name);
         break;
 
+      case "attack":
+        startAttack(msg.name, msg.direction);
+        break;
+
       case "dance":
         startDance(msg.name);
         break;
@@ -899,6 +981,26 @@
           text: msg.text,
           expires: Date.now() + 4000,
         });
+        break;
+
+      case "monster_moved": {
+        const mon = monsters.find(m => m.id === msg.id);
+        if (mon) { mon.x = msg.x; mon.y = msg.y; }
+        break;
+      }
+
+      case "monster_killed": {
+        const idx = monsters.findIndex(m => m.id === msg.id);
+        if (idx !== -1) {
+          const mon = monsters[idx];
+          dyingMonsters.push({ kind: mon.kind, x: msg.x, y: msg.y, frame: 0, nextTime: Date.now() + DYING_MONSTER_FRAME_MS });
+          monsters.splice(idx, 1);
+        }
+        break;
+      }
+
+      case "monster_spawned":
+        monsters.push({ id: msg.id, kind: msg.kind, x: msg.x, y: msg.y, displayX: msg.x, displayY: msg.y });
         break;
 
       case "info":
@@ -971,6 +1073,15 @@
     // Toggle debug overlay with backtick
     if (e.key === "`" && !chatFocused) {
       showDebug = !showDebug;
+      return;
+    }
+
+    // Attack with Space
+    if (e.code === "Space" && !e.repeat && !chatFocused && !attackingPlayers[myName]) {
+      e.preventDefault();
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "attack" }));
+      }
       return;
     }
 
