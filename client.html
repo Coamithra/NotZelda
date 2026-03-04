@@ -616,19 +616,21 @@
     }
   }
 
+  const WALKABLE = new Set([0, 1, 2, 7, 8, 9, 10, 15]); // matches server WALKABLE_TILES
+
   function getExitDirs() {
     if (!currentRoom || !currentRoom.room_id) return new Set();
-    // We don't store exits explicitly, but we can check the tilemap edges for DOOR tiles
     const tm = currentRoom.tilemap;
     const dirs = new Set();
+    const w = (t) => WALKABLE.has(t);
     // North
-    if (tm[0][6] === 15 || tm[0][7] === 15 || tm[0][8] === 15) dirs.add("north");
+    if (w(tm[0][6]) || w(tm[0][7]) || w(tm[0][8])) dirs.add("north");
     // South
-    if (tm[10][6] === 15 || tm[10][7] === 15 || tm[10][8] === 15) dirs.add("south");
+    if (w(tm[10][6]) || w(tm[10][7]) || w(tm[10][8])) dirs.add("south");
     // West
-    if (tm[4][0] === 15 || tm[5][0] === 15 || tm[6][0] === 15) dirs.add("west");
+    if (w(tm[4][0]) || w(tm[5][0]) || w(tm[6][0])) dirs.add("west");
     // East
-    if (tm[4][14] === 15 || tm[5][14] === 15 || tm[6][14] === 15) dirs.add("east");
+    if (w(tm[4][14]) || w(tm[5][14]) || w(tm[6][14])) dirs.add("east");
     return dirs;
   }
 
@@ -896,10 +898,11 @@
 
         MusicPlayer.setRoom(msg.room_id);
 
-        // Reset other players, guards, and monsters for this room
+        // Reset other players, guards, monsters, and bubbles for this room
         otherPlayers = {};
         dancingPlayers = {};
         attackingPlayers = {};
+        speechBubbles = [];
         guards = msg.guards || [];
         dyingMonsters = [];
         monsters = (msg.monsters || []).map(m => ({

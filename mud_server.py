@@ -156,7 +156,7 @@ ROOMS = {
             [ T, G, G,DI,DI, G, G, G, G,DI,DI, G, G, G, T],
             [ T, T, G, G,DI,DI,DI,DI,DI,DI, G, G, G, T, T],
             [ T, G, G, G, G,DI,DI,DI, G, G, G, G, T, T, T],
-            [ T, T, T, T, T, T,DR,DR,DR, T, T, T, T, T, T],
+            [ T, T, T, T, T, T, G, G, G, T, T, T, T, T, T],
         ],
         "spawn_points": {
             "north": (7, 1), "south": (7, 9), "default": (7, 5),
@@ -166,7 +166,7 @@ ROOMS = {
         "name": "Sunlit Clearing",
         "exits": {"north": "forest_path"},
         "tilemap": [
-            [ T, T, T, T, T, T,DR,DR,DR, T, T, T, T, T, T],
+            [ T, T, T, T, T, T, G, G, G, T, T, T, T, T, T],
             [ T, T, G, G, G, G, G, G, G, G, G, G, G, T, T],
             [ T, G, G,FL, G, G, G, G, G, G,FL, G, G, G, T],
             [ T, G, G, G, G,FL, G, G, G, G, G, G, G, T, T],
@@ -176,7 +176,7 @@ ROOMS = {
             [ T, G,FL, G, G, G, G, G, G, G, G, G,FL, T, T],
             [ T, T, G, G, G, G,FL, G, G, G, G, G, G, T, T],
             [ T, T, T, G, G, G, G, G, G, G, G, T, T, T, T],
-            [ T, T, T, T, T, T, T, T, T, T, T, T, T, T, T],
+            [ T, T, T, T, T, T, G, G, G, T, T, T, T, T, T],
         ],
         "spawn_points": {
             "north": (7, 1), "default": (7, 5),
@@ -213,6 +213,9 @@ STARTING_ROOM = "town_square"
 GUARDS = {
     "town_square": [
         {"name": "Guard", "x": 7, "y": 8, "dialog": "Welcome to Corneria!"},
+    ],
+    "clearing": [
+        {"name": "Guard", "x": 7, "y": 9, "dialog": "Careful, it's dangerous to go alone!"},
     ],
 }
 
@@ -423,11 +426,16 @@ async def do_room_transition(player: Player, exit_direction: str):
     # Broadcast departure
     await broadcast_to_room(old_room, {"type": "player_left", "name": player.name}, exclude=player.ws)
 
-    # Move player
+    # Move player — preserve column/row through the doorway
+    old_x, old_y = player.x, player.y
     player.room = new_room_id
     entry = ENTRY_DIR.get(exit_direction, "default")
     spawn = new_room["spawn_points"].get(entry, new_room["spawn_points"]["default"])
     player.x, player.y = spawn
+    if exit_direction in ("north", "south"):
+        player.x = old_x  # keep column
+    elif exit_direction in ("east", "west"):
+        player.y = old_y  # keep row
 
     # Monster lifecycle — leave old room, enter new room
     await on_player_leave_room(old_room)
