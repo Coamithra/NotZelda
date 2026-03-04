@@ -255,7 +255,7 @@ class Player:
 players: dict = {}
 
 # Activity log — appended on join/leave/chat, persisted to disk
-LOG_FILE = CLIENT_DIR / "event_log.txt"
+LOG_FILE = Path(__file__).parent / "event_log.txt"
 
 
 def log_event(kind: str, text: str):
