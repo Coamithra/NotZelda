@@ -302,6 +302,8 @@
   let dyingMonsters = [];     // [{kind, x, y, frame, nextTime}]
   let monsterHopFrame = 0;    // global hop frame toggled on timer
   let monsterHopTimer = 0;
+  let playerFlags = new Set(); // string flags, e.g. "has_sword"
+  let swordPickups = [];      // [{x, y, frame, nextTime}] — active sword pickup animations
 
   // Transition state
   let transition = null;      // {direction, oldCanvas, startTime, duration}
@@ -364,6 +366,20 @@
         dm.nextTime = now + DYING_MONSTER_FRAME_MS;
       }
       return dm.frame < 3;
+    });
+  }
+
+  const SWORD_PICKUP_FRAME_MS = 200;
+  const SWORD_PICKUP_FRAMES = 4;
+
+  function updateSwordPickups() {
+    const now = Date.now();
+    swordPickups = swordPickups.filter(sp => {
+      if (now >= sp.nextTime) {
+        sp.frame++;
+        sp.nextTime = now + SWORD_PICKUP_FRAME_MS;
+      }
+      return sp.frame < SWORD_PICKUP_FRAMES;
     });
   }
 
@@ -445,7 +461,11 @@
         else drawSlime(ctx, px, py, monsterHopFrame, SCALE);
         continue;
       } else if (p.isGuard) {
-        drawGuard(ctx, px, py, SCALE);
+        if (p.name === "Amara") {
+          drawAmara(ctx, px, py, SCALE);
+        } else {
+          drawGuard(ctx, px, py, SCALE);
+        }
       } else if (attackingPlayers[p.name]) {
         const atk = attackingPlayers[p.name];
         drawPlayerAttack(ctx, px, py, atk.direction, p.color_index, atk.frame, SCALE);
@@ -551,6 +571,12 @@
       }
 
       ctx.globalAlpha = 1;
+    }
+  }
+
+  function renderSwordPickups() {
+    for (const sp of swordPickups) {
+      drawSwordPickup(ctx, sp.x * TS, sp.y * TS, sp.frame, SCALE);
     }
   }
 
@@ -717,10 +743,11 @@
       processMovement(timestamp);
     }
 
-    // Update dance, attack, and monster animations
+    // Update dance, attack, monster, and sword pickup animations
     updateDances();
     updateAttacks();
     updateDyingMonsters();
+    updateSwordPickups();
 
     // Toggle monster hop frame every ~500ms
     monsterHopTimer++;
@@ -762,6 +789,7 @@
       renderRoom();
       renderPlayers();
       renderSpeechBubbles();
+      renderSwordPickups();
       renderUI();
     }
   }
@@ -1028,6 +1056,30 @@
         monsters.push({ id: msg.id, kind: msg.kind, x: msg.x, y: msg.y, displayX: msg.x, displayY: msg.y });
         break;
 
+      case "quest_update":
+        // Quest stage advanced — future quests may use msg.quest / msg.stage for UI
+        break;
+
+      case "sword_obtained": {
+        // Sword pickup animation on self
+        const now = Date.now();
+        swordPickups.push({ x: displayX, y: displayY, frame: 0, nextTime: now + 200 });
+        setTimeout(() => {
+          playerFlags.add("has_sword");
+          infoMessages.push({ text: "You obtained a sword!", expires: Date.now() + 4000 });
+        }, 800);
+        break;
+      }
+
+      case "sword_effect": {
+        // Another player got a sword — show pickup animation at their position
+        const other = otherPlayers[msg.name];
+        if (other) {
+          swordPickups.push({ x: other.displayX, y: other.displayY, frame: 0, nextTime: Date.now() + 200 });
+        }
+        break;
+      }
+
       case "info":
         const lines = msg.text.split("\n");
         for (const line of lines) {
@@ -1096,6 +1148,10 @@
     // Attack with Space
     if (e.code === "Space" && !e.repeat && !chatFocused && !attackingPlayers[myName]) {
       e.preventDefault();
+      if (!playerFlags.has("has_sword")) {
+        infoMessages.push({ text: "You don't have a weapon.", expires: Date.now() + 2000 });
+        return;
+      }
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "attack" }));
       }

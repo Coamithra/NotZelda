@@ -213,16 +213,36 @@ ROOMS = {
     },
     "old_chapel": {
         "name": "Old Chapel",
-        "exits": {"east": "town_square"},
+        "exits": {"east": "town_square", "west": "chapel_sanctum"},
         "tilemap": [
             [WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS],
             [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
             [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
             [WS, S,PW,PW, S,PW,PW, S,PW,PW, S,PW,PW, S,WS],
-            [WS, S,PW,PW, S,PW,PW, S,PW,PW, S,PW,PW, S,DR],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,DR],
-            [WS, S,PW,PW, S,PW,PW, S,PW,PW, S,PW,PW, S,DR],
+            [DR, S,PW,PW, S,PW,PW, S,PW,PW, S,PW,PW, S,DR],
+            [DR, S, S, S, S, S, S, S, S, S, S, S, S, S,DR],
+            [DR, S,PW,PW, S,PW,PW, S,PW,PW, S,PW,PW, S,DR],
             [WS, S,PW,PW, S,PW,PW, S,PW,PW, S,PW,PW, S,WS],
+            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
+            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
+            [WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS],
+        ],
+        "spawn_points": {
+            "east": (13, 5), "west": (1, 5), "default": (7, 5),
+        },
+    },
+    "chapel_sanctum": {
+        "name": "Chapel Sanctum",
+        "exits": {"east": "old_chapel"},
+        "tilemap": [
+            [WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS],
+            [WS, S, S, S, S,FP, S, S, S,FP, S, S, S, S,WS],
+            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
+            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
+            [WS, S, S, S,PW, S, S, S, S, S,PW, S, S, S,DR],
+            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,DR],
+            [WS, S, S, S,PW, S, S, S, S, S,PW, S, S, S,DR],
+            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
             [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
             [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
             [WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS],
@@ -373,6 +393,15 @@ GUARDS = {
     "clearing": [
         {"name": "Guard", "x": 7, "y": 9, "dialog": "Careful, it's dangerous to go alone!"},
     ],
+    "old_chapel": [
+        {"name": "Priest", "x": 7, "y": 2, "dialog": "Peace be with you, traveler."},
+    ],
+    "blacksmith": [
+        {"name": "Smith", "x": 7, "y": 5, "dialog": "Well met!"},
+    ],
+    "chapel_sanctum": [
+        {"name": "Amara", "x": 7, "y": 2, "dialog": ""},
+    ],
 }
 
 GUARD_COOLDOWN = 10  # seconds between repeated guard messages per player
@@ -514,6 +543,20 @@ class Player:
         self.last_attack_time = 0.0
         self.dancing = False
         self.guard_cooldowns = {}  # guard_key -> last_trigger_time
+        self.quests = {}   # quest_id (str) -> stage (int)
+        self.flags = set() # string flags, e.g. {"has_sword"}
+
+    def quest(self, qid: str) -> int:
+        return self.quests.get(qid, 0)
+
+    def set_quest(self, qid: str, stage: int):
+        self.quests[qid] = stage
+
+    def has_flag(self, flag: str) -> bool:
+        return flag in self.flags
+
+    def grant_flag(self, flag: str):
+        self.flags.add(flag)
 
 
 # websocket -> Player
@@ -649,11 +692,83 @@ async def check_guard_proximity(player: Player):
             last = player.guard_cooldowns.get(key, 0)
             if now - last >= GUARD_COOLDOWN:
                 player.guard_cooldowns[key] = now
-                await broadcast_to_room(player.room, {
-                    "type": "chat",
-                    "from": guard["name"],
-                    "text": guard["dialog"],
-                })
+                await handle_quest_npc(player, guard)
+
+
+# ---------------------------------------------------------------------------
+# Quest NPC handler registry
+# ---------------------------------------------------------------------------
+
+NPC_HANDLERS = {}  # (npc_name, room_id) -> async handler(player, guard)
+
+def npc_handler(name: str, room: str):
+    """Decorator to register a quest-aware NPC handler."""
+    def decorator(fn):
+        NPC_HANDLERS[(name, room)] = fn
+        return fn
+    return decorator
+
+
+@npc_handler("Amara", "chapel_sanctum")
+async def amara_interact(player: Player, guard: dict):
+    if player.quest("amara") == 0:
+        player.set_quest("amara", 1)
+        await broadcast_to_room(player.room, {
+            "type": "chat",
+            "from": player.name,
+            "text": "Who could have done this to her?",
+        })
+        await send_to(player, {"type": "quest_update", "quest": "amara", "stage": 1})
+    # Amara never speaks
+
+
+@npc_handler("Priest", "old_chapel")
+async def priest_interact(player: Player, guard: dict):
+    stage = player.quest("amara")
+    if stage == 0:
+        dialog = "Peace be with you, traveler."
+    elif stage == 1:
+        dialog = "The princess has been cursed. Please, speak to the smith before you go."
+    else:
+        dialog = "May the light guide you. Save Princess Amara!"
+    await broadcast_to_room(player.room, {
+        "type": "chat", "from": guard["name"], "text": dialog,
+    })
+
+
+@npc_handler("Smith", "blacksmith")
+async def smith_interact(player: Player, guard: dict):
+    stage = player.quest("amara")
+    if stage == 0:
+        dialog = "Well met!"
+    elif stage == 1:
+        dialog = "It's dangerous to go alone \u2014 take this!"
+        player.grant_flag("has_sword")
+        player.set_quest("amara", 2)
+        await broadcast_to_room(player.room, {
+            "type": "chat", "from": guard["name"], "text": dialog,
+        })
+        await send_to(player, {"type": "sword_obtained"})
+        await broadcast_to_room(player.room, {
+            "type": "sword_effect", "name": player.name,
+        }, exclude=player.ws)
+        return
+    else:
+        dialog = "Give those monsters what they deserve!"
+    await broadcast_to_room(player.room, {
+        "type": "chat", "from": guard["name"], "text": dialog,
+    })
+
+
+async def handle_quest_npc(player: Player, guard: dict):
+    """Dispatch to registered NPC handler, or fall back to static dialog."""
+    handler = NPC_HANDLERS.get((guard["name"], player.room))
+    if handler:
+        await handler(player, guard)
+    elif guard["dialog"]:
+        await broadcast_to_room(player.room, {
+            "type": "chat", "from": guard["name"], "text": guard["dialog"],
+        })
 
 
 async def handle_move(player: Player, direction: str):
@@ -743,6 +858,9 @@ async def handle_move(player: Player, direction: str):
 # ---------------------------------------------------------------------------
 
 async def handle_attack(player: Player):
+    if not player.has_flag("has_sword"):
+        await send_to(player, {"type": "info", "text": "You don't have a weapon."})
+        return
     now = time.monotonic()
     if now - player.last_attack_time < ATTACK_COOLDOWN:
         return
