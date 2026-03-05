@@ -1,0 +1,18 @@
+name: Peak Ridge
+biome: mountain
+music: chapel
+exits: east=ow_1_4 south=ow_2_3 north=ow_0_3 down=cave_interior_1
+---
+MT MT MT MT MT MT ST ST ST MT MT MT MT MT MT
+MT ST ST ST ST ST ST DT ST ST ST ST ST ST MT
+MT ST ST ST ST ST ST DT MT ST ST ST ST ST MT
+MT ST ST MT MT MT ST DT ST ST ST ST ST ST MT
+MT ST ST MT CV MT ST DT DT ST ST ST ST ST ST
+MT ST ST ST CV ST ST DT DT DT DT DT DT DT ST
+MT ST ST ST ST ST ST DT DT ST ST ST ST ST ST
+MT ST ST ST ST ST ST DT ST ST ST BO ST ST MT
+MT BO ST ST ST ST ST SD DT ST ST ST ST ST MT
+MT MT ST ST ST ST ST DT MT ST CL ST ST ST MT
+MT MT MT MT MT MT ST ST ST MT MT MT MT MT MT
+---
+npc Mountain_Hermit 7 3 The caves below hold ancient secrets.

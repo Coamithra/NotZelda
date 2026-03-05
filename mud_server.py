@@ -36,8 +36,37 @@ FIREPLACE   = 12
 TABLE       = 13
 PEW         = 14
 DOOR        = 15
+SAND        = 16
+CACTUS      = 17
+MOUNTAIN    = 18
+CAVE_FLOOR  = 19
+SWAMP       = 20
+DEAD_TREE   = 21
+BRIDGE      = 22
+GRAVESTONE  = 23
+IRON_FENCE  = 24
+RUINS_WALL  = 25
+RUINS_FLOOR = 26
+TALL_GRASS  = 27
+ROAD        = 28
+CLIFF       = 29
+SHALLOW_WATER = 30
+BOULDER     = 31
 
-WALKABLE_TILES = {GRASS, STONE, WOOD, FLOWERS, DIRT, STAIRS_UP, STAIRS_DOWN, DOOR}
+WALKABLE_TILES = {GRASS, STONE, WOOD, FLOWERS, DIRT, STAIRS_UP, STAIRS_DOWN, DOOR,
+                  SAND, CAVE_FLOOR, SWAMP, BRIDGE, RUINS_FLOOR, TALL_GRASS, ROAD,
+                  SHALLOW_WATER}
+
+# Tile code string -> numeric ID (for .room file parsing)
+TILE_CODES = {
+    "GR": GRASS, "ST": STONE, "WD": WOOD, "WS": WALL_STONE, "WW": WALL_WOOD,
+    "WA": WATER, "TR": TREE, "FL": FLOWERS, "DT": DIRT, "SU": STAIRS_UP,
+    "SD": STAIRS_DOWN, "AN": ANVIL, "FP": FIREPLACE, "TB": TABLE, "PW": PEW,
+    "DR": DOOR, "SA": SAND, "CC": CACTUS, "MT": MOUNTAIN, "CV": CAVE_FLOOR,
+    "SM": SWAMP, "DK": DEAD_TREE, "BR": BRIDGE, "GS": GRAVESTONE, "IF": IRON_FENCE,
+    "RW": RUINS_WALL, "RF": RUINS_FLOOR, "TG": TALL_GRASS, "RD": ROAD, "CL": CLIFF,
+    "SH": SHALLOW_WATER, "BO": BOULDER,
+}
 
 # Shorthand aliases for tilemap readability
 G  = GRASS
@@ -204,6 +233,133 @@ ROOMS = {
     },
 }
 
+# ---------------------------------------------------------------------------
+# Room file loader — reads .room files from rooms/ directory
+# ---------------------------------------------------------------------------
+
+def load_room_files(directory: str = "rooms"):
+    """Load all .room files and merge into ROOMS, GUARDS, MONSTER_TEMPLATES."""
+    rooms_dir = Path(__file__).parent / directory
+    if not rooms_dir.exists():
+        print(f"[ROOMS] No '{directory}/' directory found, skipping room file loading")
+        return
+
+    count = 0
+    for room_file in sorted(rooms_dir.glob("*.room")):
+        room_id = room_file.stem  # e.g. "ow_0_7" from "ow_0_7.room"
+        try:
+            text = room_file.read_text(encoding="utf-8")
+        except Exception as e:
+            print(f"[ROOMS] Error reading {room_file.name}: {e}")
+            continue
+
+        parts = text.split("---")
+        if len(parts) < 2:
+            print(f"[ROOMS] Skipping {room_file.name}: missing --- separator")
+            continue
+
+        # Parse header
+        header = {}
+        for line in parts[0].strip().splitlines():
+            line = line.strip()
+            if ":" in line:
+                key, val = line.split(":", 1)
+                header[key.strip()] = val.strip()
+
+        # Parse exits
+        exits = {}
+        if "exits" in header:
+            for pair in header["exits"].split():
+                if "=" in pair:
+                    direction, target = pair.split("=", 1)
+                    exits[direction] = target
+
+        # Parse tilemap
+        tilemap_text = parts[1].strip()
+        tilemap = []
+        for row_line in tilemap_text.splitlines():
+            row_line = row_line.strip()
+            if not row_line:
+                continue
+            codes = row_line.split()
+            row = [TILE_CODES.get(code, GRASS) for code in codes]
+            # Pad or trim to 15 columns
+            while len(row) < 15:
+                row.append(GRASS)
+            row = row[:15]
+            tilemap.append(row)
+        # Pad or trim to 11 rows
+        while len(tilemap) < 11:
+            tilemap.append([GRASS] * 15)
+        tilemap = tilemap[:11]
+
+        # Build spawn points from exits
+        # Key = entry direction (the side of the room you enter from)
+        # Value = position near that side
+        spawn_points = {"default": (7, 5)}
+        if "north" in exits:
+            spawn_points["north"] = (7, 1)   # enter from north edge = near top
+        if "south" in exits:
+            spawn_points["south"] = (7, 9)   # enter from south edge = near bottom
+        if "east" in exits:
+            spawn_points["east"] = (13, 5)   # enter from east edge = near right
+        if "west" in exits:
+            spawn_points["west"] = (1, 5)    # enter from west edge = near left
+        if "up" in exits:
+            spawn_points["up"] = (7, 5)
+        if "down" in exits:
+            spawn_points["down"] = (7, 5)
+
+        room = {
+            "name": header.get("name", room_id),
+            "exits": exits,
+            "tilemap": tilemap,
+            "spawn_points": spawn_points,
+            "biome": header.get("biome", "plains"),
+            "music": header.get("music", "overworld"),
+        }
+        ROOMS[room_id] = room
+
+        # Parse entity section (after second ---)
+        if len(parts) >= 3:
+            entity_text = parts[2].strip()
+            for line in entity_text.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                tokens = line.split()
+                if tokens[0] == "npc" and len(tokens) >= 5:
+                    npc_name = tokens[1].replace("_", " ")
+                    npc_x = int(tokens[2])
+                    npc_y = int(tokens[3])
+                    npc_dialog = " ".join(tokens[4:])
+                    if room_id not in GUARDS:
+                        GUARDS[room_id] = []
+                    GUARDS[room_id].append({
+                        "name": npc_name, "x": npc_x, "y": npc_y, "dialog": npc_dialog,
+                    })
+                elif tokens[0] == "monster" and len(tokens) >= 4:
+                    kind = tokens[1]
+                    mx = int(tokens[2])
+                    my = int(tokens[3])
+                    if room_id not in MONSTER_TEMPLATES:
+                        MONSTER_TEMPLATES[room_id] = []
+                    MONSTER_TEMPLATES[room_id].append({"kind": kind, "x": mx, "y": my})
+
+        count += 1
+
+    # Wire clearing's south exit to ow_0_7 if that room was loaded
+    if "ow_0_7" in ROOMS and "south" not in ROOMS["clearing"]["exits"]:
+        ROOMS["clearing"]["exits"]["south"] = "ow_0_7"
+        ROOMS["clearing"]["spawn_points"]["south"] = (7, 9)
+        # Update clearing tilemap: open south edge (cols 6-8, row 10)
+        for c in range(6, 9):
+            ROOMS["clearing"]["tilemap"][10][c] = GRASS
+
+    print(f"[ROOMS] Loaded {count} room files from {directory}/")
+    print(f"[ROOMS] Total rooms: {len(ROOMS)}")
+
+
 STARTING_ROOM = "town_square"
 
 # ---------------------------------------------------------------------------
@@ -238,8 +394,17 @@ ATTACK_COOLDOWN = 0.4  # seconds between attacks
 # Monsters
 # ---------------------------------------------------------------------------
 
-MONSTER_HOP_INTERVAL = 2.0    # seconds between random hops
+MONSTER_HOP_INTERVAL = 2.0    # seconds between random hops (default)
 ROOM_RESET_COOLDOWN = 10.0   # seconds after all-killed + empty before respawn
+
+# Per-kind monster stats
+MONSTER_STATS = {
+    "slime":      {"hp": 1, "hop_interval": 2.0},
+    "bat":        {"hp": 1, "hop_interval": 1.0},
+    "scorpion":   {"hp": 2, "hop_interval": 2.0},
+    "skeleton":   {"hp": 2, "hop_interval": 2.0},
+    "swamp_blob": {"hp": 1, "hop_interval": 2.0},
+}
 
 import random
 
@@ -250,6 +415,9 @@ class Monster:
         self.kind = kind
         self.alive = True
         self.last_hop_time = time.monotonic()
+        stats = MONSTER_STATS.get(kind, {"hp": 1, "hop_interval": 2.0})
+        self.hp = stats["hp"]
+        self.hop_interval = stats["hop_interval"]
 
 # Templates — define what monsters belong in each room (never mutated)
 MONSTER_TEMPLATES = {
@@ -394,7 +562,7 @@ def player_info(p: Player) -> dict:
     return info
 
 
-async def send_room_enter(player: Player):
+async def send_room_enter(player: Player, exit_direction: str = None):
     room = ROOMS[player.room]
     others = [player_info(p) for p in players_in_room(player.room, exclude=player.ws)]
     guards = GUARDS.get(player.room, [])
@@ -403,6 +571,7 @@ async def send_room_enter(player: Player):
         for i, m in enumerate(get_room_monsters(player.room))
         if m.alive
     ]
+    exits = room["exits"]
     await send_to(player, {
         "type": "room_enter",
         "room_id": player.room,
@@ -412,6 +581,9 @@ async def send_room_enter(player: Player):
         "players": others,
         "guards": [{"name": g["name"], "x": g["x"], "y": g["y"]} for g in guards],
         "monsters": monsters,
+        "exits": {d: exits[d] for d in exits},
+        "biome": room.get("biome", "town"),
+        "exit_direction": exit_direction,
     })
 
 # ---------------------------------------------------------------------------
@@ -442,7 +614,7 @@ async def do_room_transition(player: Player, exit_direction: str):
     await on_player_enter_room(new_room_id)
 
     # Send new room to player
-    await send_room_enter(player)
+    await send_room_enter(player, exit_direction=exit_direction)
 
     # Broadcast arrival
     await broadcast_to_room(
@@ -589,13 +761,23 @@ async def handle_attack(player: Player):
     hit_y = player.y + dy
     for i, monster in enumerate(get_room_monsters(player.room)):
         if monster.alive and monster.x == hit_x and monster.y == hit_y:
-            monster.alive = False
-            await broadcast_to_room(player.room, {
-                "type": "monster_killed",
-                "id": i,
-                "x": monster.x,
-                "y": monster.y,
-            })
+            monster.hp -= 1
+            if monster.hp <= 0:
+                monster.alive = False
+                await broadcast_to_room(player.room, {
+                    "type": "monster_killed",
+                    "id": i,
+                    "x": monster.x,
+                    "y": monster.y,
+                })
+            else:
+                await broadcast_to_room(player.room, {
+                    "type": "monster_hit",
+                    "id": i,
+                    "x": monster.x,
+                    "y": monster.y,
+                    "hp": monster.hp,
+                })
 
 # ---------------------------------------------------------------------------
 # Monster AI tick
@@ -615,7 +797,7 @@ async def monster_tick():
             for i, monster in enumerate(monster_list):
                 if not monster.alive:
                     continue
-                if now - monster.last_hop_time < MONSTER_HOP_INTERVAL:
+                if now - monster.last_hop_time < monster.hop_interval:
                     continue
                 monster.last_hop_time = now
 
@@ -799,6 +981,7 @@ STATIC_FILES = {
     "/music_forest.mp3":  ("not zelda (forest).mp3", "audio/mpeg"),
     "/music_tavern.mp3":  ("not zelda (tavern).mp3", "audio/mpeg"),
     "/music_chapel.mp3":  ("not zelda (chapel).mp3", "audio/mpeg"),
+    "/music_overworld.mp3": ("not zelda (overworld).mp3", "audio/mpeg"),
 }
 
 
@@ -823,6 +1006,7 @@ async def process_request(path, request_headers):
 # ---------------------------------------------------------------------------
 
 async def main():
+    load_room_files()
     port = 8080
     server = await websockets.serve(
         handle_connection, "0.0.0.0", port,

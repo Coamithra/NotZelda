@@ -401,6 +401,237 @@ function drawSlimeDeath(ctx, px, py, deathFrame, S) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Bat sprite — dark flapping creature
+// ---------------------------------------------------------------------------
+function drawBat(ctx, px, py, hopFrame, S) {
+  const BODY = "#3a2a4a";
+  const WING = "#5a3a6a";
+  const EYES = "#ff4444";
+
+  if (hopFrame === 0) {
+    // Wings up
+    ctx.fillStyle = BODY;
+    ctx.fillRect(px+6*S, py+6*S, 4*S, 4*S);
+    ctx.fillStyle = WING;
+    ctx.fillRect(px+1*S, py+3*S, 5*S, 4*S);
+    ctx.fillRect(px+10*S, py+3*S, 5*S, 4*S);
+    ctx.fillRect(px+2*S, py+2*S, 3*S, S);
+    ctx.fillRect(px+11*S, py+2*S, 3*S, S);
+    ctx.fillStyle = EYES;
+    ctx.fillRect(px+6*S, py+7*S, S, S);
+    ctx.fillRect(px+9*S, py+7*S, S, S);
+  } else {
+    // Wings down
+    ctx.fillStyle = BODY;
+    ctx.fillRect(px+6*S, py+5*S, 4*S, 4*S);
+    ctx.fillStyle = WING;
+    ctx.fillRect(px+1*S, py+7*S, 5*S, 4*S);
+    ctx.fillRect(px+10*S, py+7*S, 5*S, 4*S);
+    ctx.fillRect(px+2*S, py+11*S, 3*S, S);
+    ctx.fillRect(px+11*S, py+11*S, 3*S, S);
+    ctx.fillStyle = EYES;
+    ctx.fillRect(px+6*S, py+6*S, S, S);
+    ctx.fillRect(px+9*S, py+6*S, S, S);
+  }
+}
+
+function drawBatDeath(ctx, px, py, deathFrame, S) {
+  const CLR = "#3a2a4a";
+  if (deathFrame === 0) {
+    ctx.fillStyle = CLR;
+    ctx.fillRect(px+3*S, py+11*S, 10*S, 2*S);
+    ctx.fillRect(px+1*S, py+12*S, 14*S, S);
+  } else if (deathFrame === 1) {
+    ctx.fillStyle = CLR;
+    ctx.fillRect(px+1*S, py+12*S, 3*S, 2*S);
+    ctx.fillRect(px+6*S, py+11*S, 4*S, 2*S);
+    ctx.fillRect(px+12*S, py+12*S, 3*S, 2*S);
+  } else {
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = CLR;
+    ctx.fillRect(px+0*S, py+13*S, 2*S, S);
+    ctx.fillRect(px+7*S, py+12*S, 2*S, S);
+    ctx.fillRect(px+13*S, py+13*S, 2*S, S);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Scorpion sprite — desert creature
+// ---------------------------------------------------------------------------
+function drawScorpion(ctx, px, py, hopFrame, S) {
+  const BODY = "#8a5a2a";
+  const DARK = "#6a4a1a";
+  const CLAW = "#aa7a3a";
+  const TAIL = "#7a4a1a";
+
+  const yOff = hopFrame === 0 ? 0 : -S;
+  ctx.fillStyle = BODY;
+  ctx.fillRect(px+5*S, py+8*S+yOff, 6*S, 4*S);
+  ctx.fillStyle = DARK;
+  ctx.fillRect(px+6*S, py+9*S+yOff, 4*S, 2*S);
+  // Claws
+  ctx.fillStyle = CLAW;
+  ctx.fillRect(px+2*S, py+7*S+yOff, 3*S, 2*S);
+  ctx.fillRect(px+11*S, py+7*S+yOff, 3*S, 2*S);
+  ctx.fillRect(px+1*S, py+6*S+yOff, 2*S, S);
+  ctx.fillRect(px+13*S, py+6*S+yOff, 2*S, S);
+  // Tail curving up
+  ctx.fillStyle = TAIL;
+  ctx.fillRect(px+7*S, py+5*S+yOff, 2*S, 3*S);
+  ctx.fillRect(px+7*S, py+3*S+yOff, 2*S, 2*S);
+  ctx.fillRect(px+8*S, py+2*S+yOff, 2*S, 2*S);
+  ctx.fillStyle = "#cc4444";
+  ctx.fillRect(px+9*S, py+1*S+yOff, S, 2*S);
+  // Legs
+  ctx.fillStyle = DARK;
+  ctx.fillRect(px+4*S, py+12*S+yOff, S, 2*S);
+  ctx.fillRect(px+11*S, py+12*S+yOff, S, 2*S);
+  ctx.fillRect(px+3*S, py+11*S+yOff, S, 2*S);
+  ctx.fillRect(px+12*S, py+11*S+yOff, S, 2*S);
+}
+
+function drawScorpionDeath(ctx, px, py, deathFrame, S) {
+  const CLR = "#8a5a2a";
+  if (deathFrame === 0) {
+    ctx.fillStyle = CLR;
+    ctx.fillRect(px+3*S, py+11*S, 10*S, 3*S);
+  } else if (deathFrame === 1) {
+    ctx.fillStyle = CLR;
+    ctx.fillRect(px+1*S, py+12*S, 3*S, 2*S);
+    ctx.fillRect(px+7*S, py+11*S, 3*S, 2*S);
+    ctx.fillRect(px+12*S, py+12*S, 2*S, 2*S);
+  } else {
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = CLR;
+    ctx.fillRect(px+0*S, py+13*S, 2*S, S);
+    ctx.fillRect(px+7*S, py+12*S, 2*S, S);
+    ctx.fillRect(px+14*S, py+13*S, 2*S, S);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Skeleton sprite — bony undead
+// ---------------------------------------------------------------------------
+function drawSkeleton(ctx, px, py, hopFrame, S) {
+  const BONE = "#ddd8cc";
+  const DARK = "#aaa89a";
+  const EYES = "#222";
+
+  const yOff = hopFrame === 0 ? 0 : -S;
+  // Skull
+  ctx.fillStyle = BONE;
+  ctx.fillRect(px+5*S, py+1*S+yOff, 6*S, 5*S);
+  ctx.fillStyle = EYES;
+  ctx.fillRect(px+6*S, py+3*S+yOff, 2*S, 2*S);
+  ctx.fillRect(px+9*S, py+3*S+yOff, 2*S, 2*S);
+  ctx.fillRect(px+7*S, py+5*S+yOff, 2*S, S);
+  // Ribcage
+  ctx.fillStyle = BONE;
+  ctx.fillRect(px+6*S, py+6*S+yOff, 4*S, 5*S);
+  ctx.fillStyle = DARK;
+  ctx.fillRect(px+7*S, py+7*S+yOff, 2*S, S);
+  ctx.fillRect(px+7*S, py+9*S+yOff, 2*S, S);
+  // Arms
+  ctx.fillStyle = BONE;
+  ctx.fillRect(px+4*S, py+7*S+yOff, 2*S, S);
+  ctx.fillRect(px+3*S, py+8*S+yOff, S, 3*S);
+  ctx.fillRect(px+10*S, py+7*S+yOff, 2*S, S);
+  ctx.fillRect(px+12*S, py+8*S+yOff, S, 3*S);
+  // Legs
+  ctx.fillStyle = BONE;
+  ctx.fillRect(px+6*S, py+11*S+yOff, 2*S, 3*S);
+  ctx.fillRect(px+9*S, py+11*S+yOff, 2*S, 3*S);
+  ctx.fillStyle = DARK;
+  ctx.fillRect(px+5*S, py+14*S+yOff, 3*S, S);
+  ctx.fillRect(px+9*S, py+14*S+yOff, 3*S, S);
+}
+
+function drawSkeletonDeath(ctx, px, py, deathFrame, S) {
+  const CLR = "#ddd8cc";
+  if (deathFrame === 0) {
+    ctx.fillStyle = CLR;
+    ctx.fillRect(px+3*S, py+11*S, 10*S, 3*S);
+    ctx.fillRect(px+5*S, py+10*S, 6*S, S);
+  } else if (deathFrame === 1) {
+    ctx.fillStyle = CLR;
+    ctx.fillRect(px+1*S, py+12*S, 3*S, 2*S);
+    ctx.fillRect(px+5*S, py+13*S, 2*S, S);
+    ctx.fillRect(px+8*S, py+11*S, 3*S, 2*S);
+    ctx.fillRect(px+12*S, py+13*S, 3*S, S);
+  } else {
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = CLR;
+    ctx.fillRect(px+0*S, py+13*S, 2*S, S);
+    ctx.fillRect(px+6*S, py+14*S, 2*S, S);
+    ctx.fillRect(px+13*S, py+13*S, 2*S, S);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Swamp blob sprite — murky green ooze
+// ---------------------------------------------------------------------------
+function drawSwampBlob(ctx, px, py, hopFrame, S) {
+  const BODY = "#5a7a3a";
+  const DARK = "#3a5a2a";
+  const EYES = "#cc2";
+  const HIGHLIGHT = "#7a9a5a";
+
+  if (hopFrame === 0) {
+    ctx.fillStyle = DARK;
+    ctx.fillRect(px+2*S, py+9*S, 12*S, 6*S);
+    ctx.fillStyle = BODY;
+    ctx.fillRect(px+3*S, py+8*S, 10*S, 6*S);
+    ctx.fillRect(px+4*S, py+7*S, 8*S, S);
+    ctx.fillStyle = EYES;
+    ctx.fillRect(px+5*S, py+9*S, 2*S, 2*S);
+    ctx.fillRect(px+9*S, py+9*S, 2*S, 2*S);
+    ctx.fillStyle = HIGHLIGHT;
+    ctx.fillRect(px+5*S, py+8*S, 2*S, S);
+  } else {
+    ctx.fillStyle = DARK;
+    ctx.fillRect(px+4*S, py+12*S, 8*S, 2*S);
+    ctx.fillStyle = BODY;
+    ctx.fillRect(px+4*S, py+4*S, 8*S, 9*S);
+    ctx.fillRect(px+5*S, py+3*S, 6*S, S);
+    ctx.fillRect(px+5*S, py+13*S, 6*S, S);
+    ctx.fillStyle = DARK;
+    ctx.fillRect(px+4*S, py+11*S, 8*S, 2*S);
+    ctx.fillStyle = EYES;
+    ctx.fillRect(px+5*S, py+6*S, 2*S, 2*S);
+    ctx.fillRect(px+9*S, py+6*S, 2*S, 2*S);
+    ctx.fillStyle = HIGHLIGHT;
+    ctx.fillRect(px+5*S, py+4*S, 2*S, S);
+  }
+}
+
+function drawSwampBlobDeath(ctx, px, py, deathFrame, S) {
+  const SPLAT = "#5a7a3a";
+  const DARK = "#3a5a2a";
+  if (deathFrame === 0) {
+    ctx.fillStyle = DARK;
+    ctx.fillRect(px+2*S, py+12*S, 12*S, 2*S);
+    ctx.fillStyle = SPLAT;
+    ctx.fillRect(px+3*S, py+11*S, 10*S, 2*S);
+    ctx.fillRect(px+1*S, py+12*S, 14*S, S);
+  } else if (deathFrame === 1) {
+    ctx.fillStyle = SPLAT;
+    ctx.fillRect(px+1*S, py+12*S, 3*S, 2*S);
+    ctx.fillRect(px+6*S, py+11*S, 4*S, 2*S);
+    ctx.fillRect(px+12*S, py+12*S, 3*S, 2*S);
+  } else {
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = SPLAT;
+    ctx.fillRect(px+0*S, py+13*S, 2*S, S);
+    ctx.fillRect(px+6*S, py+12*S, 3*S, S);
+    ctx.fillRect(px+13*S, py+13*S, 2*S, S);
+    ctx.globalAlpha = 1;
+  }
+}
+
 function drawPlayer(ctx, px, py, direction, colorIndex, animFrame, S) {
   const sx = px;
   const sy = py;

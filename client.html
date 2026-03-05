@@ -426,14 +426,23 @@
 
     // Draw dying monsters (behind everything)
     for (const dm of dyingMonsters) {
-      drawSlimeDeath(ctx, dm.x * TS, dm.y * TS, dm.frame, SCALE);
+      const dx = dm.x * TS, dy = dm.y * TS;
+      if (dm.kind === "bat") drawBatDeath(ctx, dx, dy, dm.frame, SCALE);
+      else if (dm.kind === "scorpion") drawScorpionDeath(ctx, dx, dy, dm.frame, SCALE);
+      else if (dm.kind === "skeleton") drawSkeletonDeath(ctx, dx, dy, dm.frame, SCALE);
+      else if (dm.kind === "swamp_blob") drawSwampBlobDeath(ctx, dx, dy, dm.frame, SCALE);
+      else drawSlimeDeath(ctx, dx, dy, dm.frame, SCALE);
     }
 
     for (const p of all) {
       const px = p.x * TS;
       const py = p.y * TS;
       if (p.isMonster) {
-        drawSlime(ctx, px, py, monsterHopFrame, SCALE);
+        if (p.kind === "bat") drawBat(ctx, px, py, monsterHopFrame, SCALE);
+        else if (p.kind === "scorpion") drawScorpion(ctx, px, py, monsterHopFrame, SCALE);
+        else if (p.kind === "skeleton") drawSkeleton(ctx, px, py, monsterHopFrame, SCALE);
+        else if (p.kind === "swamp_blob") drawSwampBlob(ctx, px, py, monsterHopFrame, SCALE);
+        else drawSlime(ctx, px, py, monsterHopFrame, SCALE);
         continue;
       } else if (p.isGuard) {
         drawGuard(ctx, px, py, SCALE);
@@ -570,7 +579,7 @@
     ctx.fillText(name, 16, 24);
 
     // Version — top right
-    const version = "v0.4";
+    const version = "v0.5";
     ctx.font = "10px monospace";
     const vw = ctx.measureText(version).width;
     ctx.fillStyle = "rgba(255,255,255,0.3)";
@@ -616,7 +625,8 @@
     }
   }
 
-  const WALKABLE = new Set([0, 1, 2, 7, 8, 9, 10, 15]); // matches server WALKABLE_TILES
+  // matches server WALKABLE_TILES
+  const WALKABLE = new Set([0, 1, 2, 7, 8, 9, 10, 15, 16, 19, 20, 22, 26, 27, 28, 30]);
 
   function getExitDirs() {
     if (!currentRoom || !currentRoom.room_id) return new Set();
@@ -884,10 +894,13 @@
           oldCanvas.getContext("2d").drawImage(canvas, 0, 0);
         }
 
+        const prevExits = currentRoom ? currentRoom.exits : null;
         currentRoom = {
           name: msg.name,
           tilemap: msg.tilemap,
           room_id: msg.room_id,
+          exits: msg.exits || {},
+          biome: msg.biome || "town",
         };
         myPlayer = {
           x: msg.your_pos.x,
@@ -896,7 +909,7 @@
           color_index: myColorIndex,
         };
 
-        MusicPlayer.setRoom(msg.room_id);
+        MusicPlayer.setRoom(msg.room_id, msg.biome);
 
         // Reset other players, guards, monsters, and bubbles for this room
         otherPlayers = {};
@@ -925,7 +938,7 @@
 
         if (oldCanvas && prevRoom) {
           // Determine transition direction
-          const transDir = guessTransitionDir(prevRoom.room_id, msg.room_id);
+          const transDir = guessTransitionDir(prevRoom.room_id, msg.room_id, msg.exit_direction, prevExits);
           const isFade = transDir === "up" || transDir === "down";
           transition = {
             type: isFade ? "fade" : "slide",
@@ -1002,6 +1015,15 @@
         break;
       }
 
+      case "monster_hit": {
+        // Flash the monster white briefly to show damage
+        const hitMon = monsters.find(m => m.id === msg.id);
+        if (hitMon) {
+          hitMon.hitFlash = Date.now() + 200;
+        }
+        break;
+      }
+
       case "monster_spawned":
         monsters.push({ id: msg.id, kind: msg.kind, x: msg.x, y: msg.y, displayX: msg.x, displayY: msg.y });
         break;
@@ -1019,25 +1041,17 @@
     }
   }
 
-  // Guess transition direction based on where player came from
-  // We track previous room_id to figure out which direction the transition should animate
-  const ROOM_CONNECTIONS = {
-    "town_square->blacksmith": "north",
-    "blacksmith->town_square": "south",
-    "town_square->forest_path": "south",
-    "forest_path->town_square": "north",
-    "town_square->tavern": "east",
-    "tavern->town_square": "west",
-    "town_square->old_chapel": "west",
-    "old_chapel->town_square": "east",
-    "forest_path->clearing": "south",
-    "clearing->forest_path": "north",
-    "tavern->tavern_upstairs": "up",
-    "tavern_upstairs->tavern": "down",
-  };
-
-  function guessTransitionDir(fromId, toId) {
-    return ROOM_CONNECTIONS[fromId + "->" + toId] || "north";
+  // Transition direction comes from server's exit_direction field.
+  // Fallback: scan old room exits to find which direction leads to the new room.
+  function guessTransitionDir(fromId, toId, exitDir, fromExits) {
+    if (exitDir) return exitDir;
+    // Fallback: search the old room's exits dict
+    if (fromExits) {
+      for (const [dir, target] of Object.entries(fromExits)) {
+        if (target === toId) return dir;
+      }
+    }
+    return "north";
   }
 
   // ---------------------------------------------------------------------------

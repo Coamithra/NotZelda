@@ -10,7 +10,7 @@ const MusicPlayer = (function () {
   const FADE_MS = 800;
   const VOLUME = 0.4;
 
-  // Map room IDs to music tracks
+  // Map room IDs to music tracks (village rooms)
   const ROOM_MUSIC = {
     "town_square":      "music.mp3",
     "tavern":           "music_tavern.mp3",
@@ -20,6 +20,23 @@ const MusicPlayer = (function () {
     "forest_path":      "music_forest.mp3",
     "clearing":         "music_forest.mp3",
   };
+
+  // Map biome names to music tracks (for overworld rooms)
+  const BIOME_MUSIC = {
+    "forest":     "music_forest.mp3",
+    "mountain":   "music_chapel.mp3",
+    "cave":       "music_chapel.mp3",
+    "graveyard":  "music_chapel.mp3",
+    "castle":     "music_tavern.mp3",
+    "desert":     "music_overworld.mp3",
+    "swamp":      "music_overworld.mp3",
+    "plains":     "music_overworld.mp3",
+    "lake":       "music_overworld.mp3",
+    "river":      "music_overworld.mp3",
+    "town":       "music.mp3",
+  };
+
+  let currentBiome = null;
 
   function getOrCreateAudio(url) {
     if (!tracks[url]) {
@@ -85,8 +102,17 @@ const MusicPlayer = (function () {
     fadeIds[url] = requestAnimationFrame(step);
   }
 
-  function setRoom(roomId) {
-    const url = ROOM_MUSIC[roomId] || "music.mp3";
+  function setRoom(roomId, biome) {
+    // Village rooms use hardcoded mapping; overworld rooms use biome
+    let url;
+    if (ROOM_MUSIC[roomId]) {
+      url = ROOM_MUSIC[roomId];
+    } else if (biome && BIOME_MUSIC[biome]) {
+      url = BIOME_MUSIC[biome];
+    } else {
+      url = "music_overworld.mp3";
+    }
+    currentBiome = biome || null;
     if (url === currentTrack) return;
 
     if (!playing) {

@@ -1,0 +1,20 @@
+name: Cracked Basin
+biome: desert
+music: overworld
+exits: west=ow_3_0 north=ow_2_1
+---
+CC CC CC CC CC CC SA SA SA CC CC CC CC CC CC
+CC SA SA SA SA SA SA SA SA SA SA SA SA CC CC
+CC SA SA SA SA SA SA SA SA SA SA SA BO SA CC
+CC SA SA SA SA SA SA SA SA SA SA SA SA SA CC
+SA SA SA SA SA SA SA SA SA SA SA SA SA SA CC
+SA SA SA SA SA SA SA SA SA SA SA SA SA SA CC
+SA SA SA BO SA SA SA CC SA CC SA SA SA SA CC
+CC SA SA BO SA SA CC SA CC SA SA SA SA SA CC
+CC CC SA SA SA SA SA CC SA SA SA SA SA SA CC
+CC CC SA SA SA SA SA SA BO SA SA CC SA SA CC
+CC CC CC CC CC CC CC CC CC CC CC CC CC CC CC
+---
+npc Desert_Nomad 7 3 Water is scarce. The oasis lies to the south.
+monster scorpion 3 2
+monster scorpion 5 3

@@ -1,0 +1,21 @@
+name: Murky Sink
+biome: swamp
+music: overworld
+exits: west=ow_4_10 east=ow_4_12 south=ow_5_11 down=swamp_hut
+---
+DK DK DK DK DK DK DK DK DK DK DK DK DK DK DK
+DK SM SM SM SM SM SM SM SM SM SM SM SM SM DK
+DK SM SM SM SM SM SM SM SM SM DK SM DK SM DK
+DK SM SM SM SM SM DK SM SH SM SM SM SM SM DK
+SM SM SM SM SM SM SM SH WA SH DK SM DK SH SM
+SM SM SM SM SM SM SM SM SH SM SM SM SM SM SM
+SM SM SM SM SM SM SM SM SM SM SM SM SM SM SM
+DK SM SM SM SM SM SM WA SM SM SM SM SM SM DK
+DK SM SM SM SM SM SM SD SM SM SM SM SM SM DK
+DK SM SM SM SM SM SM SM SM SM SM SM SM SM DK
+DK DK DK DK DK DK SM SM SM DK DK DK DK DK DK
+---
+npc Swamp_Witch 7 3 Beware the deep waters. Not all who sink are found.
+monster swamp_blob 2 7
+monster swamp_blob 12 7
+monster swamp_blob 5 7
