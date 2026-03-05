@@ -127,12 +127,10 @@
   .dpad-left  { top: 50px; left: 0; }
   .dpad-right { top: 50px; right: 0; }
 
-  /* ---------- Mobile chat button ---------- */
-  #mobile-chat-btn {
+  /* ---------- Mobile action buttons ---------- */
+  #mobile-chat-btn, #mobile-sword-btn {
     display: none;
     position: fixed;
-    bottom: 70px;
-    right: 20px;
     width: 50px;
     height: 50px;
     background: rgba(255,255,255,0.15);
@@ -145,6 +143,12 @@
     user-select: none;
     -webkit-user-select: none;
     cursor: pointer;
+  }
+  #mobile-chat-btn { bottom: 70px; right: 20px; }
+  #mobile-sword-btn { bottom: 130px; right: 20px; }
+  #mobile-sword-btn:active, #mobile-sword-btn.active {
+    background: rgba(230,180,34,0.4);
+    border-color: #e6b422;
   }
 
   #debug-btn {
@@ -171,7 +175,7 @@
 
   /* ---------- Mobile overrides ---------- */
   body.mobile #dpad { display: block; }
-  body.mobile #mobile-chat-btn { display: flex; align-items: center; justify-content: center; }
+  body.mobile #mobile-chat-btn, body.mobile #mobile-sword-btn { display: flex; align-items: center; justify-content: center; }
   body.mobile #debug-btn { bottom: 20px; right: 20px; width: 36px; height: 36px; font-size: 18px; }
   body.mobile #chat-bar { display: none; }
   body.mobile #chat-bar.focused {
@@ -217,6 +221,7 @@
   <div class="dpad-btn dpad-left" data-dir="left">&#9664;</div>
   <div class="dpad-btn dpad-right" data-dir="right">&#9654;</div>
 </div>
+<button id="mobile-sword-btn">&#9876;</button>
 <button id="mobile-chat-btn">&#128172;</button>
 <button id="debug-btn">&pi;</button>
 
@@ -1278,6 +1283,14 @@
       chatInput.focus();
       chatFocused = true;
       chatBar.classList.add("focused");
+    });
+
+    // Mobile sword button
+    document.getElementById("mobile-sword-btn").addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      if (!ws || !myName || attackingPlayers[myName]) return;
+      if (!playerFlags.has("has_sword")) return;
+      ws.send(JSON.stringify({ type: "attack" }));
     });
 
     // Re-scale when login completes and game screen appears
