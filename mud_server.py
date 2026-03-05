@@ -68,190 +68,12 @@ TILE_CODES = {
     "SH": SHALLOW_WATER, "BO": BOULDER,
 }
 
-# Shorthand aliases for tilemap readability
-G  = GRASS
-S  = STONE
-W  = WOOD
-WS = WALL_STONE
-WW = WALL_WOOD
-WA = WATER
-T  = TREE
-FL = FLOWERS
-DI = DIRT
-SU = STAIRS_UP
-SD = STAIRS_DOWN
-AN = ANVIL
-FP = FIREPLACE
-TB = TABLE
-PW = PEW
-DR = DOOR
-
 # ---------------------------------------------------------------------------
 # World data — 15 columns x 11 rows per room
+# All rooms loaded from .room files in rooms/ directory
 # ---------------------------------------------------------------------------
 
-ROOMS = {
-    "town_square": {
-        "name": "Town Square",
-        "exits": {"north": "blacksmith", "south": "forest_path", "east": "tavern", "west": "old_chapel"},
-        "tilemap": [
-            [WS,WS,WS,WS,WS,WS,DR,DR,DR,WS,WS,WS,WS,WS,WS],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
-            [DR, S, S, S, S,WA,WA,WA, S, S, S, S, S, S,DR],
-            [DR, S, S, S, S,WA,WA,WA, S, S, S, S, S, S,DR],
-            [DR, S, S, S, S,WA,WA,WA, S, S, S, S, S, S,DR],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
-            [WS,WS,WS,WS,WS,WS,DR,DR,DR,WS,WS,WS,WS,WS,WS],
-        ],
-        "spawn_points": {
-            "north": (7, 1), "south": (7, 9), "east": (13, 5), "west": (1, 5), "default": (7, 5),
-        },
-    },
-    "tavern": {
-        "name": "The Rusty Flagon",
-        "exits": {"west": "town_square", "up": "tavern_upstairs"},
-        "tilemap": [
-            [WW,WW,WW,WW,WW,WW,WW,WW,WW,WW,WW,WW,WW,WW,WW],
-            [WW, W, W, W, W, W, W, W, W, W, W, W, W,SU,WW],
-            [WW, W,TB, W, W, W, W, W, W, W,TB, W, W, W,WW],
-            [WW, W, W, W, W, W, W, W, W, W, W, W, W, W,WW],
-            [DR, W, W, W, W, W, W, W, W, W, W, W, W, W,WW],
-            [DR, W, W, W,TB, W, W, W, W,TB, W, W, W, W,WW],
-            [DR, W, W, W, W, W, W, W, W, W, W, W, W, W,WW],
-            [WW, W, W, W, W, W, W, W, W, W, W, W, W, W,WW],
-            [WW, W, W, W, W, W, W, W, W, W, W, W, W, W,WW],
-            [WW, W, W, W,FP,FP,FP,FP,FP, W, W, W, W, W,WW],
-            [WW,WW,WW,WW,WW,WW,WW,WW,WW,WW,WW,WW,WW,WW,WW],
-        ],
-        "spawn_points": {
-            "west": (1, 5), "down": (13, 1), "default": (7, 5),
-        },
-    },
-    "tavern_upstairs": {
-        "name": "Tavern Upper Floor",
-        "exits": {"down": "tavern"},
-        "tilemap": [
-            [WW,WW,WW,WW,WW,WW,WW,WW,WW,WW,WW,WW,WW,WW,WW],
-            [WW, W, W, W, W, W, W, W, W, W, W, W, W,SD,WW],
-            [WW, W, W,WW, W, W,WW, W, W,WW, W, W, W, W,WW],
-            [WW, W, W,WW, W, W,WW, W, W,WW, W, W, W, W,WW],
-            [WW, W, W, W, W, W, W, W, W, W, W, W, W, W,WW],
-            [WW, W, W, W, W, W, W, W, W, W, W, W, W, W,WW],
-            [WW, W, W,WW, W, W,WW, W, W,WW, W, W, W, W,WW],
-            [WW, W, W,WW, W, W,WW, W, W,WW, W, W, W, W,WW],
-            [WW, W, W, W, W, W, W, W, W, W, W, W, W, W,WW],
-            [WW, W, W, W, W, W, W, W, W, W, W, W, W, W,WW],
-            [WW,WW,WW,WW,WW,WW,WW,WW,WW,WW,WW,WW,WW,WW,WW],
-        ],
-        "spawn_points": {
-            "up": (13, 1), "default": (7, 5),
-        },
-    },
-    "blacksmith": {
-        "name": "The Blacksmith's Forge",
-        "exits": {"south": "town_square"},
-        "tilemap": [
-            [WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
-            [WS, S, S, S, S, S, S, S, S, S, S,FP,FP, S,WS],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
-            [WS, S, S, S, S, S,AN,AN, S, S, S, S, S, S,WS],
-            [WS, S, S, S, S, S,AN,AN, S, S, S, S, S, S,WS],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
-            [WS,WS,WS,WS,WS,WS,DR,DR,DR,WS,WS,WS,WS,WS,WS],
-        ],
-        "spawn_points": {
-            "south": (7, 9), "default": (7, 5),
-        },
-    },
-    "forest_path": {
-        "name": "Forest Path",
-        "exits": {"north": "town_square", "south": "clearing"},
-        "tilemap": [
-            [ T, T, T, T, T, T,DR,DR,DR, T, T, T, T, T, T],
-            [ T, T, G, G, G,DI,DI,DI, G, G, G, G, T, T, T],
-            [ T, G, G, G,DI,DI,DI,DI,DI, G, G, G, G, T, T],
-            [ T, G, G,DI,DI,DI, G,DI,DI,DI, G, G, G, G, T],
-            [ T, G, G,DI,DI, G, G, G,DI,DI, G, G, G, T, T],
-            [ T, G,DI,DI, G, G, G, G, G,DI,DI, G, G, G, T],
-            [ T, G,DI,DI, G, G, G, G, G, G,DI, G, G, T, T],
-            [ T, G, G,DI,DI, G, G, G, G,DI,DI, G, G, G, T],
-            [ T, T, G, G,DI,DI,DI,DI,DI,DI, G, G, G, T, T],
-            [ T, G, G, G, G,DI,DI,DI, G, G, G, G, T, T, T],
-            [ T, T, T, T, T, T, G, G, G, T, T, T, T, T, T],
-        ],
-        "spawn_points": {
-            "north": (7, 1), "south": (7, 9), "default": (7, 5),
-        },
-    },
-    "clearing": {
-        "name": "Sunlit Clearing",
-        "exits": {"north": "forest_path"},
-        "tilemap": [
-            [ T, T, T, T, T, T, G, G, G, T, T, T, T, T, T],
-            [ T, T, G, G, G, G, G, G, G, G, G, G, G, T, T],
-            [ T, G, G,FL, G, G, G, G, G, G,FL, G, G, G, T],
-            [ T, G, G, G, G,FL, G, G, G, G, G, G, G, T, T],
-            [ T, G,FL, G, G, G, G, G, G,FL, G, G, G, G, T],
-            [ T, G, G, G, G, G, G, G, G, G, G,FL, G, T, T],
-            [ T, G, G, G,FL, G, G, G,FL, G, G, G, G, G, T],
-            [ T, G,FL, G, G, G, G, G, G, G, G, G,FL, T, T],
-            [ T, T, G, G, G, G,FL, G, G, G, G, G, G, T, T],
-            [ T, T, T, G, G, G, G, G, G, G, G, T, T, T, T],
-            [ T, T, T, T, T, T, G, G, G, T, T, T, T, T, T],
-        ],
-        "spawn_points": {
-            "north": (7, 1), "default": (7, 5),
-        },
-    },
-    "old_chapel": {
-        "name": "Old Chapel",
-        "exits": {"east": "town_square", "west": "chapel_sanctum"},
-        "tilemap": [
-            [WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
-            [WS, S,PW,PW, S,PW,PW, S,PW,PW, S,PW,PW, S,WS],
-            [DR, S,PW,PW, S,PW,PW, S,PW,PW, S,PW,PW, S,DR],
-            [DR, S, S, S, S, S, S, S, S, S, S, S, S, S,DR],
-            [DR, S,PW,PW, S,PW,PW, S,PW,PW, S,PW,PW, S,DR],
-            [WS, S,PW,PW, S,PW,PW, S,PW,PW, S,PW,PW, S,WS],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
-            [WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS],
-        ],
-        "spawn_points": {
-            "east": (13, 5), "west": (1, 5), "default": (7, 5),
-        },
-    },
-    "chapel_sanctum": {
-        "name": "Chapel Sanctum",
-        "exits": {"east": "old_chapel"},
-        "tilemap": [
-            [WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS],
-            [WS, S, S, S, S,FP, S, S, S,FP, S, S, S, S,WS],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
-            [WS, S, S, S,PW, S, S, S, S, S,PW, S, S, S,DR],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,DR],
-            [WS, S, S, S,PW, S, S, S, S, S,PW, S, S, S,DR],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
-            [WS, S, S, S, S, S, S, S, S, S, S, S, S, S,WS],
-            [WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS,WS],
-        ],
-        "spawn_points": {
-            "east": (13, 5), "default": (7, 5),
-        },
-    },
-}
+ROOMS = {}
 
 # ---------------------------------------------------------------------------
 # Room file loader — reads .room files from rooms/ directory
@@ -325,10 +147,19 @@ def load_room_files(directory: str = "rooms"):
             spawn_points["east"] = (13, 5)   # enter from east edge = near right
         if "west" in exits:
             spawn_points["west"] = (1, 5)    # enter from west edge = near left
-        if "up" in exits:
-            spawn_points["up"] = (7, 5)
-        if "down" in exits:
-            spawn_points["down"] = (7, 5)
+        # Scan for stairs tiles — use them for up/down spawn points
+        su_pos = None
+        sd_pos = None
+        for ry, row in enumerate(tilemap):
+            for rx, tile in enumerate(row):
+                if tile == STAIRS_UP and su_pos is None:
+                    su_pos = (rx, ry)
+                elif tile == STAIRS_DOWN and sd_pos is None:
+                    sd_pos = (rx, ry)
+        if su_pos:
+            spawn_points["down"] = su_pos   # entering from above → land at stairs up
+        if sd_pos:
+            spawn_points["up"] = sd_pos     # entering from below → land at stairs down
 
         room = {
             "name": header.get("name", room_id),
@@ -348,11 +179,11 @@ def load_room_files(directory: str = "rooms"):
                 if not line:
                     continue
                 tokens = line.split()
-                if tokens[0] == "npc" and len(tokens) >= 5:
+                if tokens[0] == "npc" and len(tokens) >= 4:
                     npc_name = tokens[1].replace("_", " ")
                     npc_x = int(tokens[2])
                     npc_y = int(tokens[3])
-                    npc_dialog = " ".join(tokens[4:])
+                    npc_dialog = " ".join(tokens[4:]) if len(tokens) > 4 else ""
                     if room_id not in GUARDS:
                         GUARDS[room_id] = []
                     GUARDS[room_id].append({
@@ -368,14 +199,6 @@ def load_room_files(directory: str = "rooms"):
 
         count += 1
 
-    # Wire clearing's south exit to ow_0_7 if that room was loaded
-    if "ow_0_7" in ROOMS and "south" not in ROOMS["clearing"]["exits"]:
-        ROOMS["clearing"]["exits"]["south"] = "ow_0_7"
-        ROOMS["clearing"]["spawn_points"]["south"] = (7, 9)
-        # Update clearing tilemap: open south edge (cols 6-8, row 10)
-        for c in range(6, 9):
-            ROOMS["clearing"]["tilemap"][10][c] = GRASS
-
     print(f"[ROOMS] Loaded {count} room files from {directory}/")
     print(f"[ROOMS] Total rooms: {len(ROOMS)}")
 
@@ -386,23 +209,7 @@ STARTING_ROOM = "town_square"
 # NPC Guards
 # ---------------------------------------------------------------------------
 
-GUARDS = {
-    "town_square": [
-        {"name": "Guard", "x": 7, "y": 8, "dialog": "Welcome to Corneria!"},
-    ],
-    "clearing": [
-        {"name": "Guard", "x": 7, "y": 9, "dialog": "Careful, it's dangerous to go alone!"},
-    ],
-    "old_chapel": [
-        {"name": "Priest", "x": 7, "y": 2, "dialog": "Peace be with you, traveler."},
-    ],
-    "blacksmith": [
-        {"name": "Smith", "x": 7, "y": 5, "dialog": "Well met!"},
-    ],
-    "chapel_sanctum": [
-        {"name": "Amara", "x": 7, "y": 2, "dialog": ""},
-    ],
-}
+GUARDS = {}  # Populated from .room files by load_room_files()
 
 GUARD_COOLDOWN = 10  # seconds between repeated guard messages per player
 
@@ -449,11 +256,7 @@ class Monster:
         self.hop_interval = stats["hop_interval"]
 
 # Templates — define what monsters belong in each room (never mutated)
-MONSTER_TEMPLATES = {
-    "clearing": [
-        {"kind": "slime", "x": 7, "y": 5},
-    ],
-}
+MONSTER_TEMPLATES = {}  # Populated from .room files by load_room_files()
 
 # Live monster instances per room — only populated while players are present
 # room_id -> [Monster, ...]
@@ -626,6 +429,7 @@ async def send_room_enter(player: Player, exit_direction: str = None):
         "monsters": monsters,
         "exits": {d: exits[d] for d in exits},
         "biome": room.get("biome", "town"),
+        "music": room.get("music", "overworld"),
         "exit_direction": exit_direction,
     })
 
@@ -1095,8 +899,7 @@ STATIC_FILES = {
     "/sprites.js":  ("sprites.js",  "application/javascript; charset=utf-8"),
     "/tiles.js":    ("tiles.js",    "application/javascript; charset=utf-8"),
     "/music.js":    ("music.js",    "application/javascript; charset=utf-8"),
-    "/music.mp3":         ("not zelda.mp3",          "audio/mpeg"),
-    "/music_forest.mp3":  ("not zelda (forest).mp3", "audio/mpeg"),
+    "/music.mp3":         ("not zelda (village).mp3", "audio/mpeg"),
     "/music_tavern.mp3":  ("not zelda (tavern).mp3", "audio/mpeg"),
     "/music_chapel.mp3":  ("not zelda (chapel).mp3", "audio/mpeg"),
     "/music_overworld.mp3": ("not zelda (overworld).mp3", "audio/mpeg"),

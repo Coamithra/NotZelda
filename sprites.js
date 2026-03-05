@@ -632,6 +632,97 @@ function drawSwampBlobDeath(ctx, px, py, deathFrame, S) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Princess Amara — sleeping figure on altar with pulsing glow
+// ---------------------------------------------------------------------------
+function drawAmara(ctx, px, py, S) {
+  const DRESS = "#b8c8e8";
+  const DRESS_DARK = "#8898b8";
+  const HAIR_GOLD = "#d4a840";
+  const CROWN = "#e6b422";
+
+  // Faint pulsing glow
+  const pulse = (Math.sin(Date.now() / 800) + 1) / 2; // 0..1
+  const glowAlpha = 0.08 + pulse * 0.12;
+  ctx.fillStyle = `rgba(180, 200, 255, ${glowAlpha})`;
+  ctx.fillRect(px+2*S, py+0*S, 12*S, 10*S);
+
+  // Altar / bed stone slab
+  ctx.fillStyle = "#606870";
+  ctx.fillRect(px+1*S, py+9*S, 14*S, 3*S);
+  ctx.fillStyle = "#505860";
+  ctx.fillRect(px+2*S, py+8*S, 12*S, S);
+
+  // Body — horizontal, lying on her back (head on left side)
+  // Hair flowing left
+  ctx.fillStyle = HAIR_GOLD;
+  ctx.fillRect(px+2*S, py+3*S, 3*S, 4*S);
+  ctx.fillRect(px+1*S, py+4*S, S, 3*S);
+
+  // Crown / tiara
+  ctx.fillStyle = CROWN;
+  ctx.fillRect(px+3*S, py+3*S, 2*S, S);
+  ctx.fillRect(px+4*S, py+2*S, S, S);
+
+  // Face
+  ctx.fillStyle = SKIN;
+  ctx.fillRect(px+5*S, py+3*S, 3*S, 4*S);
+
+  // Closed eyes (horizontal lines)
+  ctx.fillStyle = "#666";
+  ctx.fillRect(px+5*S, py+5*S, 2*S, S);
+
+  // Dress body — horizontal
+  ctx.fillStyle = DRESS;
+  ctx.fillRect(px+8*S, py+3*S, 5*S, 4*S);
+  ctx.fillStyle = DRESS_DARK;
+  ctx.fillRect(px+8*S, py+6*S, 5*S, S);
+
+  // Hands folded on chest
+  ctx.fillStyle = SKIN;
+  ctx.fillRect(px+9*S, py+3*S, 2*S, S);
+
+  // Dress skirt extending right
+  ctx.fillStyle = DRESS;
+  ctx.fillRect(px+13*S, py+4*S, S, 3*S);
+}
+
+// ---------------------------------------------------------------------------
+// Sword pickup animation — sword icon rising above player
+// ---------------------------------------------------------------------------
+function drawSwordPickup(ctx, px, py, frame, S) {
+  const BLADE = "#C0C0C0";
+  const HILT = "#8B4513";
+  const GUARD = "#DAA520";
+
+  // Rise offset — sword floats upward over 4 frames
+  const riseY = frame * 4 * S;
+  const sx = px + 6*S;
+  const sy = py - 4*S - riseY;
+
+  // Glow behind sword
+  const alpha = Math.max(0, 1 - frame * 0.2);
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = "rgba(230, 180, 34, 0.4)";
+  ctx.fillRect(sx - 2*S, sy - S, 6*S, 14*S);
+
+  // Blade pointing up
+  ctx.fillStyle = BLADE;
+  ctx.fillRect(sx, sy, 2*S, 6*S);
+  // Tip
+  ctx.fillRect(sx + S*0.5, sy - S, S, S);
+
+  // Guard
+  ctx.fillStyle = GUARD;
+  ctx.fillRect(sx - S, sy + 6*S, 4*S, S);
+
+  // Hilt
+  ctx.fillStyle = HILT;
+  ctx.fillRect(sx, sy + 7*S, 2*S, 3*S);
+
+  ctx.globalAlpha = 1;
+}
+
 function drawPlayer(ctx, px, py, direction, colorIndex, animFrame, S) {
   const sx = px;
   const sy = py;

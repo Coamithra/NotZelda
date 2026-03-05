@@ -1,6 +1,6 @@
 name: Wild Glade
 biome: forest
-music: forest
+music: overworld
 exits: south=ow_2_7 west=ow_1_6 east=ow_1_8 north=ow_0_7
 ---
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR

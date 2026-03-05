@@ -1,6 +1,6 @@
 name: Tall Bower
 biome: forest
-music: forest
+music: overworld
 exits: west=ow_0_6 east=ow_0_8 south=ow_1_7 north=clearing
 ---
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR

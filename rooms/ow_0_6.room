@@ -1,6 +1,6 @@
 name: Shaded Shade
 biome: forest
-music: forest
+music: overworld
 exits: south=ow_1_6 east=ow_0_7 west=ow_0_5
 ---
 TR TR TR TR TR TR TR TR TR TR TR TR TR TR TR

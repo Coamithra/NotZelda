@@ -1,6 +1,6 @@
 name: Old Stand
 biome: forest
-music: forest
+music: overworld
 exits: north=ow_1_6 south=ow_3_6 east=ow_2_7 west=ow_2_5
 ---
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR

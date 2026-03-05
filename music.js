@@ -10,20 +10,17 @@ const MusicPlayer = (function () {
   const FADE_MS = 800;
   const VOLUME = 0.4;
 
-  // Map room IDs to music tracks (village rooms)
-  const ROOM_MUSIC = {
-    "town_square":      "music.mp3",
-    "tavern":           "music_tavern.mp3",
-    "tavern_upstairs":  "music_tavern.mp3",
-    "blacksmith":       "music_chapel.mp3",
-    "old_chapel":       "music_chapel.mp3",
-    "forest_path":      "music_forest.mp3",
-    "clearing":         "music_forest.mp3",
+  // Map music field values (from server) to track URLs
+  const MUSIC_TRACKS = {
+    "village":    "music.mp3",
+    "tavern":     "music_tavern.mp3",
+    "chapel":     "music_chapel.mp3",
+    "overworld":  "music_overworld.mp3",
   };
 
-  // Map biome names to music tracks (for overworld rooms)
+  // Fallback: map biome names to music tracks (for rooms without explicit music field)
   const BIOME_MUSIC = {
-    "forest":     "music_forest.mp3",
+    "forest":     "music_overworld.mp3",
     "mountain":   "music_chapel.mp3",
     "cave":       "music_chapel.mp3",
     "graveyard":  "music_chapel.mp3",
@@ -102,11 +99,11 @@ const MusicPlayer = (function () {
     fadeIds[url] = requestAnimationFrame(step);
   }
 
-  function setRoom(roomId, biome) {
-    // Village rooms use hardcoded mapping; overworld rooms use biome
+  function setRoom(roomId, biome, music) {
+    // Use explicit music field first, then biome fallback, then overworld default
     let url;
-    if (ROOM_MUSIC[roomId]) {
-      url = ROOM_MUSIC[roomId];
+    if (music && MUSIC_TRACKS[music]) {
+      url = MUSIC_TRACKS[music];
     } else if (biome && BIOME_MUSIC[biome]) {
       url = BIOME_MUSIC[biome];
     } else {

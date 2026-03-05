@@ -1,6 +1,6 @@
 name: Hidden Shade
 biome: forest
-music: forest
+music: overworld
 exits: south=ow_1_9
 ---
 TR TR TR TR TR TR TR TR TR TR TR TR TR TR TR

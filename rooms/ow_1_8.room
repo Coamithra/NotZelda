@@ -1,6 +1,6 @@
 name: Dark Wood
 biome: forest
-music: forest
+music: overworld
 exits: south=ow_2_8 west=ow_1_7
 ---
 TR TR TR TR TR TR TR TR TR TR TR TR TR TR TR

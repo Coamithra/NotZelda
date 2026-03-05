@@ -1,0 +1,18 @@
+name: Town Square
+biome: town
+music: village
+exits: north=blacksmith south=forest_path east=tavern west=old_chapel
+---
+WS WS WS WS WS WS DR DR DR WS WS WS WS WS WS
+WS ST ST ST ST ST ST ST ST ST ST ST ST ST WS
+WS ST ST ST ST ST ST ST ST ST ST ST ST ST WS
+WS ST ST ST ST ST ST ST ST ST ST ST ST ST WS
+DR ST ST ST ST WA WA WA ST ST ST ST ST ST DR
+DR ST ST ST ST WA WA WA ST ST ST ST ST ST DR
+DR ST ST ST ST WA WA WA ST ST ST ST ST ST DR
+WS ST ST ST ST ST ST ST ST ST ST ST ST ST WS
+WS ST ST ST ST ST ST ST ST ST ST ST ST ST WS
+WS ST ST ST ST ST ST ST ST ST ST ST ST ST WS
+WS WS WS WS WS WS DR DR DR WS WS WS WS WS WS
+---
+npc Guard 7 8 Welcome to Corneria!

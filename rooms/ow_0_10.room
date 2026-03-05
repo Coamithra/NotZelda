@@ -1,6 +1,6 @@
 name: Twisted Stand
 biome: forest
-music: forest
+music: overworld
 exits: east=ow_0_11 south=ow_1_10
 ---
 TR TR TR TR TR TR TR TR TR TR TR TR TR TR TR

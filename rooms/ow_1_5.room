@@ -1,6 +1,6 @@
 name: Fern Clearing
 biome: forest
-music: forest
+music: overworld
 exits: west=ow_1_4 south=ow_2_5
 ---
 TR TR TR TR TR TR TR TR TR TR TR TR TR TR TR
