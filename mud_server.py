@@ -496,6 +496,20 @@ def validate_monster(data: dict) -> list[str]:
                         sc = atk.get("sprite_color")
                         if sc is not None and not _is_hex_color(sc):
                             errors.append(f"behavior.attacks[{ai}] sprite_color must be #RRGGBB")
+                        spd = atk.get("speed")
+                        if spd is not None and (not isinstance(spd, (int, float)) or spd < 1 or spd > 5):
+                            errors.append(f"behavior.attacks[{ai}] speed must be 1-5")
+                        prc = atk.get("piercing")
+                        if prc is not None and not isinstance(prc, bool):
+                            errors.append(f"behavior.attacks[{ai}] piercing must be boolean")
+                    if atype == "teleport":
+                        dly = atk.get("delay")
+                        if dly is not None and (not isinstance(dly, (int, float)) or dly < 0.2 or dly > 3.0):
+                            errors.append(f"behavior.attacks[{ai}] delay must be 0.2-3.0")
+                    if atype == "area":
+                        wd = atk.get("warning_duration")
+                        if wd is not None and (not isinstance(wd, (int, float)) or wd < 0.3 or wd > 3.0):
+                            errors.append(f"behavior.attacks[{ai}] warning_duration must be 0.3-3.0")
 
     # -- death_sprite (optional) --
     death_sprite = data.get("death_sprite")
@@ -675,7 +689,7 @@ room_cooldowns: dict[str, float] = {}
 # ---------------------------------------------------------------------------
 
 class Projectile:
-    def __init__(self, x, y, dx, dy, damage, color, room_id):
+    def __init__(self, x, y, dx, dy, damage, color, room_id, speed=1, piercing=False):
         self.x = x
         self.y = y
         self.dx = dx
@@ -683,6 +697,8 @@ class Projectile:
         self.damage = damage
         self.color = color
         self.room_id = room_id
+        self.speed = speed        # tiles per move tick
+        self.piercing = piercing  # pass through players (hit all in path)
 
 room_projectiles: dict[str, dict[int, Projectile]] = {}  # room_id -> {proj_id: Projectile}
 _next_projectile_id = 0
@@ -858,7 +874,7 @@ def player_info(p: Player) -> dict:
 
 from dungeon_layouts import DUNGEON_LAYOUTS
 
-DUNGEON_MUSIC_TRACKS = ["dungeon1", "dungeon2", "dungeon3", "dungeon4"]
+DUNGEON_MUSIC_TRACKS = ["dungeon1", "dungeon2", "dungeon3", "dungeon4", "dungeon5", "dungeon6"]
 
 class DungeonInstance:
     def __init__(self, dungeon_id, layout, room_map, active_rooms, entrance_room_id, music_track):
@@ -1537,6 +1553,8 @@ async def attack_projectile(monster, room_id, monster_idx, atk, target):
 
     color = atk.get("sprite_color", "#ff0000")
     damage = atk.get("damage", 1)
+    speed = atk.get("speed", 1)
+    piercing = atk.get("piercing", False)
 
     # Projectile starts one tile away from monster
     start_x = monster.x + dx
@@ -1548,7 +1566,7 @@ async def attack_projectile(monster, room_id, monster_idx, atk, target):
 
     proj_id = _next_projectile_id
     _next_projectile_id += 1
-    proj = Projectile(start_x, start_y, dx, dy, damage, color, room_id)
+    proj = Projectile(start_x, start_y, dx, dy, damage, color, room_id, speed, piercing)
 
     if room_id not in room_projectiles:
         room_projectiles[room_id] = {}
@@ -1619,6 +1637,7 @@ async def attack_charge(monster, room_id, monster_idx, atk, target):
 async def attack_teleport(monster, room_id, monster_idx, atk, target):
     """Disappear, then reappear near the target player after a brief delay."""
     damage = atk.get("damage", monster.damage)
+    delay = atk.get("delay", 0.5)
 
     # Find a walkable tile adjacent to the target
     target_pos = None
@@ -1638,10 +1657,11 @@ async def attack_teleport(monster, room_id, monster_idx, atk, target):
         "id": monster_idx,
         "target_x": target_pos[0],
         "target_y": target_pos[1],
+        "delay": delay,
     })
 
     async def complete_teleport():
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(delay)
         if not monster.alive:
             monster._teleporting = False
             return
@@ -1666,6 +1686,7 @@ async def attack_area(monster, room_id, monster_idx, atk):
     """Ground slam — warning indicator, then damage all players within range."""
     damage = atk.get("damage", monster.damage)
     range_val = atk.get("range", 2)
+    warning_duration = atk.get("warning_duration", 0.75)
 
     await broadcast_to_room(room_id, {
         "type": "area_warning",
@@ -1673,10 +1694,11 @@ async def attack_area(monster, room_id, monster_idx, atk):
         "x": monster.x,
         "y": monster.y,
         "range": range_val,
+        "duration": warning_duration,
     })
 
     async def execute_area():
-        await asyncio.sleep(0.75)
+        await asyncio.sleep(warning_duration)
         if not monster.alive:
             return
         await broadcast_to_room(room_id, {
@@ -1703,35 +1725,41 @@ async def projectile_tick():
             projs = room_projectiles[room_id]
             to_remove = []
             for proj_id, proj in list(projs.items()):
-                proj.x += proj.dx
-                proj.y += proj.dy
+                # Move by speed tiles per tick
+                for _ in range(proj.speed):
+                    proj.x += proj.dx
+                    proj.y += proj.dy
 
-                # Out of bounds or hit a wall
-                if (proj.x < 0 or proj.x >= ROOM_COLS or
-                        proj.y < 0 or proj.y >= ROOM_ROWS or
-                        ROOMS[room_id]["tilemap"][proj.y][proj.x] not in WALKABLE_TILES):
-                    to_remove.append(proj_id)
-                    await broadcast_to_room(room_id, {"type": "projectile_gone", "id": proj_id})
-                    continue
-
-                # Check player collision
-                hit = False
-                for p in players_in_room(room_id):
-                    if p.hp > 0 and p.x == proj.x and p.y == proj.y:
-                        await broadcast_to_room(room_id, {
-                            "type": "projectile_hit", "id": proj_id,
-                            "x": proj.x, "y": proj.y,
-                        })
-                        await damage_player(p, proj.damage, room_id)
+                    # Out of bounds or hit a wall
+                    if (proj.x < 0 or proj.x >= ROOM_COLS or
+                            proj.y < 0 or proj.y >= ROOM_ROWS or
+                            ROOMS[room_id]["tilemap"][proj.y][proj.x] not in WALKABLE_TILES):
                         to_remove.append(proj_id)
-                        hit = True
+                        await broadcast_to_room(room_id, {"type": "projectile_gone", "id": proj_id})
                         break
 
-                if not hit:
-                    await broadcast_to_room(room_id, {
-                        "type": "projectile_moved", "id": proj_id,
-                        "x": proj.x, "y": proj.y,
-                    })
+                    # Check player collision
+                    hit_player = False
+                    for p in players_in_room(room_id):
+                        if p.hp > 0 and p.x == proj.x and p.y == proj.y:
+                            await broadcast_to_room(room_id, {
+                                "type": "projectile_hit", "id": proj_id,
+                                "x": proj.x, "y": proj.y,
+                            })
+                            await damage_player(p, proj.damage, room_id)
+                            hit_player = True
+                            if not proj.piercing:
+                                to_remove.append(proj_id)
+                                break
+                    if hit_player and not proj.piercing:
+                        break
+                else:
+                    # No wall hit during multi-step move — send position update
+                    if proj_id not in to_remove:
+                        await broadcast_to_room(room_id, {
+                            "type": "projectile_moved", "id": proj_id,
+                            "x": proj.x, "y": proj.y,
+                        })
 
             for pid in to_remove:
                 projs.pop(pid, None)
@@ -2296,6 +2324,8 @@ STATIC_FILES = {
     "/music_dungeon2.mp3": ("not zelda (dungeon theme b).mp3", "audio/mpeg"),
     "/music_dungeon3.mp3": ("not zelda (dungeon theme c).mp3", "audio/mpeg"),
     "/music_dungeon4.mp3": ("not zelda (dungeon theme d).mp3", "audio/mpeg"),
+    "/music_dungeon5.mp3": ("not zelda (dungeon theme e).mp3", "audio/mpeg"),
+    "/music_dungeon6.mp3": ("not zelda (dungeon theme f).mp3", "audio/mpeg"),
 }
 
 

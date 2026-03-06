@@ -1452,7 +1452,7 @@
         }
         // Show warning at target tile
         if (msg.target_x !== undefined) {
-          areaWarnings.push({ x: msg.target_x, y: msg.target_y, range: 0, startTime: Date.now(), duration: 500 });
+          areaWarnings.push({ x: msg.target_x, y: msg.target_y, range: 0, startTime: Date.now(), duration: (msg.delay || 0.5) * 1000 });
         }
         break;
       }
@@ -1480,7 +1480,7 @@
       }
 
       case "area_warning":
-        areaWarnings.push({ x: msg.x, y: msg.y, range: msg.range, startTime: Date.now(), duration: 750 });
+        areaWarnings.push({ x: msg.x, y: msg.y, range: msg.range, startTime: Date.now(), duration: (msg.duration || 0.75) * 1000 });
         break;
 
       case "area_attack":

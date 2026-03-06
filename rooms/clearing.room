@@ -16,7 +16,7 @@ TR TR TR GR GR GR GR GR GR GR GR TR TR TR TR
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 ---
 npc Guard 7 9 guard Careful, it's dangerous to go alone!
-monster slime 7 5
-monster fire_slime 4 3
-monster ice_bat 10 3
-monster shadow_skull 7 7
+monster skeleton_archer 10 3
+monster ghost_teleporter 4 3
+monster war_boar 7 5
+monster flame_mage 4 7

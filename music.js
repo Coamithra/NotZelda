@@ -20,6 +20,8 @@ const MusicPlayer = (function () {
     "dungeon2":   "music_dungeon2.mp3",
     "dungeon3":   "music_dungeon3.mp3",
     "dungeon4":   "music_dungeon4.mp3",
+    "dungeon5":   "music_dungeon5.mp3",
+    "dungeon6":   "music_dungeon6.mp3",
   };
 
   // Fallback: map biome names to music tracks (for rooms without explicit music field)
