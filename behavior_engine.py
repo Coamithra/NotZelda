@@ -17,6 +17,7 @@ Example behavior:
 """
 
 import random
+import time
 
 # These are injected by mud_server at import time to avoid circular imports
 _players_in_room = None
@@ -99,6 +100,41 @@ def cond_always(monster, room_id, rule):
     return True
 
 
+def cond_can_attack(monster, room_id, rule):
+    """True if at least one attack is off cooldown and a player is in range."""
+    behavior = getattr(monster, "behavior", None)
+    if not behavior:
+        return False
+    attacks = behavior.get("attacks", [])
+    if not attacks:
+        return False
+    cooldowns = getattr(monster, "_attack_cooldowns", {})
+    now = time.monotonic()
+    player, player_dist = _nearest_player(monster, room_id)
+    if player is None:
+        return False
+    for i, atk in enumerate(attacks):
+        last_used = cooldowns.get(i, 0)
+        cd = atk.get("cooldown", 1.0)
+        if now - last_used >= cd and player_dist <= atk.get("range", 1):
+            return True
+    return False
+
+
+def cond_player_in_attack_range(monster, room_id, rule):
+    """True if a player is within range of any defined attack."""
+    behavior = getattr(monster, "behavior", None)
+    if not behavior:
+        return False
+    attacks = behavior.get("attacks", [])
+    if not attacks:
+        return False
+    player, player_dist = _nearest_player(monster, room_id)
+    if player is None:
+        return False
+    return any(player_dist <= atk.get("range", 1) for atk in attacks)
+
+
 CONDITION_MAP = {
     "player_within": cond_player_within,
     "player_beyond": cond_player_beyond,
@@ -107,6 +143,8 @@ CONDITION_MAP = {
     "random_chance": cond_random_chance,
     "always": cond_always,
     "default": cond_always,
+    "can_attack": cond_can_attack,
+    "player_in_attack_range": cond_player_in_attack_range,
 }
 
 
@@ -228,12 +266,18 @@ def do_hold(monster, room_id):
     return None
 
 
+def do_attack(monster, room_id):
+    """Signal attack intent — actual execution handled by the server."""
+    return None
+
+
 ACTION_MAP = {
     "wander": do_wander,
     "chase": do_chase,
     "flee": do_flee,
     "patrol": do_patrol,
     "hold": do_hold,
+    "attack": do_attack,
 }
 
 

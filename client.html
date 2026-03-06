@@ -308,6 +308,12 @@
   let dyingMonsters = [];     // [{kind, x, y, frame, nextTime}]
   let monsterHopFrame = 0;    // global hop frame toggled on timer
   let monsterHopTimer = 0;
+
+  // Stage 5: Monster attack rendering state
+  let projectiles = [];       // [{id, x, y, displayX, displayY, dx, dy, color}]
+  let areaWarnings = [];      // [{x, y, range, startTime, duration}]
+  let chargeTrails = [];      // [{path, startTime}]
+  let monsterAttackFlashes = []; // [{x, y, startTime}] — melee attack indicators
   let playerFlags = new Set(); // string flags, e.g. "has_sword"
   let swordPickups = [];      // [{x, y, frame, nextTime}] — active sword pickup animations
 
@@ -396,6 +402,93 @@
       }
       return sp.frame < SWORD_PICKUP_FRAMES;
     });
+  }
+
+  // --- Stage 5: Attack effect updates ---
+
+  function updateProjectiles() {
+    for (const p of projectiles) {
+      p.displayX += (p.x - p.displayX) * 0.4;
+      p.displayY += (p.y - p.displayY) * 0.4;
+      if (Math.abs(p.x - p.displayX) < 0.05) p.displayX = p.x;
+      if (Math.abs(p.y - p.displayY) < 0.05) p.displayY = p.y;
+    }
+  }
+
+  function updateAttackEffects() {
+    const now = Date.now();
+    areaWarnings = areaWarnings.filter(w => now - w.startTime < w.duration);
+    chargeTrails = chargeTrails.filter(t => now - t.startTime < 400);
+    monsterAttackFlashes = monsterAttackFlashes.filter(f => now - f.startTime < 200);
+  }
+
+  function renderProjectiles() {
+    for (const p of projectiles) {
+      const px = p.displayX * TS + TS / 2;
+      const py = p.displayY * TS + TS / 2;
+      const r = 3 * SCALE;
+      // Glow
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(px, py, r * 2, 0, Math.PI * 2);
+      ctx.fill();
+      // Core
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function renderAreaWarnings() {
+    const now = Date.now();
+    for (const w of areaWarnings) {
+      const elapsed = now - w.startTime;
+      const progress = elapsed / w.duration;
+      // Pulsing alpha
+      const pulse = 0.15 + 0.15 * Math.sin(elapsed / 80);
+      ctx.globalAlpha = pulse;
+      ctx.fillStyle = progress > 0.85 ? "#ff4400" : "#ff8800";
+      for (let dy = -w.range; dy <= w.range; dy++) {
+        for (let dx = -w.range; dx <= w.range; dx++) {
+          if (Math.abs(dx) + Math.abs(dy) <= w.range) {
+            const tx = w.x + dx, ty = w.y + dy;
+            if (tx >= 0 && tx < COLS && ty >= 0 && ty < ROWS) {
+              ctx.fillRect(tx * TS, ty * TS, TS, TS);
+            }
+          }
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function renderChargeTrails() {
+    const now = Date.now();
+    for (const t of chargeTrails) {
+      const age = now - t.startTime;
+      const alpha = Math.max(0, 0.5 - age / 800);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = "#ffcc44";
+      for (const [tx, ty] of t.path) {
+        ctx.fillRect(tx * TS + 2*SCALE, ty * TS + 2*SCALE, TS - 4*SCALE, TS - 4*SCALE);
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function renderMonsterAttackFlashes() {
+    const now = Date.now();
+    for (const f of monsterAttackFlashes) {
+      const age = now - f.startTime;
+      const alpha = Math.max(0, 0.6 - age / 333);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(f.x * TS, f.y * TS, TS, TS);
+      ctx.globalAlpha = 1;
+    }
   }
 
   const DYING_PLAYER_FRAME_MS = 200;
@@ -531,7 +624,7 @@
 
     // Add monsters to render list
     for (const m of monsters) {
-      all.push({ x: m.displayX, y: m.displayY, isMonster: true, kind: m.kind });
+      all.push({ x: m.displayX, y: m.displayY, isMonster: true, kind: m.kind, hitFlash: m.hitFlash, teleportAlpha: m.teleportAlpha });
     }
 
     // Sort by Y for depth
@@ -547,7 +640,19 @@
       const px = p.x * TS;
       const py = p.y * TS;
       if (p.isMonster) {
+        // Teleport fade effect
+        if (p.teleportAlpha !== undefined && p.teleportAlpha < 1) {
+          ctx.globalAlpha = Math.max(0, p.teleportAlpha);
+        }
         drawMonsterSprite(ctx, px, py, p.kind, monsterHopFrame, SCALE);
+        ctx.globalAlpha = 1;
+        // Hit flash — white overlay
+        if (p.hitFlash && Date.now() < p.hitFlash) {
+          ctx.globalAlpha = 0.5;
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(px, py, TS, TS);
+          ctx.globalAlpha = 1;
+        }
         continue;
       } else if (p.isGuard) {
         drawNPC(ctx, px, py, p.sprite, SCALE);
@@ -862,6 +967,8 @@
     updateDyingMonsters();
     updateSwordPickups();
     updateDyingOtherPlayers();
+    updateProjectiles();
+    updateAttackEffects();
 
     // Toggle monster hop frame every ~500ms
     monsterHopTimer++;
@@ -901,8 +1008,12 @@
       renderTransition(Date.now());
     } else {
       renderRoom();
+      renderAreaWarnings();
       renderHeartPickups();
+      renderChargeTrails();
       renderPlayers();
+      renderProjectiles();
+      renderMonsterAttackFlashes();
       renderSpeechBubbles();
       renderSwordPickups();
       renderUI();
@@ -1101,6 +1212,10 @@
         heartPickups = [];
         dyingPlayerSelf = null;
         dyingOtherPlayers = {};
+        projectiles = [];
+        areaWarnings = [];
+        chargeTrails = [];
+        monsterAttackFlashes = [];
         monsters = (msg.monsters || []).map(m => ({
           id: m.id, kind: m.kind, x: m.x, y: m.y, displayX: m.x, displayY: m.y,
         }));
@@ -1274,6 +1389,103 @@
           }
         }
         monsters.push({ id: msg.id, kind: msg.kind, x: msg.x, y: msg.y, displayX: msg.x, displayY: msg.y });
+        break;
+
+      // --- Stage 5: Monster attack messages ---
+      case "projectile_spawned":
+        projectiles.push({
+          id: msg.id, x: msg.x, y: msg.y,
+          displayX: msg.x, displayY: msg.y,
+          dx: msg.dx, dy: msg.dy, color: msg.color,
+        });
+        break;
+
+      case "projectile_moved": {
+        const proj = projectiles.find(p => p.id === msg.id);
+        if (proj) { proj.x = msg.x; proj.y = msg.y; }
+        break;
+      }
+
+      case "projectile_hit":
+        projectiles = projectiles.filter(p => p.id !== msg.id);
+        if (msg.x !== undefined) {
+          monsterAttackFlashes.push({ x: msg.x, y: msg.y, startTime: Date.now() });
+        }
+        break;
+
+      case "projectile_gone":
+        projectiles = projectiles.filter(p => p.id !== msg.id);
+        break;
+
+      case "monster_attack":
+        // Melee attack visual — flash on target tile
+        monsterAttackFlashes.push({ x: msg.target_x, y: msg.target_y, startTime: Date.now() });
+        break;
+
+      case "monster_charged": {
+        // Update monster position and show charge trail
+        const chargedMon = monsters.find(m => m.id === msg.id);
+        if (chargedMon) {
+          chargedMon.x = msg.x;
+          chargedMon.y = msg.y;
+          chargedMon.displayX = msg.x;
+          chargedMon.displayY = msg.y;
+        }
+        chargeTrails.push({ path: msg.path, startTime: Date.now() });
+        break;
+      }
+
+      case "teleport_start": {
+        const tpMon = monsters.find(m => m.id === msg.id);
+        if (tpMon) {
+          tpMon.teleportAlpha = 1;
+          // Fade out over 300ms
+          const fadeOut = () => {
+            if (tpMon.teleportAlpha > 0) {
+              tpMon.teleportAlpha -= 0.1;
+              setTimeout(fadeOut, 30);
+            } else {
+              tpMon.teleportAlpha = 0;
+            }
+          };
+          fadeOut();
+        }
+        // Show warning at target tile
+        if (msg.target_x !== undefined) {
+          areaWarnings.push({ x: msg.target_x, y: msg.target_y, range: 0, startTime: Date.now(), duration: 500 });
+        }
+        break;
+      }
+
+      case "teleport_end": {
+        const tpEndMon = monsters.find(m => m.id === msg.id);
+        if (tpEndMon) {
+          tpEndMon.x = msg.x;
+          tpEndMon.y = msg.y;
+          tpEndMon.displayX = msg.x;
+          tpEndMon.displayY = msg.y;
+          tpEndMon.teleportAlpha = 0;
+          // Fade in over 300ms
+          const fadeIn = () => {
+            if (tpEndMon.teleportAlpha < 1) {
+              tpEndMon.teleportAlpha += 0.1;
+              setTimeout(fadeIn, 30);
+            } else {
+              tpEndMon.teleportAlpha = 1;
+            }
+          };
+          fadeIn();
+        }
+        break;
+      }
+
+      case "area_warning":
+        areaWarnings.push({ x: msg.x, y: msg.y, range: msg.range, startTime: Date.now(), duration: 750 });
+        break;
+
+      case "area_attack":
+        // Brief bright flash on affected area
+        monsterAttackFlashes.push({ x: msg.x, y: msg.y, startTime: Date.now() });
         break;
 
       case "quest_update":

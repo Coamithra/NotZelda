@@ -368,11 +368,11 @@ VALID_TILE_OPS = frozenset({
 
 VALID_BEHAVIOR_CONDITIONS = frozenset({
     "player_within", "player_beyond", "hp_below_pct", "hp_above_pct",
-    "random_chance", "always", "default",
+    "random_chance", "always", "default", "can_attack", "player_in_attack_range",
 })
 
 VALID_BEHAVIOR_ACTIONS = frozenset({
-    "wander", "chase", "flee", "patrol", "hold",
+    "wander", "chase", "flee", "patrol", "hold", "attack",
 })
 
 VALID_ATTACK_TYPES = frozenset({
@@ -486,6 +486,16 @@ def validate_monster(data: dict) -> list[str]:
                     rng = atk.get("range")
                     if not isinstance(rng, (int, float)) or rng < 1 or rng > 15:
                         errors.append(f"behavior.attacks[{ai}] range must be 1-15")
+                    cd = atk.get("cooldown")
+                    if cd is not None and (not isinstance(cd, (int, float)) or cd < 0.5 or cd > 30.0):
+                        errors.append(f"behavior.attacks[{ai}] cooldown must be 0.5-30.0")
+                    dmg = atk.get("damage")
+                    if dmg is not None and (not isinstance(dmg, (int, float)) or dmg < 1 or dmg > 20):
+                        errors.append(f"behavior.attacks[{ai}] damage must be 1-20")
+                    if atype == "projectile":
+                        sc = atk.get("sprite_color")
+                        if sc is not None and not _is_hex_color(sc):
+                            errors.append(f"behavior.attacks[{ai}] sprite_color must be #RRGGBB")
 
     # -- death_sprite (optional) --
     death_sprite = data.get("death_sprite")
@@ -638,6 +648,10 @@ class Monster:
         self.damage = stats.get("damage", 1)
         # Behavior engine data (None = use default wander)
         self.behavior = MONSTER_BEHAVIORS.get(kind)
+        # Attack cooldown tracking: attack_index -> last_used_time
+        self._attack_cooldowns = {}
+        # Teleporting state (monster is invisible during teleport)
+        self._teleporting = False
         # Patrol state
         if self.behavior:
             patrol_wps = self.behavior.get("patrol_waypoints")
@@ -655,6 +669,23 @@ room_monsters: dict[str, list[Monster]] = {}
 # Room cooldown — when all monsters were killed and all players left
 # room_id -> timestamp when cooldown started
 room_cooldowns: dict[str, float] = {}
+
+# ---------------------------------------------------------------------------
+# Projectile tracking (Stage 5: monster ranged attacks)
+# ---------------------------------------------------------------------------
+
+class Projectile:
+    def __init__(self, x, y, dx, dy, damage, color, room_id):
+        self.x = x
+        self.y = y
+        self.dx = dx
+        self.dy = dy
+        self.damage = damage
+        self.color = color
+        self.room_id = room_id
+
+room_projectiles: dict[str, dict[int, Projectile]] = {}  # room_id -> {proj_id: Projectile}
+_next_projectile_id = 0
 
 
 def spawn_monsters(room_id: str) -> list[Monster]:
@@ -709,6 +740,7 @@ async def on_player_leave_room(room_id: str):
         return  # still has players
 
     room_hearts.pop(room_id, None)
+    room_projectiles.pop(room_id, None)
 
     if room_id in room_monsters:
         monster_list = room_monsters[room_id]
@@ -1431,6 +1463,283 @@ async def handle_attack(player: Player):
                 })
 
 # ---------------------------------------------------------------------------
+# Monster attack execution (Stage 5)
+# ---------------------------------------------------------------------------
+
+PROJECTILE_TICK_RATE = 0.15  # seconds between projectile moves
+
+
+async def execute_monster_attack(monster, room_id, monster_idx):
+    """Select and execute the best available attack for a monster."""
+    behavior = getattr(monster, "behavior", None)
+    if not behavior:
+        return
+    attacks = behavior.get("attacks", [])
+    if not attacks:
+        return
+
+    cooldowns = monster._attack_cooldowns
+    now = time.monotonic()
+    player, player_dist = behavior_engine._nearest_player(monster, room_id)
+    if player is None:
+        return
+
+    for i, atk in enumerate(attacks):
+        last_used = cooldowns.get(i, 0)
+        cd = atk.get("cooldown", 1.0)
+        if now - last_used < cd:
+            continue
+        if player_dist > atk.get("range", 1):
+            continue
+
+        # This attack is usable — execute it
+        monster._attack_cooldowns[i] = now
+        atype = atk["type"]
+
+        if atype == "melee":
+            await attack_melee(monster, room_id, monster_idx, atk, player)
+        elif atype == "projectile":
+            await attack_projectile(monster, room_id, monster_idx, atk, player)
+        elif atype == "charge":
+            await attack_charge(monster, room_id, monster_idx, atk, player)
+        elif atype == "teleport":
+            await attack_teleport(monster, room_id, monster_idx, atk, player)
+        elif atype == "area":
+            await attack_area(monster, room_id, monster_idx, atk)
+        return  # one attack per tick
+
+
+async def attack_melee(monster, room_id, monster_idx, atk, target):
+    """Enhanced melee — strike adjacent player without moving onto them."""
+    damage = atk.get("damage", monster.damage)
+    await broadcast_to_room(room_id, {
+        "type": "monster_attack",
+        "id": monster_idx,
+        "attack_type": "melee",
+        "target_x": target.x,
+        "target_y": target.y,
+    })
+    await damage_player(target, damage, room_id)
+
+
+async def attack_projectile(monster, room_id, monster_idx, atk, target):
+    """Fire a projectile toward the nearest player in a cardinal direction."""
+    global _next_projectile_id
+
+    dx_raw = target.x - monster.x
+    dy_raw = target.y - monster.y
+    if dx_raw == 0 and dy_raw == 0:
+        return
+    if abs(dx_raw) >= abs(dy_raw):
+        dx, dy = (1 if dx_raw > 0 else -1), 0
+    else:
+        dx, dy = 0, (1 if dy_raw > 0 else -1)
+
+    color = atk.get("sprite_color", "#ff0000")
+    damage = atk.get("damage", 1)
+
+    # Projectile starts one tile away from monster
+    start_x = monster.x + dx
+    start_y = monster.y + dy
+    if start_x < 0 or start_x >= ROOM_COLS or start_y < 0 or start_y >= ROOM_ROWS:
+        return
+    if ROOMS[room_id]["tilemap"][start_y][start_x] not in WALKABLE_TILES:
+        return
+
+    proj_id = _next_projectile_id
+    _next_projectile_id += 1
+    proj = Projectile(start_x, start_y, dx, dy, damage, color, room_id)
+
+    if room_id not in room_projectiles:
+        room_projectiles[room_id] = {}
+    room_projectiles[room_id][proj_id] = proj
+
+    await broadcast_to_room(room_id, {
+        "type": "projectile_spawned",
+        "id": proj_id,
+        "x": start_x,
+        "y": start_y,
+        "dx": dx,
+        "dy": dy,
+        "color": color,
+    })
+
+    # Check if a player is already at the spawn tile
+    for p in players_in_room(room_id):
+        if p.hp > 0 and p.x == start_x and p.y == start_y:
+            await broadcast_to_room(room_id, {"type": "projectile_hit", "id": proj_id, "x": start_x, "y": start_y})
+            await damage_player(p, damage, room_id)
+            room_projectiles.get(room_id, {}).pop(proj_id, None)
+            return
+
+
+async def attack_charge(monster, room_id, monster_idx, atk, target):
+    """Dash in a straight line toward the player, damaging anything in the path."""
+    dx_raw = target.x - monster.x
+    dy_raw = target.y - monster.y
+    if dx_raw == 0 and dy_raw == 0:
+        return
+    if abs(dx_raw) >= abs(dy_raw):
+        dx, dy = (1 if dx_raw > 0 else -1), 0
+    else:
+        dx, dy = 0, (1 if dy_raw > 0 else -1)
+
+    max_range = atk.get("range", 3)
+    damage = atk.get("damage", monster.damage)
+    path = []
+
+    nx, ny = monster.x, monster.y
+    for _ in range(max_range):
+        nx += dx
+        ny += dy
+        if not behavior_engine._is_walkable(nx, ny, room_id):
+            break
+        path.append([nx, ny])
+
+    if not path:
+        return
+
+    end_x, end_y = path[-1]
+    monster.x = end_x
+    monster.y = end_y
+
+    await broadcast_to_room(room_id, {
+        "type": "monster_charged",
+        "id": monster_idx,
+        "path": path,
+        "x": end_x,
+        "y": end_y,
+    })
+
+    for p in players_in_room(room_id):
+        if p.hp > 0 and any(p.x == px and p.y == py for px, py in path):
+            await damage_player(p, damage, room_id)
+
+
+async def attack_teleport(monster, room_id, monster_idx, atk, target):
+    """Disappear, then reappear near the target player after a brief delay."""
+    damage = atk.get("damage", monster.damage)
+
+    # Find a walkable tile adjacent to the target
+    target_pos = None
+    candidates = [(1,0), (-1,0), (0,1), (0,-1)]
+    random.shuffle(candidates)
+    for ddx, ddy in candidates:
+        nx, ny = target.x + ddx, target.y + ddy
+        if behavior_engine._is_walkable(nx, ny, room_id):
+            target_pos = (nx, ny)
+            break
+    if target_pos is None:
+        return
+
+    monster._teleporting = True
+    await broadcast_to_room(room_id, {
+        "type": "teleport_start",
+        "id": monster_idx,
+        "target_x": target_pos[0],
+        "target_y": target_pos[1],
+    })
+
+    async def complete_teleport():
+        await asyncio.sleep(0.5)
+        if not monster.alive:
+            monster._teleporting = False
+            return
+        monster.x = target_pos[0]
+        monster.y = target_pos[1]
+        monster._teleporting = False
+        await broadcast_to_room(room_id, {
+            "type": "teleport_end",
+            "id": monster_idx,
+            "x": target_pos[0],
+            "y": target_pos[1],
+        })
+        # Damage any adjacent player after landing
+        for p in players_in_room(room_id):
+            if p.hp > 0 and abs(p.x - monster.x) + abs(p.y - monster.y) <= 1:
+                await damage_player(p, damage, room_id)
+
+    asyncio.create_task(complete_teleport())
+
+
+async def attack_area(monster, room_id, monster_idx, atk):
+    """Ground slam — warning indicator, then damage all players within range."""
+    damage = atk.get("damage", monster.damage)
+    range_val = atk.get("range", 2)
+
+    await broadcast_to_room(room_id, {
+        "type": "area_warning",
+        "id": monster_idx,
+        "x": monster.x,
+        "y": monster.y,
+        "range": range_val,
+    })
+
+    async def execute_area():
+        await asyncio.sleep(0.75)
+        if not monster.alive:
+            return
+        await broadcast_to_room(room_id, {
+            "type": "area_attack",
+            "id": monster_idx,
+            "x": monster.x,
+            "y": monster.y,
+            "range": range_val,
+        })
+        for p in players_in_room(room_id):
+            if p.hp > 0:
+                dist = abs(p.x - monster.x) + abs(p.y - monster.y)
+                if dist <= range_val:
+                    await damage_player(p, damage, room_id)
+
+    asyncio.create_task(execute_area())
+
+
+async def projectile_tick():
+    """Background loop — moves projectiles and checks collisions."""
+    while True:
+        await asyncio.sleep(PROJECTILE_TICK_RATE)
+        for room_id in list(room_projectiles.keys()):
+            projs = room_projectiles[room_id]
+            to_remove = []
+            for proj_id, proj in list(projs.items()):
+                proj.x += proj.dx
+                proj.y += proj.dy
+
+                # Out of bounds or hit a wall
+                if (proj.x < 0 or proj.x >= ROOM_COLS or
+                        proj.y < 0 or proj.y >= ROOM_ROWS or
+                        ROOMS[room_id]["tilemap"][proj.y][proj.x] not in WALKABLE_TILES):
+                    to_remove.append(proj_id)
+                    await broadcast_to_room(room_id, {"type": "projectile_gone", "id": proj_id})
+                    continue
+
+                # Check player collision
+                hit = False
+                for p in players_in_room(room_id):
+                    if p.hp > 0 and p.x == proj.x and p.y == proj.y:
+                        await broadcast_to_room(room_id, {
+                            "type": "projectile_hit", "id": proj_id,
+                            "x": proj.x, "y": proj.y,
+                        })
+                        await damage_player(p, proj.damage, room_id)
+                        to_remove.append(proj_id)
+                        hit = True
+                        break
+
+                if not hit:
+                    await broadcast_to_room(room_id, {
+                        "type": "projectile_moved", "id": proj_id,
+                        "x": proj.x, "y": proj.y,
+                    })
+
+            for pid in to_remove:
+                projs.pop(pid, None)
+            if not projs:
+                room_projectiles.pop(room_id, None)
+
+
+# ---------------------------------------------------------------------------
 # Monster AI tick
 # ---------------------------------------------------------------------------
 
@@ -1444,31 +1753,33 @@ async def monster_tick():
             if not players_in_room(room_id):
                 continue
             for i, monster in enumerate(monster_list):
-                if not monster.alive:
+                if not monster.alive or monster._teleporting:
                     continue
                 if now - monster.last_hop_time < monster.hop_interval:
                     continue
                 monster.last_hop_time = now
 
-                # Evaluate behavior rules → pick action → execute movement
+                # Evaluate behavior rules → pick action → execute
                 action = behavior_engine.evaluate_rules(monster, room_id)
-                result = behavior_engine.execute_action(action, monster, room_id)
 
-                if result is not None:
-                    nx, ny = result
-                    monster.x = nx
-                    monster.y = ny
-                    await broadcast_to_room(room_id, {
-                        "type": "monster_moved",
-                        "id": i,
-                        "x": nx,
-                        "y": ny,
-                    })
-                    # Check if monster landed on a player
-                    for p in players_in_room(room_id):
-                        if p.x == nx and p.y == ny and p.hp > 0:
-                            await damage_player(p, monster.damage, room_id)
-                    # else: action was "hold" or no valid move — monster stays put
+                if action == "attack":
+                    await execute_monster_attack(monster, room_id, i)
+                else:
+                    result = behavior_engine.execute_action(action, monster, room_id)
+                    if result is not None:
+                        nx, ny = result
+                        monster.x = nx
+                        monster.y = ny
+                        await broadcast_to_room(room_id, {
+                            "type": "monster_moved",
+                            "id": i,
+                            "x": nx,
+                            "y": ny,
+                        })
+                        # Check if monster landed on a player
+                        for p in players_in_room(room_id):
+                            if p.x == nx and p.y == ny and p.hp > 0:
+                                await damage_player(p, monster.damage, room_id)
 
 # ---------------------------------------------------------------------------
 # Debug spawn — register + spawn a test monster (admin only for now)
@@ -1577,6 +1888,170 @@ _DEBUG_MONSTERS = {
                     ["eyes",    6, 4, 1, 1],
                     ["eyes",    9, 4, 1, 1],
                     ["dark",    7, 6, 2, 1],
+                ],
+            ],
+        },
+    },
+    # --- Stage 5: Debug monsters with attacks ---
+    "skeleton_archer": {
+        "kind": "skeleton_archer",
+        "stats": {"hp": 2, "hop_interval": 2.0, "damage": 1},
+        "behavior": {
+            "rules": [
+                {"if": "hp_below_pct", "value": 30, "do": "flee"},
+                {"if": "can_attack", "do": "attack"},
+                {"if": "player_within", "range": 3, "do": "flee"},
+                {"if": "player_within", "range": 8, "do": "hold"},
+                {"default": "wander"},
+            ],
+            "attacks": [
+                {"type": "projectile", "range": 6, "damage": 1, "cooldown": 2.0, "sprite_color": "#ccbb88"},
+            ],
+        },
+        "sprite": {
+            "colors": {"bone": "#d8d0b8", "dark": "#5a4a3a", "eyes": "#cc2200", "bow": "#8b6914"},
+            "frames": [
+                [
+                    ["dark",  5,10, 6, 4],
+                    ["bone",  6, 3, 4, 8],
+                    ["bone",  5, 4, 6, 5],
+                    ["dark",  7, 5, 2, 2],
+                    ["eyes",  7, 5, 1, 1],
+                    ["eyes",  9, 5, 1, 1],
+                    ["bone",  6, 9, 1, 3],
+                    ["bone",  9, 9, 1, 3],
+                    ["bow",   3, 4, 2, 6],
+                ],
+                [
+                    ["dark",  5, 9, 6, 4],
+                    ["bone",  6, 2, 4, 8],
+                    ["bone",  5, 3, 6, 5],
+                    ["dark",  7, 4, 2, 2],
+                    ["eyes",  7, 4, 1, 1],
+                    ["eyes",  9, 4, 1, 1],
+                    ["bone",  6, 8, 1, 3],
+                    ["bone",  9, 8, 1, 3],
+                    ["bow",   3, 3, 2, 6],
+                ],
+            ],
+        },
+    },
+    "ghost_teleporter": {
+        "kind": "ghost_teleporter",
+        "stats": {"hp": 2, "hop_interval": 2.5, "damage": 2},
+        "behavior": {
+            "rules": [
+                {"if": "can_attack", "do": "attack"},
+                {"if": "player_within", "range": 3, "do": "flee"},
+                {"default": "wander"},
+            ],
+            "attacks": [
+                {"type": "teleport", "range": 8, "damage": 2, "cooldown": 4.0},
+            ],
+        },
+        "sprite": {
+            "colors": {"body": "#6a7a9a", "glow": "#aabbdd", "eyes": "#ffffff", "dark": "#3a4a6a"},
+            "frames": [
+                [
+                    ["dark",  5, 9, 6, 5],
+                    ["body",  5, 4, 6, 7],
+                    ["body",  6, 3, 4, 1],
+                    ["glow",  6, 5, 1, 1],
+                    ["glow",  9, 5, 1, 1],
+                    ["eyes",  6, 5, 1, 1],
+                    ["eyes",  9, 5, 1, 1],
+                ],
+                [
+                    ["dark",  5, 8, 6, 5],
+                    ["body",  5, 3, 6, 7],
+                    ["body",  6, 2, 4, 1],
+                    ["glow",  6, 4, 1, 1],
+                    ["glow",  9, 4, 1, 1],
+                    ["eyes",  6, 4, 1, 1],
+                    ["eyes",  9, 4, 1, 1],
+                ],
+            ],
+        },
+    },
+    "war_boar": {
+        "kind": "war_boar",
+        "stats": {"hp": 4, "hop_interval": 1.5, "damage": 2},
+        "behavior": {
+            "rules": [
+                {"if": "can_attack", "do": "attack"},
+                {"if": "player_within", "range": 6, "do": "chase"},
+                {"default": "wander"},
+            ],
+            "attacks": [
+                {"type": "charge", "range": 4, "damage": 3, "cooldown": 3.0},
+            ],
+        },
+        "sprite": {
+            "colors": {"body": "#8b5e3c", "dark": "#5a3a1e", "snout": "#dda488", "eyes": "#220000", "tusk": "#f0e8d0"},
+            "frames": [
+                [
+                    ["dark",   3,10, 10, 4],
+                    ["body",   3, 5, 10, 7],
+                    ["body",   4, 4,  8, 1],
+                    ["dark",   4, 9, 8,  2],
+                    ["snout",  5, 6,  3, 3],
+                    ["eyes",   5, 5,  1, 1],
+                    ["eyes",   8, 5,  1, 1],
+                    ["tusk",   5, 9,  1, 2],
+                    ["tusk",   7, 9,  1, 2],
+                ],
+                [
+                    ["dark",   3, 9, 10, 4],
+                    ["body",   3, 4, 10, 7],
+                    ["body",   4, 3,  8, 1],
+                    ["dark",   4, 8, 8,  2],
+                    ["snout",  5, 5,  3, 3],
+                    ["eyes",   5, 4,  1, 1],
+                    ["eyes",   8, 4,  1, 1],
+                    ["tusk",   5, 8,  1, 2],
+                    ["tusk",   7, 8,  1, 2],
+                ],
+            ],
+        },
+    },
+    "flame_mage": {
+        "kind": "flame_mage",
+        "stats": {"hp": 3, "hop_interval": 2.5, "damage": 2},
+        "behavior": {
+            "rules": [
+                {"if": "hp_below_pct", "value": 30, "do": "flee"},
+                {"if": "can_attack", "do": "attack"},
+                {"if": "player_within", "range": 3, "do": "flee"},
+                {"if": "player_within", "range": 7, "do": "hold"},
+                {"default": "wander"},
+            ],
+            "attacks": [
+                {"type": "area", "range": 2, "damage": 2, "cooldown": 4.0},
+                {"type": "projectile", "range": 5, "damage": 1, "cooldown": 2.5, "sprite_color": "#ff6600"},
+            ],
+        },
+        "sprite": {
+            "colors": {"robe": "#8b2500", "dark": "#4a1200", "skin": "#dda488", "fire": "#ff6600", "glow": "#ffaa00"},
+            "frames": [
+                [
+                    ["dark",  4,10, 8, 4],
+                    ["robe",  4, 5, 8, 8],
+                    ["robe",  5, 4, 6, 1],
+                    ["skin",  6, 3, 4, 2],
+                    ["dark",  7, 4, 1, 1],
+                    ["dark",  9, 4, 1, 1],
+                    ["fire",  5, 2, 2, 2],
+                    ["glow",  5, 1, 1, 1],
+                ],
+                [
+                    ["dark",  4, 9, 8, 4],
+                    ["robe",  4, 4, 8, 8],
+                    ["robe",  5, 3, 6, 1],
+                    ["skin",  6, 2, 4, 2],
+                    ["dark",  7, 3, 1, 1],
+                    ["dark",  9, 3, 1, 1],
+                    ["fire",  5, 1, 2, 2],
+                    ["glow",  6, 0, 1, 1],
                 ],
             ],
         },
@@ -1869,6 +2344,7 @@ async def main():
         ping_timeout=60,     # close if no pong within 60s (lenient for mobile)
     )
     asyncio.create_task(monster_tick())
+    asyncio.create_task(projectile_tick())
     print("MUD server running!")
     print(f"Local:  http://localhost:{port}")
 

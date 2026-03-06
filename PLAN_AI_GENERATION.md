@@ -190,7 +190,7 @@ Tag-based replacement examples:
 
 ## Staged Implementation Plan
 
-**Current status: Stages 1–4 complete. Next up: Stage 5 (Behavior Engine — Attacks).**
+**Current status: Stages 1–5 complete. Next up: Stage 6 (Claude API Integration).**
 
 ### Stage 1: Tag & Metadata System ✅
 **Goal:** Define the data structures that everything else builds on.
@@ -295,7 +295,7 @@ commands. Verify chaser follows player, coward runs away.
 
 ---
 
-### Stage 5: Behavior Engine — Attacks
+### Stage 5: Behavior Engine — Attacks ✅
 **Goal:** Monsters can have ranged attacks, charges, and special abilities.
 
 Attack types:
