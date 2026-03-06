@@ -190,7 +190,7 @@ Tag-based replacement examples:
 
 ## Staged Implementation Plan
 
-**Current status: Stages 1–3 complete. Next up: Stage 4 (Behavior Engine — Movement).**
+**Current status: Stages 1–4 complete. Next up: Stage 5 (Behavior Engine — Attacks).**
 
 ### Stage 1: Tag & Metadata System ✅
 **Goal:** Define the data structures that everything else builds on.
@@ -261,7 +261,7 @@ Verify client renders it and combat works.
 
 ---
 
-### Stage 4: Behavior Engine — Movement
+### Stage 4: Behavior Engine — Movement ✅
 **Goal:** Monsters move based on data-driven behavior rules.
 **Why:** Needed before AI generation so generated behaviors have an engine.
 

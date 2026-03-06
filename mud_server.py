@@ -16,6 +16,8 @@ from pathlib import Path
 import websockets
 from websockets.http import Headers
 
+import behavior_engine
+
 # ---------------------------------------------------------------------------
 # Tile constants
 # ---------------------------------------------------------------------------
@@ -349,6 +351,7 @@ MONSTER_STATS = {
 CUSTOM_SPRITES = {}       # kind -> sprite data dict (same shape as MONSTER_SPRITE_DATA entries)
 CUSTOM_DEATH_SPRITES = {} # kind -> death sprite data dict
 CUSTOM_TILE_RECIPES = {}  # tile_id -> recipe dict (colors + operations)
+MONSTER_BEHAVIORS = {}    # kind -> behavior dict {rules: [...], patrol_waypoints: [...]}
 
 # ---------------------------------------------------------------------------
 # Validation & registration for dynamic content (Stage 3)
@@ -588,6 +591,11 @@ def register_monster_type(data: dict) -> tuple[bool, list[str]]:
     if death_sprite:
         CUSTOM_DEATH_SPRITES[kind] = death_sprite
 
+    # Register behavior (optional — monsters without it default to wander)
+    behavior = data.get("behavior")
+    if behavior:
+        MONSTER_BEHAVIORS[kind] = behavior
+
     print(f"[REG] Monster type registered: {kind} "
           f"(hp={stats['hp']}, dmg={stats['damage']}, hop={stats['hop_interval']})")
     return True, []
@@ -618,13 +626,24 @@ class Monster:
     def __init__(self, x, y, kind="slime"):
         self.x = x
         self.y = y
+        self.spawn_x = x
+        self.spawn_y = y
         self.kind = kind
         self.alive = True
         self.last_hop_time = time.monotonic()
         stats = MONSTER_STATS.get(kind, {"hp": 1, "hop_interval": 2.0, "damage": 1})
         self.hp = stats["hp"]
+        self.max_hp = stats["hp"]
         self.hop_interval = stats["hop_interval"]
         self.damage = stats.get("damage", 1)
+        # Behavior engine data (None = use default wander)
+        self.behavior = MONSTER_BEHAVIORS.get(kind)
+        # Patrol state
+        if self.behavior:
+            patrol_wps = self.behavior.get("patrol_waypoints")
+            if patrol_wps:
+                self._patrol_waypoints = patrol_wps
+                self._patrol_index = 0
 
 # Templates — define what monsters belong in each room (never mutated)
 MONSTER_TEMPLATES = {}  # Populated from .room files by load_room_files()
@@ -645,7 +664,8 @@ def spawn_monsters(room_id: str) -> list[Monster]:
     monsters = []
     for t in templates:
         m = Monster(t["x"], t["y"], t["kind"])
-        m.last_hop_time = now
+        # Stagger first hop by 0-4 ticks (0.25s each) so monsters don't move in sync
+        m.last_hop_time = now + random.randint(0, 4) * 0.25
         monsters.append(m)
     return monsters
 
@@ -1417,14 +1437,12 @@ async def handle_attack(player: Player):
 async def monster_tick():
     """Background loop — hops alive monsters in rooms that have players."""
     while True:
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(0.25)
         now = time.monotonic()
         for room_id, monster_list in list(room_monsters.items()):
             # Only simulate rooms with players
             if not players_in_room(room_id):
                 continue
-            tilemap = ROOMS[room_id]["tilemap"]
-            guards = GUARDS.get(room_id, [])
             for i, monster in enumerate(monster_list):
                 if not monster.alive:
                     continue
@@ -1432,17 +1450,12 @@ async def monster_tick():
                     continue
                 monster.last_hop_time = now
 
-                # Pick a random walkable adjacent tile
-                directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-                random.shuffle(directions)
-                for ddx, ddy in directions:
-                    nx, ny = monster.x + ddx, monster.y + ddy
-                    if nx < 0 or nx >= ROOM_COLS or ny < 0 or ny >= ROOM_ROWS:
-                        continue
-                    if tilemap[ny][nx] not in WALKABLE_TILES:
-                        continue
-                    if any(g["x"] == nx and g["y"] == ny for g in guards):
-                        continue
+                # Evaluate behavior rules → pick action → execute movement
+                action = behavior_engine.evaluate_rules(monster, room_id)
+                result = behavior_engine.execute_action(action, monster, room_id)
+
+                if result is not None:
+                    nx, ny = result
                     monster.x = nx
                     monster.y = ny
                     await broadcast_to_room(room_id, {
@@ -1455,7 +1468,7 @@ async def monster_tick():
                     for p in players_in_room(room_id):
                         if p.x == nx and p.y == ny and p.hp > 0:
                             await damage_player(p, monster.damage, room_id)
-                    break
+                    # else: action was "hold" or no valid move — monster stays put
 
 # ---------------------------------------------------------------------------
 # Debug spawn — register + spawn a test monster (admin only for now)
@@ -1466,6 +1479,13 @@ _DEBUG_MONSTERS = {
     "fire_slime": {
         "kind": "fire_slime",
         "stats": {"hp": 2, "hop_interval": 1.5, "damage": 2},
+        "behavior": {
+            "rules": [
+                {"if": "hp_below_pct", "value": 30, "do": "flee"},
+                {"if": "player_within", "range": 5, "do": "chase"},
+                {"default": "wander"},
+            ],
+        },
         "sprite": {
             "colors": {"body": "#ff6600", "dark": "#cc3300", "eyes": "#222222", "highlight": "#ffaa00"},
             "frames": [
@@ -1493,6 +1513,13 @@ _DEBUG_MONSTERS = {
     "ice_bat": {
         "kind": "ice_bat",
         "stats": {"hp": 1, "hop_interval": 0.8, "damage": 1},
+        "behavior": {
+            "rules": [
+                {"if": "player_within", "range": 3, "do": "flee"},
+                {"if": "player_within", "range": 7, "do": "hold"},
+                {"default": "wander"},
+            ],
+        },
         "sprite": {
             "colors": {"body": "#4a6a8a", "wing": "#7ab0dd", "eyes": "#00ffff"},
             "frames": [
@@ -1520,6 +1547,14 @@ _DEBUG_MONSTERS = {
     "shadow_skull": {
         "kind": "shadow_skull",
         "stats": {"hp": 3, "hop_interval": 2.0, "damage": 3},
+        "behavior": {
+            "rules": [
+                {"if": "hp_below_pct", "value": 50, "do": "flee"},
+                {"if": "player_within", "range": 4, "do": "chase"},
+                {"if": "random_chance", "value": 30, "do": "wander"},
+                {"default": "hold"},
+            ],
+        },
         "sprite": {
             "colors": {"bone": "#e0d8c0", "dark": "#2a1a2a", "eyes": "#ff0044", "shadow": "#4a2a4a"},
             "frames": [
@@ -1809,9 +1844,23 @@ async def process_request(path, request_headers):
 # Main
 # ---------------------------------------------------------------------------
 
+def _auto_register_debug_monsters():
+    """Register any _DEBUG_MONSTERS that appear in room templates."""
+    needed = set()
+    for room_id, templates in MONSTER_TEMPLATES.items():
+        for t in templates:
+            kind = t["kind"]
+            if kind in _DEBUG_MONSTERS and kind not in MONSTER_STATS:
+                needed.add(kind)
+    for kind in sorted(needed):
+        register_monster_type(_DEBUG_MONSTERS[kind])
+
+
 async def main():
     load_room_files()
     load_dungeon_templates()
+    _auto_register_debug_monsters()
+    behavior_engine.init(players_in_room, ROOM_COLS, ROOM_ROWS, WALKABLE_TILES, GUARDS, ROOMS)
     port = 8080
     server = await websockets.serve(
         handle_connection, "0.0.0.0", port,
