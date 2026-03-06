@@ -313,6 +313,7 @@
   let projectiles = [];       // [{id, x, y, displayX, displayY, dx, dy, color}]
   let areaWarnings = [];      // [{x, y, range, startTime, duration}]
   let chargeTrails = [];      // [{path, startTime}]
+  let chargePreps = [];       // [{id, lane, startTime}] — charge warning indicators
   let monsterAttackFlashes = []; // [{x, y, startTime}] — melee attack indicators
   let playerFlags = new Set(); // string flags, e.g. "has_sword"
   let swordPickups = [];      // [{x, y, frame, nextTime}] — active sword pickup animations
@@ -419,6 +420,7 @@
     const now = Date.now();
     areaWarnings = areaWarnings.filter(w => now - w.startTime < w.duration);
     chargeTrails = chargeTrails.filter(t => now - t.startTime < 400);
+    chargePreps = chargePreps.filter(p => now - p.startTime < 2000);
     monsterAttackFlashes = monsterAttackFlashes.filter(f => now - f.startTime < 200);
   }
 
@@ -460,6 +462,21 @@
             }
           }
         }
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function renderChargePreps() {
+    const now = Date.now();
+    for (const p of chargePreps) {
+      const age = now - p.startTime;
+      // Pulsing red/orange lane warning
+      const pulse = 0.25 + 0.15 * Math.sin(age / 80);
+      ctx.globalAlpha = pulse;
+      ctx.fillStyle = "#ff4422";
+      for (const [tx, ty] of p.lane) {
+        ctx.fillRect(tx * TS + 1*SCALE, ty * TS + 1*SCALE, TS - 2*SCALE, TS - 2*SCALE);
       }
       ctx.globalAlpha = 1;
     }
@@ -624,7 +641,7 @@
 
     // Add monsters to render list
     for (const m of monsters) {
-      all.push({ x: m.displayX, y: m.displayY, isMonster: true, kind: m.kind, hitFlash: m.hitFlash, teleportAlpha: m.teleportAlpha });
+      all.push({ x: m.displayX, y: m.displayY, isMonster: true, kind: m.kind, hitFlash: m.hitFlash, teleportAlpha: m.teleportAlpha, chargePrep: m.chargePrep });
     }
 
     // Sort by Y for depth
@@ -640,11 +657,16 @@
       const px = p.x * TS;
       const py = p.y * TS;
       if (p.isMonster) {
+        // Charge prep shake
+        let shakeX = 0;
+        if (p.chargePrep) {
+          shakeX = Math.round(Math.sin(Date.now() / 30) * 2) * SCALE;
+        }
         // Teleport fade effect
         if (p.teleportAlpha !== undefined && p.teleportAlpha < 1) {
           ctx.globalAlpha = Math.max(0, p.teleportAlpha);
         }
-        drawMonsterSprite(ctx, px, py, p.kind, monsterHopFrame, SCALE);
+        drawMonsterSprite(ctx, px + shakeX, py, p.kind, monsterHopFrame, SCALE);
         ctx.globalAlpha = 1;
         // Hit flash — white overlay
         if (p.hitFlash && Date.now() < p.hitFlash) {
@@ -1010,6 +1032,7 @@
       renderRoom();
       renderAreaWarnings();
       renderHeartPickups();
+      renderChargePreps();
       renderChargeTrails();
       renderPlayers();
       renderProjectiles();
@@ -1215,6 +1238,7 @@
         projectiles = [];
         areaWarnings = [];
         chargeTrails = [];
+        chargePreps = [];
         monsterAttackFlashes = [];
         monsters = (msg.monsters || []).map(m => ({
           id: m.id, kind: m.kind, x: m.x, y: m.y, displayX: m.x, displayY: m.y,
@@ -1422,15 +1446,27 @@
         monsterAttackFlashes.push({ x: msg.target_x, y: msg.target_y, startTime: Date.now() });
         break;
 
+      case "charge_prep": {
+        // Monster is winding up a charge — show warning lane and shake
+        const prepMon = monsters.find(m => m.id === msg.id);
+        if (prepMon) prepMon.chargePrep = Date.now();
+        // Remove any existing prep for this monster
+        chargePreps = chargePreps.filter(p => p.id !== msg.id);
+        chargePreps.push({ id: msg.id, lane: msg.lane, startTime: Date.now() });
+        break;
+      }
+
       case "monster_charged": {
-        // Update monster position and show charge trail
+        // Update monster position and show charge trail — clear prep state
         const chargedMon = monsters.find(m => m.id === msg.id);
         if (chargedMon) {
           chargedMon.x = msg.x;
           chargedMon.y = msg.y;
           chargedMon.displayX = msg.x;
           chargedMon.displayY = msg.y;
+          chargedMon.chargePrep = null;
         }
+        chargePreps = chargePreps.filter(p => p.id !== msg.id);
         chargeTrails.push({ path: msg.path, startTime: Date.now() });
         break;
       }

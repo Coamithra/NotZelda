@@ -666,6 +666,8 @@ class Monster:
         self._attack_cooldowns = {}
         # Teleporting state (monster is invisible during teleport)
         self._teleporting = False
+        # Charge prep state: {dx, dy, atk_index, atk} or None
+        self._charge_prep = None
         # Patrol state
         if self.behavior:
             patrol_wps = self.behavior.get("patrol_waypoints")
@@ -1507,6 +1509,8 @@ async def execute_monster_attack(monster, room_id, monster_idx):
             continue
         if player_dist > atk.get("range", 1):
             continue
+        if atk.get("type") == "charge" and monster.x != player.x and monster.y != player.y:
+            continue
 
         # This attack is usable — execute it
         monster._attack_cooldowns[i] = now
@@ -1592,7 +1596,7 @@ async def attack_projectile(monster, room_id, monster_idx, atk, target):
 
 
 async def attack_charge(monster, room_id, monster_idx, atk, target):
-    """Dash in a straight line toward the player, damaging anything in the path."""
+    """Lock in charge direction and enter prep state. Actual dash happens next tick."""
     dx_raw = target.x - monster.x
     dy_raw = target.y - monster.y
     if dx_raw == 0 and dy_raw == 0:
@@ -1602,6 +1606,34 @@ async def attack_charge(monster, room_id, monster_idx, atk, target):
     else:
         dx, dy = 0, (1 if dy_raw > 0 else -1)
 
+    # Store prep — direction is locked, charge fires next tick
+    monster._charge_prep = {"dx": dx, "dy": dy, "atk": atk}
+
+    # Build the preview lane (what the charge path would be right now)
+    max_range = atk.get("range", 3)
+    lane = []
+    nx, ny = monster.x, monster.y
+    for _ in range(max_range):
+        nx += dx
+        ny += dy
+        if not behavior_engine._is_walkable(nx, ny, room_id):
+            break
+        lane.append([nx, ny])
+
+    await broadcast_to_room(room_id, {
+        "type": "charge_prep",
+        "id": monster_idx,
+        "dx": dx,
+        "dy": dy,
+        "lane": lane,
+    })
+
+
+async def execute_charge_from_prep(monster, room_id, monster_idx, prep):
+    """Execute the actual charge dash from a prepped direction."""
+    dx = prep["dx"]
+    dy = prep["dy"]
+    atk = prep["atk"]
     max_range = atk.get("range", 3)
     damage = atk.get("damage", monster.damage)
     path = []
@@ -1786,6 +1818,13 @@ async def monster_tick():
                 if now - monster.last_hop_time < monster.hop_interval:
                     continue
                 monster.last_hop_time = now
+
+                # Execute pending charge prep (locked direction from previous tick)
+                if monster._charge_prep is not None:
+                    prep = monster._charge_prep
+                    monster._charge_prep = None
+                    await execute_charge_from_prep(monster, room_id, i, prep)
+                    continue
 
                 # Evaluate behavior rules → pick action → execute
                 action = behavior_engine.evaluate_rules(monster, room_id)

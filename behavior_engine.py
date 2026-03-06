@@ -113,10 +113,14 @@ def cond_can_attack(monster, room_id, rule):
     player, player_dist = _nearest_player(monster, room_id)
     if player is None:
         return False
+    has_charge_prep = getattr(monster, "_charge_prep", None) is not None
     for i, atk in enumerate(attacks):
         last_used = cooldowns.get(i, 0)
         cd = atk.get("cooldown", 1.0)
         if now - last_used >= cd and player_dist <= atk.get("range", 1):
+            if atk.get("type") == "charge":
+                if has_charge_prep or (monster.x != player.x and monster.y != player.y):
+                    continue
             return True
     return False
 
