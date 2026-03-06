@@ -1258,6 +1258,21 @@
       }
 
       case "monster_spawned":
+        // Register custom sprites if included (e.g. from /debug_spawn)
+        if (msg.custom_sprites) {
+          for (const [kind, spriteData] of Object.entries(msg.custom_sprites)) {
+            if (!MONSTER_SPRITE_DATA[kind] && !customMonsterSprites[kind]) {
+              customMonsterSprites[kind] = spriteData;
+            }
+          }
+        }
+        if (msg.custom_death_sprites) {
+          for (const [kind, spriteData] of Object.entries(msg.custom_death_sprites)) {
+            if (!DEATH_SPRITE_DATA[kind] && !customDeathSprites[kind]) {
+              customDeathSprites[kind] = spriteData;
+            }
+          }
+        }
         monsters.push({ id: msg.id, kind: msg.kind, x: msg.x, y: msg.y, displayX: msg.x, displayY: msg.y });
         break;
 

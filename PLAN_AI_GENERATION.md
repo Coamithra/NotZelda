@@ -190,7 +190,9 @@ Tag-based replacement examples:
 
 ## Staged Implementation Plan
 
-### Stage 1: Tag & Metadata System
+**Current status: Stages 1–3 complete. Next up: Stage 4 (Behavior Engine — Movement).**
+
+### Stage 1: Tag & Metadata System ✅
 **Goal:** Define the data structures that everything else builds on.
 **Why first:** Rooms, monsters, and tiles all depend on this. Late binding
 requires tags from the start.
@@ -210,7 +212,7 @@ verify resolution fallback chain works.
 
 ---
 
-### Stage 2: Client Dynamic Registries
+### Stage 2: Client Dynamic Registries ✅
 **Goal:** Client can render monsters, NPCs, and tiles it has never seen before.
 **Why:** Unblocks all generated content. Small change, immediately testable.
 
@@ -234,22 +236,25 @@ and a custom tile. Verify both render correctly.
 
 ---
 
-### Stage 3: Server Dynamic Registration
+### Stage 3: Server Dynamic Registration ✅
 **Goal:** Server can register new monster types and tile types at runtime.
 
 Tasks:
-- [ ] `register_monster_type(kind, stats, behavior, sprite_data)` — adds
-      to `MONSTER_STATS`, `CUSTOM_SPRITES`, and `BEHAVIOR_DATA` dicts
-- [ ] `register_tile_type(tile_id, recipe)` — adds to a new
-      `CUSTOM_TILE_RECIPES` dict
-- [ ] Extend `send_room_enter()` to attach custom sprite/tile data for any
-      custom content referenced in the room
-- [ ] Validation functions:
-  - `validate_monster(data)` — stat ranges, sprite bounds, color formats,
-    behavior rule names exist, attack types exist
+- [x] `register_monster_type(data)` — validates then adds to
+      `MONSTER_STATS`, `CUSTOM_SPRITES`, and optionally `CUSTOM_DEATH_SPRITES`
+- [x] `register_tile_type(data)` — validates then adds to
+      `CUSTOM_TILE_RECIPES`
+- [x] `send_room_enter()` already attaches custom sprite/tile data (Stage 2)
+- [x] Validation functions:
+  - `validate_monster(data)` — stat ranges, sprite bounds (16x16), color
+    formats (#RRGGBB), behavior rule/condition/action names, attack types
   - `validate_tile(data)` — operation names exist, color formats valid,
-    coordinates within 0-15 grid
-- [ ] Chat command `/debug_spawn <kind>` to test (admin only)
+    rect/pixel coordinates within 0-15 grid
+- [x] Chat command `/debug_spawn <kind>` to test — spawns near player,
+      broadcasts custom sprite data to all clients in room. Three built-in
+      test monsters: fire_slime, ice_bat, shadow_skull
+- [x] Extended `monster_spawned` protocol message to optionally carry
+      `custom_sprites`/`custom_death_sprites` so mid-session spawns work
 
 **Test:** Use `/debug_spawn` to register and spawn a custom monster.
 Verify client renders it and combat works.

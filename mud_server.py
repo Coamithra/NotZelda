@@ -345,10 +345,269 @@ MONSTER_STATS = {
 }
 
 # Custom sprite/tile data for AI-generated content (Stage 2: dynamic registries)
-# Populated by register_monster_type() / register_tile_type() in later stages
+# Populated by register_monster_type() / register_tile_type()
 CUSTOM_SPRITES = {}       # kind -> sprite data dict (same shape as MONSTER_SPRITE_DATA entries)
 CUSTOM_DEATH_SPRITES = {} # kind -> death sprite data dict
 CUSTOM_TILE_RECIPES = {}  # tile_id -> recipe dict (colors + operations)
+
+# ---------------------------------------------------------------------------
+# Validation & registration for dynamic content (Stage 3)
+# ---------------------------------------------------------------------------
+
+import re as _re
+
+_HEX_COLOR_RE = _re.compile(r'^#[0-9a-fA-F]{6}$')
+
+VALID_TILE_OPS = frozenset({
+    "fill", "noise", "bricks", "grid_lines", "hstripes", "vstripes",
+    "wave", "ripple", "rects", "pixels",
+})
+
+VALID_BEHAVIOR_CONDITIONS = frozenset({
+    "player_within", "player_beyond", "hp_below_pct", "hp_above_pct",
+    "random_chance", "always", "default",
+})
+
+VALID_BEHAVIOR_ACTIONS = frozenset({
+    "wander", "chase", "flee", "patrol", "hold",
+})
+
+VALID_ATTACK_TYPES = frozenset({
+    "melee", "projectile", "charge", "teleport", "area",
+})
+
+
+def _is_hex_color(s) -> bool:
+    """Check if a string is a valid #RRGGBB hex color."""
+    return isinstance(s, str) and bool(_HEX_COLOR_RE.match(s))
+
+
+def validate_monster(data: dict) -> list[str]:
+    """Validate a monster definition. Returns a list of error strings (empty = valid).
+
+    Expected shape:
+      kind: str
+      stats: {hp: int, hop_interval: float, damage: int}
+      sprite: {colors: {key: "#hex"}, frames: [[[colorKey, x, y, w, h], ...], ...]}
+      behavior: {rules: [...], attacks: [...]}  (optional)
+      death_sprite: {colors: {...}, frames: [...]}  (optional)
+    """
+    errors = []
+
+    # -- kind --
+    kind = data.get("kind")
+    if not isinstance(kind, str) or not kind:
+        errors.append("kind must be a non-empty string")
+    elif not _re.match(r'^[a-z][a-z0-9_]*$', kind):
+        errors.append("kind must be lowercase alphanumeric with underscores")
+
+    # -- stats --
+    stats = data.get("stats")
+    if not isinstance(stats, dict):
+        errors.append("stats must be a dict")
+    else:
+        hp = stats.get("hp")
+        if not isinstance(hp, (int, float)) or hp < 1 or hp > 100:
+            errors.append("stats.hp must be 1-100")
+        hop = stats.get("hop_interval")
+        if not isinstance(hop, (int, float)) or hop < 0.2 or hop > 10.0:
+            errors.append("stats.hop_interval must be 0.2-10.0")
+        dmg = stats.get("damage")
+        if not isinstance(dmg, (int, float)) or dmg < 1 or dmg > 20:
+            errors.append("stats.damage must be 1-20")
+
+    # -- sprite --
+    sprite = data.get("sprite")
+    if not isinstance(sprite, dict):
+        errors.append("sprite must be a dict")
+    else:
+        colors = sprite.get("colors")
+        if not isinstance(colors, dict):
+            errors.append("sprite.colors must be a dict")
+        else:
+            for k, v in colors.items():
+                if not _is_hex_color(v):
+                    errors.append(f"sprite.colors.{k} must be #RRGGBB, got {v!r}")
+        frames = sprite.get("frames")
+        if not isinstance(frames, list) or len(frames) < 1:
+            errors.append("sprite.frames must be a non-empty list")
+        else:
+            for fi, frame in enumerate(frames):
+                if not isinstance(frame, list):
+                    errors.append(f"sprite.frames[{fi}] must be a list of layers")
+                    continue
+                for li, layer in enumerate(frame):
+                    if not isinstance(layer, list) or len(layer) != 5:
+                        errors.append(f"sprite.frames[{fi}][{li}] must be [colorKey, x, y, w, h]")
+                        continue
+                    _, x, y, w, h = layer
+                    if not all(isinstance(v, (int, float)) for v in (x, y, w, h)):
+                        errors.append(f"sprite.frames[{fi}][{li}] x/y/w/h must be numbers")
+                    elif x < 0 or y < 0 or x + w > 16 or y + h > 16:
+                        errors.append(f"sprite.frames[{fi}][{li}] out of 16x16 bounds")
+
+    # -- behavior (optional) --
+    behavior = data.get("behavior")
+    if behavior is not None:
+        if not isinstance(behavior, dict):
+            errors.append("behavior must be a dict")
+        else:
+            rules = behavior.get("rules", [])
+            if not isinstance(rules, list):
+                errors.append("behavior.rules must be a list")
+            else:
+                for ri, rule in enumerate(rules):
+                    if not isinstance(rule, dict):
+                        errors.append(f"behavior.rules[{ri}] must be a dict")
+                        continue
+                    # Check condition
+                    cond = rule.get("if") or rule.get("default") and "default"
+                    if cond and cond not in VALID_BEHAVIOR_CONDITIONS:
+                        errors.append(f"behavior.rules[{ri}] unknown condition: {cond}")
+                    # Check action
+                    action = rule.get("do") or (rule.get("default") if "default" in rule else None)
+                    if isinstance(action, str) and action not in VALID_BEHAVIOR_ACTIONS:
+                        errors.append(f"behavior.rules[{ri}] unknown action: {action}")
+
+            attacks = behavior.get("attacks", [])
+            if not isinstance(attacks, list):
+                errors.append("behavior.attacks must be a list")
+            else:
+                for ai, atk in enumerate(attacks):
+                    if not isinstance(atk, dict):
+                        errors.append(f"behavior.attacks[{ai}] must be a dict")
+                        continue
+                    atype = atk.get("type")
+                    if atype not in VALID_ATTACK_TYPES:
+                        errors.append(f"behavior.attacks[{ai}] unknown type: {atype}")
+                    rng = atk.get("range")
+                    if not isinstance(rng, (int, float)) or rng < 1 or rng > 15:
+                        errors.append(f"behavior.attacks[{ai}] range must be 1-15")
+
+    # -- death_sprite (optional) --
+    death_sprite = data.get("death_sprite")
+    if death_sprite is not None:
+        if not isinstance(death_sprite, dict):
+            errors.append("death_sprite must be a dict")
+        else:
+            dcolors = death_sprite.get("colors")
+            if isinstance(dcolors, dict):
+                for k, v in dcolors.items():
+                    if not _is_hex_color(v):
+                        errors.append(f"death_sprite.colors.{k} must be #RRGGBB")
+            dframes = death_sprite.get("frames")
+            if not isinstance(dframes, list) or len(dframes) < 1:
+                errors.append("death_sprite.frames must be a non-empty list")
+
+    return errors
+
+
+def validate_tile(data: dict) -> list[str]:
+    """Validate a tile recipe. Returns a list of error strings (empty = valid).
+
+    Expected shape:
+      id: str
+      colors: {key: "#hex"}
+      operations: [{op: "fill"|"noise"|..., ...}, ...]
+    """
+    errors = []
+
+    tile_id = data.get("id")
+    if not isinstance(tile_id, str) or not tile_id:
+        errors.append("id must be a non-empty string")
+    elif not _re.match(r'^[a-z][a-z0-9_]*$', tile_id):
+        errors.append("id must be lowercase alphanumeric with underscores")
+
+    colors = data.get("colors")
+    if not isinstance(colors, dict):
+        errors.append("colors must be a dict")
+    else:
+        for k, v in colors.items():
+            if not _is_hex_color(v):
+                errors.append(f"colors.{k} must be #RRGGBB, got {v!r}")
+
+    ops = data.get("operations")
+    if not isinstance(ops, list):
+        errors.append("operations must be a list")
+    else:
+        for oi, op in enumerate(ops):
+            if not isinstance(op, dict):
+                errors.append(f"operations[{oi}] must be a dict")
+                continue
+            op_name = op.get("op")
+            if op_name not in VALID_TILE_OPS:
+                errors.append(f"operations[{oi}] unknown op: {op_name}")
+            # Validate rect coordinates for rects op
+            if op_name == "rects":
+                for ri, rect in enumerate(op.get("rects", [])):
+                    if not isinstance(rect, list) or len(rect) != 5:
+                        errors.append(f"operations[{oi}].rects[{ri}] must be [colorKey, x, y, w, h]")
+                        continue
+                    _, x, y, w, h = rect
+                    if not all(isinstance(v, (int, float)) for v in (x, y, w, h)):
+                        errors.append(f"operations[{oi}].rects[{ri}] x/y/w/h must be numbers")
+                    elif x < 0 or y < 0 or x + w > 16 or y + h > 16:
+                        errors.append(f"operations[{oi}].rects[{ri}] out of 0-15 grid")
+            # Validate pixel coordinates for pixels op
+            if op_name == "pixels":
+                for pi, px in enumerate(op.get("pixels", [])):
+                    if not isinstance(px, list) or len(px) != 3:
+                        errors.append(f"operations[{oi}].pixels[{pi}] must be [colorKey, x, y]")
+                        continue
+                    _, x, y = px
+                    if not all(isinstance(v, (int, float)) for v in (x, y)):
+                        errors.append(f"operations[{oi}].pixels[{pi}] x/y must be numbers")
+                    elif x < 0 or x > 15 or y < 0 or y > 15:
+                        errors.append(f"operations[{oi}].pixels[{pi}] out of 0-15 grid")
+
+    return errors
+
+
+def register_monster_type(data: dict) -> tuple[bool, list[str]]:
+    """Register a new monster type at runtime. Returns (success, errors)."""
+    errors = validate_monster(data)
+    if errors:
+        return False, errors
+
+    kind = data["kind"]
+    stats = data["stats"]
+    sprite = data["sprite"]
+
+    # Register stats
+    MONSTER_STATS[kind] = {
+        "hp": int(stats["hp"]),
+        "hop_interval": float(stats["hop_interval"]),
+        "damage": int(stats["damage"]),
+    }
+
+    # Register sprite
+    CUSTOM_SPRITES[kind] = sprite
+
+    # Register death sprite (optional — client auto-generates a generic splat if absent)
+    death_sprite = data.get("death_sprite")
+    if death_sprite:
+        CUSTOM_DEATH_SPRITES[kind] = death_sprite
+
+    print(f"[REG] Monster type registered: {kind} "
+          f"(hp={stats['hp']}, dmg={stats['damage']}, hop={stats['hop_interval']})")
+    return True, []
+
+
+def register_tile_type(data: dict) -> tuple[bool, list[str]]:
+    """Register a new custom tile type at runtime. Returns (success, errors)."""
+    errors = validate_tile(data)
+    if errors:
+        return False, errors
+
+    tile_id = data["id"]
+    CUSTOM_TILE_RECIPES[tile_id] = {
+        "colors": data["colors"],
+        "operations": data["operations"],
+    }
+
+    print(f"[REG] Tile type registered: {tile_id}")
+    return True, []
+
 
 HEART_DROP_CHANCE = 0.1
 INVINCIBILITY_DURATION = 1.5
@@ -1199,6 +1458,169 @@ async def monster_tick():
                     break
 
 # ---------------------------------------------------------------------------
+# Debug spawn — register + spawn a test monster (admin only for now)
+# ---------------------------------------------------------------------------
+
+# A few built-in test monster definitions for /debug_spawn
+_DEBUG_MONSTERS = {
+    "fire_slime": {
+        "kind": "fire_slime",
+        "stats": {"hp": 2, "hop_interval": 1.5, "damage": 2},
+        "sprite": {
+            "colors": {"body": "#ff6600", "dark": "#cc3300", "eyes": "#222222", "highlight": "#ffaa00"},
+            "frames": [
+                [
+                    ["dark",      2, 9,12, 6],
+                    ["body",      3, 8,10, 6],
+                    ["body",      4, 7, 8, 1],
+                    ["eyes",      5, 9, 2, 2],
+                    ["eyes",      9, 9, 2, 2],
+                    ["highlight", 5, 8, 2, 1],
+                ],
+                [
+                    ["dark",      4,12, 8, 2],
+                    ["body",      4, 4, 8, 9],
+                    ["body",      5, 3, 6, 1],
+                    ["body",      5,13, 6, 1],
+                    ["dark",      4,11, 8, 2],
+                    ["eyes",      5, 6, 2, 2],
+                    ["eyes",      9, 6, 2, 2],
+                    ["highlight", 5, 4, 2, 1],
+                ],
+            ],
+        },
+    },
+    "ice_bat": {
+        "kind": "ice_bat",
+        "stats": {"hp": 1, "hop_interval": 0.8, "damage": 1},
+        "sprite": {
+            "colors": {"body": "#4a6a8a", "wing": "#7ab0dd", "eyes": "#00ffff"},
+            "frames": [
+                [
+                    ["body",  6, 6, 4, 4],
+                    ["wing",  1, 3, 5, 4],
+                    ["wing", 10, 3, 5, 4],
+                    ["wing",  2, 2, 3, 1],
+                    ["wing", 11, 2, 3, 1],
+                    ["eyes",  6, 7, 1, 1],
+                    ["eyes",  9, 7, 1, 1],
+                ],
+                [
+                    ["body",  6, 5, 4, 4],
+                    ["wing",  1, 7, 5, 4],
+                    ["wing", 10, 7, 5, 4],
+                    ["wing",  2,11, 3, 1],
+                    ["wing", 11,11, 3, 1],
+                    ["eyes",  6, 6, 1, 1],
+                    ["eyes",  9, 6, 1, 1],
+                ],
+            ],
+        },
+    },
+    "shadow_skull": {
+        "kind": "shadow_skull",
+        "stats": {"hp": 3, "hop_interval": 2.0, "damage": 3},
+        "sprite": {
+            "colors": {"bone": "#e0d8c0", "dark": "#2a1a2a", "eyes": "#ff0044", "shadow": "#4a2a4a"},
+            "frames": [
+                [
+                    ["shadow",  4, 9, 8, 5],
+                    ["bone",    5, 3, 6, 6],
+                    ["bone",    4, 4, 8, 4],
+                    ["dark",    6, 5, 2, 2],
+                    ["dark",    8, 5, 2, 2],
+                    ["eyes",    6, 5, 1, 1],
+                    ["eyes",    9, 5, 1, 1],
+                    ["dark",    7, 7, 2, 1],
+                ],
+                [
+                    ["shadow",  4, 8, 8, 5],
+                    ["bone",    5, 2, 6, 6],
+                    ["bone",    4, 3, 8, 4],
+                    ["dark",    6, 4, 2, 2],
+                    ["dark",    8, 4, 2, 2],
+                    ["eyes",    6, 4, 1, 1],
+                    ["eyes",    9, 4, 1, 1],
+                    ["dark",    7, 6, 2, 1],
+                ],
+            ],
+        },
+    },
+}
+
+
+async def handle_debug_spawn(player: Player, args: str):
+    """Handle /debug_spawn <kind> — register and spawn a test monster near the player."""
+    args = args.strip()
+    if not args:
+        available = list(_DEBUG_MONSTERS.keys()) + [k for k in CUSTOM_SPRITES if k not in _DEBUG_MONSTERS]
+        existing_custom = [k for k in MONSTER_STATS if k not in ("slime", "bat", "scorpion", "skeleton", "swamp_blob")]
+        msg = "Usage: /debug_spawn <kind>\n"
+        msg += f"Built-in test monsters: {', '.join(_DEBUG_MONSTERS.keys())}\n"
+        if existing_custom:
+            msg += f"Registered custom: {', '.join(existing_custom)}\n"
+        msg += "Also works with any built-in kind: slime, bat, scorpion, skeleton, swamp_blob"
+        await send_to(player, {"type": "info", "text": msg})
+        return
+
+    kind = args.split()[0].lower()
+
+    # If it's a debug monster that isn't registered yet, register it
+    if kind in _DEBUG_MONSTERS and kind not in MONSTER_STATS:
+        ok, errors = register_monster_type(_DEBUG_MONSTERS[kind])
+        if not ok:
+            await send_to(player, {"type": "info", "text": f"Registration failed: {'; '.join(errors)}"})
+            return
+
+    # Check the kind exists (built-in or custom)
+    if kind not in MONSTER_STATS:
+        await send_to(player, {"type": "info", "text": f"Unknown monster kind: {kind}"})
+        return
+
+    # Find a walkable tile near the player
+    room = ROOMS[player.room]
+    tilemap = room["tilemap"]
+    guards = GUARDS.get(player.room, [])
+    spawn_x, spawn_y = None, None
+    for dx, dy in [(1,0), (-1,0), (0,1), (0,-1), (2,0), (-2,0), (0,2), (0,-2)]:
+        nx, ny = player.x + dx, player.y + dy
+        if 0 <= nx < ROOM_COLS and 0 <= ny < ROOM_ROWS:
+            if tilemap[ny][nx] in WALKABLE_TILES:
+                if not any(g["x"] == nx and g["y"] == ny for g in guards):
+                    spawn_x, spawn_y = nx, ny
+                    break
+
+    if spawn_x is None:
+        await send_to(player, {"type": "info", "text": "No walkable tile nearby to spawn monster."})
+        return
+
+    # Create and add the monster
+    monster = Monster(spawn_x, spawn_y, kind)
+    monster.last_hop_time = time.monotonic()
+    if player.room not in room_monsters:
+        room_monsters[player.room] = []
+    monster_list = room_monsters[player.room]
+    monster_id = len(monster_list)
+    monster_list.append(monster)
+
+    # Build the spawn message with custom sprite data if needed
+    spawn_msg = {
+        "type": "monster_spawned",
+        "id": monster_id,
+        "kind": kind,
+        "x": spawn_x,
+        "y": spawn_y,
+    }
+    if kind in CUSTOM_SPRITES:
+        spawn_msg["custom_sprites"] = {kind: CUSTOM_SPRITES[kind]}
+    if kind in CUSTOM_DEATH_SPRITES:
+        spawn_msg["custom_death_sprites"] = {kind: CUSTOM_DEATH_SPRITES[kind]}
+
+    await broadcast_to_room(player.room, spawn_msg)
+    await send_to(player, {"type": "info", "text": f"Spawned {kind} at ({spawn_x}, {spawn_y})"})
+
+
+# ---------------------------------------------------------------------------
 # Chat commands (typed in chat bar)
 # ---------------------------------------------------------------------------
 
@@ -1239,6 +1661,8 @@ async def handle_chat(player: Player, text: str):
                 await broadcast_to_room(player.room, {
                     "type": "chat", "from": player.name, "text": f"*{action}*",
                 })
+        elif cmd == "debug_spawn":
+            await handle_debug_spawn(player, parts[1] if len(parts) > 1 else "")
         else:
             await send_to(player, {"type": "info", "text": "Unknown command. Try /help"})
         return
