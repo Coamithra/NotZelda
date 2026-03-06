@@ -190,7 +190,7 @@ Tag-based replacement examples:
 
 ## Staged Implementation Plan
 
-**Current status: Stages 1–5 complete. Next up: Stage 6 (Claude API Integration).**
+**Current status: Stages 1–6 complete. Next up: Stage 7 (Library-Managed Dungeon Generation).**
 
 ### Stage 1: Tag & Metadata System ✅
 **Goal:** Define the data structures that everything else builds on.
@@ -325,7 +325,7 @@ and charging boar. Verify each attack type works.
 
 ---
 
-### Stage 6: Claude API Integration
+### Stage 6: Claude API Integration ✅
 **Goal:** Server can call Claude Haiku and get valid structured game content.
 
 **Key design: one API call per room, not per content type.** The AI gets a
