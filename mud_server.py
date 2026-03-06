@@ -344,6 +344,12 @@ MONSTER_STATS = {
     "swamp_blob": {"hp": 1, "hop_interval": 2.0, "damage": 1},
 }
 
+# Custom sprite/tile data for AI-generated content (Stage 2: dynamic registries)
+# Populated by register_monster_type() / register_tile_type() in later stages
+CUSTOM_SPRITES = {}       # kind -> sprite data dict (same shape as MONSTER_SPRITE_DATA entries)
+CUSTOM_DEATH_SPRITES = {} # kind -> death sprite data dict
+CUSTOM_TILE_RECIPES = {}  # tile_id -> recipe dict (colors + operations)
+
 HEART_DROP_CHANCE = 0.1
 INVINCIBILITY_DURATION = 1.5
 
@@ -700,7 +706,7 @@ async def send_room_enter(player: Player, exit_direction: str = None):
         if m.alive
     ]
     exits = room["exits"]
-    await send_to(player, {
+    msg = {
         "type": "room_enter",
         "room_id": player.room,
         "name": room["name"],
@@ -715,7 +721,32 @@ async def send_room_enter(player: Player, exit_direction: str = None):
         "exit_direction": exit_direction,
         "hp": player.hp,
         "max_hp": player.max_hp,
-    })
+    }
+
+    # Attach custom sprite/tile data for any AI-generated content in this room
+    custom_sprites = {}
+    custom_death_sprites = {}
+    for m in monsters:
+        kind = m["kind"]
+        if kind in CUSTOM_SPRITES:
+            custom_sprites[kind] = CUSTOM_SPRITES[kind]
+        if kind in CUSTOM_DEATH_SPRITES:
+            custom_death_sprites[kind] = CUSTOM_DEATH_SPRITES[kind]
+    custom_tiles = {}
+    tilemap = room["tilemap"]
+    for row in tilemap:
+        for tid in row:
+            if isinstance(tid, str) and tid in CUSTOM_TILE_RECIPES:
+                custom_tiles[tid] = CUSTOM_TILE_RECIPES[tid]
+
+    if custom_sprites:
+        msg["custom_sprites"] = custom_sprites
+    if custom_death_sprites:
+        msg["custom_death_sprites"] = custom_death_sprites
+    if custom_tiles:
+        msg["custom_tiles"] = custom_tiles
+
+    await send_to(player, msg)
 
 # ---------------------------------------------------------------------------
 # Movement & room transitions

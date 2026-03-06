@@ -604,6 +604,13 @@ const PLAYER_WALK_FRAMES = {
 // ---------------------------------------------------------------------------
 // Player fall-over frames — uses SHIRT placeholder
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Custom monster sprite registry — populated at runtime from server data
+// Keys are monster kind strings. Values have same shape as MONSTER_SPRITE_DATA entries.
+// ---------------------------------------------------------------------------
+const customMonsterSprites = {};
+const customDeathSprites = {};
+
 const PLAYER_FALL_FRAMES = [
   // Frame 0 — leaning
   [

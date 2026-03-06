@@ -386,6 +386,88 @@ const TILE_GENERATORS = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Custom tile registry — populated at runtime from server data (AI-generated)
+// Keys are string tile IDs. Values are recipe objects with colors + operations.
+// ---------------------------------------------------------------------------
+const customTiles = {};
+
+// Recipe interpreter — runs an operations array using existing draw functions
+function runTileRecipe(c, TS, TILE, S, recipe) {
+  // Build a color map from the recipe's named colors
+  const colors = recipe.colors || {};
+
+  // Fill base color
+  const base = colors.base || "#888";
+  c.fillStyle = base;
+  c.fillRect(0, 0, TS, TS);
+
+  const ops = recipe.operations || [];
+  for (const op of ops) {
+    // Resolve a color key from the recipe's color palette
+    const resolveColor = (key) => colors[key] || key;
+
+    switch (op.op) {
+      case "fill":
+        c.fillStyle = resolveColor(op.color);
+        c.fillRect(0, 0, TS, TS);
+        break;
+      case "noise": {
+        // Build an info-like object where color keys map to recipe colors
+        const info = { ...colors };
+        const colorKey = op.color || "alt";
+        const density = op.density || 0.3;
+        const seedId = op.seed || 0;
+        drawNoise(c, TS, TILE, S, info, density, colorKey, seedId);
+        break;
+      }
+      case "bricks": {
+        const info = { ...colors };
+        drawBricks(c, TS, TILE, S, info);
+        break;
+      }
+      case "grid_lines": {
+        const info = { ...colors };
+        drawGridLines(c, TS, TILE, S, info, op.spacing || 4);
+        break;
+      }
+      case "hstripes": {
+        const info = { ...colors };
+        drawHStripes(c, TS, TILE, S, info, op.spacing || 4);
+        break;
+      }
+      case "vstripes": {
+        const info = { ...colors };
+        drawVStripes(c, TS, TILE, S, info, op.spacing || 3);
+        break;
+      }
+      case "wave": {
+        const info = { ...colors };
+        drawWavePattern(c, TS, TILE, S, info);
+        break;
+      }
+      case "ripple": {
+        const info = { ...colors };
+        drawRipplePattern(c, TS, TILE, S, info);
+        break;
+      }
+      case "rects": {
+        const info = { ...colors };
+        drawRects(c, S, info, op.rects || []);
+        break;
+      }
+      // Direct pixel placement for fine-grained control
+      case "pixels": {
+        for (const [colorKey, x, y] of (op.pixels || [])) {
+          c.fillStyle = resolveColor(colorKey);
+          c.fillRect(x * S, y * S, S, S);
+        }
+        break;
+      }
+    }
+  }
+}
+
 // Pre-rendered tile cache
 const tileCanvases = {};
 
@@ -410,7 +492,16 @@ function createTileCanvas(tileId, TS, TILE, SCALE) {
 
 function getTileCanvas(tileId, TS, TILE, SCALE) {
   if (!tileCanvases[tileId]) {
-    tileCanvases[tileId] = createTileCanvas(tileId, TS, TILE, SCALE);
+    // Check custom tile registry for string IDs (AI-generated tiles)
+    if (typeof tileId === "string" && customTiles[tileId]) {
+      const tc = document.createElement("canvas");
+      tc.width = TS;
+      tc.height = TS;
+      runTileRecipe(tc.getContext("2d"), TS, TILE, SCALE, customTiles[tileId]);
+      tileCanvases[tileId] = tc;
+    } else {
+      tileCanvases[tileId] = createTileCanvas(tileId, TS, TILE, SCALE);
+    }
   }
   return tileCanvases[tileId];
 }

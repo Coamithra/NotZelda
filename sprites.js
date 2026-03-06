@@ -83,7 +83,7 @@ function drawAmara(ctx, px, py, S)       { drawNPCSprite(ctx, px, py, "amara", S
 // Monster sprites — data-driven
 // ---------------------------------------------------------------------------
 function drawMonsterSprite(ctx, px, py, kind, hopFrame, S) {
-  const sprite = MONSTER_SPRITE_DATA[kind];
+  const sprite = MONSTER_SPRITE_DATA[kind] || customMonsterSprites[kind];
   if (!sprite) return;
   const frame = hopFrame % sprite.frames.length;
   const yOffset = sprite.yOff ? sprite.yOff[frame] * S : 0;
@@ -91,8 +91,28 @@ function drawMonsterSprite(ctx, px, py, kind, hopFrame, S) {
 }
 
 function drawMonsterDeath(ctx, px, py, kind, deathFrame, S) {
-  const sprite = DEATH_SPRITE_DATA[kind];
-  if (!sprite) return;
+  const sprite = DEATH_SPRITE_DATA[kind] || customDeathSprites[kind];
+  if (!sprite) {
+    // Generate a generic splat from the monster's primary color
+    const monsterSprite = MONSTER_SPRITE_DATA[kind] || customMonsterSprites[kind];
+    if (!monsterSprite) return;
+    const clr = monsterSprite.colors[Object.keys(monsterSprite.colors)[0]] || "#888";
+    const genericFrames = [
+      [["c", 2,12,12,2], ["c", 3,11,10,2], ["c", 1,12,14,1]],
+      [["c", 1,12,3,2], ["c", 6,11,4,2], ["c",12,12,3,2]],
+      { alpha: 0.4, layers: [["c", 0,13,2,1], ["c", 6,12,3,1], ["c",13,13,2,1]] },
+    ];
+    const frame = genericFrames[Math.min(deathFrame, genericFrames.length - 1)];
+    const colors = { c: clr };
+    if (frame.alpha != null) {
+      ctx.globalAlpha = frame.alpha;
+      drawLayers(ctx, px, py, frame.layers, S, colors);
+      ctx.globalAlpha = 1;
+    } else {
+      drawLayers(ctx, px, py, frame, S, colors);
+    }
+    return;
+  }
   const frame = sprite.frames[Math.min(deathFrame, sprite.frames.length - 1)];
   if (frame.alpha != null) {
     ctx.globalAlpha = frame.alpha;
