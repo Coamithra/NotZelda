@@ -15,5 +15,5 @@ TR GR GR FL GR GR GR RD GR GR FL GR GR GR TR
 TR GR GR GR GR GR GR RD GR GR GR GR GR GR TR
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 ---
-npc Signpost_Reader 6 4 The road forks here. East to the lake, south to the castle.
+npc Signpost_Reader 6 4 merchant The road forks here. East to the lake, south to the castle.
 monster slime 10 7

@@ -155,6 +155,457 @@ function drawGuard(ctx, px, py, S) {
   ctx.fillRect(sx+9*S, sy+13*S, 2*S, 2*S);
 }
 
+// ---------------------------------------------------------------------------
+// NPC sprite variants — unique looks per NPC type
+// ---------------------------------------------------------------------------
+
+function drawSmith(ctx, px, py, S) {
+  const sx = px, sy = py;
+  // Bald/short hair
+  ctx.fillStyle = "#5a3a2a";
+  ctx.fillRect(sx+5*S, sy+0*S, 6*S, 2*S);
+  // Face
+  ctx.fillStyle = SKIN;
+  ctx.fillRect(sx+5*S, sy+2*S, 6*S, 4*S);
+  // Eyes
+  ctx.fillStyle = "#222";
+  ctx.fillRect(sx+6*S, sy+3*S, S, S);
+  ctx.fillRect(sx+9*S, sy+3*S, S, S);
+  // Brown beard
+  ctx.fillStyle = "#5a3a2a";
+  ctx.fillRect(sx+6*S, sy+5*S, 4*S, S);
+  // Leather apron over dark shirt
+  ctx.fillStyle = "#4a4a4a";
+  ctx.fillRect(sx+4*S, sy+6*S, 8*S, 5*S);
+  ctx.fillStyle = "#8a5a2a";
+  ctx.fillRect(sx+5*S, sy+6*S, 6*S, 5*S); // apron
+  ctx.fillStyle = "#6a4010";
+  ctx.fillRect(sx+6*S, sy+7*S, 4*S, S); // apron strap
+  // Beefy arms
+  ctx.fillStyle = SKIN;
+  ctx.fillRect(sx+3*S, sy+7*S, S, 3*S);
+  ctx.fillRect(sx+12*S, sy+7*S, S, 3*S);
+  ctx.fillRect(sx+3*S, sy+10*S, S, S);
+  ctx.fillRect(sx+12*S, sy+10*S, S, S);
+  // Pants & boots
+  ctx.fillStyle = PANTS;
+  ctx.fillRect(sx+5*S, sy+11*S, 6*S, 2*S);
+  ctx.fillStyle = BOOTS;
+  ctx.fillRect(sx+5*S, sy+13*S, 2*S, 2*S);
+  ctx.fillRect(sx+9*S, sy+13*S, 2*S, 2*S);
+}
+
+function drawPriest(ctx, px, py, S) {
+  const sx = px, sy = py;
+  // Bald head with tonsure
+  ctx.fillStyle = SKIN;
+  ctx.fillRect(sx+5*S, sy+0*S, 6*S, 6*S);
+  ctx.fillStyle = "#6a5040";
+  ctx.fillRect(sx+5*S, sy+0*S, 6*S, S); // ring of hair
+  ctx.fillRect(sx+5*S, sy+0*S, S, 2*S);
+  ctx.fillRect(sx+10*S, sy+0*S, S, 2*S);
+  // Eyes
+  ctx.fillStyle = "#222";
+  ctx.fillRect(sx+6*S, sy+3*S, S, S);
+  ctx.fillRect(sx+9*S, sy+3*S, S, S);
+  // Kind smile
+  ctx.fillStyle = "#a06060";
+  ctx.fillRect(sx+7*S, sy+5*S, 2*S, S);
+  // White robes
+  ctx.fillStyle = "#e8e0d0";
+  ctx.fillRect(sx+4*S, sy+6*S, 8*S, 5*S);
+  ctx.fillRect(sx+3*S, sy+7*S, S, 3*S);
+  ctx.fillRect(sx+12*S, sy+7*S, S, 3*S);
+  // Gold cross on chest
+  ctx.fillStyle = "#d4a840";
+  ctx.fillRect(sx+7*S, sy+7*S, 2*S, S);
+  ctx.fillRect(sx+7*S, sy+8*S, 2*S, 2*S);
+  // Hands
+  ctx.fillStyle = SKIN;
+  ctx.fillRect(sx+3*S, sy+10*S, S, S);
+  ctx.fillRect(sx+12*S, sy+10*S, S, S);
+  // Robe skirt (no pants visible)
+  ctx.fillStyle = "#d8d0c0";
+  ctx.fillRect(sx+4*S, sy+11*S, 8*S, 2*S);
+  // Sandals
+  ctx.fillStyle = "#8a6a3a";
+  ctx.fillRect(sx+5*S, sy+13*S, 2*S, 2*S);
+  ctx.fillRect(sx+9*S, sy+13*S, 2*S, 2*S);
+}
+
+function drawBarmaid(ctx, px, py, S) {
+  const sx = px, sy = py;
+  // Red-brown hair, longer
+  ctx.fillStyle = "#8a3020";
+  ctx.fillRect(sx+4*S, sy+0*S, 8*S, 2*S);
+  ctx.fillRect(sx+4*S, sy+2*S, 2*S, 4*S);
+  ctx.fillRect(sx+10*S, sy+2*S, 2*S, 4*S);
+  // Face
+  ctx.fillStyle = SKIN;
+  ctx.fillRect(sx+5*S, sy+2*S, 6*S, 4*S);
+  // Eyes
+  ctx.fillStyle = "#222";
+  ctx.fillRect(sx+6*S, sy+3*S, S, S);
+  ctx.fillRect(sx+9*S, sy+3*S, S, S);
+  // Smile
+  ctx.fillStyle = "#c06060";
+  ctx.fillRect(sx+7*S, sy+5*S, 2*S, S);
+  // Green dress with white apron
+  ctx.fillStyle = "#3a8a3a";
+  ctx.fillRect(sx+4*S, sy+6*S, 8*S, 5*S);
+  ctx.fillStyle = "#e8e8e8";
+  ctx.fillRect(sx+5*S, sy+7*S, 6*S, 4*S); // white apron
+  // Arms
+  ctx.fillStyle = "#3a8a3a";
+  ctx.fillRect(sx+3*S, sy+7*S, S, 3*S);
+  ctx.fillRect(sx+12*S, sy+7*S, S, 3*S);
+  ctx.fillStyle = SKIN;
+  ctx.fillRect(sx+3*S, sy+10*S, S, S);
+  ctx.fillRect(sx+12*S, sy+10*S, S, S);
+  // Skirt
+  ctx.fillStyle = "#3a8a3a";
+  ctx.fillRect(sx+4*S, sy+11*S, 8*S, 2*S);
+  // Shoes
+  ctx.fillStyle = "#4a2a1a";
+  ctx.fillRect(sx+5*S, sy+13*S, 2*S, 2*S);
+  ctx.fillRect(sx+9*S, sy+13*S, 2*S, 2*S);
+}
+
+function drawWitch(ctx, px, py, S) {
+  const sx = px, sy = py;
+  // Tall pointy hat
+  ctx.fillStyle = "#2a1a3a";
+  ctx.fillRect(sx+7*S, sy+0*S, 2*S, S);
+  ctx.fillRect(sx+6*S, sy+1*S, 4*S, S);
+  ctx.fillRect(sx+5*S, sy+2*S, 6*S, 2*S);
+  ctx.fillRect(sx+3*S, sy+4*S, 10*S, S); // hat brim
+  // Face — pale green tint
+  ctx.fillStyle = "#c8d898";
+  ctx.fillRect(sx+5*S, sy+5*S, 6*S, 3*S);
+  // Eyes — glowing
+  ctx.fillStyle = "#aa44cc";
+  ctx.fillRect(sx+6*S, sy+5*S, S, S);
+  ctx.fillRect(sx+9*S, sy+5*S, S, S);
+  // Dark purple robes
+  ctx.fillStyle = "#3a1a4a";
+  ctx.fillRect(sx+4*S, sy+8*S, 8*S, 5*S);
+  ctx.fillRect(sx+3*S, sy+9*S, S, 3*S);
+  ctx.fillRect(sx+12*S, sy+9*S, S, 3*S);
+  // Hands — bony
+  ctx.fillStyle = "#c8d898";
+  ctx.fillRect(sx+3*S, sy+12*S, S, S);
+  ctx.fillRect(sx+12*S, sy+12*S, S, S);
+  // Robe skirt
+  ctx.fillStyle = "#2a1040";
+  ctx.fillRect(sx+3*S, sy+13*S, 10*S, 2*S);
+}
+
+function drawGhost(ctx, px, py, S) {
+  const sx = px, sy = py;
+  // Floating bobbing effect
+  const bob = Math.sin(Date.now() / 600) * S;
+  const by = sy + bob;
+  ctx.globalAlpha = 0.55;
+  // Ghostly white/blue body
+  ctx.fillStyle = "#c0d0e8";
+  ctx.fillRect(sx+5*S, by+1*S, 6*S, 4*S); // head
+  ctx.fillRect(sx+4*S, by+5*S, 8*S, 6*S); // body
+  // Tattered bottom edge
+  ctx.fillRect(sx+4*S, by+11*S, 2*S, 2*S);
+  ctx.fillRect(sx+7*S, by+11*S, 2*S, 3*S);
+  ctx.fillRect(sx+10*S, by+11*S, 2*S, 2*S);
+  // Dark hollow eyes
+  ctx.fillStyle = "#223";
+  ctx.fillRect(sx+6*S, by+3*S, 2*S, 2*S);
+  ctx.fillRect(sx+9*S, by+3*S, 2*S, 2*S);
+  // Mouth
+  ctx.fillRect(sx+7*S, by+5*S, 2*S, S);
+  ctx.globalAlpha = 1;
+}
+
+function drawRanger(ctx, px, py, S) {
+  const sx = px, sy = py;
+  // Green hood
+  ctx.fillStyle = "#3a6a2a";
+  ctx.fillRect(sx+4*S, sy+0*S, 8*S, 3*S);
+  ctx.fillRect(sx+4*S, sy+0*S, S, 4*S);
+  ctx.fillRect(sx+11*S, sy+0*S, S, 4*S);
+  // Face
+  ctx.fillStyle = SKIN;
+  ctx.fillRect(sx+5*S, sy+2*S, 6*S, 4*S);
+  // Eyes
+  ctx.fillStyle = "#222";
+  ctx.fillRect(sx+6*S, sy+3*S, S, S);
+  ctx.fillRect(sx+9*S, sy+3*S, S, S);
+  // Green cloak/tunic
+  ctx.fillStyle = "#4a7a3a";
+  ctx.fillRect(sx+4*S, sy+6*S, 8*S, 5*S);
+  ctx.fillRect(sx+3*S, sy+6*S, S, 4*S);
+  ctx.fillRect(sx+12*S, sy+6*S, S, 4*S);
+  // Belt
+  ctx.fillStyle = "#6a4a1a";
+  ctx.fillRect(sx+4*S, sy+9*S, 8*S, S);
+  // Belt buckle
+  ctx.fillStyle = "#c8a838";
+  ctx.fillRect(sx+7*S, sy+9*S, 2*S, S);
+  // Hands
+  ctx.fillStyle = SKIN;
+  ctx.fillRect(sx+3*S, sy+10*S, S, S);
+  ctx.fillRect(sx+12*S, sy+10*S, S, S);
+  // Brown pants & boots
+  ctx.fillStyle = "#6a5a3a";
+  ctx.fillRect(sx+5*S, sy+11*S, 6*S, 2*S);
+  ctx.fillStyle = "#4a3a1a";
+  ctx.fillRect(sx+5*S, sy+13*S, 2*S, 2*S);
+  ctx.fillRect(sx+9*S, sy+13*S, 2*S, 2*S);
+}
+
+function drawFarmer(ctx, px, py, S) {
+  const sx = px, sy = py;
+  // Straw hat
+  ctx.fillStyle = "#c8a838";
+  ctx.fillRect(sx+5*S, sy+0*S, 6*S, S);
+  ctx.fillRect(sx+3*S, sy+1*S, 10*S, S); // wide brim
+  ctx.fillStyle = "#b89828";
+  ctx.fillRect(sx+5*S, sy+2*S, 6*S, S);
+  // Face
+  ctx.fillStyle = "#d8b880";
+  ctx.fillRect(sx+5*S, sy+3*S, 6*S, 3*S);
+  // Eyes
+  ctx.fillStyle = "#222";
+  ctx.fillRect(sx+6*S, sy+4*S, S, S);
+  ctx.fillRect(sx+9*S, sy+4*S, S, S);
+  // Brown tunic
+  ctx.fillStyle = "#8a7a5a";
+  ctx.fillRect(sx+4*S, sy+6*S, 8*S, 5*S);
+  ctx.fillRect(sx+3*S, sy+7*S, S, 3*S);
+  ctx.fillRect(sx+12*S, sy+7*S, S, 3*S);
+  // Hands
+  ctx.fillStyle = "#d8b880";
+  ctx.fillRect(sx+3*S, sy+10*S, S, S);
+  ctx.fillRect(sx+12*S, sy+10*S, S, S);
+  // Pants
+  ctx.fillStyle = "#5a5040";
+  ctx.fillRect(sx+5*S, sy+11*S, 6*S, 2*S);
+  // Boots
+  ctx.fillStyle = BOOTS;
+  ctx.fillRect(sx+5*S, sy+13*S, 2*S, 2*S);
+  ctx.fillRect(sx+9*S, sy+13*S, 2*S, 2*S);
+}
+
+function drawNomad(ctx, px, py, S) {
+  const sx = px, sy = py;
+  // Head wrap / turban
+  ctx.fillStyle = "#d8c8a0";
+  ctx.fillRect(sx+5*S, sy+0*S, 6*S, 3*S);
+  ctx.fillRect(sx+4*S, sy+1*S, S, 2*S);
+  ctx.fillRect(sx+11*S, sy+1*S, S, 2*S);
+  // Trailing cloth
+  ctx.fillRect(sx+11*S, sy+3*S, S, 3*S);
+  // Face — tanned
+  ctx.fillStyle = "#c8a070";
+  ctx.fillRect(sx+5*S, sy+3*S, 6*S, 3*S);
+  // Eyes
+  ctx.fillStyle = "#222";
+  ctx.fillRect(sx+6*S, sy+4*S, S, S);
+  ctx.fillRect(sx+9*S, sy+4*S, S, S);
+  // Sandy robes
+  ctx.fillStyle = "#c0a870";
+  ctx.fillRect(sx+4*S, sy+6*S, 8*S, 5*S);
+  ctx.fillRect(sx+3*S, sy+7*S, S, 3*S);
+  ctx.fillRect(sx+12*S, sy+7*S, S, 3*S);
+  // Sash
+  ctx.fillStyle = "#8a3030";
+  ctx.fillRect(sx+4*S, sy+8*S, 8*S, S);
+  // Hands
+  ctx.fillStyle = "#c8a070";
+  ctx.fillRect(sx+3*S, sy+10*S, S, S);
+  ctx.fillRect(sx+12*S, sy+10*S, S, S);
+  // Loose pants
+  ctx.fillStyle = "#a89868";
+  ctx.fillRect(sx+5*S, sy+11*S, 6*S, 2*S);
+  // Sandals
+  ctx.fillStyle = "#8a6a3a";
+  ctx.fillRect(sx+5*S, sy+13*S, 2*S, 2*S);
+  ctx.fillRect(sx+9*S, sy+13*S, 2*S, 2*S);
+}
+
+function drawMerchant(ctx, px, py, S) {
+  const sx = px, sy = py;
+  // Hat — flat cap
+  ctx.fillStyle = "#6a2a2a";
+  ctx.fillRect(sx+4*S, sy+0*S, 8*S, 2*S);
+  ctx.fillRect(sx+3*S, sy+2*S, 10*S, S);
+  // Face
+  ctx.fillStyle = SKIN;
+  ctx.fillRect(sx+5*S, sy+3*S, 6*S, 3*S);
+  // Eyes
+  ctx.fillStyle = "#222";
+  ctx.fillRect(sx+6*S, sy+3*S, S, S);
+  ctx.fillRect(sx+9*S, sy+3*S, S, S);
+  // Mustache
+  ctx.fillStyle = "#5a3a20";
+  ctx.fillRect(sx+6*S, sy+5*S, S, S);
+  ctx.fillRect(sx+9*S, sy+5*S, S, S);
+  // Rich red vest over white shirt
+  ctx.fillStyle = "#e8e0d0";
+  ctx.fillRect(sx+4*S, sy+6*S, 8*S, 5*S);
+  ctx.fillStyle = "#8a2a2a";
+  ctx.fillRect(sx+5*S, sy+6*S, 6*S, 5*S); // vest
+  // Gold buttons
+  ctx.fillStyle = "#d4a840";
+  ctx.fillRect(sx+7*S, sy+7*S, 2*S, S);
+  ctx.fillRect(sx+7*S, sy+9*S, 2*S, S);
+  // Sleeves
+  ctx.fillStyle = "#e8e0d0";
+  ctx.fillRect(sx+3*S, sy+7*S, S, 3*S);
+  ctx.fillRect(sx+12*S, sy+7*S, S, 3*S);
+  // Hands
+  ctx.fillStyle = SKIN;
+  ctx.fillRect(sx+3*S, sy+10*S, S, S);
+  ctx.fillRect(sx+12*S, sy+10*S, S, S);
+  // Pants
+  ctx.fillStyle = "#3a3a5a";
+  ctx.fillRect(sx+5*S, sy+11*S, 6*S, 2*S);
+  // Boots
+  ctx.fillStyle = BOOTS;
+  ctx.fillRect(sx+5*S, sy+13*S, 2*S, 2*S);
+  ctx.fillRect(sx+9*S, sy+13*S, 2*S, 2*S);
+}
+
+function drawElder(ctx, px, py, S) {
+  const sx = px, sy = py;
+  // White/grey hair
+  ctx.fillStyle = "#b0a8a0";
+  ctx.fillRect(sx+5*S, sy+0*S, 6*S, 2*S);
+  ctx.fillRect(sx+4*S, sy+1*S, S, 4*S);
+  ctx.fillRect(sx+11*S, sy+1*S, S, 4*S);
+  // Face — weathered
+  ctx.fillStyle = "#d0b888";
+  ctx.fillRect(sx+5*S, sy+2*S, 6*S, 4*S);
+  // Eyes
+  ctx.fillStyle = "#222";
+  ctx.fillRect(sx+6*S, sy+3*S, S, S);
+  ctx.fillRect(sx+9*S, sy+3*S, S, S);
+  // Long white beard
+  ctx.fillStyle = "#c0b8b0";
+  ctx.fillRect(sx+6*S, sy+5*S, 4*S, S);
+  ctx.fillRect(sx+6*S, sy+6*S, 4*S, 2*S);
+  ctx.fillRect(sx+7*S, sy+8*S, 2*S, S);
+  // Brown robe
+  ctx.fillStyle = "#6a5a3a";
+  ctx.fillRect(sx+4*S, sy+6*S, 2*S, 5*S);
+  ctx.fillRect(sx+10*S, sy+6*S, 2*S, 5*S);
+  ctx.fillRect(sx+4*S, sy+8*S, 8*S, 3*S);
+  // Arms
+  ctx.fillRect(sx+3*S, sy+8*S, S, 2*S);
+  ctx.fillRect(sx+12*S, sy+8*S, S, 2*S);
+  // Walking stick implied by hand
+  ctx.fillStyle = "#d0b888";
+  ctx.fillRect(sx+3*S, sy+10*S, S, S);
+  ctx.fillRect(sx+12*S, sy+10*S, S, S);
+  // Robe bottom
+  ctx.fillStyle = "#5a4a2a";
+  ctx.fillRect(sx+4*S, sy+11*S, 8*S, 2*S);
+  // Sandals
+  ctx.fillStyle = "#8a6a3a";
+  ctx.fillRect(sx+5*S, sy+13*S, 2*S, 2*S);
+  ctx.fillRect(sx+9*S, sy+13*S, 2*S, 2*S);
+}
+
+function drawFisher(ctx, px, py, S) {
+  const sx = px, sy = py;
+  // Bucket hat
+  ctx.fillStyle = "#5a7a8a";
+  ctx.fillRect(sx+5*S, sy+0*S, 6*S, 2*S);
+  ctx.fillRect(sx+3*S, sy+2*S, 10*S, S); // brim
+  // Face — weathered/tanned
+  ctx.fillStyle = "#d0a870";
+  ctx.fillRect(sx+5*S, sy+3*S, 6*S, 3*S);
+  // Eyes
+  ctx.fillStyle = "#222";
+  ctx.fillRect(sx+6*S, sy+4*S, S, S);
+  ctx.fillRect(sx+9*S, sy+4*S, S, S);
+  // Stubble
+  ctx.fillStyle = "#9a8a6a";
+  ctx.fillRect(sx+6*S, sy+5*S, 4*S, S);
+  // Blue-grey vest
+  ctx.fillStyle = "#5a7080";
+  ctx.fillRect(sx+4*S, sy+6*S, 8*S, 5*S);
+  ctx.fillRect(sx+3*S, sy+7*S, S, 3*S);
+  ctx.fillRect(sx+12*S, sy+7*S, S, 3*S);
+  // Hands
+  ctx.fillStyle = "#d0a870";
+  ctx.fillRect(sx+3*S, sy+10*S, S, S);
+  ctx.fillRect(sx+12*S, sy+10*S, S, S);
+  // Waders / rolled up pants
+  ctx.fillStyle = "#5a5040";
+  ctx.fillRect(sx+5*S, sy+11*S, 6*S, 2*S);
+  // Boots
+  ctx.fillStyle = "#4a3a2a";
+  ctx.fillRect(sx+5*S, sy+13*S, 2*S, 2*S);
+  ctx.fillRect(sx+9*S, sy+13*S, 2*S, 2*S);
+}
+
+function drawGhostKnight(ctx, px, py, S) {
+  const sx = px, sy = py;
+  const bob = Math.sin(Date.now() / 700) * S;
+  const by = sy + bob;
+  ctx.globalAlpha = 0.5;
+  // Ghostly helmet
+  ctx.fillStyle = "#8898b0";
+  ctx.fillRect(sx+4*S, by+0*S, 8*S, 3*S);
+  ctx.fillStyle = "#607080";
+  ctx.fillRect(sx+4*S, by+2*S, 8*S, S); // visor
+  // Hollow eyes
+  ctx.fillStyle = "#dd3333";
+  ctx.fillRect(sx+6*S, by+2*S, S, S);
+  ctx.fillRect(sx+9*S, by+2*S, S, S);
+  // Ghostly face
+  ctx.fillStyle = "#a0b0c8";
+  ctx.fillRect(sx+5*S, by+3*S, 6*S, 3*S);
+  // Spectral armor
+  ctx.fillStyle = "#7888a0";
+  ctx.fillRect(sx+4*S, by+6*S, 8*S, 5*S);
+  ctx.fillRect(sx+3*S, by+6*S, S, 4*S);
+  ctx.fillRect(sx+12*S, by+6*S, S, 4*S);
+  // Tattered bottom
+  ctx.fillStyle = "#6878a0";
+  ctx.fillRect(sx+4*S, by+11*S, 2*S, 2*S);
+  ctx.fillRect(sx+7*S, by+11*S, 2*S, 3*S);
+  ctx.fillRect(sx+10*S, by+11*S, 2*S, 2*S);
+  ctx.globalAlpha = 1;
+}
+
+// ---------------------------------------------------------------------------
+// NPC name → draw function mapping
+// ---------------------------------------------------------------------------
+const NPC_SPRITES = {
+  "guard": drawGuard,
+  "smith": drawSmith,
+  "priest": drawPriest,
+  "barmaid": drawBarmaid,
+  "amara": drawAmara,
+  "witch": drawWitch,
+  "ghost": drawGhost,
+  "ghost_knight": drawGhostKnight,
+  "ranger": drawRanger,
+  "farmer": drawFarmer,
+  "nomad": drawNomad,
+  "merchant": drawMerchant,
+  "elder": drawElder,
+  "fisher": drawFisher,
+};
+
+function drawNPC(ctx, px, py, sprite, S) {
+  const fn = NPC_SPRITES[sprite];
+  if (fn) {
+    fn(ctx, px, py, S);
+  } else {
+    drawGuard(ctx, px, py, S);
+  }
+}
+
 // Attack animation — player thrust pose (2 frames)
 function drawPlayerAttack(ctx, px, py, direction, colorIndex, attackFrame, S) {
   const sx = px;
@@ -721,6 +1172,113 @@ function drawSwordPickup(ctx, px, py, frame, S) {
   ctx.fillRect(sx, sy + 7*S, 2*S, 3*S);
 
   ctx.globalAlpha = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Heart sprites — HUD and pickup
+// ---------------------------------------------------------------------------
+function drawHeart(ctx, px, py, state, S) {
+  // 12x11 pixel-art heart at scale S
+  // state: "full", "half", "empty"
+  const RED = "#e03030";
+  const DARK_RED = "#a02020";
+  const GREY = "#555";
+  const DARK_GREY = "#333";
+
+  const full = state === "full";
+  const half = state === "half";
+  const leftColor = (full || half) ? RED : GREY;
+  const leftDark = (full || half) ? DARK_RED : DARK_GREY;
+  const rightColor = full ? RED : GREY;
+  const rightDark = full ? DARK_RED : DARK_GREY;
+
+  // Left half of heart
+  ctx.fillStyle = leftColor;
+  ctx.fillRect(px+1*S, py+0*S, 4*S, S);
+  ctx.fillRect(px+0*S, py+1*S, 6*S, 2*S);
+  ctx.fillRect(px+0*S, py+3*S, 6*S, 2*S);
+  ctx.fillRect(px+1*S, py+5*S, 5*S, 2*S);
+  ctx.fillRect(px+2*S, py+7*S, 4*S, S);
+  ctx.fillRect(px+3*S, py+8*S, 3*S, S);
+  ctx.fillRect(px+4*S, py+9*S, 2*S, S);
+  ctx.fillRect(px+5*S, py+10*S, S, S);
+  // Left highlight
+  ctx.fillStyle = "#ff6060";
+  if (full || half) {
+    ctx.fillRect(px+1*S, py+1*S, 2*S, S);
+  }
+  // Left shadow
+  ctx.fillStyle = leftDark;
+  ctx.fillRect(px+0*S, py+4*S, S, S);
+  ctx.fillRect(px+1*S, py+6*S, S, S);
+
+  // Right half of heart
+  ctx.fillStyle = rightColor;
+  ctx.fillRect(px+7*S, py+0*S, 4*S, S);
+  ctx.fillRect(px+6*S, py+1*S, 6*S, 2*S);
+  ctx.fillRect(px+6*S, py+3*S, 6*S, 2*S);
+  ctx.fillRect(px+6*S, py+5*S, 5*S, 2*S);
+  ctx.fillRect(px+6*S, py+7*S, 4*S, S);
+  ctx.fillRect(px+6*S, py+8*S, 3*S, S);
+  // Right shadow
+  ctx.fillStyle = rightDark;
+  ctx.fillRect(px+11*S, py+4*S, S, S);
+  ctx.fillRect(px+10*S, py+6*S, S, S);
+}
+
+function drawHeartPickup(ctx, px, py, bounceFrame, S) {
+  // Small bouncing heart on the ground tile
+  const yOff = bounceFrame % 2 === 0 ? 0 : -2*S;
+  drawHeart(ctx, px + 2*S, py + 2*S + yOff, "full", S * 0.7);
+}
+
+// ---------------------------------------------------------------------------
+// Player death animations
+// ---------------------------------------------------------------------------
+function drawPlayerFallOver(ctx, px, py, colorIndex, frame, S) {
+  // 3-frame fall-over for other players seeing a death
+  const shirt = SHIRT_COLORS[colorIndex % SHIRT_COLORS.length];
+
+  if (frame === 0) {
+    // Leaning — draw normal but tilted slightly (approximate by shifting)
+    ctx.fillStyle = HAIR;
+    ctx.fillRect(px+6*S, py+1*S, 6*S, 2*S);
+    ctx.fillStyle = SKIN;
+    ctx.fillRect(px+6*S, py+3*S, 6*S, 3*S);
+    ctx.fillStyle = shirt;
+    ctx.fillRect(px+5*S, py+6*S, 8*S, 5*S);
+    ctx.fillStyle = PANTS;
+    ctx.fillRect(px+5*S, py+11*S, 6*S, 2*S);
+    ctx.fillStyle = BOOTS;
+    ctx.fillRect(px+5*S, py+13*S, 2*S, 2*S);
+    ctx.fillRect(px+9*S, py+13*S, 2*S, 2*S);
+  } else if (frame === 1) {
+    // Sideways — body drawn horizontally
+    ctx.fillStyle = HAIR;
+    ctx.fillRect(px+1*S, py+8*S, 2*S, 4*S);
+    ctx.fillStyle = SKIN;
+    ctx.fillRect(px+3*S, py+8*S, 3*S, 4*S);
+    ctx.fillStyle = shirt;
+    ctx.fillRect(px+6*S, py+7*S, 5*S, 5*S);
+    ctx.fillStyle = PANTS;
+    ctx.fillRect(px+11*S, py+8*S, 2*S, 4*S);
+    ctx.fillStyle = BOOTS;
+    ctx.fillRect(px+13*S, py+8*S, 2*S, 2*S);
+  } else {
+    // Flat on ground + fading
+    ctx.globalAlpha = Math.max(0, 1 - (frame - 2) * 0.3);
+    ctx.fillStyle = HAIR;
+    ctx.fillRect(px+1*S, py+10*S, 2*S, 3*S);
+    ctx.fillStyle = SKIN;
+    ctx.fillRect(px+3*S, py+10*S, 3*S, 3*S);
+    ctx.fillStyle = shirt;
+    ctx.fillRect(px+6*S, py+9*S, 5*S, 4*S);
+    ctx.fillStyle = PANTS;
+    ctx.fillRect(px+11*S, py+10*S, 2*S, 3*S);
+    ctx.fillStyle = BOOTS;
+    ctx.fillRect(px+13*S, py+10*S, 2*S, 2*S);
+    ctx.globalAlpha = 1;
+  }
 }
 
 function drawPlayer(ctx, px, py, direction, colorIndex, animFrame, S) {

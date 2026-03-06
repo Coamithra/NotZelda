@@ -6,6 +6,7 @@ Then open http://localhost:8080 in your browser.
 """
 
 import asyncio
+import copy
 import json
 import html
 import time
@@ -52,10 +53,14 @@ ROAD        = 28
 CLIFF       = 29
 SHALLOW_WATER = 30
 BOULDER     = 31
+DUNGEON_WALL  = 32   # DW - smooth dark stone wall (non-walkable)
+DUNGEON_FLOOR = 33   # DF - worn stone floor (walkable)
+PILLAR        = 34   # PL - stone pillar (non-walkable)
+SCONCE_WALL   = 35   # SC - wall with torch sconce (non-walkable)
 
 WALKABLE_TILES = {GRASS, STONE, WOOD, FLOWERS, DIRT, STAIRS_UP, STAIRS_DOWN, DOOR,
                   SAND, CAVE_FLOOR, SWAMP, BRIDGE, RUINS_FLOOR, TALL_GRASS, ROAD,
-                  SHALLOW_WATER}
+                  SHALLOW_WATER, DUNGEON_FLOOR}
 
 # Tile code string -> numeric ID (for .room file parsing)
 TILE_CODES = {
@@ -66,6 +71,7 @@ TILE_CODES = {
     "SM": SWAMP, "DK": DEAD_TREE, "BR": BRIDGE, "GS": GRAVESTONE, "IF": IRON_FENCE,
     "RW": RUINS_WALL, "RF": RUINS_FLOOR, "TG": TALL_GRASS, "RD": ROAD, "CL": CLIFF,
     "SH": SHALLOW_WATER, "BO": BOULDER,
+    "DW": DUNGEON_WALL, "DF": DUNGEON_FLOOR, "PL": PILLAR, "SC": SCONCE_WALL,
 }
 
 # ---------------------------------------------------------------------------
@@ -179,15 +185,17 @@ def load_room_files(directory: str = "rooms"):
                 if not line:
                     continue
                 tokens = line.split()
-                if tokens[0] == "npc" and len(tokens) >= 4:
+                if tokens[0] == "npc" and len(tokens) >= 5:
                     npc_name = tokens[1].replace("_", " ")
                     npc_x = int(tokens[2])
                     npc_y = int(tokens[3])
-                    npc_dialog = " ".join(tokens[4:]) if len(tokens) > 4 else ""
+                    npc_sprite = tokens[4]
+                    npc_dialog = " ".join(tokens[5:]) if len(tokens) > 5 else ""
                     if room_id not in GUARDS:
                         GUARDS[room_id] = []
                     GUARDS[room_id].append({
-                        "name": npc_name, "x": npc_x, "y": npc_y, "dialog": npc_dialog,
+                        "name": npc_name, "x": npc_x, "y": npc_y,
+                        "sprite": npc_sprite, "dialog": npc_dialog,
                     })
                 elif tokens[0] == "monster" and len(tokens) >= 4:
                     kind = tokens[1]
@@ -201,6 +209,84 @@ def load_room_files(directory: str = "rooms"):
 
     print(f"[ROOMS] Loaded {count} room files from {directory}/")
     print(f"[ROOMS] Total rooms: {len(ROOMS)}")
+
+
+# ---------------------------------------------------------------------------
+# Dungeon template loader
+# ---------------------------------------------------------------------------
+
+DUNGEON_TEMPLATES = {}  # template_id -> {name, tilemap, guards, monsters}
+
+def load_dungeon_templates(directory: str = "rooms/dungeon1"):
+    """Load dungeon room templates from .room files (no exits parsed)."""
+    rooms_dir = Path(__file__).parent / directory
+    if not rooms_dir.exists():
+        print(f"[DUNGEON] No '{directory}/' directory found, skipping")
+        return
+
+    count = 0
+    for room_file in sorted(rooms_dir.glob("*.room")):
+        template_id = room_file.stem
+        try:
+            text = room_file.read_text(encoding="utf-8")
+        except Exception as e:
+            print(f"[DUNGEON] Error reading {room_file.name}: {e}")
+            continue
+
+        parts = text.split("---")
+        if len(parts) < 2:
+            continue
+
+        header = {}
+        for line in parts[0].strip().splitlines():
+            line = line.strip()
+            if ":" in line:
+                key, val = line.split(":", 1)
+                header[key.strip()] = val.strip()
+
+        tilemap_text = parts[1].strip()
+        tilemap = []
+        for row_line in tilemap_text.splitlines():
+            row_line = row_line.strip()
+            if not row_line:
+                continue
+            codes = row_line.split()
+            row = [TILE_CODES.get(code, DUNGEON_FLOOR) for code in codes]
+            while len(row) < 15:
+                row.append(DUNGEON_FLOOR)
+            row = row[:15]
+            tilemap.append(row)
+        while len(tilemap) < 11:
+            tilemap.append([DUNGEON_FLOOR] * 15)
+        tilemap = tilemap[:11]
+
+        guards = []
+        monsters = []
+        if len(parts) >= 3:
+            for line in parts[2].strip().splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                tokens = line.split()
+                if tokens[0] == "npc" and len(tokens) >= 5:
+                    guards.append({
+                        "name": tokens[1].replace("_", " "),
+                        "x": int(tokens[2]), "y": int(tokens[3]),
+                        "sprite": tokens[4],
+                        "dialog": " ".join(tokens[5:]) if len(tokens) > 5 else "",
+                    })
+                elif tokens[0] == "monster" and len(tokens) >= 4:
+                    monsters.append({"kind": tokens[1], "x": int(tokens[2]), "y": int(tokens[3])})
+
+        DUNGEON_TEMPLATES[template_id] = {
+            "name": header.get("name", template_id),
+            "tilemap": tilemap,
+            "guards": guards,
+            "monsters": monsters,
+        }
+        count += 1
+
+    print(f"[DUNGEON] Loaded {count} dungeon templates from {directory}/")
 
 
 STARTING_ROOM = "town_square"
@@ -235,12 +321,15 @@ ROOM_RESET_COOLDOWN = 10.0   # seconds after all-killed + empty before respawn
 
 # Per-kind monster stats
 MONSTER_STATS = {
-    "slime":      {"hp": 1, "hop_interval": 2.0},
-    "bat":        {"hp": 1, "hop_interval": 1.0},
-    "scorpion":   {"hp": 2, "hop_interval": 2.0},
-    "skeleton":   {"hp": 2, "hop_interval": 2.0},
-    "swamp_blob": {"hp": 1, "hop_interval": 2.0},
+    "slime":      {"hp": 1, "hop_interval": 2.0, "damage": 1},
+    "bat":        {"hp": 1, "hop_interval": 1.0, "damage": 1},
+    "scorpion":   {"hp": 2, "hop_interval": 2.0, "damage": 2},
+    "skeleton":   {"hp": 2, "hop_interval": 2.0, "damage": 3},
+    "swamp_blob": {"hp": 1, "hop_interval": 2.0, "damage": 1},
 }
+
+HEART_DROP_CHANCE = 0.1
+INVINCIBILITY_DURATION = 1.5
 
 import random
 
@@ -286,6 +375,10 @@ def get_room_monsters(room_id: str) -> list[Monster]:
 
 async def on_player_enter_room(room_id: str):
     """Called when a player enters a room. Spawns monsters if needed."""
+    # Dungeon cleared rooms stay empty (no respawn)
+    if active_dungeon and room_id in active_dungeon.cleared_rooms:
+        room_monsters[room_id] = []
+        return
     if room_id not in MONSTER_TEMPLATES:
         return
     if room_id in room_monsters:
@@ -313,6 +406,8 @@ async def on_player_leave_room(room_id: str):
     if players_in_room(room_id):
         return  # still has players
 
+    room_hearts.pop(room_id, None)
+
     if room_id in room_monsters:
         monster_list = room_monsters[room_id]
         all_killed = len(monster_list) > 0 and all(not m.alive for m in monster_list)
@@ -325,6 +420,18 @@ async def on_player_leave_room(room_id: str):
         elif empty_list and room_id in room_cooldowns:
             # Was on cooldown, player visited empty room and left — reset timer
             room_cooldowns[room_id] = time.monotonic()
+
+    # Dungeon cleanup — destroy instance when all players have left
+    if active_dungeon and room_id in active_dungeon.active_rooms:
+        if dungeon_player_count() == 0:
+            destroy_dungeon()
+
+# ---------------------------------------------------------------------------
+# Heart pickups
+# ---------------------------------------------------------------------------
+
+room_hearts: dict[str, list[dict]] = {}
+next_heart_id = 0
 
 # ---------------------------------------------------------------------------
 # Player
@@ -342,6 +449,9 @@ class Player:
         self.y = 5
         self.direction = "down"
         self.color_index = color_index
+        self.hp = 6
+        self.max_hp = 6
+        self.last_damage_time = 0.0
         self.last_move_time = 0.0
         self.last_attack_time = 0.0
         self.dancing = False
@@ -408,6 +518,163 @@ def player_info(p: Player) -> dict:
     return info
 
 
+# ---------------------------------------------------------------------------
+# Dungeon Instance System
+# ---------------------------------------------------------------------------
+
+from dungeon_layouts import DUNGEON_LAYOUTS
+
+DUNGEON_MUSIC_TRACKS = ["dungeon1", "dungeon2", "dungeon3", "dungeon4"]
+
+class DungeonInstance:
+    def __init__(self, dungeon_id, layout, room_map, active_rooms, entrance_room_id, music_track):
+        self.dungeon_id = dungeon_id
+        self.layout = layout
+        self.room_map = room_map           # (col, row) -> template_id
+        self.active_rooms = active_rooms   # set of room_id strings
+        self.cleared_rooms = set()         # room_ids where all monsters killed
+        self.entrance_room_id = entrance_room_id
+        self.music_track = music_track
+
+active_dungeon: DungeonInstance | None = None
+
+
+def create_dungeon() -> DungeonInstance:
+    """Create a new dungeon instance from random layout + templates."""
+    global active_dungeon
+
+    layout = random.choice(DUNGEON_LAYOUTS)
+    music_track = random.choice(DUNGEON_MUSIC_TRACKS)
+
+    # Find all active cells in layout
+    active_cells = []
+    for row_idx, row_str in enumerate(layout["grid"]):
+        for col_idx, ch in enumerate(row_str):
+            if ch == "X":
+                active_cells.append((col_idx, row_idx))
+
+    # Assign templates to cells
+    template_keys = list(DUNGEON_TEMPLATES.keys())
+    random.shuffle(template_keys)
+    # Cycle through templates if we have more cells than templates
+    room_map = {}
+    for i, cell in enumerate(active_cells):
+        room_map[cell] = template_keys[i % len(template_keys)]
+
+    entrance_col, entrance_row = layout["entrance"]
+    entrance_room_id = f"d1_{entrance_col}_{entrance_row}"
+    active_rooms = set()
+
+    for (col, row), template_id in room_map.items():
+        room_id = f"d1_{col}_{row}"
+        active_rooms.add(room_id)
+        tmpl = DUNGEON_TEMPLATES[template_id]
+
+        # Deep-copy tilemap
+        tilemap = [list(r) for r in tmpl["tilemap"]]
+
+        # Auto-generate exits from layout adjacency
+        exits = {}
+        if (col, row - 1) in room_map:
+            exits["north"] = f"d1_{col}_{row - 1}"
+        if (col, row + 1) in room_map:
+            exits["south"] = f"d1_{col}_{row + 1}"
+        if (col - 1, row) in room_map:
+            exits["west"] = f"d1_{col - 1}_{row}"
+        if (col + 1, row) in room_map:
+            exits["east"] = f"d1_{col + 1}_{row}"
+
+        # Wall off unused exits
+        if "north" not in exits:
+            for c in (6, 7, 8):
+                tilemap[0][c] = DUNGEON_WALL
+        if "south" not in exits:
+            for c in (6, 7, 8):
+                tilemap[10][c] = DUNGEON_WALL
+        if "west" not in exits:
+            for r in (4, 5, 6):
+                tilemap[r][0] = DUNGEON_WALL
+        if "east" not in exits:
+            for r in (4, 5, 6):
+                tilemap[r][14] = DUNGEON_WALL
+
+        # Entrance cell gets stairs up to clearing
+        if col == entrance_col and row == entrance_row:
+            exits["up"] = "clearing"
+            tilemap[9][7] = STAIRS_UP
+
+        # Build spawn points
+        spawn_points = {"default": (7, 5)}
+        if "north" in exits:
+            spawn_points["north"] = (7, 1)
+        if "south" in exits:
+            spawn_points["south"] = (7, 9)
+        if "east" in exits:
+            spawn_points["east"] = (13, 5)
+        if "west" in exits:
+            spawn_points["west"] = (1, 5)
+        # Scan for stairs
+        for ry, trow in enumerate(tilemap):
+            for rx, tile in enumerate(trow):
+                if tile == STAIRS_UP:
+                    spawn_points["down"] = (rx, ry)
+                elif tile == STAIRS_DOWN:
+                    spawn_points["up"] = (rx, ry)
+
+        ROOMS[room_id] = {
+            "name": tmpl["name"],
+            "exits": exits,
+            "tilemap": tilemap,
+            "spawn_points": spawn_points,
+            "biome": "dungeon",
+            "music": music_track,
+        }
+        if tmpl["guards"]:
+            GUARDS[room_id] = copy.deepcopy(tmpl["guards"])
+        if tmpl["monsters"]:
+            MONSTER_TEMPLATES[room_id] = copy.deepcopy(tmpl["monsters"])
+
+    instance = DungeonInstance(
+        dungeon_id="d1",
+        layout=layout,
+        room_map=room_map,
+        active_rooms=active_rooms,
+        entrance_room_id=entrance_room_id,
+        music_track=music_track,
+    )
+    active_dungeon = instance
+    print(f"[DUNGEON] Created instance: layout={layout['name']}, rooms={len(active_rooms)}, entrance={entrance_room_id}, music={music_track}")
+    return instance
+
+
+def destroy_dungeon():
+    """Tear down the active dungeon instance."""
+    global active_dungeon
+    if active_dungeon is None:
+        return
+
+    for room_id in active_dungeon.active_rooms:
+        ROOMS.pop(room_id, None)
+        GUARDS.pop(room_id, None)
+        MONSTER_TEMPLATES.pop(room_id, None)
+        room_monsters.pop(room_id, None)
+        room_cooldowns.pop(room_id, None)
+        room_hearts.pop(room_id, None)
+
+    print(f"[DUNGEON] Destroyed instance: layout={active_dungeon.layout['name']}")
+    active_dungeon = None
+
+
+def is_dungeon_room(room_id: str) -> bool:
+    return active_dungeon is not None and room_id in active_dungeon.active_rooms
+
+
+def dungeon_player_count() -> int:
+    if active_dungeon is None:
+        return 0
+    return sum(1 for p in players.values() if p.room in active_dungeon.active_rooms)
+
+
 async def send_room_enter(player: Player, exit_direction: str = None):
     room = ROOMS[player.room]
     others = [player_info(p) for p in players_in_room(player.room, exclude=player.ws)]
@@ -425,12 +692,14 @@ async def send_room_enter(player: Player, exit_direction: str = None):
         "tilemap": room["tilemap"],
         "your_pos": {"x": player.x, "y": player.y},
         "players": others,
-        "guards": [{"name": g["name"], "x": g["x"], "y": g["y"]} for g in guards],
+        "guards": [{"name": g["name"], "x": g["x"], "y": g["y"], "sprite": g.get("sprite", "guard")} for g in guards],
         "monsters": monsters,
         "exits": {d: exits[d] for d in exits},
         "biome": room.get("biome", "town"),
         "music": room.get("music", "overworld"),
         "exit_direction": exit_direction,
+        "hp": player.hp,
+        "max_hp": player.max_hp,
     })
 
 # ---------------------------------------------------------------------------
@@ -440,6 +709,13 @@ async def send_room_enter(player: Player, exit_direction: str = None):
 async def do_room_transition(player: Player, exit_direction: str):
     old_room = player.room
     new_room_id = ROOMS[old_room]["exits"][exit_direction]
+
+    # Dungeon entrance — create instance on demand
+    if new_room_id == "d1_entrance":
+        if active_dungeon is None:
+            create_dungeon()
+        new_room_id = active_dungeon.entrance_room_id
+
     new_room = ROOMS[new_room_id]
 
     # Broadcast departure
@@ -497,6 +773,81 @@ async def check_guard_proximity(player: Player):
             if now - last >= GUARD_COOLDOWN:
                 player.guard_cooldowns[key] = now
                 await handle_quest_npc(player, guard)
+
+
+# ---------------------------------------------------------------------------
+# Contact damage
+# ---------------------------------------------------------------------------
+
+DIRECTION_OPPOSITES = {"up": "down", "down": "up", "left": "right", "right": "left"}
+
+async def damage_player(player: Player, damage: int, room_id: str):
+    """Apply contact damage to a player from a monster."""
+    now = time.monotonic()
+    if now - player.last_damage_time < INVINCIBILITY_DURATION:
+        return
+    player.hp = max(0, player.hp - damage)
+    player.last_damage_time = now
+
+    if player.hp > 0:
+        # Calculate knockback — push player away from facing direction
+        opp = DIRECTION_OPPOSITES.get(player.direction, "down")
+        kdx, kdy = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}[opp]
+        kx, ky = player.x + kdx, player.y + kdy
+        knocked = False
+        room = ROOMS[room_id]
+        tilemap = room["tilemap"]
+        guards = GUARDS.get(room_id, [])
+        if 0 <= kx < 15 and 0 <= ky < 11 and tilemap[ky][kx] in WALKABLE_TILES:
+            if not any(g["x"] == kx and g["y"] == ky for g in guards):
+                player.x, player.y = kx, ky
+                knocked = True
+
+        await broadcast_to_room(room_id, {
+            "type": "player_hurt",
+            "name": player.name,
+            "hp": player.hp,
+            "max_hp": player.max_hp,
+            "x": player.x,
+            "y": player.y,
+            "knockback": knocked,
+        })
+    else:
+        # Player died
+        await broadcast_to_room(room_id, {
+            "type": "player_died",
+            "name": player.name,
+            "x": player.x,
+            "y": player.y,
+            "color_index": player.color_index,
+        }, exclude=player.ws)
+        await send_to(player, {
+            "type": "you_died",
+            "x": player.x,
+            "y": player.y,
+        })
+
+        # Respawn after delay (match client death animation duration)
+        await asyncio.sleep(5.5)
+        old_room = player.room
+        player.hp = player.max_hp
+        player.room = STARTING_ROOM
+        spawn = ROOMS[STARTING_ROOM]["spawn_points"]["default"]
+        player.x, player.y = spawn
+        player.direction = "down"
+        player.dancing = False
+
+        await broadcast_to_room(old_room, {
+            "type": "player_left", "name": player.name,
+        })
+        await on_player_leave_room(old_room)
+        await on_player_enter_room(STARTING_ROOM)
+        await send_room_enter(player)
+        await broadcast_to_room(
+            STARTING_ROOM,
+            {"type": "player_entered", **player_info(player)},
+            exclude=player.ws,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -559,6 +910,19 @@ async def smith_interact(player: Player, guard: dict):
         return
     else:
         dialog = "Give those monsters what they deserve!"
+    await broadcast_to_room(player.room, {
+        "type": "chat", "from": guard["name"], "text": dialog,
+    })
+
+
+@npc_handler("Barmaid", "tavern")
+async def barmaid_interact(player: Player, guard: dict):
+    if player.hp < player.max_hp:
+        player.hp = player.max_hp
+        await send_to(player, {"type": "hp_update", "hp": player.hp, "max_hp": player.max_hp})
+        dialog = "Here, let me patch you up!"
+    else:
+        dialog = "You look healthy to me!"
     await broadcast_to_room(player.room, {
         "type": "chat", "from": guard["name"], "text": dialog,
     })
@@ -654,6 +1018,24 @@ async def handle_move(player: Player, direction: str):
         "direction": player.direction,
     })
 
+    # Monster contact damage — check if player walked onto a monster
+    if player.hp > 0:
+        for monster in get_room_monsters(player.room):
+            if monster.alive and monster.x == new_x and monster.y == new_y:
+                stats = MONSTER_STATS.get(monster.kind, {"damage": 1})
+                await damage_player(player, stats["damage"], player.room)
+                break
+
+    # Heart pickup
+    hearts = room_hearts.get(player.room, [])
+    for heart in hearts:
+        if heart["x"] == player.x and heart["y"] == player.y and player.hp < player.max_hp:
+            player.hp = min(player.max_hp, player.hp + 2)
+            hearts.remove(heart)
+            await send_to(player, {"type": "hp_update", "hp": player.hp, "max_hp": player.max_hp})
+            await broadcast_to_room(player.room, {"type": "heart_collected", "id": heart["id"]})
+            break
+
     # Guard proximity chat
     await check_guard_proximity(player)
 
@@ -692,6 +1074,24 @@ async def handle_attack(player: Player):
                     "x": monster.x,
                     "y": monster.y,
                 })
+                # Heart drop
+                global next_heart_id
+                if random.random() < HEART_DROP_CHANCE:
+                    hid = next_heart_id
+                    next_heart_id += 1
+                    heart = {"x": monster.x, "y": monster.y, "id": hid}
+                    room_hearts.setdefault(player.room, []).append(heart)
+                    await broadcast_to_room(player.room, {
+                        "type": "heart_spawned",
+                        "id": hid,
+                        "x": monster.x,
+                        "y": monster.y,
+                    })
+                # Mark dungeon room as cleared if all monsters dead
+                if is_dungeon_room(player.room):
+                    alive = [m for m in room_monsters[player.room] if m.alive]
+                    if not alive:
+                        active_dungeon.cleared_rooms.add(player.room)
             else:
                 await broadcast_to_room(player.room, {
                     "type": "monster_hit",
@@ -742,6 +1142,11 @@ async def monster_tick():
                         "x": nx,
                         "y": ny,
                     })
+                    # Check if monster landed on a player
+                    for p in players_in_room(room_id):
+                        if p.x == nx and p.y == ny and p.hp > 0:
+                            stats = MONSTER_STATS.get(monster.kind, {"damage": 1})
+                            await damage_player(p, stats["damage"], room_id)
                     break
 
 # ---------------------------------------------------------------------------
@@ -836,7 +1241,7 @@ async def handle_connection(websocket):
         log_event("JOIN", f"{name} ({player.description})")
         print(f"[JOIN] {name} from {addr}")
 
-        await send_to(player, {"type": "login_ok", "color_index": color_index})
+        await send_to(player, {"type": "login_ok", "color_index": color_index, "hp": 6, "max_hp": 6})
         await on_player_enter_room(player.room)
         await send_room_enter(player)
         await broadcast_to_room(
@@ -903,6 +1308,10 @@ STATIC_FILES = {
     "/music_tavern.mp3":  ("not zelda (tavern).mp3", "audio/mpeg"),
     "/music_chapel.mp3":  ("not zelda (chapel).mp3", "audio/mpeg"),
     "/music_overworld.mp3": ("not zelda (overworld).mp3", "audio/mpeg"),
+    "/music_dungeon1.mp3": ("not zelda (dungeon theme a).mp3", "audio/mpeg"),
+    "/music_dungeon2.mp3": ("not zelda (dungeon theme b).mp3", "audio/mpeg"),
+    "/music_dungeon3.mp3": ("not zelda (dungeon theme c).mp3", "audio/mpeg"),
+    "/music_dungeon4.mp3": ("not zelda (dungeon theme d).mp3", "audio/mpeg"),
 }
 
 
@@ -928,6 +1337,7 @@ async def process_request(path, request_headers):
 
 async def main():
     load_room_files()
+    load_dungeon_templates()
     port = 8080
     server = await websockets.serve(
         handle_connection, "0.0.0.0", port,

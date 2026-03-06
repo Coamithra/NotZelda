@@ -1,10 +1,10 @@
 name: Sunlit Clearing
 biome: town
 music: village
-exits: north=forest_path south=ow_0_7
+exits: north=forest_path south=ow_0_7 down=d1_entrance
 ---
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
-TR TR GR GR GR GR GR GR GR GR GR GR GR TR TR
+TR TR GR GR GR GR GR SD GR GR GR GR GR TR TR
 TR GR GR FL GR GR GR GR GR GR FL GR GR GR TR
 TR GR GR GR GR FL GR GR GR GR GR GR GR TR TR
 TR GR FL GR GR GR GR GR GR FL GR GR GR GR TR
@@ -15,5 +15,5 @@ TR TR GR GR GR GR FL GR GR GR GR GR GR TR TR
 TR TR TR GR GR GR GR GR GR GR GR TR TR TR TR
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 ---
-npc Guard 7 9 Careful, it's dangerous to go alone!
+npc Guard 7 9 guard Careful, it's dangerous to go alone!
 monster slime 7 5

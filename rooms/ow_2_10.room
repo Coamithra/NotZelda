@@ -15,5 +15,5 @@ TR GR GR TG GR GR GR RD GR GR TG FL TG GR TR
 TR GR GR GR GR GR GR RD GR GR GR GR GR GR TR
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 ---
-npc Innkeeper_Ghost 3 4 The old crossroads inn. Travelers once stopped here for a warm meal and a bed.
+npc Innkeeper_Ghost 3 4 ghost The old crossroads inn. Travelers once stopped here for a warm meal and a bed.
 monster slime 12 2

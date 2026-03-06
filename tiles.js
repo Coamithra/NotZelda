@@ -34,6 +34,10 @@ const TILE_COLORS = {
   29: { name: "cliff",       base: "#6a5a4a", alt: "#5a4a3a", face: "#7a6a5a" },
   30: { name: "shallow_water", base: "#5a9acc", alt: "#6aaadd" },
   31: { name: "boulder",     base: "#3a7a2a", alt: "#2d6a1e", rock: "#7a7a7a", rock2: "#6a6a6a" },
+  32: { name: "dungeon_wall",  base: "#3a3a4a", alt: "#2a2a3a" },
+  33: { name: "dungeon_floor", base: "#5a5a5a", alt: "#4a4a4a" },
+  34: { name: "pillar",        base: "#5a5a5a", alt: "#4a4a4a", cap: "#7a7a7a", body: "#6a6a6a" },
+  35: { name: "sconce_wall",   base: "#3a3a4a", alt: "#2a2a3a", flame: "#fc3" },
 };
 
 // Seeded random for consistent tile patterns
@@ -374,6 +378,67 @@ function createTileCanvas(tileId, TS, TILE, SCALE) {
     c.fillRect(4*S, 5*S, 3*S, 3*S);
     c.fillStyle = "#8a8a8a";
     c.fillRect(8*S, 4*S, 3*S, 2*S);
+  } else if (tileId === 32) {
+    // Dungeon wall — dark blue-grey bricks with mortar lines
+    c.fillStyle = info.base;
+    c.fillRect(0, 0, TS, TS);
+    c.fillStyle = info.alt;
+    for (let row = 0; row < TILE; row += 4) {
+      const offset = (row % 8 === 0) ? 0 : 4;
+      for (let col = offset; col < TILE; col += 8) {
+        c.fillRect(col * S, row * S, S, S);
+      }
+      c.fillRect(0, (row + 3) * S, TS, S);
+    }
+  } else if (tileId === 33) {
+    // Dungeon floor — grey stone with subtle cracks
+    for (let py = 0; py < TILE; py++) {
+      for (let px = 0; px < TILE; px++) {
+        c.fillStyle = seededRand(px, py, 33) < 0.3 ? info.alt : info.base;
+        c.fillRect(px * S, py * S, S, S);
+      }
+    }
+    // Crack lines
+    c.fillStyle = "#3a3a3a";
+    c.fillRect(4*S, 3*S, S, 6*S);
+    c.fillRect(4*S, 9*S, 5*S, S);
+    c.fillRect(10*S, 6*S, S, 5*S);
+  } else if (tileId === 34) {
+    // Pillar — dungeon floor background with round stone column
+    for (let py = 0; py < TILE; py++) {
+      for (let px = 0; px < TILE; px++) {
+        c.fillStyle = seededRand(px, py, 33) < 0.3 ? info.alt : info.base;
+        c.fillRect(px * S, py * S, S, S);
+      }
+    }
+    c.fillStyle = info.body;
+    c.fillRect(5*S, 2*S, 6*S, 12*S);
+    c.fillRect(4*S, 3*S, 8*S, 10*S);
+    c.fillStyle = info.cap;
+    c.fillRect(4*S, 2*S, 8*S, 2*S);
+    c.fillRect(5*S, 1*S, 6*S, S);
+    c.fillRect(4*S, 12*S, 8*S, 2*S);
+  } else if (tileId === 35) {
+    // Sconce wall — dungeon wall base with orange flame
+    c.fillStyle = info.base;
+    c.fillRect(0, 0, TS, TS);
+    c.fillStyle = info.alt;
+    for (let row = 0; row < TILE; row += 4) {
+      const offset = (row % 8 === 0) ? 0 : 4;
+      for (let col = offset; col < TILE; col += 8) {
+        c.fillRect(col * S, row * S, S, S);
+      }
+      c.fillRect(0, (row + 3) * S, TS, S);
+    }
+    // Sconce bracket
+    c.fillStyle = "#5a5a5a";
+    c.fillRect(6*S, 6*S, 4*S, 4*S);
+    c.fillRect(7*S, 10*S, 2*S, 2*S);
+    // Flame
+    c.fillStyle = info.flame;
+    c.fillRect(7*S, 3*S, 2*S, 4*S);
+    c.fillStyle = "#f83";
+    c.fillRect(6*S, 4*S, 4*S, 2*S);
   }
 
   return tc;

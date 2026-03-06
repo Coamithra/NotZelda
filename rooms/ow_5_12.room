@@ -15,6 +15,6 @@ DK SM SM SM SM SM SM WA WA WA SM SM SM SM DK
 DK SM SM SM SM SM SM SM SM SM SM SM SM SM DK
 DK DK DK DK DK DK DK DK DK DK DK DK DK DK DK
 ---
-npc Drowned_Spirit 5 5 The marsh swallowed a whole village. Sometimes you can hear bells below the water.
+npc Drowned_Spirit 5 5 ghost The marsh swallowed a whole village. Sometimes you can hear bells below the water.
 monster swamp_blob 2 3
 monster swamp_blob 12 8

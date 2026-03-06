@@ -15,5 +15,5 @@ IF GR GR GS GR GS GR RD GR GR IF IF DR IF IF
 IF GR GR GR GR GR GR RD GR GR GR GR GR GR IF
 IF IF IF IF IF IF IF IF IF IF IF IF IF IF IF
 ---
-npc Ghost 7 3 This land was not always dead. The castle fell, and darkness spread.
+npc Ghost 7 3 ghost This land was not always dead. The castle fell, and darkness spread.
 monster skeleton 4 2

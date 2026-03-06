@@ -15,6 +15,6 @@ CC SA SA SA SA SA CC SA SA SA SA SA SA SA CC
 CC SA SA SA SA SA SA SA SA SA SA CC SA SA CC
 CC CC CC CC CC CC SA SA SA CC CC CC CC CC CC
 ---
-npc Nomad 3 4 We camped here once. The stones still hold heat from ancient fires.
+npc Nomad 3 4 nomad We camped here once. The stones still hold heat from ancient fires.
 monster scorpion 10 3
 monster scorpion 8 7

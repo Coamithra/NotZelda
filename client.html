@@ -310,6 +310,14 @@
   let playerFlags = new Set(); // string flags, e.g. "has_sword"
   let swordPickups = [];      // [{x, y, frame, nextTime}] — active sword pickup animations
 
+  // Health system
+  let myHp = 6, myMaxHp = 6;
+  let hurtFlash = 0;          // timestamp when red flash ends
+  let invincibleUntil = 0;    // timestamp when invincibility flicker ends
+  let heartPickups = [];      // [{id, x, y}] — hearts on ground in current room
+  let dyingPlayerSelf = null;  // {x, y, frame, startTime} — death animation for local player
+  let dyingOtherPlayers = {};  // name -> {x, y, color_index, frame, nextTime}
+
   // Transition state
   let transition = null;      // {direction, oldCanvas, startTime, duration}
 
@@ -388,6 +396,77 @@
     });
   }
 
+  const DYING_PLAYER_FRAME_MS = 200;
+
+  function updateDyingOtherPlayers() {
+    const now = Date.now();
+    for (const [name, dp] of Object.entries(dyingOtherPlayers)) {
+      if (now >= dp.nextTime) {
+        dp.frame++;
+        dp.nextTime = now + DYING_PLAYER_FRAME_MS;
+      }
+      if (dp.frame > 5) {
+        delete dyingOtherPlayers[name];
+      }
+    }
+  }
+
+  function renderHeartPickups() {
+    for (const h of heartPickups) {
+      const bounceFrame = Math.floor(Date.now() / 400) % 2;
+      drawHeartPickup(ctx, h.x * TS, h.y * TS, bounceFrame, SCALE);
+    }
+  }
+
+  function renderDeathAnimation() {
+    if (!dyingPlayerSelf) return;
+    const elapsed = Date.now() - dyingPlayerSelf.startTime;
+    const duration = 5000;
+
+    if (elapsed >= duration) return;
+
+    const px = dyingPlayerSelf.x * TS;
+    const py = dyingPlayerSelf.y * TS;
+
+    // Phase 1: Spin + fade out player (0–1s)
+    // Phase 2: Fade to full black (1–1.5s)
+    // Phase 3: Linger on "You died!" with full black (1.5–5s)
+
+    if (elapsed < 1000) {
+      // Spinning player fading out
+      const dirs = ["down", "left", "up", "right"];
+      const spinDir = dirs[Math.floor(elapsed / 80) % 4];
+      const playerAlpha = Math.max(0, 1 - elapsed / 1000);
+      ctx.globalAlpha = playerAlpha;
+      drawPlayer(ctx, px, py, spinDir, myColorIndex, 0, SCALE);
+      ctx.globalAlpha = 1;
+      // Darkening overlay
+      ctx.fillStyle = `rgba(0,0,0,${elapsed / 1000 * 0.7})`;
+      ctx.fillRect(0, 0, CW, CH);
+    } else if (elapsed < 1500) {
+      // Fade to full black
+      const blackAlpha = 0.7 + 0.3 * ((elapsed - 1000) / 500);
+      ctx.fillStyle = `rgba(0,0,0,${blackAlpha})`;
+      ctx.fillRect(0, 0, CW, CH);
+    } else {
+      // Full black
+      ctx.fillStyle = "rgba(0,0,0,1)";
+      ctx.fillRect(0, 0, CW, CH);
+    }
+
+    // "You died!" text — appears at 0.8s, fully opaque by 1.3s
+    if (elapsed > 800) {
+      const textAlpha = Math.min(1, (elapsed - 800) / 500);
+      ctx.globalAlpha = textAlpha;
+      ctx.font = "bold 28px monospace";
+      ctx.fillStyle = "#cc3333";
+      const txt = "You died!";
+      const tw = ctx.measureText(txt).width;
+      ctx.fillText(txt, CW/2 - tw/2, CH/2);
+      ctx.globalAlpha = 1;
+    }
+  }
+
   const ATTACK_FRAME_MS = 150;  // time per attack frame
   const ATTACK_FRAMES = 2;      // total frames in attack animation
 
@@ -413,15 +492,25 @@
   function renderPlayers() {
     if (!myPlayer) return;
 
-    // Collect all players
+    // Collect all players (skip self if dying)
     const all = [];
-    all.push({
-      name: myName,
-      x: displayX,
-      y: displayY,
-      direction: myPlayer.direction,
-      color_index: myPlayer.color_index,
-    });
+    if (!dyingPlayerSelf) {
+      // Invincibility flicker — skip drawing every other 100ms
+      let skipSelf = false;
+      if (Date.now() < invincibleUntil) {
+        skipSelf = Math.floor(Date.now() / 100) % 2 === 1;
+      }
+      if (!skipSelf) {
+        all.push({
+          name: myName,
+          x: displayX,
+          y: displayY,
+          direction: myPlayer.direction,
+          color_index: myPlayer.color_index,
+          hurtFlash: Date.now() < hurtFlash,
+        });
+      }
+    }
     for (const [name, p] of Object.entries(otherPlayers)) {
       all.push({
         name: name,
@@ -429,12 +518,13 @@
         y: p.displayY,
         direction: p.direction,
         color_index: p.color_index,
+        hurtFlash: p.hurtFlash && Date.now() < p.hurtFlash,
       });
     }
 
     // Add guards to render list
     for (const g of guards) {
-      all.push({ name: g.name, x: g.x, y: g.y, isGuard: true });
+      all.push({ name: g.name, x: g.x, y: g.y, isGuard: true, sprite: g.sprite || "guard" });
     }
 
     // Add monsters to render list
@@ -466,11 +556,7 @@
         else drawSlime(ctx, px, py, monsterHopFrame, SCALE);
         continue;
       } else if (p.isGuard) {
-        if (p.name === "Amara") {
-          drawAmara(ctx, px, py, SCALE);
-        } else {
-          drawGuard(ctx, px, py, SCALE);
-        }
+        drawNPC(ctx, px, py, p.sprite, SCALE);
       } else if (attackingPlayers[p.name]) {
         const atk = attackingPlayers[p.name];
         drawPlayerAttack(ctx, px, py, atk.direction, p.color_index, atk.frame, SCALE);
@@ -482,6 +568,14 @@
         drawPlayer(ctx, px, py, p.direction, p.color_index, moving ? animFrame : 0, SCALE);
       }
 
+      // Damage flash — red tint overlay
+      if (p.hurtFlash) {
+        ctx.globalAlpha = 0.4;
+        ctx.fillStyle = "#ff0000";
+        ctx.fillRect(px + 3*SCALE, py, 10*SCALE, 15*SCALE);
+        ctx.globalAlpha = 1;
+      }
+
       // Name label
       ctx.font = "bold 11px monospace";
       const tw = ctx.measureText(p.name).width;
@@ -491,6 +585,13 @@
       ctx.fillRect(labelX - 3, labelY - 10, tw + 6, 14);
       ctx.fillStyle = "#fff";
       ctx.fillText(p.name, labelX, labelY);
+    }
+
+    // Draw dying other players
+    for (const [name, dp] of Object.entries(dyingOtherPlayers)) {
+      const dpx = dp.x * TS;
+      const dpy = dp.y * TS;
+      drawPlayerFallOver(ctx, dpx, dpy, dp.color_index, dp.frame, SCALE);
     }
   }
 
@@ -610,7 +711,7 @@
     ctx.fillText(name, 16, 24);
 
     // Version — top right
-    const version = "v0.5";
+    const version = "v0.6";
     ctx.font = "10px monospace";
     const vw = ctx.measureText(version).width;
     ctx.fillStyle = "rgba(255,255,255,0.3)";
@@ -656,8 +757,21 @@
     }
   }
 
+  function renderHeartsHUD() {
+    const heartScale = SCALE * 0.45;
+    const heartW = 12 * heartScale + 2;
+    const heartStartX = CW - 3 * heartW - 14;
+    for (let i = 0; i < 3; i++) {
+      const hpForHeart = myHp - i * 2;
+      let state = "empty";
+      if (hpForHeart >= 2) state = "full";
+      else if (hpForHeart === 1) state = "half";
+      drawHeart(ctx, heartStartX + i * heartW, 8, state, heartScale);
+    }
+  }
+
   // matches server WALKABLE_TILES
-  const WALKABLE = new Set([0, 1, 2, 7, 8, 9, 10, 15, 16, 19, 20, 22, 26, 27, 28, 30]);
+  const WALKABLE = new Set([0, 1, 2, 7, 8, 9, 10, 15, 16, 19, 20, 22, 26, 27, 28, 30, 33]);
 
   function getExitDirs() {
     if (!currentRoom || !currentRoom.room_id) return new Set();
@@ -743,8 +857,8 @@
       animFrame = (animFrame + 1) % 2;
     }
 
-    // Process movement (freeze while attacking)
-    if (!chatFocused && !transition && !attackingPlayers[myName]) {
+    // Process movement (freeze while attacking or dying)
+    if (!chatFocused && !transition && !attackingPlayers[myName] && !dyingPlayerSelf) {
       processMovement(timestamp);
     }
 
@@ -753,6 +867,7 @@
     updateAttacks();
     updateDyingMonsters();
     updateSwordPickups();
+    updateDyingOtherPlayers();
 
     // Toggle monster hop frame every ~500ms
     monsterHopTimer++;
@@ -792,11 +907,14 @@
       renderTransition(Date.now());
     } else {
       renderRoom();
+      renderHeartPickups();
       renderPlayers();
       renderSpeechBubbles();
       renderSwordPickups();
       renderUI();
+      if (dyingPlayerSelf) renderDeathAnimation();
     }
+    renderHeartsHUD();
   }
 
   function processMovement(timestamp) {
@@ -909,6 +1027,8 @@
     switch (msg.type) {
       case "login_ok":
         myColorIndex = msg.color_index;
+        myHp = msg.hp;
+        myMaxHp = msg.max_hp;
         loginScreen.classList.add("hidden");
         gameScreen.classList.add("active");
         MusicPlayer.start();
@@ -944,6 +1064,9 @@
 
         MusicPlayer.setRoom(msg.room_id, msg.biome, msg.music);
 
+        // Update HP from server
+        if (msg.hp !== undefined) { myHp = msg.hp; myMaxHp = msg.max_hp; }
+
         // Reset other players, guards, monsters, and bubbles for this room
         otherPlayers = {};
         dancingPlayers = {};
@@ -951,6 +1074,9 @@
         speechBubbles = [];
         guards = msg.guards || [];
         dyingMonsters = [];
+        heartPickups = [];
+        dyingPlayerSelf = null;
+        dyingOtherPlayers = {};
         monsters = (msg.monsters || []).map(m => ({
           id: m.id, kind: m.kind, x: m.x, y: m.y, displayX: m.x, displayY: m.y,
         }));
@@ -1030,6 +1156,56 @@
           text: msg.text,
           expires: Date.now() + 4000,
         });
+        break;
+
+      case "player_hurt": {
+        if (msg.name === myName) {
+          const oldX = myPlayer.x;
+          const oldY = myPlayer.y;
+          myHp = msg.hp;
+          myPlayer.x = msg.x;
+          myPlayer.y = msg.y;
+          hurtFlash = Date.now() + 300;
+          invincibleUntil = Date.now() + 1500;
+          // If knockback occurred, keep displayX/Y at old position so lerp animates it
+          if (msg.knockback) {
+            // displayX/Y stay where they are, lerp will catch up
+          }
+        } else if (otherPlayers[msg.name]) {
+          otherPlayers[msg.name].x = msg.x;
+          otherPlayers[msg.name].y = msg.y;
+          otherPlayers[msg.name].hurtFlash = Date.now() + 300;
+        }
+        break;
+      }
+
+      case "you_died":
+        dyingPlayerSelf = { x: msg.x, y: msg.y, frame: 0, startTime: Date.now() };
+        myHp = 0;
+        break;
+
+      case "player_died":
+        delete otherPlayers[msg.name];
+        stopDance(msg.name);
+        dyingOtherPlayers[msg.name] = {
+          x: msg.x, y: msg.y,
+          color_index: msg.color_index,
+          frame: 0,
+          nextTime: Date.now() + DYING_PLAYER_FRAME_MS,
+        };
+        break;
+
+      case "hp_update":
+        myHp = msg.hp;
+        myMaxHp = msg.max_hp;
+        break;
+
+      case "heart_spawned":
+        heartPickups.push({ id: msg.id, x: msg.x, y: msg.y });
+        break;
+
+      case "heart_collected":
+        heartPickups = heartPickups.filter(h => h.id !== msg.id);
         break;
 
       case "monster_moved": {
