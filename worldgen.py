@@ -77,73 +77,17 @@ BO = "BO"  # boulder
 COLS = 15
 ROWS = 11
 
-# Biome base tiles and decoration tiles
-BIOME_BASE = {
-    "forest":    GR,
-    "mountain":  ST,
-    "desert":    SA,
-    "swamp":     SM,
-    "graveyard": GR,
-    "castle":    RF,
-    "plains":    GR,
-    "lake":      WA,
-    "river":     GR,
-}
-
-BIOME_BORDER = {
-    "forest":    TR,
-    "mountain":  MT,
-    "desert":    CC,
-    "swamp":     DK,
-    "graveyard": IF,
-    "castle":    RW,
-    "plains":    TR,
-    "lake":      GR,
-    "river":     TR,
-}
-
-BIOME_DECOR = {
-    "forest":    [TR, FL, TG, BO],
-    "mountain":  [MT, BO, CL, ST],
-    "desert":    [CC, BO, SA, SA],
-    "swamp":     [DK, SH, SM, WA],
-    "graveyard": [GS, DK, IF, GR],
-    "castle":    [RW, RF, ST, BO],
-    "plains":    [FL, TG, BO, TR],
-    "lake":      [WA, SH, GR, FL],
-    "river":     [WA, SH, BR, GR],
-}
-
-BIOME_WALKABLE = {
-    "forest":    [GR, FL, TG, DT],
-    "mountain":  [ST, CV, DT],
-    "desert":    [SA, DT, RD],
-    "swamp":     [SM, DT, SH],
-    "graveyard": [GR, DT, RD],
-    "castle":    [RF, ST, DT, RD],
-    "plains":    [GR, FL, TG, DT, RD],
-    "lake":      [GR, SH, BR, FL],
-    "river":     [GR, DT, BR, RD],
-}
-
-# Music mapping per biome
-BIOME_MUSIC = {
-    "forest": "forest", "mountain": "chapel", "desert": "overworld",
-    "swamp": "overworld", "graveyard": "chapel", "castle": "tavern",
-    "plains": "overworld", "lake": "overworld", "river": "overworld",
-}
-
-# Monster types per biome
-BIOME_MONSTERS = {
-    "forest":    ["slime", "slime"],
-    "mountain":  ["bat"],
-    "desert":    ["scorpion"],
-    "swamp":     ["swamp_blob", "swamp_blob"],
-    "graveyard": ["skeleton"],
-    "castle":    ["skeleton", "bat"],
-    "plains":    ["slime"],
-    "lake":      [],
-    "river":     ["slime"],
+# Consolidated biome config — one dict to rule them all
+BIOME_CONFIG = {
+    "forest":    {"base": GR, "border": TR, "decor": [TR, FL, TG, BO], "walkable": [GR, FL, TG, DT], "music": "forest",    "monsters": ["slime", "slime"]},
+    "mountain":  {"base": ST, "border": MT, "decor": [MT, BO, CL, ST], "walkable": [ST, CV, DT],      "music": "chapel",    "monsters": ["bat"]},
+    "desert":    {"base": SA, "border": CC, "decor": [CC, BO, SA, SA], "walkable": [SA, DT, RD],      "music": "overworld",  "monsters": ["scorpion"]},
+    "swamp":     {"base": SM, "border": DK, "decor": [DK, SH, SM, WA], "walkable": [SM, DT, SH],      "music": "overworld",  "monsters": ["swamp_blob", "swamp_blob"]},
+    "graveyard": {"base": GR, "border": IF, "decor": [GS, DK, IF, GR], "walkable": [GR, DT, RD],      "music": "chapel",    "monsters": ["skeleton"]},
+    "castle":    {"base": RF, "border": RW, "decor": [RW, RF, ST, BO], "walkable": [RF, ST, DT, RD],  "music": "tavern",    "monsters": ["skeleton", "bat"]},
+    "plains":    {"base": GR, "border": TR, "decor": [FL, TG, BO, TR], "walkable": [GR, FL, TG, DT, RD], "music": "overworld", "monsters": ["slime"]},
+    "lake":      {"base": WA, "border": GR, "decor": [WA, SH, GR, FL], "walkable": [GR, SH, BR, FL],  "music": "overworld",  "monsters": []},
+    "river":     {"base": GR, "border": TR, "decor": [WA, SH, BR, GR], "walkable": [GR, DT, BR, RD],  "music": "overworld",  "monsters": ["slime"]},
 }
 
 # ---------------------------------------------------------------------------
@@ -313,10 +257,11 @@ def build_connections(rooms):
 # ---------------------------------------------------------------------------
 def make_tilemap(biome, exits):
     """Generate a 11x15 tilemap for a room with given biome and exits."""
-    base = BIOME_BASE[biome]
-    border = BIOME_BORDER[biome]
-    decor = BIOME_DECOR[biome]
-    walkable = BIOME_WALKABLE[biome]
+    cfg = BIOME_CONFIG[biome]
+    base = cfg["base"]
+    border = cfg["border"]
+    decor = cfg["decor"]
+    walkable = cfg["walkable"]
 
     # Start with base fill
     tm = [[base for _ in range(COLS)] for _ in range(ROWS)]
@@ -833,7 +778,7 @@ def generate():
         name = gen_room_name(biome)
 
         # Music
-        music = BIOME_MUSIC.get(biome, "overworld")
+        music = BIOME_CONFIG.get(biome, {}).get("music", "overworld")
 
         # NPCs
         npcs = []
@@ -843,7 +788,7 @@ def generate():
 
         # Monsters — place based on biome
         room_monsters = []
-        monster_kinds = BIOME_MONSTERS.get(biome, [])
+        monster_kinds = BIOME_CONFIG.get(biome, {}).get("monsters", [])
         if monster_kinds and random.random() < 0.6:  # 60% chance room has monsters
             num = random.randint(1, min(3, len(monster_kinds) + 1))
             for _ in range(num):

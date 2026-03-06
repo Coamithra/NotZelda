@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Tile colors — procedural drawing
+// Tile rendering — data-driven with composable operations
 // ---------------------------------------------------------------------------
 const TILE_COLORS = {
   0:  { name: "grass",       base: "#3a7a2a", alt: "#2d6a1e" },
@@ -47,6 +47,345 @@ function seededRand(x, y, tileId) {
   return (h & 0x7fffffff) / 0x7fffffff;
 }
 
+// ---------------------------------------------------------------------------
+// Shared tile drawing operations
+// ---------------------------------------------------------------------------
+function drawNoise(c, TS, TILE, S, info, density, colorKey, seedId) {
+  const color = info[colorKey] || colorKey;
+  for (let py = 0; py < TILE; py++) {
+    for (let px = 0; px < TILE; px++) {
+      if (seededRand(px, py, seedId) < density) {
+        c.fillStyle = color;
+        c.fillRect(px * S, py * S, S, S);
+      }
+    }
+  }
+}
+
+function drawSwampNoise(c, TS, TILE, S, info, seedId) {
+  for (let py = 0; py < TILE; py++) {
+    for (let px = 0; px < TILE; px++) {
+      const r = seededRand(px, py, seedId);
+      c.fillStyle = r < 0.2 ? info.water : r < 0.5 ? info.alt : info.base;
+      c.fillRect(px * S, py * S, S, S);
+    }
+  }
+}
+
+function drawBricks(c, TS, TILE, S, info) {
+  c.fillStyle = info.alt;
+  for (let row = 0; row < TILE; row += 4) {
+    const offset = (row % 8 === 0) ? 0 : 4;
+    for (let col = offset; col < TILE; col += 8) {
+      c.fillRect(col * S, row * S, S, S);
+    }
+    c.fillRect(0, (row + 3) * S, TS, S);
+  }
+}
+
+function drawGridLines(c, TS, TILE, S, info, spacing) {
+  c.fillStyle = info.alt;
+  for (let i = 0; i < TILE; i += spacing) {
+    c.fillRect(0, i * S, TS, S);
+    c.fillRect(i * S, 0, S, TS);
+  }
+}
+
+function drawHStripes(c, TS, TILE, S, info, spacing) {
+  c.fillStyle = info.alt;
+  for (let i = 0; i < TILE; i += spacing) {
+    c.fillRect(0, i * S, TS, S);
+  }
+}
+
+function drawVStripes(c, TS, TILE, S, info, spacing) {
+  c.fillStyle = info.alt;
+  for (let i = 0; i < TILE; i += spacing) {
+    c.fillRect(i * S, 0, S, TS);
+  }
+}
+
+function drawRects(c, S, info, rects) {
+  for (const [colorKey, x, y, w, h] of rects) {
+    c.fillStyle = info[colorKey] || TILE_COLORS[colorKey]?.base || colorKey;
+    c.fillRect(x * S, y * S, w * S, h * S);
+  }
+}
+
+function drawWavePattern(c, TS, TILE, S, info) {
+  for (let py = 0; py < TILE; py++) {
+    for (let px = 0; px < TILE; px++) {
+      if ((px + py) % 4 < 2) {
+        c.fillStyle = info.alt;
+        c.fillRect(px * S, py * S, S, S);
+      }
+    }
+  }
+}
+
+function drawRipplePattern(c, TS, TILE, S, info) {
+  for (let py = 0; py < TILE; py++) {
+    for (let px = 0; px < TILE; px++) {
+      c.fillStyle = (px + py) % 3 === 0 ? info.alt : info.base;
+      c.fillRect(px * S, py * S, S, S);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tile recipes — declarative definitions for each tile type
+// Each recipe is a function(c, TS, TILE, S, info) that draws on top of the base fill
+// ---------------------------------------------------------------------------
+const TILE_GENERATORS = {
+  0: (c, TS, TILE, S, info) => { // grass
+    drawNoise(c, TS, TILE, S, info, 0.25, "alt", 0);
+  },
+  1: (c, TS, TILE, S, info) => { // stone
+    drawGridLines(c, TS, TILE, S, info, 4);
+  },
+  2: (c, TS, TILE, S, info) => { // wood
+    drawHStripes(c, TS, TILE, S, info, 4);
+  },
+  3: (c, TS, TILE, S, info) => { // wall_stone
+    drawBricks(c, TS, TILE, S, info);
+  },
+  4: (c, TS, TILE, S, info) => { // wall_wood
+    drawVStripes(c, TS, TILE, S, info, 3);
+  },
+  5: (c, TS, TILE, S, info) => { // water
+    drawWavePattern(c, TS, TILE, S, info);
+  },
+  6: (c, TS, TILE, S, info) => { // tree
+    drawRects(c, S, info, [
+      ["trunk",    6, 10, 4, 6],
+      ["#2a7a2a",  2,  1, 12, 10],
+      ["alt",      3,  0, 10, 2],
+      ["alt",      1,  3,  2, 6],
+      ["alt",     13,  3,  2, 6],
+      ["#4a9a3a",  4,  2,  3, 2],
+      ["#4a9a3a",  8,  4,  4, 2],
+    ]);
+  },
+  7: (c, TS, TILE, S, info) => { // flowers
+    drawNoise(c, TS, TILE, S, info, 0.25, "alt", 7);
+    const spots = [[4,4],[10,8],[6,12],[12,4]];
+    spots.forEach(([fx,fy]) => {
+      c.fillStyle = seededRand(fx,fy,99) > 0.5 ? info.flower1 : info.flower2;
+      c.fillRect(fx*S, fy*S, S*2, S*2);
+    });
+  },
+  8: (c, TS, TILE, S, info) => { // dirt
+    drawNoise(c, TS, TILE, S, info, 0.25, "alt", 8);
+  },
+  9: (c, TS, TILE, S, info) => { // stairs_up
+    drawHStripes(c, TS, TILE, S, info, 3);
+    drawRects(c, S, info, [
+      ["#fff", 7, 3, 2, 8],
+      ["#fff", 5, 5, 2, 2],
+      ["#fff", 9, 5, 2, 2],
+    ]);
+  },
+  10: (c, TS, TILE, S, info) => { // stairs_down
+    drawHStripes(c, TS, TILE, S, info, 3);
+    drawRects(c, S, info, [
+      ["#fff", 7, 3, 2, 8],
+      ["#fff", 5, 9, 2, 2],
+      ["#fff", 9, 9, 2, 2],
+    ]);
+  },
+  11: (c, TS, TILE, S, info) => { // anvil
+    c.fillStyle = TILE_COLORS[1].base;
+    c.fillRect(0, 0, TS, TS);
+    drawRects(c, S, info, [
+      ["#3a3a3a", 4, 6, 8, 4],
+      ["#3a3a3a", 3, 4, 10, 3],
+      ["#3a3a3a", 6, 3, 4, 2],
+    ]);
+  },
+  12: (c, TS, TILE, S, info) => { // fireplace
+    c.fillStyle = "#3a2010";
+    c.fillRect(0, 0, TS, TS);
+    drawRects(c, S, info, [
+      ["flame", 4, 4, 3, 6],
+      ["flame", 8, 5, 3, 5],
+      ["#f83",  5, 6, 5, 4],
+    ]);
+  },
+  13: (c, TS, TILE, S, info) => { // table
+    c.fillStyle = TILE_COLORS[2].base;
+    c.fillRect(0, 0, TS, TS);
+    drawRects(c, S, info, [
+      ["base", 2, 2, 12, 12],
+      ["alt",  3, 3, 10, 10],
+    ]);
+  },
+  14: (c, TS, TILE, S, info) => { // pew
+    c.fillStyle = TILE_COLORS[1].base;
+    c.fillRect(0, 0, TS, TS);
+    drawRects(c, S, info, [
+      ["base", 2, 4, 12, 8],
+      ["alt",  2, 4, 12, 2],
+    ]);
+  },
+  15: (c, TS, TILE, S, info) => { // door
+    drawGridLines(c, TS, TILE, S, info, 4);
+  },
+  16: (c, TS, TILE, S, info) => { // sand
+    drawNoise(c, TS, TILE, S, info, 0.3, "alt", 16);
+  },
+  17: (c, TS, TILE, S, info) => { // cactus
+    drawNoise(c, TS, TILE, S, info, 0.2, "alt", 17);
+    drawRects(c, S, info, [
+      ["body",  6, 3, 4, 12],
+      ["body",  3, 5, 3, 3],
+      ["body", 10, 7, 3, 3],
+      ["spine", 7, 2, 2, 1],
+      ["spine", 4, 4, 1, 1],
+      ["spine",11, 6, 1, 1],
+    ]);
+  },
+  18: (c, TS, TILE, S, info) => { // mountain
+    drawRects(c, S, info, [
+      ["alt",  0, 0, 16, 16],
+      ["base", 2, 4, 12, 12],
+      ["base", 4, 2, 8, 2],
+      ["base", 6, 0, 4, 2],
+      ["snow", 6, 0, 4, 2],
+      ["snow", 5, 2, 6, 1],
+    ]);
+  },
+  19: (c, TS, TILE, S, info) => { // cave_floor
+    drawNoise(c, TS, TILE, S, info, 0.3, "alt", 19);
+  },
+  20: (c, TS, TILE, S, info) => { // swamp
+    drawSwampNoise(c, TS, TILE, S, info, 20);
+  },
+  21: (c, TS, TILE, S, info) => { // dead_tree
+    drawNoise(c, TS, TILE, S, info, 0.2, "alt", 21);
+    drawRects(c, S, info, [
+      ["trunk",   6, 6, 4, 10],
+      ["trunk",   5, 4, 6, 3],
+      ["branch",  3, 2, 3, 3],
+      ["branch", 10, 1, 3, 4],
+      ["branch",  4, 0, 2, 3],
+      ["branch", 11, 3, 2, 2],
+    ]);
+  },
+  22: (c, TS, TILE, S, info) => { // bridge
+    c.fillStyle = TILE_COLORS[5].base;
+    c.fillRect(0, 0, TS, TS);
+    c.fillStyle = info.base;
+    c.fillRect(2*S, 0, 12*S, TS);
+    c.fillStyle = info.alt;
+    for (let i = 0; i < TILE; i += 3) c.fillRect(2*S, i*S, 12*S, S);
+    drawRects(c, S, info, [
+      ["plank", 2, 0, 1, 16],
+      ["plank",13, 0, 1, 16],
+    ]);
+  },
+  23: (c, TS, TILE, S, info) => { // gravestone
+    c.fillStyle = TILE_COLORS[0].base;
+    c.fillRect(0, 0, TS, TS);
+    drawNoise(c, TS, TILE, S, TILE_COLORS[0], 0.2, "alt", 0);
+    drawRects(c, S, info, [
+      ["stone",   5, 4, 6, 8],
+      ["stone",   6, 3, 4, 1],
+      ["#6a6a7a", 7, 5, 2, 1],
+      ["#6a6a7a", 6, 7, 4, 1],
+    ]);
+  },
+  24: (c, TS, TILE, S, info) => { // iron_fence
+    c.fillStyle = TILE_COLORS[0].base;
+    c.fillRect(0, 0, TS, TS);
+    drawNoise(c, TS, TILE, S, TILE_COLORS[0], 0.2, "alt", 0);
+    c.fillStyle = info.iron;
+    for (let i = 1; i < TILE; i += 3) c.fillRect(i*S, 0, S, TS);
+    c.fillRect(0, 4*S, TS, S);
+    c.fillRect(0, 10*S, TS, S);
+  },
+  25: (c, TS, TILE, S, info) => { // ruins_wall
+    drawBricks(c, TS, TILE, S, info);
+    drawRects(c, S, info, [
+      ["#3a3a3a", 2, 1, 2, 2],
+      ["#3a3a3a",10, 8, 3, 2],
+    ]);
+  },
+  26: (c, TS, TILE, S, info) => { // ruins_floor
+    drawNoise(c, TS, TILE, S, info, 0.3, "alt", 26);
+    drawRects(c, S, info, [
+      ["#5a5a4a", 3, 2, 1, 8],
+      ["#5a5a4a", 3,10, 6, 1],
+      ["#5a5a4a", 9, 5, 1, 6],
+    ]);
+  },
+  27: (c, TS, TILE, S, info) => { // tall_grass
+    drawNoise(c, TS, TILE, S, info, 0.25, "alt", 27);
+    c.fillStyle = info.tip;
+    const blades = [[2,2],[5,1],[8,3],[11,0],[14,2],[3,8],[7,7],[10,9],[13,6]];
+    blades.forEach(([bx,by]) => { c.fillRect(bx*S, by*S, S, 4*S); });
+  },
+  28: (c, TS, TILE, S, info) => { // road
+    drawNoise(c, TS, TILE, S, info, 0.2, "alt", 28);
+    drawRects(c, S, info, [
+      ["#7a6a4a", 4, 0, 1, 16],
+      ["#7a6a4a",11, 0, 1, 16],
+    ]);
+  },
+  29: (c, TS, TILE, S, info) => { // cliff
+    drawRects(c, S, info, [
+      ["face", 0, 0, 16, 8],
+    ]);
+    c.fillStyle = info.alt;
+    for (let i = 0; i < TILE; i += 3) c.fillRect(0, i*S, TS, S);
+    drawRects(c, S, info, [
+      ["#4a3a2a", 0, 8, 16, 2],
+    ]);
+  },
+  30: (c, TS, TILE, S, info) => { // shallow_water
+    drawRipplePattern(c, TS, TILE, S, info);
+  },
+  31: (c, TS, TILE, S, info) => { // boulder
+    drawNoise(c, TS, TILE, S, TILE_COLORS[0], 0.2, "alt", 0);
+    drawRects(c, S, info, [
+      ["rock",    3, 4, 10, 8],
+      ["rock",    4, 3, 8, 1],
+      ["rock",    5,12, 6, 1],
+      ["rock2",   4, 5, 3, 3],
+      ["#8a8a8a", 8, 4, 3, 2],
+    ]);
+  },
+  32: (c, TS, TILE, S, info) => { // dungeon_wall
+    drawBricks(c, TS, TILE, S, info);
+  },
+  33: (c, TS, TILE, S, info) => { // dungeon_floor
+    drawNoise(c, TS, TILE, S, info, 0.3, "alt", 33);
+    drawRects(c, S, info, [
+      ["#3a3a3a", 4, 3, 1, 6],
+      ["#3a3a3a", 4, 9, 5, 1],
+      ["#3a3a3a",10, 6, 1, 5],
+    ]);
+  },
+  34: (c, TS, TILE, S, info) => { // pillar
+    drawNoise(c, TS, TILE, S, info, 0.3, "alt", 33);
+    drawRects(c, S, info, [
+      ["body", 5, 2, 6, 12],
+      ["body", 4, 3, 8, 10],
+      ["cap",  4, 2, 8, 2],
+      ["cap",  5, 1, 6, 1],
+      ["cap",  4,12, 8, 2],
+    ]);
+  },
+  35: (c, TS, TILE, S, info) => { // sconce_wall
+    drawBricks(c, TS, TILE, S, info);
+    drawRects(c, S, info, [
+      ["#5a5a5a", 6, 6, 4, 4],
+      ["#5a5a5a", 7,10, 2, 2],
+      ["flame",   7, 3, 2, 4],
+      ["#f83",    6, 4, 4, 2],
+    ]);
+  },
+};
+
 // Pre-rendered tile cache
 const tileCanvases = {};
 
@@ -58,388 +397,13 @@ function createTileCanvas(tileId, TS, TILE, SCALE) {
   const info = TILE_COLORS[tileId] || TILE_COLORS[0];
   const S = SCALE;
 
-  // Fill base
+  // Fill base color
   c.fillStyle = info.base;
   c.fillRect(0, 0, TS, TS);
 
-  if (tileId === 0 || tileId === 7 || tileId === 8) {
-    for (let py = 0; py < TILE; py++) {
-      for (let px = 0; px < TILE; px++) {
-        if (seededRand(px, py, tileId) < 0.25) {
-          c.fillStyle = info.alt;
-          c.fillRect(px * S, py * S, S, S);
-        }
-      }
-    }
-    if (tileId === 7) {
-      const spots = [[4,4],[10,8],[6,12],[12,4]];
-      spots.forEach(([fx,fy]) => {
-        c.fillStyle = seededRand(fx,fy,99) > 0.5 ? info.flower1 : info.flower2;
-        c.fillRect(fx*S, fy*S, S*2, S*2);
-      });
-    }
-  } else if (tileId === 1 || tileId === 15) {
-    c.fillStyle = info.alt;
-    for (let i = 0; i < TILE; i += 4) {
-      c.fillRect(0, i * S, TS, S);
-      c.fillRect(i * S, 0, S, TS);
-    }
-  } else if (tileId === 2) {
-    c.fillStyle = info.alt;
-    for (let i = 0; i < TILE; i += 4) {
-      c.fillRect(0, i * S, TS, S);
-    }
-  } else if (tileId === 3) {
-    c.fillStyle = info.alt;
-    for (let row = 0; row < TILE; row += 4) {
-      const offset = (row % 8 === 0) ? 0 : 4;
-      for (let col = offset; col < TILE; col += 8) {
-        c.fillRect(col * S, row * S, S, S);
-      }
-      c.fillRect(0, (row + 3) * S, TS, S);
-    }
-  } else if (tileId === 4) {
-    c.fillStyle = info.alt;
-    for (let i = 0; i < TILE; i += 3) {
-      c.fillRect(i * S, 0, S, TS);
-    }
-  } else if (tileId === 5) {
-    for (let py = 0; py < TILE; py++) {
-      for (let px = 0; px < TILE; px++) {
-        if ((px + py) % 4 < 2) {
-          c.fillStyle = info.alt;
-          c.fillRect(px * S, py * S, S, S);
-        }
-      }
-    }
-  } else if (tileId === 6) {
-    c.fillStyle = info.base;
-    c.fillRect(0, 0, TS, TS);
-    c.fillStyle = info.trunk;
-    c.fillRect(6*S, 10*S, 4*S, 6*S);
-    c.fillStyle = "#2a7a2a";
-    c.fillRect(2*S, 1*S, 12*S, 10*S);
-    c.fillStyle = info.alt;
-    c.fillRect(3*S, 0, 10*S, 2*S);
-    c.fillRect(1*S, 3*S, 2*S, 6*S);
-    c.fillRect(13*S, 3*S, 2*S, 6*S);
-    c.fillStyle = "#4a9a3a";
-    c.fillRect(4*S, 2*S, 3*S, 2*S);
-    c.fillRect(8*S, 4*S, 4*S, 2*S);
-  } else if (tileId === 9) {
-    c.fillStyle = info.alt;
-    for (let i = 0; i < TILE; i += 3) {
-      c.fillRect(0, i*S, TS, S);
-    }
-    c.fillStyle = "#fff";
-    c.fillRect(7*S, 3*S, 2*S, 8*S);
-    c.fillRect(5*S, 5*S, 2*S, 2*S);
-    c.fillRect(9*S, 5*S, 2*S, 2*S);
-  } else if (tileId === 10) {
-    c.fillStyle = info.alt;
-    for (let i = 0; i < TILE; i += 3) {
-      c.fillRect(0, i*S, TS, S);
-    }
-    c.fillStyle = "#fff";
-    c.fillRect(7*S, 3*S, 2*S, 8*S);
-    c.fillRect(5*S, 9*S, 2*S, 2*S);
-    c.fillRect(9*S, 9*S, 2*S, 2*S);
-  } else if (tileId === 11) {
-    c.fillStyle = TILE_COLORS[1].base;
-    c.fillRect(0, 0, TS, TS);
-    c.fillStyle = "#3a3a3a";
-    c.fillRect(4*S, 6*S, 8*S, 4*S);
-    c.fillRect(3*S, 4*S, 10*S, 3*S);
-    c.fillRect(6*S, 3*S, 4*S, 2*S);
-  } else if (tileId === 12) {
-    c.fillStyle = "#3a2010";
-    c.fillRect(0, 0, TS, TS);
-    c.fillStyle = info.flame;
-    c.fillRect(4*S, 4*S, 3*S, 6*S);
-    c.fillRect(8*S, 5*S, 3*S, 5*S);
-    c.fillStyle = "#f83";
-    c.fillRect(5*S, 6*S, 5*S, 4*S);
-  } else if (tileId === 13) {
-    c.fillStyle = TILE_COLORS[2].base;
-    c.fillRect(0, 0, TS, TS);
-    c.fillStyle = info.base;
-    c.fillRect(2*S, 2*S, 12*S, 12*S);
-    c.fillStyle = info.alt;
-    c.fillRect(3*S, 3*S, 10*S, 10*S);
-  } else if (tileId === 14) {
-    c.fillStyle = TILE_COLORS[1].base;
-    c.fillRect(0, 0, TS, TS);
-    c.fillStyle = info.base;
-    c.fillRect(2*S, 4*S, 12*S, 8*S);
-    c.fillStyle = info.alt;
-    c.fillRect(2*S, 4*S, 12*S, 2*S);
-  } else if (tileId === 16) {
-    // Sand — dithered dunes
-    for (let py = 0; py < TILE; py++) {
-      for (let px = 0; px < TILE; px++) {
-        c.fillStyle = seededRand(px, py, 16) < 0.3 ? info.alt : info.base;
-        c.fillRect(px*S, py*S, S, S);
-      }
-    }
-  } else if (tileId === 17) {
-    // Cactus on sand
-    c.fillStyle = info.base;
-    c.fillRect(0, 0, TS, TS);
-    for (let py = 0; py < TILE; py++) {
-      for (let px = 0; px < TILE; px++) {
-        if (seededRand(px, py, 17) < 0.2) { c.fillStyle = info.alt; c.fillRect(px*S, py*S, S, S); }
-      }
-    }
-    c.fillStyle = info.body;
-    c.fillRect(6*S, 3*S, 4*S, 12*S);
-    c.fillRect(3*S, 5*S, 3*S, 3*S);
-    c.fillRect(10*S, 7*S, 3*S, 3*S);
-    c.fillStyle = info.spine;
-    c.fillRect(7*S, 2*S, 2*S, S);
-    c.fillRect(4*S, 4*S, S, S);
-    c.fillRect(11*S, 6*S, S, S);
-  } else if (tileId === 18) {
-    // Mountain — rocky peak
-    c.fillStyle = info.alt;
-    c.fillRect(0, 0, TS, TS);
-    c.fillStyle = info.base;
-    c.fillRect(2*S, 4*S, 12*S, 12*S);
-    c.fillRect(4*S, 2*S, 8*S, 2*S);
-    c.fillRect(6*S, 0, 4*S, 2*S);
-    c.fillStyle = info.snow;
-    c.fillRect(6*S, 0, 4*S, 2*S);
-    c.fillRect(5*S, 2*S, 6*S, S);
-  } else if (tileId === 19) {
-    // Cave floor — dark stone
-    for (let py = 0; py < TILE; py++) {
-      for (let px = 0; px < TILE; px++) {
-        c.fillStyle = seededRand(px, py, 19) < 0.3 ? info.alt : info.base;
-        c.fillRect(px*S, py*S, S, S);
-      }
-    }
-  } else if (tileId === 20) {
-    // Swamp — murky green with water patches
-    for (let py = 0; py < TILE; py++) {
-      for (let px = 0; px < TILE; px++) {
-        const r = seededRand(px, py, 20);
-        c.fillStyle = r < 0.2 ? info.water : r < 0.5 ? info.alt : info.base;
-        c.fillRect(px*S, py*S, S, S);
-      }
-    }
-  } else if (tileId === 21) {
-    // Dead tree — bare branches on swamp
-    c.fillStyle = info.base;
-    c.fillRect(0, 0, TS, TS);
-    for (let py = 0; py < TILE; py++) {
-      for (let px = 0; px < TILE; px++) {
-        if (seededRand(px, py, 21) < 0.2) { c.fillStyle = info.alt; c.fillRect(px*S, py*S, S, S); }
-      }
-    }
-    c.fillStyle = info.trunk;
-    c.fillRect(6*S, 6*S, 4*S, 10*S);
-    c.fillRect(5*S, 4*S, 6*S, 3*S);
-    c.fillStyle = info.branch;
-    c.fillRect(3*S, 2*S, 3*S, 3*S);
-    c.fillRect(10*S, 1*S, 3*S, 4*S);
-    c.fillRect(4*S, 0, 2*S, 3*S);
-    c.fillRect(11*S, 3*S, 2*S, 2*S);
-  } else if (tileId === 22) {
-    // Bridge — wooden planks over water
-    c.fillStyle = TILE_COLORS[5].base;
-    c.fillRect(0, 0, TS, TS);
-    c.fillStyle = info.base;
-    c.fillRect(2*S, 0, 12*S, TS);
-    c.fillStyle = info.alt;
-    for (let i = 0; i < TILE; i += 3) {
-      c.fillRect(2*S, i*S, 12*S, S);
-    }
-    c.fillStyle = info.plank;
-    c.fillRect(2*S, 0, S, TS);
-    c.fillRect(13*S, 0, S, TS);
-  } else if (tileId === 23) {
-    // Gravestone on grass
-    c.fillStyle = TILE_COLORS[0].base;
-    c.fillRect(0, 0, TS, TS);
-    for (let py = 0; py < TILE; py++) {
-      for (let px = 0; px < TILE; px++) {
-        if (seededRand(px, py, 0) < 0.2) { c.fillStyle = TILE_COLORS[0].alt; c.fillRect(px*S, py*S, S, S); }
-      }
-    }
-    c.fillStyle = info.stone;
-    c.fillRect(5*S, 4*S, 6*S, 8*S);
-    c.fillRect(6*S, 3*S, 4*S, S);
-    c.fillStyle = "#6a6a7a";
-    c.fillRect(7*S, 5*S, 2*S, S);
-    c.fillRect(6*S, 7*S, 4*S, S);
-  } else if (tileId === 24) {
-    // Iron fence on grass
-    c.fillStyle = TILE_COLORS[0].base;
-    c.fillRect(0, 0, TS, TS);
-    for (let py = 0; py < TILE; py++) {
-      for (let px = 0; px < TILE; px++) {
-        if (seededRand(px, py, 0) < 0.2) { c.fillStyle = TILE_COLORS[0].alt; c.fillRect(px*S, py*S, S, S); }
-      }
-    }
-    c.fillStyle = info.iron;
-    for (let i = 1; i < TILE; i += 3) {
-      c.fillRect(i*S, 0, S, TS);
-    }
-    c.fillRect(0, 4*S, TS, S);
-    c.fillRect(0, 10*S, TS, S);
-  } else if (tileId === 25) {
-    // Ruins wall — crumbling stone bricks
-    c.fillStyle = info.base;
-    c.fillRect(0, 0, TS, TS);
-    c.fillStyle = info.alt;
-    for (let row = 0; row < TILE; row += 4) {
-      const offset = (row % 8 === 0) ? 0 : 4;
-      for (let col = offset; col < TILE; col += 8) {
-        c.fillRect(col*S, row*S, S, S);
-      }
-      c.fillRect(0, (row+3)*S, TS, S);
-    }
-    // Damage holes
-    c.fillStyle = "#3a3a3a";
-    c.fillRect(2*S, 1*S, 2*S, 2*S);
-    c.fillRect(10*S, 8*S, 3*S, 2*S);
-  } else if (tileId === 26) {
-    // Ruins floor — cracked stone
-    for (let py = 0; py < TILE; py++) {
-      for (let px = 0; px < TILE; px++) {
-        c.fillStyle = seededRand(px, py, 26) < 0.3 ? info.alt : info.base;
-        c.fillRect(px*S, py*S, S, S);
-      }
-    }
-    c.fillStyle = "#5a5a4a";
-    c.fillRect(3*S, 2*S, S, 8*S);
-    c.fillRect(3*S, 10*S, 6*S, S);
-    c.fillRect(9*S, 5*S, S, 6*S);
-  } else if (tileId === 27) {
-    // Tall grass — grass with taller blades
-    c.fillStyle = info.base;
-    c.fillRect(0, 0, TS, TS);
-    for (let py = 0; py < TILE; py++) {
-      for (let px = 0; px < TILE; px++) {
-        if (seededRand(px, py, 27) < 0.25) {
-          c.fillStyle = info.alt; c.fillRect(px*S, py*S, S, S);
-        }
-      }
-    }
-    c.fillStyle = info.tip;
-    const blades = [[2,2],[5,1],[8,3],[11,0],[14,2],[3,8],[7,7],[10,9],[13,6]];
-    blades.forEach(([bx,by]) => { c.fillRect(bx*S, by*S, S, 4*S); });
-  } else if (tileId === 28) {
-    // Road — packed earth with wheel ruts
-    c.fillStyle = info.base;
-    c.fillRect(0, 0, TS, TS);
-    c.fillStyle = info.alt;
-    for (let py = 0; py < TILE; py++) {
-      for (let px = 0; px < TILE; px++) {
-        if (seededRand(px, py, 28) < 0.2) c.fillRect(px*S, py*S, S, S);
-      }
-    }
-    c.fillStyle = "#7a6a4a";
-    c.fillRect(4*S, 0, S, TS);
-    c.fillRect(11*S, 0, S, TS);
-  } else if (tileId === 29) {
-    // Cliff — steep rock face
-    c.fillStyle = info.base;
-    c.fillRect(0, 0, TS, TS);
-    c.fillStyle = info.face;
-    c.fillRect(0, 0, TS, 8*S);
-    c.fillStyle = info.alt;
-    for (let i = 0; i < TILE; i += 3) {
-      c.fillRect(0, i*S, TS, S);
-    }
-    c.fillStyle = "#4a3a2a";
-    c.fillRect(0, 8*S, TS, 2*S);
-  } else if (tileId === 30) {
-    // Shallow water — lighter blue with ripples
-    for (let py = 0; py < TILE; py++) {
-      for (let px = 0; px < TILE; px++) {
-        c.fillStyle = (px + py) % 3 === 0 ? info.alt : info.base;
-        c.fillRect(px*S, py*S, S, S);
-      }
-    }
-  } else if (tileId === 31) {
-    // Boulder on grass
-    c.fillStyle = info.base;
-    c.fillRect(0, 0, TS, TS);
-    for (let py = 0; py < TILE; py++) {
-      for (let px = 0; px < TILE; px++) {
-        if (seededRand(px, py, 0) < 0.2) { c.fillStyle = info.alt; c.fillRect(px*S, py*S, S, S); }
-      }
-    }
-    c.fillStyle = info.rock;
-    c.fillRect(3*S, 4*S, 10*S, 8*S);
-    c.fillRect(4*S, 3*S, 8*S, S);
-    c.fillRect(5*S, 12*S, 6*S, S);
-    c.fillStyle = info.rock2;
-    c.fillRect(4*S, 5*S, 3*S, 3*S);
-    c.fillStyle = "#8a8a8a";
-    c.fillRect(8*S, 4*S, 3*S, 2*S);
-  } else if (tileId === 32) {
-    // Dungeon wall — dark blue-grey bricks with mortar lines
-    c.fillStyle = info.base;
-    c.fillRect(0, 0, TS, TS);
-    c.fillStyle = info.alt;
-    for (let row = 0; row < TILE; row += 4) {
-      const offset = (row % 8 === 0) ? 0 : 4;
-      for (let col = offset; col < TILE; col += 8) {
-        c.fillRect(col * S, row * S, S, S);
-      }
-      c.fillRect(0, (row + 3) * S, TS, S);
-    }
-  } else if (tileId === 33) {
-    // Dungeon floor — grey stone with subtle cracks
-    for (let py = 0; py < TILE; py++) {
-      for (let px = 0; px < TILE; px++) {
-        c.fillStyle = seededRand(px, py, 33) < 0.3 ? info.alt : info.base;
-        c.fillRect(px * S, py * S, S, S);
-      }
-    }
-    // Crack lines
-    c.fillStyle = "#3a3a3a";
-    c.fillRect(4*S, 3*S, S, 6*S);
-    c.fillRect(4*S, 9*S, 5*S, S);
-    c.fillRect(10*S, 6*S, S, 5*S);
-  } else if (tileId === 34) {
-    // Pillar — dungeon floor background with round stone column
-    for (let py = 0; py < TILE; py++) {
-      for (let px = 0; px < TILE; px++) {
-        c.fillStyle = seededRand(px, py, 33) < 0.3 ? info.alt : info.base;
-        c.fillRect(px * S, py * S, S, S);
-      }
-    }
-    c.fillStyle = info.body;
-    c.fillRect(5*S, 2*S, 6*S, 12*S);
-    c.fillRect(4*S, 3*S, 8*S, 10*S);
-    c.fillStyle = info.cap;
-    c.fillRect(4*S, 2*S, 8*S, 2*S);
-    c.fillRect(5*S, 1*S, 6*S, S);
-    c.fillRect(4*S, 12*S, 8*S, 2*S);
-  } else if (tileId === 35) {
-    // Sconce wall — dungeon wall base with orange flame
-    c.fillStyle = info.base;
-    c.fillRect(0, 0, TS, TS);
-    c.fillStyle = info.alt;
-    for (let row = 0; row < TILE; row += 4) {
-      const offset = (row % 8 === 0) ? 0 : 4;
-      for (let col = offset; col < TILE; col += 8) {
-        c.fillRect(col * S, row * S, S, S);
-      }
-      c.fillRect(0, (row + 3) * S, TS, S);
-    }
-    // Sconce bracket
-    c.fillStyle = "#5a5a5a";
-    c.fillRect(6*S, 6*S, 4*S, 4*S);
-    c.fillRect(7*S, 10*S, 2*S, 2*S);
-    // Flame
-    c.fillStyle = info.flame;
-    c.fillRect(7*S, 3*S, 2*S, 4*S);
-    c.fillStyle = "#f83";
-    c.fillRect(6*S, 4*S, 4*S, 2*S);
-  }
+  // Apply tile-specific generator
+  const generator = TILE_GENERATORS[tileId];
+  if (generator) generator(c, TS, TILE, S, info);
 
   return tc;
 }

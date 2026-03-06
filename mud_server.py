@@ -144,15 +144,10 @@ def load_room_files(directory: str = "rooms"):
         # Build spawn points from exits
         # Key = entry direction (the side of the room you enter from)
         # Value = position near that side
-        spawn_points = {"default": (7, 5)}
-        if "north" in exits:
-            spawn_points["north"] = (7, 1)   # enter from north edge = near top
-        if "south" in exits:
-            spawn_points["south"] = (7, 9)   # enter from south edge = near bottom
-        if "east" in exits:
-            spawn_points["east"] = (13, 5)   # enter from east edge = near right
-        if "west" in exits:
-            spawn_points["west"] = (1, 5)    # enter from west edge = near left
+        spawn_points = {"default": DEFAULT_SPAWN}
+        for direction, pos in EDGE_SPAWN_POINTS.items():
+            if direction in exits:
+                spawn_points[direction] = pos
         # Scan for stairs tiles — use them for up/down spawn points
         su_pos = None
         sd_pos = None
@@ -299,18 +294,40 @@ GUARDS = {}  # Populated from .room files by load_room_files()
 
 GUARD_COOLDOWN = 10  # seconds between repeated guard messages per player
 
-# Maps direction player walked to the direction they should enter from
-ENTRY_DIR = {
-    "north": "south",
-    "south": "north",
-    "east": "west",
-    "west": "east",
-    "up": "up",
-    "down": "down",
+# Unified direction data
+DIRECTIONS = {
+    "up":    (0, -1),
+    "down":  (0,  1),
+    "left":  (-1, 0),
+    "right": (1,  0),
 }
 
-MOVE_COOLDOWN = 0.125  # seconds between moves
-ATTACK_COOLDOWN = 0.4  # seconds between attacks
+DIRECTION_OPPOSITES = {"up": "down", "down": "up", "left": "right", "right": "left"}
+
+# Maps direction player walked to the direction they should enter from
+ENTRY_DIR = {
+    "north": "south", "south": "north",
+    "east": "west", "west": "east",
+    "up": "up", "down": "down",
+}
+
+# Spawn points relative to room edges
+EDGE_SPAWN_POINTS = {
+    "north": (7, 1), "south": (7, 9),
+    "east": (13, 5), "west": (1, 5),
+}
+DEFAULT_SPAWN = (7, 5)
+
+# Room dimensions
+ROOM_COLS = 15
+ROOM_ROWS = 11
+
+# Gameplay constants
+MOVE_COOLDOWN = 0.125
+ATTACK_COOLDOWN = 0.4
+HEART_RESTORE_HP = 2
+PLAYER_MAX_HP = 6
+PLAYER_RESPAWN_DELAY = 5.5
 
 # ---------------------------------------------------------------------------
 # Monsters
@@ -340,9 +357,10 @@ class Monster:
         self.kind = kind
         self.alive = True
         self.last_hop_time = time.monotonic()
-        stats = MONSTER_STATS.get(kind, {"hp": 1, "hop_interval": 2.0})
+        stats = MONSTER_STATS.get(kind, {"hp": 1, "hop_interval": 2.0, "damage": 1})
         self.hp = stats["hp"]
         self.hop_interval = stats["hop_interval"]
+        self.damage = stats.get("damage", 1)
 
 # Templates — define what monsters belong in each room (never mutated)
 MONSTER_TEMPLATES = {}  # Populated from .room files by load_room_files()
@@ -449,8 +467,8 @@ class Player:
         self.y = 5
         self.direction = "down"
         self.color_index = color_index
-        self.hp = 6
-        self.max_hp = 6
+        self.hp = PLAYER_MAX_HP
+        self.max_hp = PLAYER_MAX_HP
         self.last_damage_time = 0.0
         self.last_move_time = 0.0
         self.last_attack_time = 0.0
@@ -604,15 +622,10 @@ def create_dungeon() -> DungeonInstance:
             tilemap[9][7] = STAIRS_UP
 
         # Build spawn points
-        spawn_points = {"default": (7, 5)}
-        if "north" in exits:
-            spawn_points["north"] = (7, 1)
-        if "south" in exits:
-            spawn_points["south"] = (7, 9)
-        if "east" in exits:
-            spawn_points["east"] = (13, 5)
-        if "west" in exits:
-            spawn_points["west"] = (1, 5)
+        spawn_points = {"default": DEFAULT_SPAWN}
+        for direction, pos in EDGE_SPAWN_POINTS.items():
+            if direction in exits:
+                spawn_points[direction] = pos
         # Scan for stairs
         for ry, trow in enumerate(tilemap):
             for rx, tile in enumerate(trow):
@@ -779,8 +792,6 @@ async def check_guard_proximity(player: Player):
 # Contact damage
 # ---------------------------------------------------------------------------
 
-DIRECTION_OPPOSITES = {"up": "down", "down": "up", "left": "right", "right": "left"}
-
 async def damage_player(player: Player, damage: int, room_id: str):
     """Apply contact damage to a player from a monster."""
     now = time.monotonic()
@@ -792,13 +803,13 @@ async def damage_player(player: Player, damage: int, room_id: str):
     if player.hp > 0:
         # Calculate knockback — push player away from facing direction
         opp = DIRECTION_OPPOSITES.get(player.direction, "down")
-        kdx, kdy = {"up": (0, -1), "down": (0, 1), "left": (-1, 0), "right": (1, 0)}[opp]
+        kdx, kdy = DIRECTIONS[opp]
         kx, ky = player.x + kdx, player.y + kdy
         knocked = False
         room = ROOMS[room_id]
         tilemap = room["tilemap"]
         guards = GUARDS.get(room_id, [])
-        if 0 <= kx < 15 and 0 <= ky < 11 and tilemap[ky][kx] in WALKABLE_TILES:
+        if 0 <= kx < ROOM_COLS and 0 <= ky < ROOM_ROWS and tilemap[ky][kx] in WALKABLE_TILES:
             if not any(g["x"] == kx and g["y"] == ky for g in guards):
                 player.x, player.y = kx, ky
                 knocked = True
@@ -828,7 +839,7 @@ async def damage_player(player: Player, damage: int, room_id: str):
         })
 
         # Respawn after delay (match client death animation duration)
-        await asyncio.sleep(5.5)
+        await asyncio.sleep(PLAYER_RESPAWN_DELAY)
         old_room = player.room
         player.hp = player.max_hp
         player.room = STARTING_ROOM
@@ -945,9 +956,10 @@ async def handle_move(player: Player, direction: str):
         return
     player.last_move_time = now
 
-    dx, dy = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0, 1)}.get(direction, (0, 0))
-    if dx == 0 and dy == 0:
+    delta = DIRECTIONS.get(direction)
+    if not delta:
         return
+    dx, dy = delta
 
     player.direction = direction
     player.dancing = False
@@ -958,7 +970,7 @@ async def handle_move(player: Player, direction: str):
     tilemap = room["tilemap"]
 
     # Off edge — check for room exit
-    if new_x < 0 or new_x >= 15 or new_y < 0 or new_y >= 11:
+    if new_x < 0 or new_x >= ROOM_COLS or new_y < 0 or new_y >= ROOM_ROWS:
         exit_dir = check_edge_exit(player, new_x, new_y, room)
         if exit_dir:
             await do_room_transition(player, exit_dir)
@@ -1022,15 +1034,14 @@ async def handle_move(player: Player, direction: str):
     if player.hp > 0:
         for monster in get_room_monsters(player.room):
             if monster.alive and monster.x == new_x and monster.y == new_y:
-                stats = MONSTER_STATS.get(monster.kind, {"damage": 1})
-                await damage_player(player, stats["damage"], player.room)
+                await damage_player(player, monster.damage, player.room)
                 break
 
     # Heart pickup
     hearts = room_hearts.get(player.room, [])
     for heart in hearts:
         if heart["x"] == player.x and heart["y"] == player.y and player.hp < player.max_hp:
-            player.hp = min(player.max_hp, player.hp + 2)
+            player.hp = min(player.max_hp, player.hp + HEART_RESTORE_HP)
             hearts.remove(heart)
             await send_to(player, {"type": "hp_update", "hp": player.hp, "max_hp": player.max_hp})
             await broadcast_to_room(player.room, {"type": "heart_collected", "id": heart["id"]})
@@ -1060,7 +1071,7 @@ async def handle_attack(player: Player):
     })
 
     # Hit detection — check if sword hits a monster
-    dx, dy = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0, 1)}.get(player.direction, (0, 0))
+    dx, dy = DIRECTIONS.get(player.direction, (0, 0))
     hit_x = player.x + dx
     hit_y = player.y + dy
     for i, monster in enumerate(get_room_monsters(player.room)):
@@ -1128,7 +1139,7 @@ async def monster_tick():
                 random.shuffle(directions)
                 for ddx, ddy in directions:
                     nx, ny = monster.x + ddx, monster.y + ddy
-                    if nx < 0 or nx >= 15 or ny < 0 or ny >= 11:
+                    if nx < 0 or nx >= ROOM_COLS or ny < 0 or ny >= ROOM_ROWS:
                         continue
                     if tilemap[ny][nx] not in WALKABLE_TILES:
                         continue
@@ -1145,8 +1156,7 @@ async def monster_tick():
                     # Check if monster landed on a player
                     for p in players_in_room(room_id):
                         if p.x == nx and p.y == ny and p.hp > 0:
-                            stats = MONSTER_STATS.get(monster.kind, {"damage": 1})
-                            await damage_player(p, stats["damage"], room_id)
+                            await damage_player(p, monster.damage, room_id)
                     break
 
 # ---------------------------------------------------------------------------
@@ -1241,7 +1251,7 @@ async def handle_connection(websocket):
         log_event("JOIN", f"{name} ({player.description})")
         print(f"[JOIN] {name} from {addr}")
 
-        await send_to(player, {"type": "login_ok", "color_index": color_index, "hp": 6, "max_hp": 6})
+        await send_to(player, {"type": "login_ok", "color_index": color_index, "hp": PLAYER_MAX_HP, "max_hp": PLAYER_MAX_HP})
         await on_player_enter_room(player.room)
         await send_room_enter(player)
         await broadcast_to_room(
@@ -1301,6 +1311,7 @@ CLIENT_DIR = Path(__file__).parent
 STATIC_FILES = {
     "/":            ("client.html", "text/html; charset=utf-8"),
     "/index.html":  ("client.html", "text/html; charset=utf-8"),
+    "/sprite_data.js": ("sprite_data.js", "application/javascript; charset=utf-8"),
     "/sprites.js":  ("sprites.js",  "application/javascript; charset=utf-8"),
     "/tiles.js":    ("tiles.js",    "application/javascript; charset=utf-8"),
     "/music.js":    ("music.js",    "application/javascript; charset=utf-8"),
