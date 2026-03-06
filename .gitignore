@@ -5,3 +5,4 @@ venv/
 collab_package/
 notzelda_collab_rudy.zip
 event_log.txt
+.env
