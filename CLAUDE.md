@@ -8,8 +8,9 @@ A browser-based multiplayer MUD (Multi-User Dungeon) rendered as a Zelda-style t
 
 ## General Rules
 
-
 If a bash command starts with "cd /c/Folder &&", where /c/Folder is the location of CLAUDE.md, leave the cd command out. It is not necessary.
+
+**NEVER run `python worldgen.py` without explicit user permission.** The overworld `.room` files in `rooms/` contain hand-edited changes that worldgen will overwrite. Running it will destroy manual edits. Always warn the user that data will be lost before re-running.
 
 ## Architecture
 
