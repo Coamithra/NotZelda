@@ -321,6 +321,7 @@
 
   // Transition state
   let transition = null;      // {direction, oldCanvas, startTime, duration}
+  let gameLoopStarted = false;
 
 
 
@@ -1015,6 +1016,7 @@
   // When user comes back, check connection and reconnect if needed.
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && loginScreen.classList.contains("hidden")) {
+      keysDown = {};
       dbg(`Tab visible, ws.readyState=${ws ? ws.readyState : 'null'}`);
       if (!ws || ws.readyState !== WebSocket.OPEN) {
         dbg(`Connection dead on resume, reconnecting`);
@@ -1030,10 +1032,14 @@
         myColorIndex = msg.color_index;
         myHp = msg.hp;
         myMaxHp = msg.max_hp;
+        playerFlags = new Set();
         loginScreen.classList.add("hidden");
         gameScreen.classList.add("active");
         MusicPlayer.start();
-        requestAnimationFrame(gameLoop);
+        if (!gameLoopStarted) {
+          gameLoopStarted = true;
+          requestAnimationFrame(gameLoop);
+        }
         break;
 
       case "room_enter": {

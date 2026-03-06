@@ -8,7 +8,6 @@ Then open http://localhost:8080 in your browser.
 import asyncio
 import copy
 import json
-import html
 import time
 from datetime import datetime
 from http import HTTPStatus
@@ -573,6 +572,9 @@ def create_dungeon() -> DungeonInstance:
 
     # Assign templates to cells
     template_keys = list(DUNGEON_TEMPLATES.keys())
+    if not template_keys:
+        print("[DUNGEON] No dungeon templates loaded, cannot create dungeon")
+        return None
     random.shuffle(template_keys)
     # Cycle through templates if we have more cells than templates
     room_map = {}
@@ -726,7 +728,9 @@ async def do_room_transition(player: Player, exit_direction: str):
     # Dungeon entrance — create instance on demand
     if new_room_id == "d1_entrance":
         if active_dungeon is None:
-            create_dungeon()
+            if create_dungeon() is None:
+                await send_to(player, {"type": "info", "text": "The dungeon entrance is sealed."})
+                return
         new_room_id = active_dungeon.entrance_room_id
 
     new_room = ROOMS[new_room_id]
@@ -951,6 +955,8 @@ async def handle_quest_npc(player: Player, guard: dict):
 
 
 async def handle_move(player: Player, direction: str):
+    if player.hp <= 0:
+        return
     now = time.monotonic()
     if now - player.last_move_time < MOVE_COOLDOWN:
         return
@@ -1055,6 +1061,8 @@ async def handle_move(player: Player, direction: str):
 # ---------------------------------------------------------------------------
 
 async def handle_attack(player: Player):
+    if player.hp <= 0:
+        return
     if not player.has_flag("has_sword"):
         await send_to(player, {"type": "info", "text": "You don't have a weapon."})
         return
@@ -1230,8 +1238,8 @@ async def handle_connection(websocket):
             print(f"[CONN] {addr} sent non-login first message, dropping")
             return
 
-        name = html.escape(data.get("name", "").strip()[:20])
-        desc = html.escape(data.get("description", "").strip()[:80])
+        name = data.get("name", "").strip()[:20]
+        desc = data.get("description", "").strip()[:80]
 
         if not name:
             await websocket.send(json.dumps({"type": "error", "text": "Name cannot be empty."}))

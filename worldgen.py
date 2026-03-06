@@ -538,12 +538,12 @@ def place_feature(tm, feature):
 # NPC data
 # ---------------------------------------------------------------------------
 NPCS = {
-    (0, 7):  ("Ranger", "Stay on the roads if you value your life."),
-    (1, 3):  ("Mountain_Hermit", "The caves below hold ancient secrets."),
-    (3, 1):  ("Desert_Nomad", "Water is scarce. The oasis lies to the south."),
-    (4, 11): ("Swamp_Witch", "Beware the deep waters. Not all who sink are found."),
-    (1, 12): ("Ghost", "This land was not always dead. The castle fell, and darkness spread."),
-    (7, 6):  ("Castle_Guardian", "None shall pass... oh wait, the door's already broken."),
+    (0, 7):  ("Ranger", "ranger", "Stay on the roads if you value your life."),
+    (1, 3):  ("Mountain_Hermit", "elder", "The caves below hold ancient secrets."),
+    (3, 1):  ("Desert_Nomad", "nomad", "Water is scarce. The oasis lies to the south."),
+    (4, 11): ("Swamp_Witch", "witch", "Beware the deep waters. Not all who sink are found."),
+    (1, 12): ("Ghost", "ghost", "This land was not always dead. The castle fell, and darkness spread."),
+    (7, 6):  ("Castle_Guardian", "guard", "None shall pass... oh wait, the door's already broken."),
 }
 
 # ---------------------------------------------------------------------------
@@ -586,7 +586,7 @@ def make_interior_rooms():
         "exits": {"up": "ow_5_2"},
         "tilemap": make_oasis_tilemap(),
         "monsters": [],
-        "npcs": [("Oasis_Keeper", 7, 3, "Rest here, traveler. The desert shows no mercy.")],
+        "npcs": [("Oasis_Keeper", 7, 3, "elder", "Rest here, traveler. The desert shows no mercy.")],
     })
 
     # Swamp Witch Hut Interior
@@ -598,7 +598,7 @@ def make_interior_rooms():
         "exits": {"up": "ow_4_11"},
         "tilemap": make_hut_tilemap(),
         "monsters": [],
-        "npcs": [("Witch", 7, 4, "Eye of newt, wing of bat... oh, a visitor!")],
+        "npcs": [("Witch", 7, 4, "witch", "Eye of newt, wing of bat... oh, a visitor!")],
     })
 
     return interiors
@@ -699,11 +699,14 @@ def write_room_file(room_id, name, biome, music, exits, tilemap, npcs=None, mons
     lines.append("---")
     if npcs:
         for npc in npcs:
-            if len(npc) == 4:
+            if len(npc) == 5:
+                npc_name, nx, ny, npc_sprite, dialog = npc
+            elif len(npc) == 4:
                 npc_name, nx, ny, dialog = npc
+                npc_sprite = "guard"
             else:
-                npc_name, nx, ny, dialog = npc[0], npc[1], npc[2], npc[3]
-            lines.append(f"npc {npc_name} {nx} {ny} {dialog}")
+                npc_name, nx, ny, npc_sprite, dialog = npc[0], npc[1], npc[2], "guard", npc[3]
+            lines.append(f"npc {npc_name} {nx} {ny} {npc_sprite} {dialog}")
     if monsters:
         for m in monsters:
             kind, mx, my = m
@@ -783,8 +786,8 @@ def generate():
         # NPCs
         npcs = []
         if (r, c) in NPCS:
-            npc_name, dialog = NPCS[(r, c)]
-            npcs.append((npc_name, 7, 3, dialog))
+            npc_name, npc_sprite, dialog = NPCS[(r, c)]
+            npcs.append((npc_name, 7, 3, npc_sprite, dialog))
 
         # Monsters — place based on biome
         room_monsters = []
