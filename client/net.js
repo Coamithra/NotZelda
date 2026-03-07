@@ -1,0 +1,455 @@
+/* WebSocket connection, message handling, and reconnection logic. */
+
+function dbg(msg) {
+  const ts = new Date().toLocaleTimeString();
+  const line = `${ts} ${msg}`;
+  console.log("[WS] " + msg);
+  G.debugLog.push(line);
+  if (G.debugLog.length > G.MAX_DEBUG_LINES) G.debugLog.shift();
+}
+
+function connect(name, description) {
+  G.lastLoginName = name;
+  G.lastLoginDesc = description;
+  if (G.reconnectTimer) { clearTimeout(G.reconnectTimer); G.reconnectTimer = null; }
+  if (G.pingInterval) { clearInterval(G.pingInterval); G.pingInterval = null; }
+
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  dbg(`Connecting...`);
+  G.ws = new WebSocket(`${proto}//${location.host}/ws`);
+
+  G.ws.onopen = () => {
+    dbg(`Connected, logging in`);
+    G.reconnectCount = 0;
+    G.ws.send(JSON.stringify({ type: "login", name, description }));
+    G.pingInterval = setInterval(() => {
+      if (G.ws && G.ws.readyState === WebSocket.OPEN) {
+        G.ws.send(JSON.stringify({ type: "ping" }));
+      }
+    }, 15000);
+  };
+
+  G.ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === "pong") return;
+    handleMessage(msg);
+  };
+
+  G.ws.onclose = (ev) => {
+    dbg(`Closed: code=${ev.code} reason='${ev.reason}' clean=${ev.wasClean}`);
+    if (G.pingInterval) { clearInterval(G.pingInterval); G.pingInterval = null; }
+    if (!G.loginScreen.classList.contains("hidden")) return;
+    G.infoMessages.push({ text: "Disconnected — reconnecting...", expires: Date.now() + 4000 });
+    scheduleReconnect();
+  };
+
+  G.ws.onerror = (ev) => {
+    dbg(`Error event`);
+    G.loginError.textContent = "Could not connect to server.";
+  };
+}
+
+function scheduleReconnect() {
+  if (G.reconnectTimer) return;
+  G.reconnectCount++;
+  const delay = Math.min(G.reconnectCount * 2000, 10000);
+  dbg(`Reconnect #${G.reconnectCount} in ${delay/1000}s`);
+  G.reconnectTimer = setTimeout(() => {
+    G.reconnectTimer = null;
+    connect(G.lastLoginName, G.lastLoginDesc);
+  }, delay);
+}
+
+function guessTransitionDir(fromId, toId, exitDir, fromExits) {
+  if (exitDir) return exitDir;
+  if (fromExits) {
+    for (const [dir, target] of Object.entries(fromExits)) {
+      if (target === toId) return dir;
+    }
+  }
+  return "north";
+}
+
+function handleMessage(msg) {
+  switch (msg.type) {
+    case "login_ok":
+      G.myColorIndex = msg.color_index;
+      G.myHp = msg.hp;
+      G.myMaxHp = msg.max_hp;
+      G.playerFlags = new Set();
+      G.loginScreen.classList.add("hidden");
+      G.gameScreen.classList.add("active");
+      MusicPlayer.start();
+      if (!G.gameLoopStarted) {
+        G.gameLoopStarted = true;
+        requestAnimationFrame(gameLoop);
+      }
+      break;
+
+    case "room_enter": {
+      let oldCanvas = null;
+      const prevRoom = G.currentRoom;
+      if (prevRoom) {
+        oldCanvas = document.createElement("canvas");
+        oldCanvas.width = CW;
+        oldCanvas.height = CH;
+        oldCanvas.getContext("2d").drawImage(G.canvas, 0, 0);
+      }
+
+      const prevExits = G.currentRoom ? G.currentRoom.exits : null;
+      G.currentRoom = {
+        name: msg.name,
+        tilemap: msg.tilemap,
+        room_id: msg.room_id,
+        exits: msg.exits || {},
+        biome: msg.biome || "town",
+      };
+      G.myPlayer = {
+        x: msg.your_pos.x,
+        y: msg.your_pos.y,
+        direction: G.myPlayer ? G.myPlayer.direction : "down",
+        color_index: G.myColorIndex,
+      };
+
+      MusicPlayer.setRoom(msg.room_id, msg.biome, msg.music);
+
+      // Register any custom sprites/tiles sent with this room
+      if (msg.custom_sprites) {
+        for (const [kind, spriteData] of Object.entries(msg.custom_sprites)) {
+          if (!MONSTER_SPRITE_DATA[kind] && !customMonsterSprites[kind]) {
+            customMonsterSprites[kind] = spriteData;
+          }
+        }
+      }
+      if (msg.custom_death_sprites) {
+        for (const [kind, spriteData] of Object.entries(msg.custom_death_sprites)) {
+          if (!DEATH_SPRITE_DATA[kind] && !customDeathSprites[kind]) {
+            customDeathSprites[kind] = spriteData;
+          }
+        }
+      }
+      if (msg.custom_tiles) {
+        for (const [tileId, recipe] of Object.entries(msg.custom_tiles)) {
+          if (!customTiles[tileId]) {
+            customTiles[tileId] = recipe;
+            delete tileCanvases[tileId];
+          }
+        }
+      }
+
+      if (msg.hp !== undefined) { G.myHp = msg.hp; G.myMaxHp = msg.max_hp; }
+
+      G.otherPlayers = {};
+      G.dancingPlayers = {};
+      G.attackingPlayers = {};
+      G.speechBubbles = [];
+      G.guards = msg.guards || [];
+      G.dyingMonsters = [];
+      G.heartPickups = [];
+      G.dyingPlayerSelf = null;
+      G.dyingOtherPlayers = {};
+      G.projectiles = [];
+      G.areaWarnings = [];
+      G.chargeTrails = [];
+      G.chargePreps = [];
+      G.monsterAttackFlashes = [];
+      G.monsters = (msg.monsters || []).map(m => ({
+        id: m.id, kind: m.kind, x: m.x, y: m.y, displayX: m.x, displayY: m.y,
+      }));
+      for (const p of msg.players) {
+        G.otherPlayers[p.name] = {
+          x: p.x, y: p.y,
+          displayX: p.x, displayY: p.y,
+          direction: p.direction,
+          color_index: p.color_index,
+          moving: false,
+        };
+        if (p.dancing) startDance(p.name);
+      }
+
+      G.displayX = G.myPlayer.x;
+      G.displayY = G.myPlayer.y;
+
+      if (oldCanvas && prevRoom) {
+        const transDir = guessTransitionDir(prevRoom.room_id, msg.room_id, msg.exit_direction, prevExits);
+        const isFade = transDir === "up" || transDir === "down";
+        G.transition = {
+          type: isFade ? "fade" : "slide",
+          direction: transDir,
+          oldCanvas: oldCanvas,
+          startTime: Date.now(),
+          duration: isFade ? 500 : 300,
+        };
+      }
+      break;
+    }
+
+    case "player_moved":
+      stopDance(msg.name);
+      delete G.attackingPlayers[msg.name];
+      if (msg.name === G.myName) {
+        G.myPlayer.x = msg.x;
+        G.myPlayer.y = msg.y;
+        G.myPlayer.direction = msg.direction;
+      } else if (G.otherPlayers[msg.name]) {
+        G.otherPlayers[msg.name].x = msg.x;
+        G.otherPlayers[msg.name].y = msg.y;
+        G.otherPlayers[msg.name].direction = msg.direction;
+      }
+      break;
+
+    case "player_entered":
+      if (msg.name !== G.myName) {
+        G.otherPlayers[msg.name] = {
+          x: msg.x, y: msg.y,
+          displayX: msg.x, displayY: msg.y,
+          direction: msg.direction,
+          color_index: msg.color_index,
+          moving: false,
+        };
+        if (msg.dancing) startDance(msg.name);
+      }
+      break;
+
+    case "player_left":
+      delete G.otherPlayers[msg.name];
+      stopDance(msg.name);
+      break;
+
+    case "attack":
+      startAttack(msg.name, msg.direction);
+      break;
+
+    case "dance":
+      startDance(msg.name);
+      break;
+
+    case "chat":
+      G.speechBubbles.push({
+        from: msg.from,
+        text: msg.text,
+        expires: Date.now() + 4000,
+      });
+      break;
+
+    case "player_hurt": {
+      if (msg.name === G.myName) {
+        G.myHp = msg.hp;
+        G.myPlayer.x = msg.x;
+        G.myPlayer.y = msg.y;
+        G.hurtFlash = Date.now() + 300;
+        G.invincibleUntil = Date.now() + 1500;
+      } else if (G.otherPlayers[msg.name]) {
+        G.otherPlayers[msg.name].x = msg.x;
+        G.otherPlayers[msg.name].y = msg.y;
+        G.otherPlayers[msg.name].hurtFlash = Date.now() + 300;
+      }
+      break;
+    }
+
+    case "you_died":
+      G.dyingPlayerSelf = { x: msg.x, y: msg.y, frame: 0, startTime: Date.now() };
+      G.myHp = 0;
+      break;
+
+    case "player_died":
+      delete G.otherPlayers[msg.name];
+      stopDance(msg.name);
+      G.dyingOtherPlayers[msg.name] = {
+        x: msg.x, y: msg.y,
+        color_index: msg.color_index,
+        frame: 0,
+        nextTime: Date.now() + DYING_PLAYER_FRAME_MS,
+      };
+      break;
+
+    case "hp_update":
+      G.myHp = msg.hp;
+      G.myMaxHp = msg.max_hp;
+      break;
+
+    case "heart_spawned":
+      G.heartPickups.push({ id: msg.id, x: msg.x, y: msg.y });
+      break;
+
+    case "heart_collected":
+      G.heartPickups = G.heartPickups.filter(h => h.id !== msg.id);
+      break;
+
+    case "monster_moved": {
+      const mon = G.monsters.find(m => m.id === msg.id);
+      if (mon) { mon.x = msg.x; mon.y = msg.y; }
+      break;
+    }
+
+    case "monster_killed": {
+      const idx = G.monsters.findIndex(m => m.id === msg.id);
+      if (idx !== -1) {
+        const mon = G.monsters[idx];
+        G.dyingMonsters.push({ kind: mon.kind, x: msg.x, y: msg.y, frame: 0, nextTime: Date.now() + DYING_MONSTER_FRAME_MS });
+        G.monsters.splice(idx, 1);
+      }
+      break;
+    }
+
+    case "monster_hit": {
+      const hitMon = G.monsters.find(m => m.id === msg.id);
+      if (hitMon) {
+        hitMon.hitFlash = Date.now() + 200;
+      }
+      break;
+    }
+
+    case "monster_spawned":
+      if (msg.custom_sprites) {
+        for (const [kind, spriteData] of Object.entries(msg.custom_sprites)) {
+          if (!MONSTER_SPRITE_DATA[kind] && !customMonsterSprites[kind]) {
+            customMonsterSprites[kind] = spriteData;
+          }
+        }
+      }
+      if (msg.custom_death_sprites) {
+        for (const [kind, spriteData] of Object.entries(msg.custom_death_sprites)) {
+          if (!DEATH_SPRITE_DATA[kind] && !customDeathSprites[kind]) {
+            customDeathSprites[kind] = spriteData;
+          }
+        }
+      }
+      G.monsters.push({ id: msg.id, kind: msg.kind, x: msg.x, y: msg.y, displayX: msg.x, displayY: msg.y });
+      break;
+
+    // --- Stage 5: Monster attack messages ---
+    case "projectile_spawned":
+      G.projectiles.push({
+        id: msg.id, x: msg.x, y: msg.y,
+        displayX: msg.x, displayY: msg.y,
+        dx: msg.dx, dy: msg.dy, color: msg.color,
+      });
+      break;
+
+    case "projectile_moved": {
+      const proj = G.projectiles.find(p => p.id === msg.id);
+      if (proj) { proj.x = msg.x; proj.y = msg.y; }
+      break;
+    }
+
+    case "projectile_hit":
+      G.projectiles = G.projectiles.filter(p => p.id !== msg.id);
+      if (msg.x !== undefined) {
+        G.monsterAttackFlashes.push({ x: msg.x, y: msg.y, startTime: Date.now() });
+      }
+      break;
+
+    case "projectile_gone":
+      G.projectiles = G.projectiles.filter(p => p.id !== msg.id);
+      break;
+
+    case "monster_attack":
+      G.monsterAttackFlashes.push({ x: msg.target_x, y: msg.target_y, startTime: Date.now() });
+      break;
+
+    case "charge_prep": {
+      const prepMon = G.monsters.find(m => m.id === msg.id);
+      if (prepMon) prepMon.chargePrep = Date.now();
+      G.chargePreps = G.chargePreps.filter(p => p.id !== msg.id);
+      G.chargePreps.push({ id: msg.id, lane: msg.lane, startTime: Date.now() });
+      break;
+    }
+
+    case "monster_charged": {
+      const chargedMon = G.monsters.find(m => m.id === msg.id);
+      if (chargedMon) {
+        chargedMon.x = msg.x;
+        chargedMon.y = msg.y;
+        chargedMon.displayX = msg.x;
+        chargedMon.displayY = msg.y;
+        chargedMon.chargePrep = null;
+      }
+      G.chargePreps = G.chargePreps.filter(p => p.id !== msg.id);
+      G.chargeTrails.push({ path: msg.path, startTime: Date.now() });
+      break;
+    }
+
+    case "teleport_start": {
+      const tpMon = G.monsters.find(m => m.id === msg.id);
+      if (tpMon) {
+        tpMon.teleportAlpha = 1;
+        const fadeOut = () => {
+          if (tpMon.teleportAlpha > 0) {
+            tpMon.teleportAlpha -= 0.1;
+            setTimeout(fadeOut, 30);
+          } else {
+            tpMon.teleportAlpha = 0;
+          }
+        };
+        fadeOut();
+      }
+      if (msg.target_x !== undefined) {
+        G.areaWarnings.push({ x: msg.target_x, y: msg.target_y, range: 0, startTime: Date.now(), duration: (msg.delay || 0.5) * 1000 });
+      }
+      break;
+    }
+
+    case "teleport_end": {
+      const tpEndMon = G.monsters.find(m => m.id === msg.id);
+      if (tpEndMon) {
+        tpEndMon.x = msg.x;
+        tpEndMon.y = msg.y;
+        tpEndMon.displayX = msg.x;
+        tpEndMon.displayY = msg.y;
+        tpEndMon.teleportAlpha = 0;
+        const fadeIn = () => {
+          if (tpEndMon.teleportAlpha < 1) {
+            tpEndMon.teleportAlpha += 0.1;
+            setTimeout(fadeIn, 30);
+          } else {
+            tpEndMon.teleportAlpha = 1;
+          }
+        };
+        fadeIn();
+      }
+      break;
+    }
+
+    case "area_warning":
+      G.areaWarnings.push({ x: msg.x, y: msg.y, range: msg.range, startTime: Date.now(), duration: (msg.duration || 0.75) * 1000 });
+      break;
+
+    case "area_attack":
+      G.monsterAttackFlashes.push({ x: msg.x, y: msg.y, startTime: Date.now() });
+      break;
+
+    case "quest_update":
+      break;
+
+    case "sword_obtained": {
+      const now = Date.now();
+      G.swordPickups.push({ x: G.displayX, y: G.displayY, frame: 0, nextTime: now + 200 });
+      setTimeout(() => {
+        G.playerFlags.add("has_sword");
+        G.infoMessages.push({ text: "You obtained a sword!", expires: Date.now() + 4000 });
+      }, 800);
+      break;
+    }
+
+    case "sword_effect": {
+      const other = G.otherPlayers[msg.name];
+      if (other) {
+        G.swordPickups.push({ x: other.displayX, y: other.displayY, frame: 0, nextTime: Date.now() + 200 });
+      }
+      break;
+    }
+
+    case "info": {
+      const lines = msg.text.split("\n");
+      for (const line of lines) {
+        G.infoMessages.push({ text: line, expires: Date.now() + 5000 });
+      }
+      break;
+    }
+
+    case "error":
+      G.loginError.textContent = msg.text;
+      break;
+  }
+}
