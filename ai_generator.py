@@ -20,8 +20,8 @@ from dataclasses import dataclass, field
 # Configuration
 # ---------------------------------------------------------------------------
 
-ANTHROPIC_MODEL = "claude-sonnet-4-6"
-GENERATION_TIMEOUT = 30.0       # seconds before giving up on API call
+ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
+GENERATION_TIMEOUT = 15.0       # seconds before giving up on API call
 MAX_API_CALLS_PER_MINUTE = 5
 MAX_API_CALLS_PER_DAY = 200
 MAX_RETRIES = 1                 # single retry on validation failure
@@ -82,9 +82,9 @@ class UsageTracker:
         self._save()
 
     def estimated_cost(self) -> float:
-        # Sonnet pricing: $3.00/M input, $15.00/M output
-        return (self.total_input_tokens * 3.00 / 1_000_000 +
-                self.total_output_tokens * 15.00 / 1_000_000)
+        # Haiku pricing: $1.00/M input, $5.00/M output
+        return (self.total_input_tokens * 1.00 / 1_000_000 +
+                self.total_output_tokens * 5.00 / 1_000_000)
 
     def _save(self):
         self._file.parent.mkdir(parents=True, exist_ok=True)
@@ -115,8 +115,8 @@ You generate complete dungeon rooms as JSON. Each room has a 15x11 tilemap, mons
 - Each cell is a 2-character tile code OR a custom tile string ID
 - Built-in dungeon tile codes: DW (dungeon wall), DF (dungeon floor), PL (pillar), SC (sconce wall)
 - Custom tiles use their string ID (e.g. "lava_crack")
-- Row 0 (top) and row 10 (bottom): columns 0-5 and 9-14 MUST be DW. Columns 6-8 MUST be DF (for north/south doorways)
-- Column 0 (left) and column 14 (right): rows 0-3 and 7-10 MUST be DW. Rows 4-6 MUST be DF (for east/west doorways)
+- Row 0 (top) and row 10 (bottom): columns 0-5 and 9-14 MUST be non-walkable (DW, PL, SC, or a non-walkable custom tile). Columns 6-8 MUST be walkable (DF or a walkable custom tile) for north/south doorways
+- Column 0 (left) and column 14 (right): rows 0-3 and 7-10 MUST be non-walkable. Rows 4-6 MUST be walkable for east/west doorways
 - Interior (rows 1-9, cols 1-13 excluding doorway edges) is your creative space
 - IMPORTANT: Use DW tiles INSIDE the room for interesting shapes:
   - L-corridors, T-junctions, winding paths, chokepoints, alcoves, divided chambers
@@ -124,6 +124,7 @@ You generate complete dungeon rooms as JSON. Each room has a 15x11 tilemap, mons
   - Mix it up: some symmetric, some asymmetric
   - ALL four doorways must be connected by walkable tiles
 - Monsters and players must be placed only on walkable tiles (DF or walkable custom tiles; PL, SC are NOT walkable)
+- Pick a dominant walkable tile for most floors and a dominant non-walkable tile for most interior walls. You can still scatter other tile types or use them in larger patches — be creative!
 
 ## MONSTER DEFINITION FORMAT
 Each new monster needs:
@@ -300,15 +301,17 @@ def _build_prompt(theme: str, difficulty: int,
     ]
     tile_summary = ", ".join(builtin_tiles + custom_tile_parts)
 
-    if existing_tiles:
-        if tile_library_full:
-            parts.append(f"\nAvailable tiles (library FULL — use ONLY these, do NOT create new ones): {tile_summary}")
-        else:
-            parts.append(f"\nAvailable tiles: {tile_summary}")
-            parts.append("You MUST create at least 1 new custom tile (in new_tiles) that fits the theme — either a walkable floor or a non-walkable wall. Use it in your tilemap for visual variety.")
+    if tile_library_full:
+        parts.append(f"\nAvailable tiles (library FULL — use ONLY these, do NOT create new ones): {tile_summary}")
+    elif existing_tiles:
+        parts.append(f"\nAvailable tiles: {tile_summary}")
+        parts.append("Create at least 1 new custom tile in new_tiles that fits the theme.")
     else:
         parts.append(f"\nAvailable tiles: {tile_summary}")
-        parts.append("You MUST create at least 1 new custom tile (in new_tiles) that fits the theme — either a walkable floor or a non-walkable wall. Use it in your tilemap for visual variety.")
+        parts.append("Create at least 2 new custom tiles in new_tiles: one walkable floor AND one non-walkable wall.")
+
+    if not tile_library_full:
+        parts.append("Pick a dominant walkable tile for most floors and a dominant non-walkable tile for most interior walls — these can be existing or newly created tiles.")
 
     # Retry with validation error
     if validation_error:
@@ -339,17 +342,17 @@ FEW_SHOT_EXAMPLES = [
         "content": json.dumps({
             "name": "Ember Chamber",
             "tilemap": [
-                ["DW","DW","DW","DW","DW","DW","DF","DF","DF","DW","DW","DW","DW","DW","DW"],
-                ["DW","DF","DF","DF","DF","DF","DF","DF","DF","DW","DW","SC","DF","DF","DW"],
-                ["DW","DF","DF","DF","DF","DF","DF","DF","DW","DW","DF","DF","DF","DF","DW"],
-                ["DW","DW","DW","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DW"],
-                ["DF","DF","DF","DF","DF","DW","DW","DF","DF","DF","DF","PL","DF","DF","DF"],
-                ["DF","DF","DF","DF","DF","DF","DW","DF","ember_floor","DF","DF","DF","DF","DF","DF"],
-                ["DF","DF","PL","DF","DF","DF","DF","DF","DF","DW","DF","DF","DF","DF","DF"],
-                ["DW","DF","DF","DF","DF","DF","DF","ember_floor","DW","DW","DW","DF","DF","DF","DW"],
-                ["DW","DF","DF","DF","DW","DW","DF","DF","DF","DF","DW","DW","DF","DF","DW"],
-                ["DW","DF","DF","DW","DW","DF","DF","DF","DF","DF","DF","DF","DF","DF","DW"],
-                ["DW","DW","DW","DW","DW","DW","DF","DF","DF","DW","DW","DW","DW","DW","DW"],
+                ["charred_wall","charred_wall","charred_wall","charred_wall","charred_wall","charred_wall","ember_floor","ember_floor","ember_floor","charred_wall","charred_wall","charred_wall","charred_wall","charred_wall","charred_wall"],
+                ["charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall","charred_wall","charred_wall","ember_floor","ember_floor","charred_wall"],
+                ["charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall","charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall"],
+                ["charred_wall","charred_wall","charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall"],
+                ["ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall","charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall","ember_floor","ember_floor","ember_floor"],
+                ["ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor"],
+                ["ember_floor","ember_floor","charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor"],
+                ["charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall","charred_wall","charred_wall","ember_floor","ember_floor","ember_floor","charred_wall"],
+                ["charred_wall","ember_floor","ember_floor","ember_floor","charred_wall","charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall","charred_wall","ember_floor","ember_floor","charred_wall"],
+                ["charred_wall","ember_floor","ember_floor","charred_wall","charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall"],
+                ["charred_wall","charred_wall","charred_wall","charred_wall","charred_wall","charred_wall","ember_floor","ember_floor","ember_floor","charred_wall","charred_wall","charred_wall","charred_wall","charred_wall","charred_wall"],
             ],
             "new_tiles": [
                 {
@@ -361,6 +364,18 @@ FEW_SHOT_EXAMPLES = [
                         {"op": "fill", "color": "base"},
                         {"op": "noise", "color": "alt", "density": 0.4},
                         {"op": "pixels", "pixels": [["glow",3,7],["glow",10,4],["glow",6,12],["glow",13,9]]},
+                    ],
+                },
+                {
+                    "id": "charred_wall",
+                    "walkable": False,
+                    "tags": ["fire", "wall"],
+                    "colors": {"base": "#2a1a1a", "alt": "#1a0a0a", "crack": "#553310"},
+                    "operations": [
+                        {"op": "fill", "color": "base"},
+                        {"op": "noise", "color": "alt", "density": 0.5},
+                        {"op": "bricks"},
+                        {"op": "pixels", "pixels": [["crack",2,5],["crack",3,5],["crack",10,3],["crack",11,3],["crack",7,10]]},
                     ],
                 },
             ],
@@ -705,21 +720,28 @@ def validate_room_response(data: dict, existing_tile_ids: set[str] | None = None
                 errors.append(f"tilemap[{row_idx}][{col_idx}] unknown tile: {tile!r}")
 
     # Validate doorway constraints (borders must have correct tiles)
+    walkable_for_doorway = {"DF"} | new_walkable_tiles | existing_walkable_tiles
     if len(tilemap) == 11 and all(isinstance(r, list) and len(r) == 15 for r in tilemap):
-        # Top/bottom rows: cols 0-5 and 9-14 = DW, cols 6-8 = DF
+        # Top/bottom rows: cols 0-5 and 9-14 = non-walkable, cols 6-8 = walkable
         for row_idx in (0, 10):
             for col_idx in range(15):
-                expected = "DF" if 6 <= col_idx <= 8 else "DW"
                 actual = tilemap[row_idx][col_idx]
-                if actual != expected:
-                    errors.append(f"tilemap[{row_idx}][{col_idx}] must be {expected} (doorway edge), got {actual!r}")
-        # Left/right columns: rows 0-3 and 7-10 = DW, rows 4-6 = DF
+                if 6 <= col_idx <= 8:
+                    if actual not in walkable_for_doorway:
+                        errors.append(f"tilemap[{row_idx}][{col_idx}] must be walkable (doorway), got {actual!r}")
+                else:
+                    if actual in walkable_for_doorway:
+                        errors.append(f"tilemap[{row_idx}][{col_idx}] must be non-walkable (border), got {actual!r}")
+        # Left/right columns: rows 0-3 and 7-10 = non-walkable, rows 4-6 = walkable
         for col_idx in (0, 14):
             for row_idx in range(11):
-                expected = "DF" if 4 <= row_idx <= 6 else "DW"
                 actual = tilemap[row_idx][col_idx]
-                if actual != expected:
-                    errors.append(f"tilemap[{row_idx}][{col_idx}] must be {expected} (doorway edge), got {actual!r}")
+                if 4 <= row_idx <= 6:
+                    if actual not in walkable_for_doorway:
+                        errors.append(f"tilemap[{row_idx}][{col_idx}] must be walkable (doorway), got {actual!r}")
+                else:
+                    if actual in walkable_for_doorway:
+                        errors.append(f"tilemap[{row_idx}][{col_idx}] must be non-walkable (border), got {actual!r}")
 
     # -- doorway reachability (flood fill) --
     if len(tilemap) == 11 and all(isinstance(r, list) and len(r) == 15 for r in tilemap):
@@ -927,15 +949,33 @@ def validate_room_response(data: dict, existing_tile_ids: set[str] | None = None
 # Main generation function
 # ---------------------------------------------------------------------------
 
-def _dump_ai_output(raw_text: str, label: str = "failed") -> str:
-    """Save raw AI output to a timestamped file for debugging. Returns the filename."""
+_PROMPT_DIR = Path(__file__).parent / "tmp_prompts"
+
+
+def _dump_text(text: str, prefix: str, label: str = "") -> str:
+    """Save text to a timestamped file in tmp_prompts/. Returns the filename."""
     from datetime import datetime
+    _PROMPT_DIR.mkdir(exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"ai_output_{ts}.txt"
-    filepath = Path(__file__).parent / filename
-    filepath.write_text(raw_text, encoding="utf-8")
-    print(f"[GEN] Raw AI output saved to {filename} ({label})")
+    filename = f"{prefix}_{ts}.txt"
+    filepath = _PROMPT_DIR / filename
+    filepath.write_text(text, encoding="utf-8")
+    suffix = f" ({label})" if label else ""
+    print(f"[GEN] Saved {filepath.name}{suffix}")
     return filename
+
+
+def _dump_ai_output(raw_text: str, label: str = "failed") -> str:
+    """Save raw AI output for debugging."""
+    return _dump_text(raw_text, "response", label)
+
+
+def _dump_prompt(system: str, messages: list, label: str = "") -> str:
+    """Save the full prompt (system + messages) for debugging."""
+    parts = [f"=== SYSTEM PROMPT ===\n{system}\n"]
+    for msg in messages:
+        parts.append(f"=== {msg['role'].upper()} ===\n{msg['content']}\n")
+    return _dump_text("\n".join(parts), "prompt", label)
 
 
 _client = None
@@ -1001,6 +1041,9 @@ async def generate_room(
 
         messages = FEW_SHOT_EXAMPLES + [{"role": "user", "content": prompt}]
 
+        # Dump the prompt for debugging
+        _dump_prompt(SYSTEM_PROMPT, messages, f"attempt {attempt + 1}")
+
         raw_text = None  # captured for debug dump on failure
         try:
             client = _get_client()
@@ -1040,6 +1083,9 @@ async def generate_room(
                 raw_text = "\n".join(raw_lines)
 
             data = json.loads(raw_text)
+
+            # Always dump for debugging
+            _dump_ai_output(raw_text, "raw response")
 
             # Auto-patch common issues before validation
             ext_tile_ids = {t["id"] for t in existing_tiles if isinstance(t, dict) and "id" in t}
