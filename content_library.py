@@ -3,8 +3,8 @@ Content Library — Tag-based storage, querying, and expiry for AI-generated con
 
 Manages rooms, monsters, and tiles in fixed-capacity libraries with placeholder
 slots. Supports late binding via semantic tags: preferred → best tag overlap → generate.
-Tags are free-form strings (normalized on ingestion). Fuzzy tag matching bridges
-synonyms when exact matches fail. Persists to JSON files in data/.
+Tags are free-form strings (normalized on ingestion). Tag-overlap scoring ranks
+candidates when exact matches fail. Persists to JSON files in data/.
 """
 
 import json

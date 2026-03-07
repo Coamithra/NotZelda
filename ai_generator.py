@@ -13,6 +13,7 @@ import json
 import os
 import time
 import asyncio
+from collections import deque
 from pathlib import Path
 from dataclasses import dataclass, field
 
@@ -608,10 +609,12 @@ def patch_monster_placements(data: dict, existing_walkable: set[str]) -> list[st
             occupied.add((y, x))
             continue
 
-        reason = "non-walkable" if tilemap[y][x] not in walkable else "unreachable"
+        if y < 0 or y > 10 or x < 0 or x > 14:
+            reason = "out_of_bounds"
+        else:
+            reason = "non-walkable" if tilemap[y][x] not in walkable else "unreachable"
 
         # Find nearest reachable tile (BFS from original position)
-        from collections import deque
         visited = set()
         queue = deque([(y, x)])
         found = None
@@ -689,7 +692,6 @@ def patch_unreachable_doorways(data: dict, existing_walkable: set[str]) -> list[
     # For each unreachable doorway, BFS from it through ALL tiles to find
     # nearest reachable tile, then carve the path
     for dr, dc in unreachable:
-        from collections import deque
         visited = {}  # (r,c) -> parent (r,c)
         queue = deque([(dr, dc, None)])
         target = None
@@ -1120,7 +1122,7 @@ async def _call_cli(system_prompt: str, messages: list[dict]) -> str:
     env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
 
     proc = await asyncio.wait_for(
-        asyncio.get_event_loop().run_in_executor(
+        asyncio.get_running_loop().run_in_executor(
             None,
             lambda: subprocess.run(
                 ["claude", "-p", combined_prompt, "--output-format", "json", "--model", ANTHROPIC_MODEL],
@@ -1192,6 +1194,7 @@ async def generate_room(
     total_attempts = 1 + MAX_RETRIES
     for attempt in range(total_attempts):
         print(f"[GEN] Try {attempt + 1}/{total_attempts}...")
+        input_tokens = output_tokens = 0
         prompt = _build_prompt(
             theme, difficulty,
             existing_monsters, existing_tiles,
@@ -1220,7 +1223,7 @@ async def generate_room(
                 # Use Anthropic SDK (API key + pay-per-token)
                 client = _get_client()
                 response = await asyncio.wait_for(
-                    asyncio.get_event_loop().run_in_executor(
+                    asyncio.get_running_loop().run_in_executor(
                         None,
                         lambda: client.messages.create(
                             model=ANTHROPIC_MODEL,

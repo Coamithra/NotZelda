@@ -13,6 +13,7 @@ Usage: python content_viewer.py
 import asyncio
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -66,8 +67,7 @@ def _patched_print(*args, **kwargs):
     """Intercept all print() calls and tee them to the log buffer."""
     # Determine if this is going to stderr
     file = kwargs.get("file", None)
-    import sys as _sys
-    level = "error" if file is _sys.stderr or file is _sys.__stderr__ else "info"
+    level = "error" if file is sys.stderr or file is sys.__stderr__ else "info"
     # Build the message the same way print would
     sep = kwargs.get("sep", " ")
     msg = sep.join(str(a) for a in args)
@@ -95,9 +95,9 @@ ROOM_CAPACITY = 50
 # Libraries (loaded at startup)
 # ---------------------------------------------------------------------------
 
-monster_lib: ContentLibrary = None
-tile_lib: ContentLibrary = None
-room_lib: ContentLibrary = None
+monster_lib: ContentLibrary | None = None
+tile_lib: ContentLibrary | None = None
+room_lib: ContentLibrary | None = None
 generate_lock = asyncio.Lock()
 
 
@@ -370,12 +370,8 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             import subprocess
             env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
             server_log("[TEST-CLI] Starting claude CLI test...", "info")
-            server_log(f"[TEST-CLI] PATH includes claude? checking 'where claude'...", "info")
-            try:
-                where_result = subprocess.run(["where", "claude"], capture_output=True, text=True, timeout=5, env=env)
-                server_log(f"[TEST-CLI] where claude: exit={where_result.returncode} stdout={where_result.stdout.strip()} stderr={where_result.stderr.strip()}", "info")
-            except Exception as e:
-                server_log(f"[TEST-CLI] where claude failed: {e}", "error")
+            claude_path = shutil.which("claude")
+            server_log(f"[TEST-CLI] claude location: {claude_path or 'NOT FOUND'}", "info")
 
             model = ai_generator.ANTHROPIC_MODEL
             server_log(f"[TEST-CLI] Running: claude -p '...' --output-format json --model {model}", "info")
@@ -424,12 +420,17 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 status = 400
                 response_body = b'{"error": "Bad request"}'
 
+        elif method == "OPTIONS":
+            status = 204
+            response_body = b""
+            content_type = "text/plain"
+
         else:
             status = 404
             response_body = b'{"error": "Not found"}'
 
         # Build response
-        status_text = {200: "OK", 400: "Bad Request", 404: "Not Found", 500: "Internal Server Error"}.get(status, "OK")
+        status_text = {200: "OK", 204: "No Content", 400: "Bad Request", 404: "Not Found", 500: "Internal Server Error"}.get(status, "OK")
         header = (
             f"HTTP/1.1 {status} {status_text}\r\n"
             f"Content-Type: {content_type}\r\n"
