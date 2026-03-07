@@ -20,8 +20,8 @@ from dataclasses import dataclass, field
 # Configuration
 # ---------------------------------------------------------------------------
 
-ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
-GENERATION_TIMEOUT = 8.0        # seconds before giving up on API call
+ANTHROPIC_MODEL = "claude-sonnet-4-6"
+GENERATION_TIMEOUT = 30.0       # seconds before giving up on API call
 MAX_API_CALLS_PER_MINUTE = 5
 MAX_API_CALLS_PER_DAY = 200
 MAX_RETRIES = 1                 # single retry on validation failure
@@ -82,9 +82,9 @@ class UsageTracker:
         self._save()
 
     def estimated_cost(self) -> float:
-        # Haiku pricing: $1.00/M input, $5.00/M output
-        return (self.total_input_tokens * 1.00 / 1_000_000 +
-                self.total_output_tokens * 5.00 / 1_000_000)
+        # Sonnet pricing: $3.00/M input, $15.00/M output
+        return (self.total_input_tokens * 3.00 / 1_000_000 +
+                self.total_output_tokens * 15.00 / 1_000_000)
 
     def _save(self):
         self._file.parent.mkdir(parents=True, exist_ok=True)
@@ -112,25 +112,31 @@ You generate complete dungeon rooms as JSON. Each room has a 15x11 tilemap, mons
 
 ## TILEMAP FORMAT
 - 15 columns x 11 rows grid
-- Each cell is a 2-character tile code
-- Available dungeon tile codes: DW (dungeon wall), DF (dungeon floor), PL (pillar), SC (sconce wall)
+- Each cell is a 2-character tile code OR a custom tile string ID
+- Built-in dungeon tile codes: DW (dungeon wall), DF (dungeon floor), PL (pillar), SC (sconce wall)
 - Custom tiles use their string ID (e.g. "lava_crack")
 - Row 0 (top) and row 10 (bottom): columns 0-5 and 9-14 MUST be DW. Columns 6-8 MUST be DF (for north/south doorways)
 - Column 0 (left) and column 14 (right): rows 0-3 and 7-10 MUST be DW. Rows 4-6 MUST be DF (for east/west doorways)
 - Interior (rows 1-9, cols 1-13 excluding doorway edges) is your creative space
-- Monsters and players must be placed only on walkable tiles (DF, PL is NOT walkable, SC is NOT walkable)
+- IMPORTANT: Use DW tiles INSIDE the room for interesting shapes:
+  - L-corridors, T-junctions, winding paths, chokepoints, alcoves, divided chambers
+  - Only 30-60% of interior walkable — walls create character
+  - Mix it up: some symmetric, some asymmetric
+  - ALL four doorways must be connected by walkable tiles
+- Monsters and players must be placed only on walkable tiles (DF or walkable custom tiles; PL, SC are NOT walkable)
 
 ## MONSTER DEFINITION FORMAT
 Each new monster needs:
 ```
 {
   "kind": "lowercase_name",
+  "tags": ["theme", "combat_style"],
   "stats": {"hp": 1-100, "hop_interval": 0.2-10.0, "damage": 1-20},
   "sprite": {
     "colors": {"colorKey": "#RRGGBB", ...},
     "frames": [
-      [["colorKey", x, y, w, h], ...],  // frame 0
-      [["colorKey", x, y, w, h], ...]   // frame 1
+      [["colorKey", x, y, w, h], ...],
+      [["colorKey", x, y, w, h], ...]
     ]
   },
   "behavior": {
@@ -157,6 +163,8 @@ Attack types: melee (range 1), projectile (+ sprite_color "#RRGGBB"), charge (ra
 ```
 {
   "id": "lowercase_name",
+  "walkable": true,
+  "tags": ["theme", "category"],
   "colors": {"base": "#RRGGBB", "colorKey": "#RRGGBB", ...},
   "operations": [
     {"op": "fill", "color": "colorKey"},
@@ -173,6 +181,7 @@ Attack types: melee (range 1), projectile (+ sprite_color "#RRGGBB"), charge (ra
 }
 ```
 Tile grid is 16x16. Operations execute in order. Start with "fill" for base color.
+The "walkable" field determines if players/monsters can walk on this tile.
 
 ## RESPONSE FORMAT
 Return ONLY valid JSON (no markdown, no explanation):
@@ -192,13 +201,12 @@ Return ONLY valid JSON (no markdown, no explanation):
 ```
 
 ## DIFFICULTY GUIDELINES
-- Easy (1-3): 1-2 monsters, fodder/light_melee, hp 1-2, damage 1
-- Medium (4-6): 2-4 monsters, medium_melee/ranged, hp 2-4, damage 1-2, simple attacks
-- Hard (7-9): 3-5 monsters, heavy_melee/ranged mix, hp 3-6, damage 2-3, varied attacks
+- Easy (1-3): 1-2 monsters, hp 1-2, damage 1
+- Medium (4-6): 2-4 monsters, hp 2-4, damage 1-2, simple attacks
+- Hard (7-9): 3-5 monsters, hp 3-6, damage 2-3, varied attacks
 - Boss (10): 1 boss + 2-3 fodder, boss hp 6-10, damage 3-4, multiple attack types
 
 ## THEME GUIDELINES
-Match the theme in colors, names, and creature types:
 - fire: oranges/reds, flame creatures, lava tiles
 - ice: blues/whites, frozen creatures, frost tiles
 - shadow: purples/blacks, spectral creatures, dark tiles
@@ -207,12 +215,38 @@ Match the theme in colors, names, and creature types:
 - poison: greens/purples, toxic creatures, acid tiles
 - dungeon: grays/browns, classic dungeon creatures
 
+## EXAMPLE LAYOUTS (ascii: x=wall, .=walkable, P=pillar, S=sconce)
+Asymmetric:
+xxxxxx...xxxxxx
+x.....x..xSx.x
+x.....xx.x...x
+xxx......x...x
+...x.xx......x
+.....x.......x
+..P......x...x
+x.......xxx..x
+x...xx....xx.x
+x..xx........x
+xxxxxx...xxxxxx
+Symmetric:
+xxxxxx...xxxxxx
+x..Sxx...xxS..x
+x....x...x....x
+x..............x
+...x...P...x...
+...x.......x...
+...x...P...x...
+x..............x
+x....x...x....x
+x..Sxx...xxS..x
+xxxxxx...xxxxxx
+
 ## IMPORTANT RULES
-1. All tile codes in the tilemap must be either a built-in code (DW, DF, PL, SC) or defined in new_tiles
+1. All tile codes in the tilemap must be either a built-in code (DW, DF, PL, SC) or defined in new_tiles or in the available tiles list
 2. All monster kinds in monster_placements must be either in the existing monsters list or defined in new_monsters
-3. Place monsters only on DF tiles, not on walls, pillars, or sconces
+3. Place monsters only on walkable tiles (DF or walkable custom tiles), not on walls, pillars, or sconces
 4. Monster x must be 0-14, y must be 0-10
-5. Keep room layouts interesting — use pillars, alcoves, and custom tiles for variety
+5. All IDs MUST be lowercase_snake_case [a-z][a-z0-9_]*
 6. Give monsters thematic names (fire_imp, frost_archer, shadow_wraith — not monster_1)
 7. Sprite colors should be thematically appropriate and visually distinct"""
 
@@ -226,7 +260,8 @@ def _build_prompt(theme: str, difficulty: int,
                   existing_tiles: list[dict],
                   monster_library_full: bool,
                   tile_library_full: bool,
-                  validation_error: str | None = None) -> str:
+                  validation_error: str | None = None,
+                  existing_room_names: list[str] | None = None) -> str:
     """Build the user prompt for room generation."""
 
     parts = []
@@ -234,31 +269,46 @@ def _build_prompt(theme: str, difficulty: int,
     # Theme and difficulty
     parts.append(f"Generate a dungeon room with theme \"{theme}\" and difficulty {difficulty}/10.")
 
+    # Avoid duplicate room names
+    if existing_room_names:
+        parts.append(f"\nDo NOT reuse these room names (already taken): {', '.join(existing_room_names[:30])}")
+
     # Existing monsters summary
     if existing_monsters:
         monster_summary = ", ".join(
-            f"{m['kind']} ({m.get('role', '?')}, tags: {m.get('tags', [])})"
+            f"{m['kind']} (tags: {', '.join(m.get('tags', []))})"
             for m in existing_monsters[:20]  # Cap at 20 to save tokens
         )
         if monster_library_full:
             parts.append(f"\nAvailable monsters (library FULL — use ONLY these, do NOT create new ones): {monster_summary}")
         else:
-            parts.append(f"\nAvailable monsters (reuse where fitting, create new if needed): {monster_summary}")
+            parts.append(f"\nExisting monsters: {monster_summary}")
+            parts.append("You MUST create at least 1 new monster (in new_monsters) with a unique thematic design, sprite, and behavior. You may also reuse existing ones alongside your new creation.")
     else:
-        parts.append("\nNo existing monsters — create new ones as needed.")
+        parts.append("\nNo existing monsters — you MUST create new ones (define them in new_monsters). Design at least 1-2 unique monsters with thematic sprites and interesting behavior rules.")
 
-    # Existing tiles summary
+    # Tiles summary (always includes built-ins)
+    builtin_tiles = [
+        "DW (dungeon wall, non-walkable)",
+        "DF (dungeon floor, walkable)",
+        "PL (pillar, non-walkable)",
+        "SC (sconce wall, non-walkable)",
+    ]
+    custom_tile_parts = [
+        f"{t['id']} ({'walkable' if t.get('walkable', False) else 'non-walkable'}, tags: {', '.join(t.get('tags', []))})"
+        for t in (existing_tiles or [])[:20]
+    ]
+    tile_summary = ", ".join(builtin_tiles + custom_tile_parts)
+
     if existing_tiles:
-        tile_summary = ", ".join(
-            f"{t['id']} ({t.get('role', '?')}, tags: {t.get('tags', [])})"
-            for t in existing_tiles[:20]
-        )
         if tile_library_full:
-            parts.append(f"\nAvailable custom tiles (library FULL — use ONLY these, do NOT create new ones): {tile_summary}")
+            parts.append(f"\nAvailable tiles (library FULL — use ONLY these, do NOT create new ones): {tile_summary}")
         else:
-            parts.append(f"\nAvailable custom tiles (reuse where fitting, create new if needed): {tile_summary}")
+            parts.append(f"\nAvailable tiles: {tile_summary}")
+            parts.append("You MUST create at least 1 new custom tile (in new_tiles) that fits the theme — either a walkable floor or a non-walkable wall. Use it in your tilemap for visual variety.")
     else:
-        parts.append("\nNo existing custom tiles — create new ones if desired, or use only built-in tiles (DW, DF, PL, SC).")
+        parts.append(f"\nAvailable tiles: {tile_summary}")
+        parts.append("You MUST create at least 1 new custom tile (in new_tiles) that fits the theme — either a walkable floor or a non-walkable wall. Use it in your tilemap for visual variety.")
 
     # Retry with validation error
     if validation_error:
@@ -274,7 +324,15 @@ def _build_prompt(theme: str, difficulty: int,
 FEW_SHOT_EXAMPLES = [
     {
         "role": "user",
-        "content": 'Generate a dungeon room with theme "fire" and difficulty 4/10.\n\nNo existing monsters — create new ones as needed.\n\nNo existing custom tiles — create new ones if desired, or use only built-in tiles (DW, DF, PL, SC).'
+        "content": (
+            'Generate a dungeon room with theme "fire" and difficulty 4/10.\n\n'
+            'No existing monsters — you MUST create new ones (define them in new_monsters). '
+            'Design at least 1-2 unique monsters with thematic sprites and interesting behavior rules.\n\n'
+            'Available tiles: DW (dungeon wall, non-walkable), DF (dungeon floor, walkable), '
+            'PL (pillar, non-walkable), SC (sconce wall, non-walkable)\n'
+            'You MUST create at least 1 new custom tile that fits the theme — '
+            'either a walkable floor or a non-walkable wall. Use it in your tilemap for visual variety.'
+        ),
     },
     {
         "role": "assistant",
@@ -282,23 +340,34 @@ FEW_SHOT_EXAMPLES = [
             "name": "Ember Chamber",
             "tilemap": [
                 ["DW","DW","DW","DW","DW","DW","DF","DF","DF","DW","DW","DW","DW","DW","DW"],
-                ["DW","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DW"],
-                ["DW","DF","DF","DF","PL","DF","DF","DF","DF","DF","PL","DF","DF","DF","DW"],
-                ["DW","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DW"],
-                ["DF","DF","DF","DF","DF","DF","DF","SC","DF","DF","DF","DF","DF","DF","DF"],
-                ["DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF"],
-                ["DF","DF","DF","DF","DF","DF","DF","SC","DF","DF","DF","DF","DF","DF","DF"],
-                ["DW","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DW"],
-                ["DW","DF","DF","DF","PL","DF","DF","DF","DF","DF","PL","DF","DF","DF","DW"],
-                ["DW","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DW"],
-                ["DW","DW","DW","DW","DW","DW","DF","DF","DF","DW","DW","DW","DW","DW","DW"]
+                ["DW","DF","DF","DF","DF","DF","DF","DF","DF","DW","DW","SC","DF","DF","DW"],
+                ["DW","DF","DF","DF","DF","DF","DF","DF","DW","DW","DF","DF","DF","DF","DW"],
+                ["DW","DW","DW","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DW"],
+                ["DF","DF","DF","DF","DF","DW","DW","DF","DF","DF","DF","PL","DF","DF","DF"],
+                ["DF","DF","DF","DF","DF","DF","DW","DF","ember_floor","DF","DF","DF","DF","DF","DF"],
+                ["DF","DF","PL","DF","DF","DF","DF","DF","DF","DW","DF","DF","DF","DF","DF"],
+                ["DW","DF","DF","DF","DF","DF","DF","ember_floor","DW","DW","DW","DF","DF","DF","DW"],
+                ["DW","DF","DF","DF","DW","DW","DF","DF","DF","DF","DW","DW","DF","DF","DW"],
+                ["DW","DF","DF","DW","DW","DF","DF","DF","DF","DF","DF","DF","DF","DF","DW"],
+                ["DW","DW","DW","DW","DW","DW","DF","DF","DF","DW","DW","DW","DW","DW","DW"],
             ],
-            "new_tiles": [],
+            "new_tiles": [
+                {
+                    "id": "ember_floor",
+                    "walkable": True,
+                    "tags": ["fire", "floor"],
+                    "colors": {"base": "#3a2a1a", "alt": "#2a1a0a", "glow": "#cc4400"},
+                    "operations": [
+                        {"op": "fill", "color": "base"},
+                        {"op": "noise", "color": "alt", "density": 0.4},
+                        {"op": "pixels", "pixels": [["glow",3,7],["glow",10,4],["glow",6,12],["glow",13,9]]},
+                    ],
+                },
+            ],
             "new_monsters": [
                 {
                     "kind": "fire_imp",
-                    "role": "light_melee",
-                    "tags": ["fire", "dungeon"],
+                    "tags": ["fire", "dungeon", "melee"],
                     "stats": {"hp": 2, "hop_interval": 1.2, "damage": 1},
                     "sprite": {
                         "colors": {"body": "#cc3300", "dark": "#881100", "eyes": "#ffcc00", "flame": "#ff6600"},
@@ -309,7 +378,7 @@ FEW_SHOT_EXAMPLES = [
                                 ["body",  6, 3, 4, 1],
                                 ["eyes",  6, 6, 2, 1],
                                 ["eyes",  9, 6, 2, 1],
-                                ["flame", 6, 2, 4, 2]
+                                ["flame", 6, 2, 4, 2],
                             ],
                             [
                                 ["dark",  5, 8, 6, 5],
@@ -317,96 +386,25 @@ FEW_SHOT_EXAMPLES = [
                                 ["body",  6, 2, 4, 1],
                                 ["eyes",  6, 5, 2, 1],
                                 ["eyes",  9, 5, 2, 1],
-                                ["flame", 6, 1, 4, 2]
-                            ]
-                        ]
+                                ["flame", 6, 1, 4, 2],
+                            ],
+                        ],
                     },
                     "behavior": {
                         "rules": [
                             {"if": "hp_below_pct", "value": 30, "do": "flee"},
                             {"if": "player_within", "range": 4, "do": "chase"},
-                            {"default": "wander"}
+                            {"default": "wander"},
                         ],
-                        "attacks": []
-                    }
-                }
-            ],
-            "monster_placements": [
-                {"kind": "fire_imp", "x": 3, "y": 3},
-                {"kind": "fire_imp", "x": 11, "y": 7}
-            ]
-        })
-    },
-    {
-        "role": "user",
-        "content": 'Generate a dungeon room with theme "shadow" and difficulty 7/10.\n\nAvailable monsters (reuse where fitting, create new if needed): shadow_wraith (medium_melee, tags: [\'shadow\', \'undead\'])\n\nNo existing custom tiles — create new ones if desired, or use only built-in tiles (DW, DF, PL, SC).'
-    },
-    {
-        "role": "assistant",
-        "content": json.dumps({
-            "name": "Shadow Sanctum",
-            "tilemap": [
-                ["DW","DW","DW","DW","DW","DW","DF","DF","DF","DW","DW","DW","DW","DW","DW"],
-                ["DW","DF","DF","SC","DF","DF","DF","DF","DF","DF","DF","SC","DF","DF","DW"],
-                ["DW","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DW"],
-                ["DW","DF","DF","PL","DF","DF","DF","DF","DF","DF","DF","PL","DF","DF","DW"],
-                ["DF","DF","DF","DF","DF","DF","DF","PL","DF","DF","DF","DF","DF","DF","DF"],
-                ["DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF"],
-                ["DF","DF","DF","DF","DF","DF","DF","PL","DF","DF","DF","DF","DF","DF","DF"],
-                ["DW","DF","DF","PL","DF","DF","DF","DF","DF","DF","DF","PL","DF","DF","DW"],
-                ["DW","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DF","DW"],
-                ["DW","DF","DF","SC","DF","DF","DF","DF","DF","DF","DF","SC","DF","DF","DW"],
-                ["DW","DW","DW","DW","DW","DW","DF","DF","DF","DW","DW","DW","DW","DW","DW"]
-            ],
-            "new_tiles": [],
-            "new_monsters": [
-                {
-                    "kind": "shadow_archer",
-                    "role": "ranged",
-                    "tags": ["shadow", "dungeon"],
-                    "stats": {"hp": 3, "hop_interval": 2.0, "damage": 1},
-                    "sprite": {
-                        "colors": {"body": "#2a1a3a", "cloak": "#4a2a5a", "eyes": "#cc00ff", "bow": "#3a2a2a"},
-                        "frames": [
-                            [
-                                ["cloak", 4, 9, 8, 5],
-                                ["body",  5, 4, 6, 7],
-                                ["cloak", 4, 5, 8, 4],
-                                ["eyes",  6, 5, 1, 1],
-                                ["eyes",  9, 5, 1, 1],
-                                ["bow",   2, 4, 2, 6]
-                            ],
-                            [
-                                ["cloak", 4, 8, 8, 5],
-                                ["body",  5, 3, 6, 7],
-                                ["cloak", 4, 4, 8, 4],
-                                ["eyes",  6, 4, 1, 1],
-                                ["eyes",  9, 4, 1, 1],
-                                ["bow",   2, 3, 2, 6]
-                            ]
-                        ]
+                        "attacks": [],
                     },
-                    "behavior": {
-                        "rules": [
-                            {"if": "hp_below_pct", "value": 25, "do": "flee"},
-                            {"if": "can_attack", "do": "attack"},
-                            {"if": "player_within", "range": 3, "do": "flee"},
-                            {"if": "player_within", "range": 8, "do": "hold"},
-                            {"default": "wander"}
-                        ],
-                        "attacks": [
-                            {"type": "projectile", "range": 6, "damage": 2, "cooldown": 2.5, "sprite_color": "#9900cc"}
-                        ]
-                    }
-                }
+                },
             ],
             "monster_placements": [
-                {"kind": "shadow_wraith", "x": 6, "y": 4},
-                {"kind": "shadow_wraith", "x": 4, "y": 7},
-                {"kind": "shadow_archer", "x": 10, "y": 2},
-                {"kind": "shadow_archer", "x": 3, "y": 8}
-            ]
-        })
+                {"kind": "fire_imp", "x": 4, "y": 2},
+                {"kind": "fire_imp", "x": 12, "y": 4},
+            ],
+        }),
     },
 ]
 
@@ -437,9 +435,244 @@ def _is_hex_color(v: str) -> bool:
     return isinstance(v, str) and bool(_re.match(r'^#[0-9a-fA-F]{6}$', v))
 
 
-def validate_room_response(data: dict) -> list[str]:
+# ---------------------------------------------------------------------------
+# Auto-patching — fix common AI mistakes locally to avoid costly retries
+# ---------------------------------------------------------------------------
+
+def _build_walkability_set(data: dict, existing_walkable: set[str]) -> set[str]:
+    """Build the set of all walkable tile codes for this room."""
+    walkable = {"DF"} | existing_walkable
+    for t in data.get("new_tiles", []):
+        if isinstance(t, dict) and t.get("walkable", False):
+            walkable.add(t.get("id", ""))
+    return walkable
+
+
+def patch_monster_placements(data: dict, existing_walkable: set[str]) -> list[str]:
+    """Move monsters to reachable walkable tiles (connected to doorways).
+    Handles: non-walkable placement, walled-off placement.
+    Returns list of patch descriptions."""
+    patches = []
+    tilemap = data.get("tilemap")
+    placements = data.get("monster_placements")
+    if not tilemap or not placements or len(tilemap) != 11:
+        return patches
+    if not all(isinstance(r, list) and len(r) == 15 for r in tilemap):
+        return patches
+
+    walkable = _build_walkability_set(data, existing_walkable)
+
+    # Flood fill from north doorway to find reachable walkable tiles
+    reachable = set()
+    stack = [(0, 7)]  # center of north doorway
+    while stack:
+        r, c = stack.pop()
+        if (r, c) in reachable:
+            continue
+        if r < 0 or r > 10 or c < 0 or c > 14:
+            continue
+        if tilemap[r][c] not in walkable:
+            continue
+        reachable.add((r, c))
+        stack.extend([(r-1,c),(r+1,c),(r,c-1),(r,c+1)])
+
+    # Track occupied tiles
+    occupied = set()
+
+    for pi, p in enumerate(placements):
+        if not isinstance(p, dict):
+            continue
+        x, y = int(p.get("x", 0)), int(p.get("y", 0))
+
+        if (y, x) in reachable and (y, x) not in occupied:
+            occupied.add((y, x))
+            continue
+
+        reason = "non-walkable" if tilemap[y][x] not in walkable else "unreachable"
+
+        # Find nearest reachable tile (BFS from original position)
+        from collections import deque
+        visited = set()
+        queue = deque([(y, x)])
+        found = None
+        while queue:
+            ry, rx = queue.popleft()
+            if (ry, rx) in visited:
+                continue
+            visited.add((ry, rx))
+            if (ry, rx) in reachable and (ry, rx) not in occupied:
+                found = (ry, rx)
+                break
+            for dy, dx in [(-1,0),(1,0),(0,-1),(0,1)]:
+                ny, nx = ry+dy, rx+dx
+                if 0 <= ny <= 10 and 0 <= nx <= 14 and (ny, nx) not in visited:
+                    queue.append((ny, nx))
+
+        if found:
+            patches.append(f"Moved {p.get('kind','?')} from ({x},{y}) [{reason}] to ({found[1]},{found[0]})")
+            p["x"] = found[1]
+            p["y"] = found[0]
+            occupied.add(found)
+        else:
+            patches.append(f"Removed {p.get('kind','?')} at ({x},{y}) — {reason}, no reachable tile found")
+            placements[pi] = None
+
+    # Remove None entries
+    data["monster_placements"] = [p for p in placements if p is not None]
+    return patches
+
+
+def patch_unreachable_doorways(data: dict, existing_walkable: set[str]) -> list[str]:
+    """Carve walkable paths to connect unreachable doorways.
+    Returns list of patch descriptions."""
+    patches = []
+    tilemap = data.get("tilemap")
+    if not tilemap or len(tilemap) != 11:
+        return patches
+    if not all(isinstance(r, list) and len(r) == 15 for r in tilemap):
+        return patches
+
+    walkable = _build_walkability_set(data, existing_walkable)
+    non_walkable_codes = {"DW", "PL", "SC"}
+
+    # Identify doorway cells
+    doorways = []
+    for c in range(6, 9):
+        doorways.append((0, c))
+        doorways.append((10, c))
+    for r in range(4, 7):
+        doorways.append((r, 0))
+        doorways.append((r, 14))
+
+    # Flood fill from first doorway
+    def flood_fill():
+        visited = set()
+        stack = [doorways[0]]
+        while stack:
+            row, col = stack.pop()
+            if (row, col) in visited:
+                continue
+            if row < 0 or row > 10 or col < 0 or col > 14:
+                continue
+            if tilemap[row][col] not in walkable:
+                continue
+            visited.add((row, col))
+            stack.extend([(row-1,col),(row+1,col),(row,col-1),(row,col+1)])
+        return visited
+
+    reachable = flood_fill()
+    unreachable = [(r, c) for r, c in doorways if (r, c) not in reachable]
+
+    if not unreachable:
+        return patches
+
+    # For each unreachable doorway, BFS from it through ALL tiles to find
+    # nearest reachable tile, then carve the path
+    for dr, dc in unreachable:
+        from collections import deque
+        visited = {}  # (r,c) -> parent (r,c)
+        queue = deque([(dr, dc, None)])
+        target = None
+
+        while queue:
+            r, c, parent = queue.popleft()
+            if (r, c) in visited:
+                continue
+            if r < 0 or r > 10 or c < 0 or c > 14:
+                continue
+            visited[(r, c)] = parent
+            if (r, c) in reachable:
+                target = (r, c)
+                break
+            for dy, dx in [(-1,0),(1,0),(0,-1),(0,1)]:
+                queue.append((r+dy, c+dx, (r, c)))
+
+        if target:
+            # Trace path back and carve
+            carved = []
+            pos = target
+            while pos is not None:
+                r, c = pos
+                if tilemap[r][c] not in walkable:
+                    tilemap[r][c] = "DF"
+                    carved.append(f"({c},{r})")
+                pos = visited.get(pos)
+            if carved:
+                patches.append(f"Carved path to doorway ({dc},{dr}): {', '.join(carved)}")
+                # Update reachable set
+                reachable = flood_fill()
+
+    return patches
+
+
+def patch_duplicate_name(data: dict, existing_names: list[str]) -> list[str]:
+    """Append roman numeral suffix if room name is already taken.
+    Returns list of patch descriptions."""
+    if not existing_names:
+        return []
+    name = data.get("name", "")
+    if not name or name not in existing_names:
+        return []
+
+    numerals = ["II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X",
+                "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX"]
+    taken = set(existing_names)
+    for num in numerals:
+        candidate = f"{name} {num}"
+        if candidate not in taken:
+            data["name"] = candidate
+            return [f"Renamed \"{name}\" to \"{candidate}\" (duplicate)"]
+    # Fallback
+    import random
+    suffix = random.randint(100, 999)
+    data["name"] = f"{name} #{suffix}"
+    return [f"Renamed \"{name}\" to \"{data['name']}\" (duplicate)"]
+
+
+def patch_monster_attacks(data: dict) -> list[str]:
+    """Clamp out-of-range attack stats to valid bounds.
+    Returns list of patch descriptions."""
+    patches = []
+    for m in data.get("new_monsters", []):
+        if not isinstance(m, dict):
+            continue
+        kind = m.get("kind", "?")
+        behavior = m.get("behavior")
+        if not isinstance(behavior, dict):
+            continue
+        for ai, atk in enumerate(behavior.get("attacks", [])):
+            if not isinstance(atk, dict):
+                continue
+            cd = atk.get("cooldown")
+            if isinstance(cd, (int, float)) and (cd < 0.5 or cd > 30.0):
+                clamped = max(0.5, min(30.0, cd))
+                patches.append(f"Clamped {kind} attack[{ai}] cooldown {cd} -> {clamped}")
+                atk["cooldown"] = clamped
+            rng = atk.get("range")
+            if isinstance(rng, (int, float)) and (rng < 1 or rng > 15):
+                clamped = max(1, min(15, int(rng)))
+                patches.append(f"Clamped {kind} attack[{ai}] range {rng} -> {clamped}")
+                atk["range"] = clamped
+    return patches
+
+
+def auto_patch(data: dict, existing_walkable: set[str],
+               existing_room_names: list[str] | None = None) -> list[str]:
+    """Apply all auto-patches. Returns list of patch descriptions."""
+    patches = []
+    patches.extend(patch_duplicate_name(data, existing_room_names or []))
+    patches.extend(patch_unreachable_doorways(data, existing_walkable))
+    patches.extend(patch_monster_placements(data, existing_walkable))
+    patches.extend(patch_monster_attacks(data))
+    return patches
+
+
+def validate_room_response(data: dict, existing_tile_ids: set[str] | None = None,
+                           existing_walkable_tiles: set[str] | None = None) -> list[str]:
     """Validate the AI's room response. Returns list of error strings."""
     errors = []
+    existing_tile_ids = existing_tile_ids or set()
+    existing_walkable_tiles = existing_walkable_tiles or set()
 
     # -- name --
     name = data.get("name")
@@ -452,13 +685,16 @@ def validate_room_response(data: dict) -> list[str]:
         errors.append(f"tilemap must be 11 rows, got {len(tilemap) if isinstance(tilemap, list) else 'non-list'}")
         return errors  # Can't validate further without correct dimensions
 
-    # Collect custom tile IDs defined in new_tiles
+    # Collect custom tile IDs defined in new_tiles and track walkability
     new_tile_ids = set()
+    new_walkable_tiles = set()
     for t in data.get("new_tiles", []):
         if isinstance(t, dict) and isinstance(t.get("id"), str):
             new_tile_ids.add(t["id"])
+            if t.get("walkable", False):
+                new_walkable_tiles.add(t["id"])
 
-    all_valid_tiles = BUILTIN_TILES | new_tile_ids
+    all_valid_tiles = BUILTIN_TILES | new_tile_ids | existing_tile_ids
 
     for row_idx, row in enumerate(tilemap):
         if not isinstance(row, list) or len(row) != 15:
@@ -485,6 +721,38 @@ def validate_room_response(data: dict) -> list[str]:
                 if actual != expected:
                     errors.append(f"tilemap[{row_idx}][{col_idx}] must be {expected} (doorway edge), got {actual!r}")
 
+    # -- doorway reachability (flood fill) --
+    if len(tilemap) == 11 and all(isinstance(r, list) and len(r) == 15 for r in tilemap):
+        walkable_set = {"DF"} | new_walkable_tiles | existing_walkable_tiles
+        # Identify all doorway cells
+        doorways = []
+        for c in range(6, 9):
+            doorways.append((0, c))    # north
+            doorways.append((10, c))   # south
+        for r in range(4, 7):
+            doorways.append((r, 0))    # west
+            doorways.append((r, 14))   # east
+
+        # Flood fill from the first doorway
+        visited = set()
+        stack = [doorways[0]]
+        while stack:
+            row, col = stack.pop()
+            if (row, col) in visited:
+                continue
+            if row < 0 or row > 10 or col < 0 or col > 14:
+                continue
+            tile = tilemap[row][col]
+            if tile not in walkable_set:
+                continue
+            visited.add((row, col))
+            stack.extend([(row-1, col), (row+1, col), (row, col-1), (row, col+1)])
+
+        # Check all doorways are reachable
+        unreachable = [f"({r},{c})" for r, c in doorways if (r, c) not in visited]
+        if unreachable:
+            errors.append(f"Doorways not connected — unreachable: {', '.join(unreachable)}")
+
     # -- new_tiles --
     new_tiles = data.get("new_tiles", [])
     if not isinstance(new_tiles, list):
@@ -497,6 +765,9 @@ def validate_room_response(data: dict) -> list[str]:
             tid = tile.get("id")
             if not isinstance(tid, str) or not _re.match(r'^[a-z][a-z0-9_]*$', tid):
                 errors.append(f"new_tiles[{ti}].id must be lowercase alphanumeric")
+            walkable = tile.get("walkable")
+            if walkable is not None and not isinstance(walkable, bool):
+                errors.append(f"new_tiles[{ti}].walkable must be a boolean")
             colors = tile.get("colors")
             if not isinstance(colors, dict):
                 errors.append(f"new_tiles[{ti}].colors must be a dict")
@@ -642,7 +913,7 @@ def validate_room_response(data: dict) -> list[str]:
                 ix, iy = int(x), int(y)
                 if 0 <= iy < 11 and 0 <= ix < 15:
                     tile_at = tilemap[iy][ix]
-                    if tile_at in NON_WALKABLE:
+                    if tile_at in NON_WALKABLE and tile_at not in new_walkable_tiles and tile_at not in existing_walkable_tiles:
                         errors.append(f"monster_placements[{pi}] at ({ix},{iy}) is on non-walkable tile {tile_at!r}")
 
     # Cap total errors to avoid huge retry prompts
@@ -655,6 +926,17 @@ def validate_room_response(data: dict) -> list[str]:
 # ---------------------------------------------------------------------------
 # Main generation function
 # ---------------------------------------------------------------------------
+
+def _dump_ai_output(raw_text: str, label: str = "failed") -> str:
+    """Save raw AI output to a timestamped file for debugging. Returns the filename."""
+    from datetime import datetime
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"ai_output_{ts}.txt"
+    filepath = Path(__file__).parent / filename
+    filepath.write_text(raw_text, encoding="utf-8")
+    print(f"[GEN] Raw AI output saved to {filename} ({label})")
+    return filename
+
 
 _client = None
 
@@ -687,6 +969,7 @@ async def generate_room(
     existing_tiles: list[dict] | None = None,
     monster_library_full: bool = False,
     tile_library_full: bool = False,
+    existing_room_names: list[str] | None = None,
 ) -> dict | None:
     """Generate a complete dungeon room via Claude API.
 
@@ -705,16 +988,20 @@ async def generate_room(
     existing_tiles = existing_tiles or []
     validation_error = None
 
-    for attempt in range(1 + MAX_RETRIES):
+    total_attempts = 1 + MAX_RETRIES
+    for attempt in range(total_attempts):
+        print(f"[GEN] Try {attempt + 1}/{total_attempts}...")
         prompt = _build_prompt(
             theme, difficulty,
             existing_monsters, existing_tiles,
             monster_library_full, tile_library_full,
             validation_error=validation_error,
+            existing_room_names=existing_room_names,
         )
 
         messages = FEW_SHOT_EXAMPLES + [{"role": "user", "content": prompt}]
 
+        raw_text = None  # captured for debug dump on failure
         try:
             client = _get_client()
             rate_limiter.record_call()
@@ -745,18 +1032,27 @@ async def generate_room(
 
             # Strip markdown code fences if present
             if raw_text.startswith("```"):
-                lines = raw_text.split("\n")
-                # Remove first line (```json or ```) and last line (```)
-                if lines[-1].strip() == "```":
-                    lines = lines[1:-1]
+                raw_lines = raw_text.split("\n")
+                if raw_lines[-1].strip() == "```":
+                    raw_lines = raw_lines[1:-1]
                 else:
-                    lines = lines[1:]
-                raw_text = "\n".join(lines)
+                    raw_lines = raw_lines[1:]
+                raw_text = "\n".join(raw_lines)
 
             data = json.loads(raw_text)
 
-            # Validate
-            errors = validate_room_response(data)
+            # Auto-patch common issues before validation
+            ext_tile_ids = {t["id"] for t in existing_tiles if isinstance(t, dict) and "id" in t}
+            ext_walkable = {t["id"] for t in existing_tiles if isinstance(t, dict) and t.get("walkable", False)}
+            patch_log = auto_patch(data, ext_walkable, existing_room_names)
+            if patch_log:
+                print(f"[GEN] Auto-patched {len(patch_log)} issues:")
+                for p in patch_log:
+                    print(f"[GEN]   {p}")
+
+            # Validate — pass existing library tile IDs so they're recognized
+            errors = validate_room_response(data, existing_tile_ids=ext_tile_ids,
+                                            existing_walkable_tiles=ext_walkable)
 
             # Also check that placed monsters reference valid kinds
             existing_kinds = {m["kind"] for m in existing_monsters if isinstance(m, dict)}
@@ -773,33 +1069,41 @@ async def generate_room(
 
             if errors:
                 validation_error = "\n".join(f"- {e}" for e in errors)
-                print(f"[GEN] Validation failed (attempt {attempt + 1}): {len(errors)} errors")
-                for e in errors[:5]:
-                    print(f"  {e}")
+                print(f"[GEN] Try {attempt + 1}/{total_attempts} FAILED — {len(errors)} validation errors:")
+                for e in errors:
+                    print(f"[GEN]   {e}")
+                if raw_text:
+                    _dump_ai_output(raw_text, "validation failed")
                 if attempt < MAX_RETRIES:
+                    print(f"[GEN] Retrying with error feedback...")
                     continue
                 else:
                     print(f"[GEN] Max retries reached, giving up")
                     return None
 
             # Success
-            print(f"[GEN] Room generated: \"{data.get('name', '?')}\" "
+            print(f"[GEN] Try {attempt + 1}/{total_attempts} SUCCESS — \"{data.get('name', '?')}\" "
                   f"({elapsed:.1f}s, {input_tokens}+{output_tokens} tokens, "
                   f"{len(data.get('new_monsters', []))} new monsters, "
                   f"{len(data.get('new_tiles', []))} new tiles)")
             return data
 
         except asyncio.TimeoutError:
-            print(f"[GEN] API timeout after {GENERATION_TIMEOUT}s")
+            print(f"[GEN] Try {attempt + 1}/{total_attempts} FAILED — API timeout after {GENERATION_TIMEOUT}s")
             return None
         except json.JSONDecodeError as e:
-            print(f"[GEN] JSON parse error: {e}")
+            print(f"[GEN] Try {attempt + 1}/{total_attempts} FAILED — parse error: {e}")
+            if raw_text:
+                _dump_ai_output(raw_text, "JSON parse error")
             if attempt < MAX_RETRIES:
-                validation_error = f"Response was not valid JSON: {e}"
+                validation_error = f"Response was not valid JSON: {e}. Return ONLY a JSON object, no markdown or explanation."
+                print(f"[GEN] Retrying with error feedback...")
                 continue
             return None
         except Exception as e:
-            print(f"[GEN] API error: {e}")
+            print(f"[GEN] Try {attempt + 1}/{total_attempts} FAILED — {type(e).__name__}: {e}")
+            if raw_text:
+                _dump_ai_output(raw_text, f"{type(e).__name__}: {e}")
             return None
 
     return None
@@ -842,11 +1146,11 @@ async def _test_standalone():
         theme="shadow",
         difficulty=7,
         existing_monsters=[
-            {"kind": "shadow_wraith", "role": "medium_melee", "tags": ["shadow", "undead"]},
-            {"kind": "dark_bat", "role": "fodder", "tags": ["shadow", "flying"]},
+            {"kind": "shadow_wraith", "tags": ["shadow", "undead"]},
+            {"kind": "dark_bat", "tags": ["shadow", "flying"]},
         ],
         existing_tiles=[
-            {"id": "dark_stone", "role": "floor_variant", "tags": ["shadow", "dungeon"]},
+            {"id": "dark_stone", "walkable": True, "tags": ["shadow", "dungeon"]},
         ],
     )
     if result2:
@@ -862,9 +1166,9 @@ async def _test_standalone():
         theme="dungeon",
         difficulty=3,
         existing_monsters=[
-            {"kind": "skeleton", "role": "medium_melee", "tags": ["undead"]},
-            {"kind": "slime", "role": "fodder", "tags": ["dungeon"]},
-            {"kind": "bat", "role": "fodder", "tags": ["flying"]},
+            {"kind": "skeleton", "tags": ["undead"]},
+            {"kind": "slime", "tags": ["dungeon"]},
+            {"kind": "bat", "tags": ["flying"]},
         ],
         existing_tiles=[],
         monster_library_full=True,

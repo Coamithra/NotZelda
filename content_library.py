@@ -2,7 +2,7 @@
 Content Library — Tag-based storage, querying, and expiry for AI-generated content.
 
 Manages rooms, monsters, and tiles in fixed-capacity libraries with placeholder
-slots. Supports late binding via semantic tags: preferred → role+tags → role → generate.
+slots. Supports late binding via semantic tags: preferred → best tag overlap → generate.
 Tags are free-form strings (normalized on ingestion). Fuzzy tag matching bridges
 synonyms when exact matches fail. Persists to JSON files in data/.
 """
@@ -13,27 +13,6 @@ import time
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any, Optional
-
-# ---------------------------------------------------------------------------
-# Reference roles (soft guidance for AI prompts, not enforced)
-# ---------------------------------------------------------------------------
-
-MONSTER_ROLES = frozenset({
-    "fodder", "light_melee", "medium_melee", "heavy_melee",
-    "ranged", "tank", "boss", "swarm",
-})
-
-TILE_ROLES = frozenset({
-    "floor_base", "floor_variant", "wall_base", "wall_variant",
-    "pillar", "structural", "light_source", "decoration", "hazard",
-    "container", "furniture",
-})
-
-ROOM_ROLES = frozenset({
-    "combat", "puzzle", "treasure", "corridor", "hub", "boss_room",
-    "ambush", "rest",
-})
-
 
 # ---------------------------------------------------------------------------
 # Tag normalization & fuzzy matching
@@ -49,47 +28,6 @@ def normalize_tags(tags: list[str]) -> list[str]:
     return [t for raw in tags if (t := normalize_tag(raw))]
 
 
-# Fuzzy similarity threshold for partial tag matching (0.0 to 1.0).
-# A query tag is considered a fuzzy match if it scores above this.
-FUZZY_TAG_THRESHOLD = 0.5
-
-
-def _tag_similarity(a: str, b: str) -> float:
-    """Score similarity between two normalized tags. Returns 0.0-1.0.
-
-    Uses substring containment (strong signal) with bigram Jaccard as tiebreaker.
-    """
-    if a == b:
-        return 1.0
-    # Substring containment — one tag fully inside the other
-    if a in b or b in a:
-        return 0.9
-    # Bigram Jaccard similarity
-    if len(a) < 2 or len(b) < 2:
-        return 0.0
-    bigrams_a = {a[i:i+2] for i in range(len(a) - 1)}
-    bigrams_b = {b[i:i+2] for i in range(len(b) - 1)}
-    intersection = len(bigrams_a & bigrams_b)
-    union = len(bigrams_a | bigrams_b)
-    return intersection / union if union else 0.0
-
-
-def tags_match_fuzzy(query_tags: list[str], entry_tags: list[str],
-                     threshold: float = FUZZY_TAG_THRESHOLD) -> float:
-    """Check if all query tags have a fuzzy match in entry tags.
-
-    Returns the average best-match score (0.0 if any query tag has no match
-    above threshold). Higher is better.
-    """
-    if not query_tags:
-        return 0.0
-    total = 0.0
-    for qt in query_tags:
-        best = max((_tag_similarity(qt, et) for et in entry_tags), default=0.0)
-        if best < threshold:
-            return 0.0
-        total += best
-    return total / len(query_tags)
 
 # ---------------------------------------------------------------------------
 # Configuration defaults
@@ -114,7 +52,6 @@ class LibraryEntry:
     """A single item in a content library (room, monster, or tile)."""
     id: str                              # unique identifier (e.g. "flame_wyrm")
     content_type: str                    # "room", "monster", or "tile"
-    role: str                            # semantic role (e.g. "medium_melee")
     tags: list[str] = field(default_factory=list)
     created_at: float = 0.0             # time.time() when created
     data: dict[str, Any] = field(default_factory=dict)  # full payload
@@ -134,7 +71,6 @@ class LibraryEntry:
         return cls(
             id=d["id"],
             content_type=d["content_type"],
-            role=d["role"],
             tags=d.get("tags", []),
             created_at=d.get("created_at", 0.0),
             data=d.get("data", {}),
@@ -142,7 +78,7 @@ class LibraryEntry:
 
     @classmethod
     def placeholder(cls, content_type: str) -> "LibraryEntry":
-        return cls(id=PLACEHOLDER_ID, content_type=content_type, role="", tags=[])
+        return cls(id=PLACEHOLDER_ID, content_type=content_type, tags=[])
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +89,7 @@ class LibraryEntry:
 class ResolutionResult:
     """Result of resolving a content reference."""
     entry: Optional[LibraryEntry]
-    method: str   # "preferred", "role_tags", "role_only", "generate", "none"
+    method: str   # "preferred", "tag_match", "any", "generate"
 
 
 # ---------------------------------------------------------------------------
@@ -195,40 +131,37 @@ class ContentLibrary:
                 return e
         return None
 
-    def query_by_role_and_tags(self, role: str, tags: list[str]) -> list[LibraryEntry]:
-        """Find real entries matching the given role AND all given tags (exact)."""
-        results = []
+    def query_by_tags(self, tags: list[str]) -> list[LibraryEntry]:
+        """Find real entries matching ALL given tags (exact)."""
         normed = normalize_tags(tags)
         tag_set = set(normed)
-        for e in self._entries:
-            if e.is_placeholder:
-                continue
-            if e.role == role and tag_set.issubset(set(e.tags)):
-                results.append(e)
-        return results
+        return [e for e in self._entries
+                if not e.is_placeholder and tag_set.issubset(set(e.tags))]
 
-    def query_by_role_and_tags_fuzzy(self, role: str, tags: list[str],
-                                     threshold: float = FUZZY_TAG_THRESHOLD) -> list[LibraryEntry]:
-        """Find real entries matching role, with fuzzy tag matching.
+    def query_by_tag_overlap(self, tags: list[str],
+                              min_overlap: int = 1) -> list[tuple[float, LibraryEntry]]:
+        """Find real entries ranked by tag overlap score.
 
-        Returns entries sorted by descending match score.
+        Score = number of shared tags / total unique tags across both sets.
+        Returns (score, entry) pairs sorted by descending score,
+        filtered to entries with at least min_overlap shared tags.
         """
-        normed = normalize_tags(tags)
+        normed = set(normalize_tags(tags))
         if not normed:
             return []
         scored = []
         for e in self._entries:
-            if e.is_placeholder or e.role != role:
+            if e.is_placeholder:
                 continue
-            score = tags_match_fuzzy(normed, e.tags, threshold)
-            if score > 0:
-                scored.append((score, e))
+            entry_tags = set(e.tags)
+            shared = len(normed & entry_tags)
+            if shared < min_overlap:
+                continue
+            union = len(normed | entry_tags)
+            score = shared / union if union else 0.0
+            scored.append((score, e))
         scored.sort(key=lambda x: x[0], reverse=True)
-        return [e for _, e in scored]
-
-    def query_by_role(self, role: str) -> list[LibraryEntry]:
-        """Find real entries matching the given role (ignoring tags)."""
-        return [e for e in self._entries if not e.is_placeholder and e.role == role]
+        return scored
 
     def get_random_real(self) -> Optional[LibraryEntry]:
         """Return a random real entry, or None if library is empty."""
@@ -302,42 +235,45 @@ class ContentLibrary:
 
     # -- Resolution (late binding) --
 
-    def resolve(self, preferred_id: Optional[str], role: str, tags: list[str]) -> ResolutionResult:
+    def resolve(self, preferred_id: Optional[str], tags: list[str],
+                walkable: Optional[bool] = None) -> ResolutionResult:
         """
         Resolve a content reference using the fallback chain:
         1. preferred ID exists in library → use it
-        2. role + exact tags match → pick one
-        3. role + fuzzy tags match → pick best
-        4. role only match → pick one
-        5. nothing found → signal that generation is needed
+        2. best tag overlap match → pick highest scoring
+        3. any real entry (respecting walkability constraint) → pick random
+        4. nothing found → signal that generation is needed
+
+        For tiles, walkable is a hard constraint: a walkable tile can only be
+        substituted with another walkable tile, and vice versa.
         """
         import random
+
+        def _walkability_ok(entry: LibraryEntry) -> bool:
+            if walkable is None:
+                return True
+            return entry.data.get("walkable", False) == walkable
 
         # Step 1: preferred
         if preferred_id:
             entry = self.get_by_id(preferred_id)
-            if entry is not None:
+            if entry is not None and _walkability_ok(entry):
                 return ResolutionResult(entry=entry, method="preferred")
 
-        # Step 2: role + exact tags
+        # Step 2: best tag overlap
         if tags:
-            matches = self.query_by_role_and_tags(role, tags)
+            matches = self.query_by_tag_overlap(tags)
+            # Filter by walkability
+            matches = [(s, e) for s, e in matches if _walkability_ok(e)]
             if matches:
-                return ResolutionResult(entry=random.choice(matches), method="role_tags")
+                return ResolutionResult(entry=matches[0][1], method="tag_match")
 
-        # Step 3: role + fuzzy tags
-        if tags:
-            matches = self.query_by_role_and_tags_fuzzy(role, tags)
-            if matches:
-                return ResolutionResult(entry=matches[0], method="role_tags_fuzzy")
+        # Step 3: any real entry
+        candidates = [e for e in self.real_entries if _walkability_ok(e)]
+        if candidates:
+            return ResolutionResult(entry=random.choice(candidates), method="any")
 
-        # Step 4: role only
-        if role:
-            matches = self.query_by_role(role)
-            if matches:
-                return ResolutionResult(entry=random.choice(matches), method="role_only")
-
-        # Step 5: nothing — generation needed
+        # Step 4: nothing — generation needed
         return ResolutionResult(entry=None, method="generate")
 
     # -- Persistence --

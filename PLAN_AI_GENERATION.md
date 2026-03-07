@@ -65,48 +65,49 @@ Rooms don't hardcode specific monster/tile IDs. They store semantic slots:
 ```json
 {
   "monsters": [
-    { "role": "medium_melee", "tags": ["fire"], "preferred": "flame_wyrm" },
-    { "role": "ranged",       "tags": ["fire"], "preferred": "ember_spitter" }
+    { "tags": ["fire", "melee"], "preferred": "flame_wyrm" },
+    { "tags": ["fire", "ranged"], "preferred": "ember_spitter" }
   ],
   "custom_tiles": {
-    "X1": { "role": "floor_variant", "tags": ["fire"], "preferred": "lava_crack" },
-    "X2": { "role": "light_source",  "tags": ["wall_mounted"], "preferred": "brazier" }
+    "X1": { "tags": ["fire"], "walkable": true, "preferred": "lava_crack" },
+    "X2": { "tags": ["wall_mounted"], "walkable": false, "preferred": "brazier" }
   }
 }
 ```
 
 At dungeon build time, each slot resolves:
 1. Is `preferred` still in the library? Use it.
-2. Gone? Search for any content matching `role` + `tags`.
-3. No tag match? Match by `role` alone.
-4. Nothing? Generate a replacement on the spot — role and tags become
-   the AI prompt.
+2. Gone? Find the best substitute by **tag overlap** — score =
+   shared tags / total unique tags. Pick the highest-scoring match.
+3. No tag matches? Pick any entry from the library.
+4. Nothing? Generate a replacement on the spot — tags become the AI prompt.
+
+**Walkability is a hard constraint for tiles:** a walkable tile can only be
+substituted with another walkable tile, and vice versa. This ensures the
+room layout stays playable even after substitution.
 
 This means:
 - Rooms are durable — they degrade gracefully, almost never become invalid
 - Monsters and tiles can rotate freely
-- Replacement is semantic ("find me another wall-mounted light source"),
-  not fuzzy name matching
+- Replacement is semantic ("find me another fire tile that's walkable"),
+  scored by tag overlap
 - The AI is great at tagging its own output — include the tag vocabulary
   in the system prompt
 
 ### Tag Vocabulary
 
-Roles and tags are a fixed vocabulary (extendable over time):
-
-**Monster roles:** `fodder`, `light_melee`, `medium_melee`, `heavy_melee`,
-`ranged`, `tank`, `boss`, `swarm`
+Tags are free-form strings (extendable over time). The AI generates tags
+for its own content; these are reference examples:
 
 **Monster tags:** `fire`, `ice`, `shadow`, `undead`, `beast`, `magic`,
-`poison`, `flying`, `dungeon`, `cave`, `swamp`, `desert`
-
-**Tile roles:** `floor_base`, `floor_variant`, `wall_base`, `wall_variant`,
-`pillar`, `structural`, `light_source`, `decoration`, `hazard`,
-`container`, `furniture`
+`poison`, `flying`, `dungeon`, `cave`, `swamp`, `desert`, `melee`,
+`ranged`, `light`, `heavy`, `fodder`, `boss`, `tank`, `swarm`
 
 **Tile tags:** `fire`, `ice`, `shadow`, `stone`, `wood`, `metal`,
 `organic`, `magical`, `wall_mounted`, `freestanding`, `dungeon`,
-`walkable`, `blocking`
+`floor`, `wall`, `pillar`, `decoration`, `light`, `hazard`
+
+Walkability is a separate boolean property on tiles, not a tag.
 
 ### The Behavior Engine
 

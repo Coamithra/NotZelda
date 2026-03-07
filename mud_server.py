@@ -63,6 +63,10 @@ WALKABLE_TILES = {GRASS, STONE, WOOD, FLOWERS, DIRT, STAIRS_UP, STAIRS_DOWN, DOO
                   SAND, CAVE_FLOOR, SWAMP, BRIDGE, RUINS_FLOOR, TALL_GRASS, ROAD,
                   SHALLOW_WATER, DUNGEON_FLOOR}
 
+def is_walkable_tile(tile) -> bool:
+    """Check if a tile ID (numeric or string) is walkable."""
+    return tile in WALKABLE_TILES or tile in CUSTOM_WALKABLE_TILES
+
 # Tile code string -> numeric ID (for .room file parsing)
 TILE_CODES = {
     "GR": GRASS, "ST": STONE, "WD": WOOD, "WS": WALL_STONE, "WW": WALL_WOOD,
@@ -351,6 +355,7 @@ MONSTER_STATS = {
 CUSTOM_SPRITES = {}       # kind -> sprite data dict (same shape as MONSTER_SPRITE_DATA entries)
 CUSTOM_DEATH_SPRITES = {} # kind -> death sprite data dict
 CUSTOM_TILE_RECIPES = {}  # tile_id -> recipe dict (colors + operations)
+CUSTOM_WALKABLE_TILES = set()  # set of custom tile IDs that are walkable
 MONSTER_BEHAVIORS = {}    # kind -> behavior dict {rules: [...], patrol_waypoints: [...]}
 
 # ---------------------------------------------------------------------------
@@ -534,6 +539,7 @@ def validate_tile(data: dict) -> list[str]:
 
     Expected shape:
       id: str
+      walkable: bool (optional, defaults to False)
       colors: {key: "#hex"}
       operations: [{op: "fill"|"noise"|..., ...}, ...]
     """
@@ -637,7 +643,12 @@ def register_tile_type(data: dict) -> tuple[bool, list[str]]:
         "operations": data["operations"],
     }
 
-    print(f"[REG] Tile type registered: {tile_id}")
+    if data.get("walkable", False):
+        CUSTOM_WALKABLE_TILES.add(tile_id)
+    else:
+        CUSTOM_WALKABLE_TILES.discard(tile_id)
+
+    print(f"[REG] Tile type registered: {tile_id} (walkable={data.get('walkable', False)})")
     return True, []
 
 
@@ -1173,7 +1184,7 @@ async def damage_player(player: Player, damage: int, room_id: str):
         room = ROOMS[room_id]
         tilemap = room["tilemap"]
         guards = GUARDS.get(room_id, [])
-        if 0 <= kx < ROOM_COLS and 0 <= ky < ROOM_ROWS and tilemap[ky][kx] in WALKABLE_TILES:
+        if 0 <= kx < ROOM_COLS and 0 <= ky < ROOM_ROWS and is_walkable_tile(tilemap[ky][kx]):
             if not any(g["x"] == kx and g["y"] == ky for g in guards):
                 player.x, player.y = kx, ky
                 knocked = True
@@ -1362,7 +1373,7 @@ async def handle_move(player: Player, direction: str):
         return
 
     # Walkability check
-    if tile not in WALKABLE_TILES:
+    if not is_walkable_tile(tile):
         # Still update facing direction
         await broadcast_to_room(player.room, {
             "type": "player_moved",
@@ -1565,7 +1576,7 @@ async def attack_projectile(monster, room_id, monster_idx, atk, target):
     start_y = monster.y + dy
     if start_x < 0 or start_x >= ROOM_COLS or start_y < 0 or start_y >= ROOM_ROWS:
         return
-    if ROOMS[room_id]["tilemap"][start_y][start_x] not in WALKABLE_TILES:
+    if not is_walkable_tile(ROOMS[room_id]["tilemap"][start_y][start_x]):
         return
 
     proj_id = _next_projectile_id
@@ -1765,7 +1776,7 @@ async def projectile_tick():
                     # Out of bounds or hit a wall
                     if (proj.x < 0 or proj.x >= ROOM_COLS or
                             proj.y < 0 or proj.y >= ROOM_ROWS or
-                            ROOMS[room_id]["tilemap"][proj.y][proj.x] not in WALKABLE_TILES):
+                            not is_walkable_tile(ROOMS[room_id]["tilemap"][proj.y][proj.x])):
                         to_remove.append(proj_id)
                         await broadcast_to_room(room_id, {"type": "projectile_gone", "id": proj_id})
                         break
@@ -2162,7 +2173,7 @@ async def handle_debug_spawn(player: Player, args: str):
     for dx, dy in [(1,0), (-1,0), (0,1), (0,-1), (2,0), (-2,0), (0,2), (0,-2)]:
         nx, ny = player.x + dx, player.y + dy
         if 0 <= nx < ROOM_COLS and 0 <= ny < ROOM_ROWS:
-            if tilemap[ny][nx] in WALKABLE_TILES:
+            if is_walkable_tile(tilemap[ny][nx]):
                 if not any(g["x"] == nx and g["y"] == ny for g in guards):
                     spawn_x, spawn_y = nx, ny
                     break
@@ -2404,7 +2415,7 @@ async def main():
     load_room_files()
     load_dungeon_templates()
     _auto_register_debug_monsters()
-    behavior_engine.init(players_in_room, ROOM_COLS, ROOM_ROWS, WALKABLE_TILES, GUARDS, ROOMS)
+    behavior_engine.init(players_in_room, ROOM_COLS, ROOM_ROWS, is_walkable_tile, GUARDS, ROOMS)
     port = 8080
     server = await websockets.serve(
         handle_connection, "0.0.0.0", port,
