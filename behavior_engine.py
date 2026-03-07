@@ -23,18 +23,18 @@ import time
 _players_in_room = None
 _ROOM_COLS = None
 _ROOM_ROWS = None
-_WALKABLE_TILES = None
+_is_walkable_tile = None
 _GUARDS = None
 _ROOMS = None
 
 
-def init(players_in_room, ROOM_COLS, ROOM_ROWS, WALKABLE_TILES, GUARDS, ROOMS):
+def init(players_in_room, ROOM_COLS, ROOM_ROWS, is_walkable_tile, GUARDS, ROOMS):
     """Called once by mud_server to inject shared state references."""
-    global _players_in_room, _ROOM_COLS, _ROOM_ROWS, _WALKABLE_TILES, _GUARDS, _ROOMS
+    global _players_in_room, _ROOM_COLS, _ROOM_ROWS, _is_walkable_tile, _GUARDS, _ROOMS
     _players_in_room = players_in_room
     _ROOM_COLS = ROOM_COLS
     _ROOM_ROWS = ROOM_ROWS
-    _WALKABLE_TILES = WALKABLE_TILES
+    _is_walkable_tile = is_walkable_tile
     _GUARDS = GUARDS
     _ROOMS = ROOMS
 
@@ -161,7 +161,7 @@ def _is_walkable(x, y, room_id, monster_list=None, exclude_monster=None):
     if x < 0 or x >= _ROOM_COLS or y < 0 or y >= _ROOM_ROWS:
         return False
     tilemap = _ROOMS[room_id]["tilemap"]
-    if tilemap[y][x] not in _WALKABLE_TILES:
+    if not _is_walkable_tile(tilemap[y][x]):
         return False
     guards = _GUARDS.get(room_id, [])
     if any(g["x"] == x and g["y"] == y for g in guards):

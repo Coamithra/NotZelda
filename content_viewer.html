@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Content Viewer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #1a1a2e; color: #e0e0e0; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; }
+
+/* Top bar */
+.topbar {
+  display: flex; align-items: center; gap: 12px; padding: 8px 16px;
+  background: #16213e; border-bottom: 2px solid #0f3460;
+}
+.topbar h1 { font-size: 16px; color: #e94560; margin-right: 16px; }
+.topbar label { color: #aaa; font-size: 12px; }
+.topbar select, .topbar input[type=range] { background: #1a1a2e; color: #e0e0e0; border: 1px solid #0f3460; padding: 4px 8px; border-radius: 3px; }
+.topbar input[type=range] { width: 100px; }
+.topbar button {
+  background: #e94560; color: #fff; border: none; padding: 6px 16px;
+  border-radius: 3px; cursor: pointer; font-weight: bold; font-family: inherit;
+}
+.topbar button:hover { background: #c73850; }
+.topbar button:disabled { background: #555; cursor: not-allowed; }
+#diffDisplay { color: #e94560; font-weight: bold; min-width: 24px; text-align: center; }
+#statusText { margin-left: auto; color: #aaa; font-size: 12px; }
+
+/* Main layout */
+.main { display: flex; height: calc(100vh - 106px); overflow: hidden; }
+
+/* Left panel - library browser */
+.panel-left {
+  width: 240px; min-width: 240px; overflow-y: auto; padding: 8px;
+  border-right: 2px solid #0f3460; background: #16213e;
+}
+.lib-section { margin-bottom: 16px; }
+.lib-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.lib-header h3 { font-size: 13px; color: #e94560; }
+.lib-header .count { color: #aaa; font-size: 11px; }
+.capacity-bar {
+  height: 6px; background: #1a1a2e; border-radius: 3px; margin-bottom: 8px; overflow: hidden;
+}
+.capacity-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+.capacity-fill.monsters { background: #e94560; }
+.capacity-fill.tiles { background: #0f3460; }
+.capacity-fill.rooms { background: #e9a545; }
+
+.lib-item {
+  display: flex; align-items: center; gap: 6px; padding: 4px;
+  border-radius: 3px; cursor: pointer; margin-bottom: 2px;
+}
+.lib-item:hover { background: #1a1a2e; }
+.lib-item.selected { background: #0f3460; }
+.lib-item canvas { border: 1px solid #333; image-rendering: pixelated; }
+.lib-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.lib-item .del-btn {
+  background: none; border: none; color: #666; cursor: pointer; font-size: 14px; padding: 0 4px;
+  font-family: inherit;
+}
+.lib-item .del-btn:hover { color: #e94560; }
+.room-item .name { font-size: 11px; }
+.room-item .meta { color: #777; font-size: 10px; }
+
+/* Center panel - room preview */
+.panel-center {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  padding: 16px; background: #1a1a2e;
+}
+#roomCanvas { border: 2px solid #0f3460; image-rendering: pixelated; background: #000; }
+.no-room { color: #555; font-size: 14px; text-align: center; }
+
+/* Right panel - details */
+.panel-right {
+  width: 300px; min-width: 300px; overflow-y: auto; padding: 12px;
+  border-left: 2px solid #0f3460; background: #16213e;
+}
+.detail-title { font-size: 15px; color: #e94560; margin-bottom: 8px; }
+.detail-section { margin-bottom: 12px; }
+.detail-section h4 { color: #888; font-size: 11px; text-transform: uppercase; margin-bottom: 4px; }
+.tag { display: inline-block; background: #0f3460; color: #aad; padding: 1px 6px; border-radius: 10px; font-size: 11px; margin: 1px; }
+.badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 11px; }
+.badge-walk { background: #2a6a2a; color: #afa; }
+.badge-wall { background: #6a2a2a; color: #faa; }
+.stat-row { display: flex; gap: 16px; margin-bottom: 2px; }
+.stat-label { color: #888; min-width: 80px; }
+.stat-val { color: #e0e0e0; }
+.rule-list { list-style: none; padding: 0; }
+.rule-list li { padding: 2px 0; font-size: 12px; color: #ccc; }
+.rule-list li::before { content: "\2192 "; color: #e94560; }
+.attack-item { background: #1a1a2e; padding: 4px 8px; border-radius: 3px; margin-bottom: 4px; font-size: 12px; }
+.color-swatch {
+  display: inline-block; width: 16px; height: 16px; border: 1px solid #555;
+  border-radius: 2px; vertical-align: middle; margin-right: 4px;
+}
+.color-row { margin-bottom: 2px; }
+.sprite-preview { margin: 8px 0; }
+.sprite-preview canvas { border: 1px solid #333; image-rendering: pixelated; margin-right: 8px; }
+.ops-list { list-style: none; padding: 0; }
+.ops-list li { padding: 1px 0; font-size: 12px; color: #bbb; }
+.json-toggle { color: #0f3460; cursor: pointer; font-size: 11px; text-decoration: underline; }
+.json-toggle:hover { color: #e94560; }
+.json-block { background: #111; padding: 8px; border-radius: 3px; font-size: 11px; max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-all; display: none; margin-top: 4px; }
+.detail-delete { margin-top: 12px; }
+.detail-delete button {
+  background: #6a2a2a; color: #faa; border: none; padding: 4px 12px;
+  border-radius: 3px; cursor: pointer; font-family: inherit;
+}
+.detail-delete button:hover { background: #8a3a3a; }
+.placement-list { list-style: none; padding: 0; }
+.placement-list li { font-size: 12px; padding: 1px 0; }
+
+/* Bottom bar */
+.bottombar {
+  display: flex; align-items: center; gap: 16px; padding: 6px 16px;
+  background: #16213e; border-top: 2px solid #0f3460; font-size: 12px; color: #888;
+}
+
+/* Log panel */
+.log-panel {
+  background: #111; border-top: 2px solid #0f3460;
+  max-height: 0; overflow: hidden; transition: max-height 0.3s ease;
+}
+.log-panel.open { max-height: 200px; }
+.log-header {
+  display: flex; align-items: center; gap: 8px; padding: 4px 16px;
+  background: #16213e; cursor: pointer; user-select: none; border-top: 2px solid #0f3460;
+}
+.log-header:hover { background: #1a2a4e; }
+.log-header h4 { font-size: 12px; color: #888; }
+.log-header .arrow { color: #555; font-size: 10px; transition: transform 0.2s; }
+.log-header .arrow.open { transform: rotate(90deg); }
+.log-badge { background: #e94560; color: #fff; font-size: 10px; padding: 0 5px; border-radius: 8px; min-width: 16px; text-align: center; display: none; }
+.log-badge.visible { display: inline-block; }
+.log-content {
+  height: 180px; overflow-y: auto; padding: 4px 16px; font-size: 11px;
+}
+.log-entry { padding: 1px 0; white-space: pre-wrap; word-break: break-all; }
+.log-entry.info { color: #8a8; }
+.log-entry.error { color: #e94560; }
+.log-entry .log-ts { color: #555; margin-right: 8px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Content Viewer</h1>
+  <label>Theme</label>
+  <select id="themeSelect">
+    <option value="dungeon">Dungeon</option>
+    <option value="fire">Fire</option>
+    <option value="ice">Ice</option>
+    <option value="shadow">Shadow</option>
+    <option value="undead">Undead</option>
+    <option value="beast">Beast</option>
+    <option value="poison">Poison</option>
+    <option value="swamp">Swamp</option>
+    <option value="cave">Cave</option>
+  </select>
+  <label>Difficulty</label>
+  <input type="range" id="diffSlider" min="1" max="10" value="5">
+  <span id="diffDisplay">5</span>
+  <button id="generateBtn" onclick="generateRoom()">Generate Room</button>
+  <button onclick="testCli()" style="background:#0f3460">Test CLI</button>
+  <span id="statusText">Ready</span>
+</div>
+
+<div class="main">
+  <!-- Left panel: library browser -->
+  <div class="panel-left" id="libraryPanel">
+    <div class="lib-section" id="monsterSection">
+      <div class="lib-header">
+        <h3>Monsters</h3>
+        <span class="count" id="monsterCount">0/40</span>
+      </div>
+      <div class="capacity-bar"><div class="capacity-fill monsters" id="monsterBar" style="width:0%"></div></div>
+      <div id="monsterList"></div>
+    </div>
+    <div class="lib-section" id="tileSection">
+      <div class="lib-header">
+        <h3>Tiles</h3>
+        <span class="count" id="tileCount">0/30</span>
+      </div>
+      <div class="capacity-bar"><div class="capacity-fill tiles" id="tileBar" style="width:0%"></div></div>
+      <div id="tileList"></div>
+    </div>
+    <div class="lib-section" id="roomSection">
+      <div class="lib-header">
+        <h3>Rooms</h3>
+        <span class="count" id="roomCount">0/50</span>
+      </div>
+      <div class="capacity-bar"><div class="capacity-fill rooms" id="roomBar" style="width:0%"></div></div>
+      <div id="roomList"></div>
+    </div>
+  </div>
+
+  <!-- Center panel: room preview -->
+  <div class="panel-center">
+    <div id="roomPreviewWrap">
+      <canvas id="roomCanvas" width="480" height="352"></canvas>
+    </div>
+  </div>
+
+  <!-- Right panel: details -->
+  <div class="panel-right" id="detailPanel">
+    <div class="no-room">Select an item to view details</div>
+  </div>
+</div>
+
+<div class="log-header" onclick="toggleLogPanel()">
+  <span class="arrow" id="logArrow">&#9654;</span>
+  <h4>Server Log</h4>
+  <span class="log-badge" id="logBadge">0</span>
+</div>
+<div class="log-panel" id="logPanel">
+  <div class="log-content" id="logContent"></div>
+</div>
+
+<div class="bottombar">
+  <span id="bottomStatus">Loading...</span>
+  <span id="bottomUsage"></span>
+</div>
+
+<script src="/sprite_data.js"></script>
+<script src="/sprites.js"></script>
+<script src="/tiles.js"></script>
+<script>
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let libData = null;
+let selectedType = null;  // "monster", "tile", "room"
+let selectedId = null;
+
+const TILE_CODE_MAP = { "DW": 32, "DF": 33, "PL": 34, "SC": 35 };
+const TS = 32;   // tile size in pixels
+const TILE = 16; // tile grid (internal)
+const SCALE = 2; // pixel scale
+
+// ---------------------------------------------------------------------------
+// Difficulty slider
+// ---------------------------------------------------------------------------
+document.getElementById('diffSlider').oninput = function() {
+  document.getElementById('diffDisplay').textContent = this.value;
+};
+
+// ---------------------------------------------------------------------------
+// API helpers
+// ---------------------------------------------------------------------------
+async function apiGet(path) {
+  const r = await fetch(path);
+  return r.json();
+}
+
+async function apiPost(path, body) {
+  const r = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return { status: r.status, data: await r.json() };
+}
+
+async function apiDelete(path) {
+  const r = await fetch(path, { method: 'DELETE' });
+  return { status: r.status, data: await r.json() };
+}
+
+// ---------------------------------------------------------------------------
+// Load libraries
+// ---------------------------------------------------------------------------
+async function loadLibraries() {
+  libData = await apiGet('/api/libraries');
+  renderLibraryPanel();
+  updateUsage();
+}
+
+function renderLibraryPanel() {
+  if (!libData) return;
+  _animatedCanvases.length = 0; // clear old refs
+
+  // Monsters
+  const m = libData.monsters;
+  document.getElementById('monsterCount').textContent = `${m.real_count}/${m.capacity}`;
+  document.getElementById('monsterBar').style.width = `${(m.real_count / m.capacity) * 100}%`;
+  const mList = document.getElementById('monsterList');
+  mList.innerHTML = '';
+  for (const entry of m.entries) {
+    const item = createMonsterItem(entry);
+    mList.appendChild(item);
+  }
+
+  // Tiles
+  const t = libData.tiles;
+  document.getElementById('tileCount').textContent = `${t.real_count}/${t.capacity}`;
+  document.getElementById('tileBar').style.width = `${(t.real_count / t.capacity) * 100}%`;
+  const tList = document.getElementById('tileList');
+  tList.innerHTML = '';
+  for (const entry of t.entries) {
+    const item = createTileItem(entry);
+    tList.appendChild(item);
+  }
+
+  // Rooms
+  const rm = libData.rooms;
+  document.getElementById('roomCount').textContent = `${rm.real_count}/${rm.capacity}`;
+  document.getElementById('roomBar').style.width = `${(rm.real_count / rm.capacity) * 100}%`;
+  const rList = document.getElementById('roomList');
+  rList.innerHTML = '';
+  for (const entry of rm.entries) {
+    const item = createRoomItem(entry);
+    rList.appendChild(item);
+  }
+
+  document.getElementById('bottomStatus').textContent =
+    `Monsters: ${m.real_count}/${m.capacity} | Tiles: ${t.real_count}/${t.capacity} | Rooms: ${rm.real_count}/${rm.capacity}`;
+
+  // Re-select if needed
+  if (selectedType && selectedId) {
+    const el = document.querySelector(`.lib-item[data-type="${selectedType}"][data-id="${selectedId}"]`);
+    if (el) el.classList.add('selected');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Library item renderers
+// ---------------------------------------------------------------------------
+function createMonsterItem(entry) {
+  const div = document.createElement('div');
+  div.className = 'lib-item';
+  div.dataset.type = 'monster';
+  div.dataset.id = entry.id;
+  if (selectedType === 'monster' && selectedId === entry.id) div.classList.add('selected');
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 32; canvas.height = 32;
+  renderMonsterThumb(canvas, entry.data);
+  div.appendChild(canvas);
+
+  const name = document.createElement('span');
+  name.className = 'name';
+  name.textContent = entry.id;
+  div.appendChild(name);
+
+  const del = document.createElement('button');
+  del.className = 'del-btn';
+  del.textContent = '\u00D7';
+  del.onclick = (e) => { e.stopPropagation(); deleteItem('monster', entry.id); };
+  div.appendChild(del);
+
+  div.onclick = () => selectItem('monster', entry);
+  return div;
+}
+
+function createTileItem(entry) {
+  const div = document.createElement('div');
+  div.className = 'lib-item';
+  div.dataset.type = 'tile';
+  div.dataset.id = entry.id;
+  if (selectedType === 'tile' && selectedId === entry.id) div.classList.add('selected');
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 32; canvas.height = 32;
+  renderTileThumb(canvas, entry.data);
+  div.appendChild(canvas);
+
+  const name = document.createElement('span');
+  name.className = 'name';
+  name.textContent = entry.id;
+  div.appendChild(name);
+
+  const del = document.createElement('button');
+  del.className = 'del-btn';
+  del.textContent = '\u00D7';
+  del.onclick = (e) => { e.stopPropagation(); deleteItem('tile', entry.id); };
+  div.appendChild(del);
+
+  div.onclick = () => selectItem('tile', entry);
+  return div;
+}
+
+function createRoomItem(entry) {
+  const div = document.createElement('div');
+  div.className = 'lib-item room-item';
+  div.dataset.type = 'room';
+  div.dataset.id = entry.id;
+  if (selectedType === 'room' && selectedId === entry.id) div.classList.add('selected');
+
+  const info = document.createElement('div');
+  info.style.flex = '1';
+  const name = document.createElement('div');
+  name.className = 'name';
+  name.textContent = entry.data.name || entry.id;
+  info.appendChild(name);
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  const mCount = (entry.data.monster_placements || []).length;
+  meta.textContent = `${mCount} monsters`;
+  info.appendChild(meta);
+  div.appendChild(info);
+
+  const del = document.createElement('button');
+  del.className = 'del-btn';
+  del.textContent = '\u00D7';
+  del.onclick = (e) => { e.stopPropagation(); deleteItem('room', entry.id); };
+  div.appendChild(del);
+
+  div.onclick = () => selectItem('room', entry);
+  return div;
+}
+
+// ---------------------------------------------------------------------------
+// Thumbnail renderers + animation
+// ---------------------------------------------------------------------------
+const _animatedCanvases = []; // [{canvas, sprite, scale}]
+let _animFrame = 0;
+
+function renderMonsterThumb(canvas, monsterData) {
+  const sprite = monsterData.sprite;
+  if (!sprite || !sprite.frames || !sprite.frames[0]) return;
+  canvas._sprite = sprite;
+  canvas._scale = 2;
+  _animatedCanvases.push(canvas);
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, 32, 32);
+  drawLayers(ctx, 0, 0, sprite.frames[0], 2, sprite.colors);
+}
+
+function _animTick() {
+  _animFrame++;
+  for (const canvas of _animatedCanvases) {
+    const sprite = canvas._sprite;
+    if (!sprite || !sprite.frames) continue;
+    const frame = _animFrame % sprite.frames.length;
+    const ctx = canvas.getContext('2d');
+    const s = canvas._scale;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawLayers(ctx, 0, 0, sprite.frames[frame], s, sprite.colors);
+  }
+  _drawRoomFrame();
+}
+
+setInterval(_animTick, 400);
+
+function renderTileThumb(canvas, tileData) {
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, 32, 32);
+  if (!tileData.colors || !tileData.operations) return;
+  runTileRecipe(ctx, 32, 16, 2, tileData);
+}
+
+// ---------------------------------------------------------------------------
+// Room preview rendering
+// ---------------------------------------------------------------------------
+let _currentRoomData = null;
+let _roomBgCache = null; // cached tilemap image
+
+function renderRoomPreview(roomData) {
+  _currentRoomData = roomData;
+  const canvas = document.getElementById('roomCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, 480, 352);
+
+  if (!roomData || !roomData.tilemap) {
+    _roomBgCache = null;
+    return;
+  }
+
+  // Register custom tiles from library
+  if (libData) {
+    for (const entry of libData.tiles.entries) {
+      customTiles[entry.id] = entry.data;
+    }
+  }
+  for (const t of (roomData.new_tiles || [])) {
+    customTiles[t.id] = t;
+  }
+
+  // Clear custom tile cache entries
+  for (const k of Object.keys(tileCanvases)) {
+    if (typeof k === "string" && isNaN(Number(k))) {
+      delete tileCanvases[k];
+    }
+  }
+
+  // Register custom monster sprites
+  if (libData) {
+    for (const entry of libData.monsters.entries) {
+      if (entry.data.sprite) customMonsterSprites[entry.id] = entry.data.sprite;
+    }
+  }
+  for (const m of (roomData.new_monsters || [])) {
+    if (m.sprite) customMonsterSprites[m.kind] = m.sprite;
+  }
+
+  // Render tilemap to background cache
+  const bgCanvas = document.createElement('canvas');
+  bgCanvas.width = 480; bgCanvas.height = 352;
+  const bgCtx = bgCanvas.getContext('2d');
+  const tilemap = roomData.tilemap;
+  for (let row = 0; row < tilemap.length; row++) {
+    for (let col = 0; col < tilemap[row].length; col++) {
+      const code = tilemap[row][col];
+      const tileId = TILE_CODE_MAP[code] !== undefined ? TILE_CODE_MAP[code] : code;
+      try {
+        bgCtx.drawImage(getTileCanvas(tileId, TS, TILE, SCALE), col * TS, row * TS);
+      } catch (e) {
+        bgCtx.fillStyle = '#333';
+        bgCtx.fillRect(col * TS, row * TS, TS, TS);
+      }
+    }
+  }
+  _roomBgCache = bgCanvas;
+
+  // Draw initial frame
+  _drawRoomFrame();
+}
+
+function _drawRoomFrame() {
+  if (!_currentRoomData || !_roomBgCache) return;
+  const canvas = document.getElementById('roomCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(_roomBgCache, 0, 0);
+  for (const p of (_currentRoomData.monster_placements || [])) {
+    drawMonsterSprite(ctx, p.x * TS, p.y * TS, p.kind, _animFrame, SCALE);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Selection & details
+// ---------------------------------------------------------------------------
+function selectItem(type, entry) {
+  // Deselect previous
+  document.querySelectorAll('.lib-item.selected').forEach(el => el.classList.remove('selected'));
+
+  selectedType = type;
+  selectedId = entry.id;
+
+  // Highlight
+  const el = document.querySelector(`.lib-item[data-type="${type}"][data-id="${entry.id}"]`);
+  if (el) el.classList.add('selected');
+
+  // Show details
+  if (type === 'monster') showMonsterDetails(entry);
+  else if (type === 'tile') showTileDetails(entry);
+  else if (type === 'room') showRoomDetails(entry);
+
+  // If room, render preview
+  if (type === 'room') {
+    renderRoomPreview(entry.data);
+  }
+}
+
+function relativeTime(ts) {
+  if (!ts) return 'unknown';
+  const diff = (Date.now() / 1000) - ts;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function showMonsterDetails(entry) {
+  const d = entry.data;
+  const panel = document.getElementById('detailPanel');
+  let html = `<div class="detail-title">${entry.id}</div>`;
+
+  // Tags
+  html += `<div class="detail-section"><h4>Tags</h4>`;
+  for (const t of (entry.tags || [])) html += `<span class="tag">${t}</span> `;
+  html += `<br><span style="color:#666;font-size:11px">Created ${relativeTime(entry.created_at)}</span></div>`;
+
+  // Stats
+  const stats = d.stats || {};
+  html += `<div class="detail-section"><h4>Stats</h4>`;
+  html += `<div class="stat-row"><span class="stat-label">HP</span><span class="stat-val">${stats.hp || '?'}</span></div>`;
+  html += `<div class="stat-row"><span class="stat-label">Damage</span><span class="stat-val">${stats.damage || '?'}</span></div>`;
+  html += `<div class="stat-row"><span class="stat-label">Hop Interval</span><span class="stat-val">${stats.hop_interval || '?'}s</span></div>`;
+  html += `</div>`;
+
+  // Behavior
+  const behavior = d.behavior || {};
+  if (behavior.rules && behavior.rules.length) {
+    html += `<div class="detail-section"><h4>Behavior Rules</h4><ul class="rule-list">`;
+    for (const rule of behavior.rules) {
+      if (rule.default) {
+        html += `<li>default: <b>${rule.default}</b></li>`;
+      } else {
+        const cond = rule['if'] || '?';
+        const val = rule.value !== undefined ? ` ${rule.value}` : (rule.range !== undefined ? ` ${rule.range}` : '');
+        html += `<li>if ${cond}${val}: <b>${rule['do'] || '?'}</b></li>`;
+      }
+    }
+    html += `</ul></div>`;
+  }
+
+  // Attacks
+  if (behavior.attacks && behavior.attacks.length) {
+    html += `<div class="detail-section"><h4>Attacks</h4>`;
+    for (const atk of behavior.attacks) {
+      html += `<div class="attack-item">${atk.type} &mdash; range: ${atk.range}, dmg: ${atk.damage}, cd: ${atk.cooldown}s`;
+      if (atk.sprite_color) html += ` <span class="color-swatch" style="background:${atk.sprite_color}"></span>`;
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+
+  // Sprite preview
+  html += `<div class="detail-section"><h4>Sprite Preview</h4><div class="sprite-preview" id="spritePreview"></div></div>`;
+
+  // JSON
+  html += `<div class="detail-section"><span class="json-toggle" onclick="toggleJson()">Show raw JSON</span>`;
+  html += `<div class="json-block" id="jsonBlock">${JSON.stringify(d, null, 2)}</div></div>`;
+
+  // Delete
+  html += `<div class="detail-delete"><button class="detail-delete-btn" data-type="monster" data-id="${entry.id}">Delete Monster</button></div>`;
+
+  panel.innerHTML = html;
+
+  const delBtn = panel.querySelector('.detail-delete-btn');
+  if (delBtn) delBtn.onclick = () => deleteItem(delBtn.dataset.type, delBtn.dataset.id);
+
+  // Render animated sprite preview
+  const previewDiv = document.getElementById('spritePreview');
+  if (d.sprite && d.sprite.frames) {
+    const c = document.createElement('canvas');
+    c.width = 64; c.height = 64;
+    c._sprite = d.sprite;
+    c._scale = 4;
+    _animatedCanvases.push(c);
+    const ctx = c.getContext('2d');
+    drawLayers(ctx, 0, 0, d.sprite.frames[0], 4, d.sprite.colors);
+    previewDiv.appendChild(c);
+
+    const label = document.createElement('span');
+    label.style.cssText = 'color:#666;font-size:11px;vertical-align:top;margin-left:4px';
+    label.textContent = `${d.sprite.frames.length} frames`;
+    previewDiv.appendChild(label);
+  }
+}
+
+function showTileDetails(entry) {
+  const d = entry.data;
+  const panel = document.getElementById('detailPanel');
+  let html = `<div class="detail-title">${entry.id}</div>`;
+
+  // Walkable badge + tags
+  html += `<div class="detail-section">`;
+  html += d.walkable ? `<span class="badge badge-walk">walkable</span>` : `<span class="badge badge-wall">non-walkable</span>`;
+  html += `<br>`;
+  for (const t of (entry.tags || [])) html += `<span class="tag">${t}</span> `;
+  html += `<br><span style="color:#666;font-size:11px">Created ${relativeTime(entry.created_at)}</span></div>`;
+
+  // Colors
+  html += `<div class="detail-section"><h4>Colors</h4>`;
+  for (const [key, val] of Object.entries(d.colors || {})) {
+    html += `<div class="color-row"><span class="color-swatch" style="background:${val}"></span> ${key}: ${val}</div>`;
+  }
+  html += `</div>`;
+
+  // Operations
+  if (d.operations && d.operations.length) {
+    html += `<div class="detail-section"><h4>Operations</h4><ul class="ops-list">`;
+    for (const op of d.operations) {
+      html += `<li>${op.op}`;
+      if (op.color) html += ` (${op.color})`;
+      if (op.density !== undefined) html += ` density=${op.density}`;
+      if (op.spacing !== undefined) html += ` spacing=${op.spacing}`;
+      html += `</li>`;
+    }
+    html += `</ul></div>`;
+  }
+
+  // Tile preview
+  html += `<div class="detail-section"><h4>Preview</h4><div class="sprite-preview" id="spritePreview"></div></div>`;
+
+  // JSON
+  html += `<div class="detail-section"><span class="json-toggle" onclick="toggleJson()">Show raw JSON</span>`;
+  html += `<div class="json-block" id="jsonBlock">${JSON.stringify(d, null, 2)}</div></div>`;
+
+  // Delete
+  html += `<div class="detail-delete"><button class="detail-delete-btn" data-type="tile" data-id="${entry.id}">Delete Tile</button></div>`;
+
+  panel.innerHTML = html;
+
+  const delBtn = panel.querySelector('.detail-delete-btn');
+  if (delBtn) delBtn.onclick = () => deleteItem(delBtn.dataset.type, delBtn.dataset.id);
+
+  // Render tile preview
+  const previewDiv = document.getElementById('spritePreview');
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  const ctx = c.getContext('2d');
+  runTileRecipe(ctx, 64, 16, 4, d);
+  previewDiv.appendChild(c);
+}
+
+function showRoomDetails(entry) {
+  const d = entry.data;
+  const panel = document.getElementById('detailPanel');
+  let html = `<div class="detail-title">${d.name || entry.id}</div>`;
+
+  // Tags
+  html += `<div class="detail-section">`;
+  for (const t of (entry.tags || [])) html += `<span class="tag">${t}</span> `;
+  html += `<br><span style="color:#666;font-size:11px">Created ${relativeTime(entry.created_at)}</span></div>`;
+
+  // Stats
+  const mCount = (d.monster_placements || []).length;
+  const newM = (d.new_monsters || []).length;
+  const newT = (d.new_tiles || []).length;
+  html += `<div class="detail-section"><h4>Content</h4>`;
+  html += `<div class="stat-row"><span class="stat-label">Monsters</span><span class="stat-val">${mCount} placed</span></div>`;
+  html += `<div class="stat-row"><span class="stat-label">New monsters</span><span class="stat-val">${newM}</span></div>`;
+  html += `<div class="stat-row"><span class="stat-label">New tiles</span><span class="stat-val">${newT}</span></div>`;
+  html += `</div>`;
+
+  // Monster placements
+  if (d.monster_placements && d.monster_placements.length) {
+    html += `<div class="detail-section"><h4>Monster Placements</h4><ul class="placement-list">`;
+    for (const p of d.monster_placements) {
+      html += `<li>${p.kind} at (${p.x}, ${p.y})</li>`;
+    }
+    html += `</ul></div>`;
+  }
+
+  // JSON
+  html += `<div class="detail-section"><span class="json-toggle" onclick="toggleJson()">Show raw JSON</span>`;
+  html += `<div class="json-block" id="jsonBlock">${JSON.stringify(d, null, 2)}</div></div>`;
+
+  // Delete
+  html += `<div class="detail-delete"><button class="detail-delete-btn" data-type="room" data-id="${entry.id}">Delete Room</button></div>`;
+
+  panel.innerHTML = html;
+
+  const delBtn = panel.querySelector('.detail-delete-btn');
+  if (delBtn) delBtn.onclick = () => deleteItem(delBtn.dataset.type, delBtn.dataset.id);
+}
+
+function toggleJson() {
+  const block = document.getElementById('jsonBlock');
+  if (block) {
+    block.style.display = block.style.display === 'none' ? 'block' : 'none';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Generate room
+// ---------------------------------------------------------------------------
+let _generating = false;
+async function generateRoom() {
+  if (_generating) return;
+  _generating = true;
+  const btn = document.getElementById('generateBtn');
+  const status = document.getElementById('statusText');
+  btn.disabled = true;
+  const startTime = Date.now();
+  status.textContent = 'Generating...';
+
+  // Show elapsed timer
+  const timer = setInterval(() => {
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    status.textContent = `Generating... (${elapsed}s)`;
+  }, 100);
+
+  try {
+    const theme = document.getElementById('themeSelect').value;
+    const difficulty = parseInt(document.getElementById('diffSlider').value);
+    const { status: httpStatus, data } = await apiPost('/api/generate', { theme, difficulty });
+
+    clearInterval(timer);
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+
+    if (httpStatus === 200 && !data.error) {
+      status.textContent = `Generated: "${data.name}" (${elapsed}s)`;
+      await loadLibraries();
+      renderRoomPreview(data);
+    } else {
+      status.textContent = `Error: ${data.error || 'Unknown error'} (${elapsed}s)`;
+    }
+  } catch (e) {
+    clearInterval(timer);
+    status.textContent = `Error: ${e.message}`;
+  }
+
+  btn.disabled = false;
+  _generating = false;
+}
+
+// ---------------------------------------------------------------------------
+// Delete item
+// ---------------------------------------------------------------------------
+async function deleteItem(type, id) {
+  const { status, data } = await apiDelete(`/api/${type}/${encodeURIComponent(id)}`);
+  if (status === 200) {
+    if (selectedType === type && selectedId === id) {
+      selectedType = null;
+      selectedId = null;
+      document.getElementById('detailPanel').innerHTML = '<div class="no-room">Select an item to view details</div>';
+    }
+    await loadLibraries();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Usage display
+// ---------------------------------------------------------------------------
+async function updateUsage() {
+  try {
+    const usage = await apiGet('/api/usage');
+    document.getElementById('bottomUsage').textContent =
+      `API: ${usage.session_calls} calls this session ($${usage.session_cost_usd.toFixed(4)}) · `
+      + `${usage.total_calls} all-time ($${usage.estimated_cost_usd.toFixed(4)}) · `
+      + `${usage.daily_calls} today`;
+  } catch (e) {
+    // ignore
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Log panel
+// ---------------------------------------------------------------------------
+let logSinceId = 0;
+let logOpen = false;
+let unseenLogs = 0;
+let _polling = false;
+
+function toggleLogPanel() {
+  logOpen = !logOpen;
+  document.getElementById('logPanel').classList.toggle('open', logOpen);
+  document.getElementById('logArrow').classList.toggle('open', logOpen);
+  if (logOpen) {
+    unseenLogs = 0;
+    updateLogBadge();
+    const el = document.getElementById('logContent');
+    el.scrollTop = el.scrollHeight;
+  }
+}
+
+function updateLogBadge() {
+  const badge = document.getElementById('logBadge');
+  badge.textContent = unseenLogs;
+  badge.classList.toggle('visible', unseenLogs > 0);
+}
+
+async function pollLogs() {
+  if (_polling) return;
+  _polling = true;
+  try {
+    const data = await apiGet(`/api/logs?since=${logSinceId}`);
+    if (data.logs && data.logs.length > 0) {
+      const el = document.getElementById('logContent');
+      const wasAtBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
+      for (const entry of data.logs) {
+        logSinceId = Math.max(logSinceId, entry.id);
+        const div = document.createElement('div');
+        div.className = `log-entry ${entry.level}`;
+        const ts = new Date(entry.ts * 1000).toLocaleTimeString();
+        div.innerHTML = `<span class="log-ts">${ts}</span>${escapeHtml(entry.msg)}`;
+        el.appendChild(div);
+      }
+      // Trim to last 200 entries in DOM
+      while (el.children.length > 200) el.removeChild(el.firstChild);
+      if (wasAtBottom || logOpen) el.scrollTop = el.scrollHeight;
+      if (!logOpen) {
+        unseenLogs += data.logs.length;
+        updateLogBadge();
+      }
+    }
+  } catch (e) { /* ignore poll errors */ }
+  _polling = false;
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Poll every 1s
+setInterval(pollLogs, 1000);
+
+// ---------------------------------------------------------------------------
+// Test CLI
+// ---------------------------------------------------------------------------
+async function testCli() {
+  const status = document.getElementById('statusText');
+  status.textContent = 'Testing CLI...';
+  try {
+    const { status: httpStatus, data } = await apiPost('/api/test-cli', {});
+    if (data.ok) {
+      status.textContent = `CLI OK (${data.elapsed}s): ${data.stdout.substring(0, 80)}`;
+    } else {
+      status.textContent = `CLI FAIL: ${data.error}`;
+    }
+  } catch (e) {
+    status.textContent = `CLI error: ${e.message}`;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+loadLibraries();
+pollLogs();
+</script>
+</body>
+</html>
