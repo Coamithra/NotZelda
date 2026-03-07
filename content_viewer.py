@@ -251,6 +251,8 @@ def handle_usage():
         "input_tokens": tracker.total_input_tokens,
         "output_tokens": tracker.total_output_tokens,
         "estimated_cost_usd": round(tracker.estimated_cost(), 4),
+        "session_calls": tracker.session_calls,
+        "session_cost_usd": round(tracker.session_cost(), 4),
         "daily_calls": ai_generator.rate_limiter.daily_calls,
     })
 
@@ -363,6 +365,47 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 since_id = int(qs.get("since", [0])[0])
             response_body = handle_logs(since_id).encode("utf-8")
 
+        elif method == "POST" and path == "/api/test-cli":
+            # Quick CLI smoke test — send a trivial prompt
+            import subprocess
+            env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+            server_log("[TEST-CLI] Starting claude CLI test...", "info")
+            server_log(f"[TEST-CLI] PATH includes claude? checking 'where claude'...", "info")
+            try:
+                where_result = subprocess.run(["where", "claude"], capture_output=True, text=True, timeout=5, env=env)
+                server_log(f"[TEST-CLI] where claude: exit={where_result.returncode} stdout={where_result.stdout.strip()} stderr={where_result.stderr.strip()}", "info")
+            except Exception as e:
+                server_log(f"[TEST-CLI] where claude failed: {e}", "error")
+
+            model = ai_generator.ANTHROPIC_MODEL
+            server_log(f"[TEST-CLI] Running: claude -p '...' --output-format json --model {model}", "info")
+            try:
+                import time as _t
+                t0 = _t.time()
+                result = subprocess.run(
+                    ["claude", "-p", "Reply with exactly one word: HELLO", "--output-format", "json", "--model", model],
+                    capture_output=True, text=True, timeout=60, env=env,
+                )
+                elapsed = _t.time() - t0
+                server_log(f"[TEST-CLI] Finished in {elapsed:.1f}s, exit code: {result.returncode}", "info")
+                server_log(f"[TEST-CLI] stdout ({len(result.stdout)} chars):", "info")
+                # Log in chunks so nothing gets cut off
+                for i in range(0, len(result.stdout), 300):
+                    server_log(f"  {result.stdout[i:i+300]}", "info")
+                if result.stderr:
+                    server_log(f"[TEST-CLI] stderr ({len(result.stderr)} chars):", "error")
+                    for i in range(0, len(result.stderr), 300):
+                        server_log(f"  {result.stderr[i:i+300]}", "error")
+                response_body = json.dumps({"ok": True, "exit_code": result.returncode, "stdout": result.stdout, "stderr": result.stderr, "elapsed": round(elapsed, 1)}).encode("utf-8")
+            except subprocess.TimeoutExpired:
+                server_log("[TEST-CLI] TIMED OUT after 60s", "error")
+                response_body = json.dumps({"ok": False, "error": "timeout after 60s"}).encode("utf-8")
+                status = 500
+            except Exception as e:
+                server_log(f"[TEST-CLI] Exception: {e}", "error")
+                response_body = json.dumps({"ok": False, "error": str(e)}).encode("utf-8")
+                status = 500
+
         elif method == "POST" and path == "/api/generate":
             result, status = await handle_generate(body)
             response_body = result.encode("utf-8")
@@ -416,8 +459,12 @@ async def main():
     print(f"  Tile library:    {tile_lib.real_count}/{tile_lib.capacity}")
     print(f"  Room library:    {room_lib.real_count}/{room_lib.capacity}")
 
-    has_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
-    print(f"  API key: {'set' if has_key else 'NOT SET (generation disabled)'}")
+    backend = ai_generator.AI_BACKEND
+    if backend == "cli":
+        print(f"  Backend: CLI (uses your Claude subscription)")
+    else:
+        has_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
+        print(f"  Backend: API ({'key set' if has_key else 'NO KEY — generation disabled'})")
     print()
 
     server = await asyncio.start_server(handle_request, "0.0.0.0", PORT)

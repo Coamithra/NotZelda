@@ -160,6 +160,7 @@ body { background: #1a1a2e; color: #e0e0e0; font-family: 'Consolas', 'Monaco', m
   <input type="range" id="diffSlider" min="1" max="10" value="5">
   <span id="diffDisplay">5</span>
   <button id="generateBtn" onclick="generateRoom()">Generate Room</button>
+  <button onclick="testCli()" style="background:#0f3460">Test CLI</button>
   <span id="statusText">Ready</span>
 </div>
 
@@ -798,7 +799,9 @@ async function updateUsage() {
   try {
     const usage = await apiGet('/api/usage');
     document.getElementById('bottomUsage').textContent =
-      `API: ${usage.total_calls} calls total, ${usage.daily_calls} today, $${usage.estimated_cost_usd.toFixed(4)}`;
+      `API: ${usage.session_calls} calls this session ($${usage.session_cost_usd.toFixed(4)}) · `
+      + `${usage.total_calls} all-time ($${usage.estimated_cost_usd.toFixed(4)}) · `
+      + `${usage.daily_calls} today`;
   } catch (e) {
     // ignore
   }
@@ -864,6 +867,24 @@ function escapeHtml(s) {
 
 // Poll every 1s
 setInterval(pollLogs, 1000);
+
+// ---------------------------------------------------------------------------
+// Test CLI
+// ---------------------------------------------------------------------------
+async function testCli() {
+  const status = document.getElementById('statusText');
+  status.textContent = 'Testing CLI...';
+  try {
+    const { status: httpStatus, data } = await apiPost('/api/test-cli', {});
+    if (data.ok) {
+      status.textContent = `CLI OK (${data.elapsed}s): ${data.stdout.substring(0, 80)}`;
+    } else {
+      status.textContent = `CLI FAIL: ${data.error}`;
+    }
+  } catch (e) {
+    status.textContent = `CLI error: ${e.message}`;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Init

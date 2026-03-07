@@ -22,9 +22,14 @@ from dataclasses import dataclass, field
 
 ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
 GENERATION_TIMEOUT = 15.0       # seconds before giving up on API call
+CLI_TIMEOUT = 600.0             # CLI is much slower than API
 MAX_API_CALLS_PER_MINUTE = 5
 MAX_API_CALLS_PER_DAY = 200
 MAX_RETRIES = 1                 # single retry on validation failure
+
+# Backend: "api" uses Anthropic SDK (needs ANTHROPIC_API_KEY),
+#          "cli" shells out to local `claude` CLI (uses your subscription)
+AI_BACKEND = os.environ.get("AI_BACKEND", "cli").lower()
 
 DATA_DIR = Path(__file__).parent / "data"
 
@@ -67,24 +72,44 @@ class RateLimiter:
 # Token usage tracking
 # ---------------------------------------------------------------------------
 
+# Per-million-token pricing by model
+MODEL_PRICING = {
+    "claude-haiku-4-5-20251001": (1.00, 5.00),
+    "claude-sonnet-4-6":        (3.00, 15.00),
+    "claude-opus-4-6":          (15.00, 75.00),
+}
+
+
 @dataclass
 class UsageTracker:
-    """Tracks API token usage and cost."""
+    """Tracks API token usage and cost (all-time persisted + per-session)."""
     total_input_tokens: int = 0
     total_output_tokens: int = 0
     total_calls: int = 0
+    session_input_tokens: int = 0
+    session_output_tokens: int = 0
+    session_calls: int = 0
     _file: Path = field(default_factory=lambda: DATA_DIR / "api_usage.json")
 
     def record(self, input_tokens: int, output_tokens: int):
         self.total_input_tokens += input_tokens
         self.total_output_tokens += output_tokens
         self.total_calls += 1
+        self.session_input_tokens += input_tokens
+        self.session_output_tokens += output_tokens
+        self.session_calls += 1
         self._save()
 
+    def _cost(self, input_tokens: int, output_tokens: int) -> float:
+        price_in, price_out = MODEL_PRICING.get(ANTHROPIC_MODEL, (1.00, 5.00))
+        return (input_tokens * price_in / 1_000_000 +
+                output_tokens * price_out / 1_000_000)
+
     def estimated_cost(self) -> float:
-        # Haiku pricing: $1.00/M input, $5.00/M output
-        return (self.total_input_tokens * 1.00 / 1_000_000 +
-                self.total_output_tokens * 5.00 / 1_000_000)
+        return self._cost(self.total_input_tokens, self.total_output_tokens)
+
+    def session_cost(self) -> float:
+        return self._cost(self.session_input_tokens, self.session_output_tokens)
 
     def _save(self):
         self._file.parent.mkdir(parents=True, exist_ok=True)
@@ -113,76 +138,107 @@ You generate complete dungeon rooms as JSON. Each room has a 15x11 tilemap, mons
 ## TILEMAP FORMAT
 - 15 columns x 11 rows grid
 - Each cell is a 2-character tile code OR a custom tile string ID
-- Built-in dungeon tile codes: DW (dungeon wall), DF (dungeon floor), PL (pillar), SC (sconce wall)
+- Built-in dungeon tile codes: DW (dungeon wall, non-walkable), DF (dungeon floor, walkable), PL (pillar, non-walkable), SC (sconce wall, non-walkable)
 - Custom tiles use their string ID (e.g. "lava_crack")
-- Row 0 (top) and row 10 (bottom): columns 0-5 and 9-14 MUST be non-walkable (DW, PL, SC, or a non-walkable custom tile). Columns 6-8 MUST be walkable (DF or a walkable custom tile) for north/south doorways
+- Row 0 (top) and row 10 (bottom): columns 0-5 and 9-14 MUST be non-walkable. Columns 6-8 MUST be walkable for north/south doorways
 - Column 0 (left) and column 14 (right): rows 0-3 and 7-10 MUST be non-walkable. Rows 4-6 MUST be walkable for east/west doorways
-- Interior (rows 1-9, cols 1-13 excluding doorway edges) is your creative space
-- IMPORTANT: Use DW tiles INSIDE the room for interesting shapes:
+- Interior (rows 1-9, cols 1-13) is your creative space
+- IMPORTANT: Use wall tiles INSIDE the room to create interesting shapes:
   - L-corridors, T-junctions, winding paths, chokepoints, alcoves, divided chambers
-  - Only 30-60% of interior walkable — walls create character
+  - Only 30-60% of interior should be walkable — walls create character
   - Mix it up: some symmetric, some asymmetric
-  - ALL four doorways must be connected by walkable tiles
-- Monsters and players must be placed only on walkable tiles (DF or walkable custom tiles; PL, SC are NOT walkable)
-- Pick a dominant walkable tile for most floors and a dominant non-walkable tile for most interior walls. You can still scatter other tile types or use them in larger patches — be creative!
+  - ALL four doorways must be connected by walkable tiles (flood-fill reachable)
+- Monsters must be placed only on walkable tiles, away from doorways (not on row 0, row 10, col 0, or col 14). Use interior positions (rows 2-9, cols 2-13) so players aren't ambushed at entrances
+- Use a MIX of built-in tiles (DW, DF, PL, SC) and custom tiles. Custom tiles add theme; built-in tiles provide structure. Don't replace ALL tiles with custom ones — use PL for pillars, SC for sconces, etc.
+- Pick a dominant walkable tile for most floors and a dominant non-walkable tile for most interior walls. Scatter other tile types for variety
 
 ## MONSTER DEFINITION FORMAT
 Each new monster needs:
 ```
 {
   "kind": "lowercase_name",
-  "tags": ["theme", "combat_style"],
-  "stats": {"hp": 1-100, "hop_interval": 0.2-10.0, "damage": 1-20},
+  "tags": ["fire", "melee"],
+  "stats": {"hp": 2, "hop_interval": 1.2, "damage": 1},
   "sprite": {
-    "colors": {"colorKey": "#RRGGBB", ...},
+    "colors": {"body": "#cc3300", "eyes": "#ffcc00", ...},
     "frames": [
-      [["colorKey", x, y, w, h], ...],
-      [["colorKey", x, y, w, h], ...]
+      [["body", 5, 4, 6, 7], ["eyes", 6, 6, 2, 1], ...],
+      [["body", 5, 3, 6, 7], ["eyes", 6, 5, 2, 1], ...]
     ]
   },
   "behavior": {
     "rules": [
-      {"if": "condition", "value": N, "do": "action"},
-      {"default": "action"}
+      {"if": "player_within", "range": 4, "do": "chase"},
+      {"if": "hp_below_pct", "value": 30, "do": "flee"},
+      {"default": "wander"}
     ],
     "attacks": [
-      {"type": "attack_type", "range": 1-15, "damage": 1-20, "cooldown": 0.5-30.0, ...}
+      {"type": "melee", "range": 1, "damage": 1, "cooldown": 2.0}
     ]
   }
 }
 ```
 
 Sprite grid is 16x16. Each layer is [colorKey, x, y, w, h] where x+w<=16, y+h<=16.
-Sprites need exactly 2 frames. Frame 1 is the "hop" frame (shifted up 1-2px typically).
+Sprites need exactly 2 frames. The second frame (index 1) is the "hop" frame — shift all layers up 1-2px from frame 0.
 Use 3-6 color keys per sprite. Build recognizable silhouettes with 5-12 layers per frame.
+Tips: place eyes near the top third, use a dark color for the base/shadow, make the shape asymmetric or distinctive.
 
-Behavior conditions: player_within (range), player_beyond (range), hp_below_pct (value), hp_above_pct (value), random_chance (value 0-100), can_attack, player_in_attack_range, always, default
+Behavior rules are evaluated top-to-bottom, first match wins. Put urgent conditions first (low HP → flee), then combat (can_attack → attack), then approach (player_within → chase), then default.
+- `default` is the fallback action (always matches). `always` is identical to `default` — use `default` for the last rule.
+
+Behavior conditions with their parameter name:
+- player_within: "range" (tiles)
+- player_beyond: "range" (tiles)
+- hp_below_pct: "value" (0-100)
+- hp_above_pct: "value" (0-100)
+- random_chance: "value" (0-100, percent chance)
+- can_attack: (no param — true when any attack is off cooldown and player in range)
+- player_in_attack_range: (no param)
+- default: (no param, always matches)
+
 Behavior actions: wander, chase, flee, patrol, hold, attack
-Attack types: melee (range 1), projectile (+ sprite_color "#RRGGBB"), charge (range 2-6), teleport (+ delay 0.2-3.0), area (+ warning_duration 0.3-3.0)
+
+Attack types and their extra fields:
+- melee: range MUST be 1, strikes adjacent player
+- projectile: range 1-10 (travel distance), requires "sprite_color": "#RRGGBB"
+- charge: range 2-6 (dash distance), 2-tick windup with warning
+- teleport: range 1-8 (max teleport distance), requires "delay": 0.2-3.0
+- area: range 1-4 (AoE radius), requires "warning_duration": 0.3-3.0
+All attacks need: "type", "range", "damage" (1-20), "cooldown" (0.5-30.0 seconds)
 
 ## CUSTOM TILE FORMAT
 ```
 {
-  "id": "lowercase_name",
+  "id": "lava_floor",
   "walkable": true,
-  "tags": ["theme", "category"],
-  "colors": {"base": "#RRGGBB", "colorKey": "#RRGGBB", ...},
+  "tags": ["fire", "floor"],
+  "colors": {"base": "#3a1a0a", "alt": "#2a0a00", "glow": "#cc4400"},
   "operations": [
-    {"op": "fill", "color": "colorKey"},
-    {"op": "noise", "color": "colorKey", "density": 0.0-1.0},
-    {"op": "bricks"},
-    {"op": "grid_lines", "spacing": 2-8},
-    {"op": "hstripes", "spacing": 2-8},
-    {"op": "vstripes", "spacing": 2-8},
-    {"op": "wave"},
-    {"op": "ripple"},
-    {"op": "rects", "rects": [["colorKey", x, y, w, h], ...]},
-    {"op": "pixels", "pixels": [["colorKey", x, y], ...]}
+    {"op": "fill", "color": "base"},
+    {"op": "noise", "color": "alt", "density": 0.4},
+    {"op": "pixels", "pixels": [["glow", 3, 7], ["glow", 10, 4]]}
   ]
 }
 ```
 Tile grid is 16x16. Operations execute in order. Start with "fill" for base color.
 The "walkable" field determines if players/monsters can walk on this tile.
+IMPORTANT: The "base" and "alt" color keys have special roles:
+- "base" is used as the automatic background fill
+- "alt" is used by bricks, grid_lines, hstripes, vstripes, wave, and ripple as their drawing color
+- You MUST define both "base" and "alt" in your colors dict if you use any of those operations
+
+Available operations:
+- fill: {"op": "fill", "color": "colorKey"} — fill entire tile with a color
+- noise: {"op": "noise", "color": "colorKey", "density": 0.0-1.0} — random scattered pixels
+- bricks: {"op": "bricks"} — brick mortar pattern drawn in "alt" color
+- grid_lines: {"op": "grid_lines", "spacing": 2-8} — grid drawn in "alt" color
+- hstripes: {"op": "hstripes", "spacing": 2-8} — horizontal stripes in "alt" color
+- vstripes: {"op": "vstripes", "spacing": 2-8} — vertical stripes in "alt" color
+- wave: {"op": "wave"} — diagonal wave pattern in "alt" color
+- ripple: {"op": "ripple"} — alternating dot pattern using "base" and "alt"
+- rects: {"op": "rects", "rects": [["colorKey", x, y, w, h], ...]} — colored rectangles
+- pixels: {"op": "pixels", "pixels": [["colorKey", x, y], ...]} — individual pixel placement
 
 ## RESPONSE FORMAT
 Return ONLY valid JSON (no markdown, no explanation):
@@ -191,10 +247,10 @@ Return ONLY valid JSON (no markdown, no explanation):
   "name": "Room Name",
   "tilemap": [
     ["DW","DW","DW","DW","DW","DW","DF","DF","DF","DW","DW","DW","DW","DW","DW"],
-    ...11 rows total...
+    ...11 rows total, 15 columns each...
   ],
-  "new_tiles": [],
-  "new_monsters": [],
+  "new_tiles": [...],
+  "new_monsters": [...],
   "monster_placements": [
     {"kind": "skeleton", "x": 5, "y": 3}
   ]
@@ -202,10 +258,10 @@ Return ONLY valid JSON (no markdown, no explanation):
 ```
 
 ## DIFFICULTY GUIDELINES
-- Easy (1-3): 1-2 monsters, hp 1-2, damage 1
-- Medium (4-6): 2-4 monsters, hp 2-4, damage 1-2, simple attacks
-- Hard (7-9): 3-5 monsters, hp 3-6, damage 2-3, varied attacks
-- Boss (10): 1 boss + 2-3 fodder, boss hp 6-10, damage 3-4, multiple attack types
+- Easy (1-3): 1-2 monsters, hp 1-2, damage 1, hop_interval 1.5-2.5, no attacks
+- Medium (4-6): 2-4 monsters, hp 2-4, damage 1-2, hop_interval 1.0-1.8, 1 simple attack (melee or projectile)
+- Hard (7-9): 3-5 monsters, hp 3-6, damage 2-3, hop_interval 0.6-1.2, 1-2 varied attacks
+- Boss (10): 1 boss + 2-3 fodder, boss hp 6-10, damage 3-4, hop_interval 0.8-1.5, 2-3 attack types
 
 ## THEME GUIDELINES
 - fire: oranges/reds, flame creatures, lava tiles
@@ -217,39 +273,41 @@ Return ONLY valid JSON (no markdown, no explanation):
 - dungeon: grays/browns, classic dungeon creatures
 
 ## EXAMPLE LAYOUTS (ascii: x=wall, .=walkable, P=pillar, S=sconce)
+Each row is exactly 15 characters. All 4 doorways must be connected via walkable tiles.
 Asymmetric:
 xxxxxx...xxxxxx
-x.....x..xSx.x
-x.....xx.x...x
-xxx......x...x
-...x.xx......x
-.....x.......x
-..P......x...x
-x.......xxx..x
-x...xx....xx.x
-x..xx........x
+xxx..xx..xxx..x
+xxx..xx..x....x
+xxxx....xx....x
+...xxx..xx...x.
+.......xxx.....
+..P....xx.xxx..
+x..xxx........x
+x..xxxx..xx...x
+x........xx...x
 xxxxxx...xxxxxx
 Symmetric:
 xxxxxx...xxxxxx
-x..Sxx...xxS..x
-x....x...x....x
-x..............x
-...x...P...x...
-...x.......x...
-...x...P...x...
-x..............x
-x....x...x....x
-x..Sxx...xxS..x
+xS.xxx...xxx.Sx
+x..xxx...xxx..x
+x..x.......x..x
+...xx..P..xx...
+...............
+...xx..P..xx...
+x..x.......x..x
+x..xxx...xxx..x
+xS.xxx...xxx.Sx
 xxxxxx...xxxxxx
 
 ## IMPORTANT RULES
 1. All tile codes in the tilemap must be either a built-in code (DW, DF, PL, SC) or defined in new_tiles or in the available tiles list
 2. All monster kinds in monster_placements must be either in the existing monsters list or defined in new_monsters
-3. Place monsters only on walkable tiles (DF or walkable custom tiles), not on walls, pillars, or sconces
+3. Place monsters only on walkable tiles, in the interior (rows 2-9, cols 2-13) — not on doorway or border tiles
 4. Monster x must be 0-14, y must be 0-10
 5. All IDs MUST be lowercase_snake_case [a-z][a-z0-9_]*
 6. Give monsters thematic names (fire_imp, frost_archer, shadow_wraith — not monster_1)
-7. Sprite colors should be thematically appropriate and visually distinct"""
+7. Sprite colors should be thematically appropriate and visually distinct
+8. Room names should be evocative and unique (2-3 words)"""
 
 
 # ---------------------------------------------------------------------------
@@ -328,31 +386,33 @@ FEW_SHOT_EXAMPLES = [
     {
         "role": "user",
         "content": (
-            'Generate a dungeon room with theme "fire" and difficulty 4/10.\n\n'
+            'Generate a dungeon room with theme "fire" and difficulty 5/10.\n\n'
             'No existing monsters — you MUST create new ones (define them in new_monsters). '
             'Design at least 1-2 unique monsters with thematic sprites and interesting behavior rules.\n\n'
             'Available tiles: DW (dungeon wall, non-walkable), DF (dungeon floor, walkable), '
             'PL (pillar, non-walkable), SC (sconce wall, non-walkable)\n'
             'You MUST create at least 1 new custom tile that fits the theme — '
-            'either a walkable floor or a non-walkable wall. Use it in your tilemap for visual variety.'
+            'either a walkable floor or a non-walkable wall. Use it in your tilemap for visual variety.\n'
+            'Pick a dominant walkable tile for most floors and a dominant non-walkable tile for most '
+            'interior walls — these can be existing or newly created tiles.'
         ),
     },
     {
         "role": "assistant",
         "content": json.dumps({
-            "name": "Ember Chamber",
+            "name": "Ember Sanctum",
             "tilemap": [
-                ["charred_wall","charred_wall","charred_wall","charred_wall","charred_wall","charred_wall","ember_floor","ember_floor","ember_floor","charred_wall","charred_wall","charred_wall","charred_wall","charred_wall","charred_wall"],
-                ["charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall","charred_wall","charred_wall","ember_floor","ember_floor","charred_wall"],
-                ["charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall","charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall"],
-                ["charred_wall","charred_wall","charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall"],
-                ["ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall","charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall","ember_floor","ember_floor","ember_floor"],
-                ["ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor"],
-                ["ember_floor","ember_floor","charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor"],
-                ["charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall","charred_wall","charred_wall","ember_floor","ember_floor","ember_floor","charred_wall"],
-                ["charred_wall","ember_floor","ember_floor","ember_floor","charred_wall","charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall","charred_wall","ember_floor","ember_floor","charred_wall"],
-                ["charred_wall","ember_floor","ember_floor","charred_wall","charred_wall","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","charred_wall"],
-                ["charred_wall","charred_wall","charred_wall","charred_wall","charred_wall","charred_wall","ember_floor","ember_floor","ember_floor","charred_wall","charred_wall","charred_wall","charred_wall","charred_wall","charred_wall"],
+                ["DW","DW","DW","DW","DW","DW","ember_floor","ember_floor","ember_floor","DW","DW","DW","DW","DW","DW"],
+                ["DW","ember_floor","ember_floor","DW","DW","DW","ember_floor","ember_floor","DW","DW","DW","DW","DW","SC","DW"],
+                ["DW","ember_floor","ember_floor","DW","DW","DW","ember_floor","ember_floor","ember_floor","DW","DW","DW","DW","DW","DW"],
+                ["DW","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","DW","ember_floor","ember_floor","ember_floor","ember_floor","DW","DW","DW"],
+                ["ember_floor","ember_floor","ember_floor","ember_floor","PL","DW","DW","DW","DW","ember_floor","ember_floor","ember_floor","PL","ember_floor","ember_floor"],
+                ["ember_floor","ember_floor","DW","DW","DW","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","DW","DW","DW","ember_floor","ember_floor"],
+                ["ember_floor","ember_floor","DW","DW","PL","ember_floor","ember_floor","ember_floor","ember_floor","DW","DW","ember_floor","ember_floor","ember_floor","ember_floor"],
+                ["DW","ember_floor","ember_floor","DW","DW","DW","ember_floor","ember_floor","DW","DW","ember_floor","ember_floor","DW","DW","DW"],
+                ["DW","DW","ember_floor","ember_floor","DW","DW","ember_floor","ember_floor","ember_floor","DW","DW","ember_floor","ember_floor","SC","DW"],
+                ["DW","DW","ember_floor","ember_floor","ember_floor","DW","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","ember_floor","DW","DW","DW"],
+                ["DW","DW","DW","DW","DW","DW","ember_floor","ember_floor","ember_floor","DW","DW","DW","DW","DW","DW"],
             ],
             "new_tiles": [
                 {
@@ -366,24 +426,12 @@ FEW_SHOT_EXAMPLES = [
                         {"op": "pixels", "pixels": [["glow",3,7],["glow",10,4],["glow",6,12],["glow",13,9]]},
                     ],
                 },
-                {
-                    "id": "charred_wall",
-                    "walkable": False,
-                    "tags": ["fire", "wall"],
-                    "colors": {"base": "#2a1a1a", "alt": "#1a0a0a", "crack": "#553310"},
-                    "operations": [
-                        {"op": "fill", "color": "base"},
-                        {"op": "noise", "color": "alt", "density": 0.5},
-                        {"op": "bricks"},
-                        {"op": "pixels", "pixels": [["crack",2,5],["crack",3,5],["crack",10,3],["crack",11,3],["crack",7,10]]},
-                    ],
-                },
             ],
             "new_monsters": [
                 {
                     "kind": "fire_imp",
-                    "tags": ["fire", "dungeon", "melee"],
-                    "stats": {"hp": 2, "hop_interval": 1.2, "damage": 1},
+                    "tags": ["fire", "melee", "fast"],
+                    "stats": {"hp": 3, "hop_interval": 1.2, "damage": 1},
                     "sprite": {
                         "colors": {"body": "#cc3300", "dark": "#881100", "eyes": "#ffcc00", "flame": "#ff6600"},
                         "frames": [
@@ -408,16 +456,58 @@ FEW_SHOT_EXAMPLES = [
                     "behavior": {
                         "rules": [
                             {"if": "hp_below_pct", "value": 30, "do": "flee"},
-                            {"if": "player_within", "range": 4, "do": "chase"},
+                            {"if": "can_attack", "do": "attack"},
+                            {"if": "player_within", "range": 5, "do": "chase"},
                             {"default": "wander"},
                         ],
-                        "attacks": [],
+                        "attacks": [
+                            {"type": "melee", "range": 1, "damage": 1, "cooldown": 2.0},
+                        ],
+                    },
+                },
+                {
+                    "kind": "flame_spitter",
+                    "tags": ["fire", "ranged"],
+                    "stats": {"hp": 2, "hop_interval": 1.8, "damage": 1},
+                    "sprite": {
+                        "colors": {"shell": "#8a4400", "dark": "#5a2a00", "eye": "#ff6600", "mouth": "#ff3300", "glow": "#ffaa00"},
+                        "frames": [
+                            [
+                                ["dark",  4,10, 8, 4],
+                                ["shell", 4, 4, 8, 8],
+                                ["shell", 5, 3, 6, 1],
+                                ["eye",   6, 5, 2, 2],
+                                ["eye",   9, 5, 2, 2],
+                                ["mouth", 6, 8, 4, 2],
+                                ["glow",  7, 9, 2, 1],
+                            ],
+                            [
+                                ["dark",  4, 9, 8, 4],
+                                ["shell", 4, 3, 8, 8],
+                                ["shell", 5, 2, 6, 1],
+                                ["eye",   6, 4, 2, 2],
+                                ["eye",   9, 4, 2, 2],
+                                ["mouth", 6, 7, 4, 2],
+                                ["glow",  7, 8, 2, 1],
+                            ],
+                        ],
+                    },
+                    "behavior": {
+                        "rules": [
+                            {"if": "can_attack", "do": "attack"},
+                            {"if": "player_within", "range": 2, "do": "flee"},
+                            {"default": "hold"},
+                        ],
+                        "attacks": [
+                            {"type": "projectile", "range": 6, "damage": 2, "cooldown": 3.0, "sprite_color": "#ff4400"},
+                        ],
                     },
                 },
             ],
             "monster_placements": [
-                {"kind": "fire_imp", "x": 4, "y": 2},
-                {"kind": "fire_imp", "x": 12, "y": 4},
+                {"kind": "fire_imp", "x": 3, "y": 3},
+                {"kind": "fire_imp", "x": 11, "y": 8},
+                {"kind": "flame_spitter", "x": 9, "y": 5},
             ],
         }),
     },
@@ -992,6 +1082,61 @@ def _get_client():
     return _client
 
 
+async def _call_cli(system_prompt: str, messages: list[dict]) -> str:
+    """Call the local Claude CLI and return the raw text response.
+
+    Builds a single prompt from system + messages and invokes:
+      claude -p "..." --output-format json
+    """
+    import subprocess
+
+    # Build a combined prompt: system instructions + conversation
+    parts = [system_prompt, ""]
+    for msg in messages:
+        if msg["role"] == "user":
+            parts.append(f"User: {msg['content']}")
+        else:
+            parts.append(f"Assistant: {msg['content']}")
+    combined_prompt = "\n\n".join(parts)
+
+    print(f"[GEN] Calling Claude CLI ({len(combined_prompt)} chars)...")
+
+    # Build a clean env without CLAUDECODE to avoid nested-session detection
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+
+    proc = await asyncio.wait_for(
+        asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: subprocess.run(
+                ["claude", "-p", combined_prompt, "--output-format", "json", "--model", ANTHROPIC_MODEL],
+                capture_output=True, text=True, timeout=int(CLI_TIMEOUT),
+                env=env,
+            )
+        ),
+        timeout=CLI_TIMEOUT + 5,
+    )
+
+    if proc.returncode != 0:
+        raise RuntimeError(f"Claude CLI exited with code {proc.returncode}: {proc.stderr[:500]}")
+
+    # CLI with --output-format json returns {"type":"result", "result":"...", "usage":{...}, ...}
+    try:
+        cli_output = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        # Fallback: raw stdout is the response text
+        return proc.stdout
+
+    # Extract token usage for tracking
+    usage = cli_output.get("usage", {})
+    input_tokens = usage.get("input_tokens", 0) + usage.get("cache_creation_input_tokens", 0) + usage.get("cache_read_input_tokens", 0)
+    output_tokens = usage.get("output_tokens", 0)
+    if input_tokens or output_tokens:
+        print(f"[GEN] CLI tokens: {input_tokens} in + {output_tokens} out (cost: ${cli_output.get('total_cost_usd', 0):.4f})")
+        usage_tracker.record(input_tokens, output_tokens)
+
+    return cli_output.get("result", proc.stdout)
+
+
 # Module-level instances
 rate_limiter = RateLimiter()
 usage_tracker = UsageTracker()
@@ -1000,6 +1145,7 @@ usage_tracker = UsageTracker()
 def init():
     """Load persisted usage data on startup."""
     usage_tracker.load()
+    print(f"[GEN] Backend: {AI_BACKEND}" + (" (Claude CLI — uses subscription)" if AI_BACKEND == "cli" else " (Anthropic API)"))
 
 
 async def generate_room(
@@ -1016,7 +1162,7 @@ async def generate_room(
     Returns the validated room dict, or None on failure.
     Each dict has: name, tilemap, new_tiles, new_monsters, monster_placements.
     """
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    if AI_BACKEND == "api" and not os.environ.get("ANTHROPIC_API_KEY"):
         print("[GEN] No ANTHROPIC_API_KEY set — skipping generation")
         return None
 
@@ -1046,32 +1192,38 @@ async def generate_room(
 
         raw_text = None  # captured for debug dump on failure
         try:
-            client = _get_client()
             rate_limiter.record_call()
-
-            # Run the synchronous API call in a thread to not block asyncio
             start_time = time.time()
-            response = await asyncio.wait_for(
-                asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda: client.messages.create(
-                        model=ANTHROPIC_MODEL,
-                        max_tokens=4096,
-                        system=SYSTEM_PROMPT,
-                        messages=messages,
-                    )
-                ),
-                timeout=GENERATION_TIMEOUT,
-            )
-            elapsed = time.time() - start_time
 
-            # Track usage
-            input_tokens = response.usage.input_tokens
-            output_tokens = response.usage.output_tokens
-            usage_tracker.record(input_tokens, output_tokens)
+            if AI_BACKEND == "cli":
+                # Shell out to local Claude CLI (uses subscription)
+                raw_text = await _call_cli(SYSTEM_PROMPT, messages)
+                raw_text = raw_text.strip()
+                elapsed = time.time() - start_time
+                print(f"[GEN] CLI responded in {elapsed:.1f}s ({len(raw_text)} chars)")
+            else:
+                # Use Anthropic SDK (API key + pay-per-token)
+                client = _get_client()
+                response = await asyncio.wait_for(
+                    asyncio.get_event_loop().run_in_executor(
+                        None,
+                        lambda: client.messages.create(
+                            model=ANTHROPIC_MODEL,
+                            max_tokens=4096,
+                            system=SYSTEM_PROMPT,
+                            messages=messages,
+                        )
+                    ),
+                    timeout=GENERATION_TIMEOUT,
+                )
+                elapsed = time.time() - start_time
 
-            # Parse response
-            raw_text = response.content[0].text.strip()
+                # Track usage
+                input_tokens = response.usage.input_tokens
+                output_tokens = response.usage.output_tokens
+                usage_tracker.record(input_tokens, output_tokens)
+
+                raw_text = response.content[0].text.strip()
 
             # Strip markdown code fences if present
             if raw_text.startswith("```"):
@@ -1128,14 +1280,16 @@ async def generate_room(
                     return None
 
             # Success
+            token_info = f"{input_tokens}+{output_tokens} tokens, " if AI_BACKEND == "api" else ""
             print(f"[GEN] Try {attempt + 1}/{total_attempts} SUCCESS — \"{data.get('name', '?')}\" "
-                  f"({elapsed:.1f}s, {input_tokens}+{output_tokens} tokens, "
+                  f"({elapsed:.1f}s, {token_info}"
                   f"{len(data.get('new_monsters', []))} new monsters, "
                   f"{len(data.get('new_tiles', []))} new tiles)")
             return data
 
         except asyncio.TimeoutError:
-            print(f"[GEN] Try {attempt + 1}/{total_attempts} FAILED — API timeout after {GENERATION_TIMEOUT}s")
+            timeout_val = CLI_TIMEOUT if AI_BACKEND == "cli" else GENERATION_TIMEOUT
+            print(f"[GEN] Try {attempt + 1}/{total_attempts} FAILED — timeout after {timeout_val}s")
             return None
         except json.JSONDecodeError as e:
             print(f"[GEN] Try {attempt + 1}/{total_attempts} FAILED — parse error: {e}")
