@@ -16,7 +16,7 @@ from pathlib import Path
 import websockets
 from websockets.http import Headers
 
-import behavior_engine
+from server import behavior_engine
 
 # ---------------------------------------------------------------------------
 # Tile constants
@@ -885,7 +885,7 @@ def player_info(p: Player) -> dict:
 # Dungeon Instance System
 # ---------------------------------------------------------------------------
 
-from dungeon_layouts import DUNGEON_LAYOUTS
+from server.dungeon_layouts import DUNGEON_LAYOUTS
 
 DUNGEON_MUSIC_TRACKS = ["dungeon1", "dungeon2", "dungeon3", "dungeon4", "dungeon5", "dungeon6", "dungeon7"]
 
@@ -2356,27 +2356,27 @@ async def handle_connection(websocket):
 # HTTP server for client.html
 # ---------------------------------------------------------------------------
 
-CLIENT_DIR = Path(__file__).parent
+ROOT_DIR = Path(__file__).parent
 
 # Static files that the client can request
 STATIC_FILES = {
-    "/":            ("client.html", "text/html; charset=utf-8"),
-    "/index.html":  ("client.html", "text/html; charset=utf-8"),
-    "/sprite_data.js": ("sprite_data.js", "application/javascript; charset=utf-8"),
-    "/sprites.js":  ("sprites.js",  "application/javascript; charset=utf-8"),
-    "/tiles.js":    ("tiles.js",    "application/javascript; charset=utf-8"),
-    "/music.js":    ("music.js",    "application/javascript; charset=utf-8"),
-    "/music.mp3":         ("not zelda (village).mp3", "audio/mpeg"),
-    "/music_tavern.mp3":  ("not zelda (tavern).mp3", "audio/mpeg"),
-    "/music_chapel.mp3":  ("not zelda (chapel).mp3", "audio/mpeg"),
-    "/music_overworld.mp3": ("not zelda (overworld).mp3", "audio/mpeg"),
-    "/music_dungeon1.mp3": ("not zelda (dungeon theme a).mp3", "audio/mpeg"),
-    "/music_dungeon2.mp3": ("not zelda (dungeon theme b).mp3", "audio/mpeg"),
-    "/music_dungeon3.mp3": ("not zelda (dungeon theme c).mp3", "audio/mpeg"),
-    "/music_dungeon4.mp3": ("not zelda (dungeon theme d).mp3", "audio/mpeg"),
-    "/music_dungeon5.mp3": ("not zelda (dungeon theme e).mp3", "audio/mpeg"),
-    "/music_dungeon6.mp3": ("not zelda (dungeon theme f).mp3", "audio/mpeg"),
-    "/music_dungeon7.mp3": ("not zelda (dungeon theme g).mp3", "audio/mpeg"),
+    "/":            ("client/client.html", "text/html; charset=utf-8"),
+    "/index.html":  ("client/client.html", "text/html; charset=utf-8"),
+    "/sprite_data.js": ("client/sprite_data.js", "application/javascript; charset=utf-8"),
+    "/sprites.js":  ("client/sprites.js",  "application/javascript; charset=utf-8"),
+    "/tiles.js":    ("client/tiles.js",    "application/javascript; charset=utf-8"),
+    "/music.js":    ("client/music.js",    "application/javascript; charset=utf-8"),
+    "/music.mp3":         ("music/village.mp3", "audio/mpeg"),
+    "/music_tavern.mp3":  ("music/tavern.mp3", "audio/mpeg"),
+    "/music_chapel.mp3":  ("music/chapel.mp3", "audio/mpeg"),
+    "/music_overworld.mp3": ("music/overworld.mp3", "audio/mpeg"),
+    "/music_dungeon1.mp3": ("music/dungeon_a.mp3", "audio/mpeg"),
+    "/music_dungeon2.mp3": ("music/dungeon_b.mp3", "audio/mpeg"),
+    "/music_dungeon3.mp3": ("music/dungeon_c.mp3", "audio/mpeg"),
+    "/music_dungeon4.mp3": ("music/dungeon_d.mp3", "audio/mpeg"),
+    "/music_dungeon5.mp3": ("music/dungeon_e.mp3", "audio/mpeg"),
+    "/music_dungeon6.mp3": ("music/dungeon_f.mp3", "audio/mpeg"),
+    "/music_dungeon7.mp3": ("music/dungeon_g.mp3", "audio/mpeg"),
 }
 
 
@@ -2392,7 +2392,7 @@ async def process_request(path, request_headers):
         return HTTPStatus.OK, [("Content-Type", "text/plain; charset=utf-8")], b"Log cleared."
     if path in STATIC_FILES:
         filename, content_type = STATIC_FILES[path]
-        body = (CLIENT_DIR / filename).read_bytes()
+        body = (ROOT_DIR / filename).read_bytes()
         return HTTPStatus.OK, [("Content-Type", content_type)], body
     return HTTPStatus.NOT_FOUND, [], b"Not Found"
 

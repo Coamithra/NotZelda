@@ -1,11 +1,14 @@
 """Unit tests for content_library.py — Stage 1 of AI generation plan."""
 
 import json
+import sys
 import time
 import tempfile
 from pathlib import Path
 
-from content_library import (
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from server.content_library import (
     ContentLibrary, LibraryEntry, ResolutionResult, PLACEHOLDER_ID,
     normalize_tag, normalize_tags,
 )

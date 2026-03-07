@@ -14,9 +14,10 @@ except ImportError:
     print("Pillow not installed. Run: pip install Pillow")
     sys.exit(1)
 
-from dungeon_layouts import DUNGEON_LAYOUTS
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from server.dungeon_layouts import DUNGEON_LAYOUTS
 
-OUTPUT = Path(__file__).parent / "dungeon_layouts.png"
+OUTPUT = Path(__file__).parent.parent / "docs" / "dungeon_layouts.png"
 
 CELL = 32       # pixels per cell
 PAD = 8         # padding between layouts

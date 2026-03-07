@@ -17,8 +17,8 @@ except ImportError:
     print("Pillow not installed. Run: pip install Pillow")
     sys.exit(1)
 
-ROOMS_DIR = Path(__file__).parent / "rooms" / "dungeon1"
-OUTPUT = Path(__file__).parent / "dungeon_rooms.png"
+ROOMS_DIR = Path(__file__).parent.parent / "rooms" / "dungeon1"
+OUTPUT = Path(__file__).parent.parent / "docs" / "dungeon_rooms.png"
 
 TPIX = 4        # pixels per tile
 ROOM_COLS = 15

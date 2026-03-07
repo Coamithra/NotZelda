@@ -18,10 +18,11 @@ import sys
 from pathlib import Path
 
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).parent))
+_PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(_PROJECT_ROOT))
 
 # Load .env file if present
-_env_path = Path(__file__).parent / ".env"
+_env_path = _PROJECT_ROOT / ".env"
 if _env_path.exists():
     for line in _env_path.read_text().splitlines():
         line = line.strip()
@@ -29,8 +30,8 @@ if _env_path.exists():
             key, _, val = line.partition("=")
             os.environ.setdefault(key.strip(), val.strip())
 
-import ai_generator
-from content_library import ContentLibrary, LibraryEntry
+from server import ai_generator
+from server.content_library import ContentLibrary, LibraryEntry
 
 # ---------------------------------------------------------------------------
 # Server log capture — ring buffer that the frontend can poll
@@ -82,8 +83,8 @@ def _patched_print(*args, **kwargs):
 # ---------------------------------------------------------------------------
 
 PORT = 8081
-DATA_DIR = Path(__file__).parent / "data"
-PROJECT_ROOT = Path(__file__).parent
+DATA_DIR = Path(__file__).parent.parent / "data"
+PROJECT_ROOT = Path(__file__).parent.parent
 
 MONSTER_CAPACITY = 7
 TILE_CAPACITY = 12
@@ -272,9 +273,9 @@ def handle_logs(since_id: int = 0):
 # ---------------------------------------------------------------------------
 
 STATIC_FILES = {
-    "/tiles.js": ("tiles.js", "application/javascript"),
-    "/sprites.js": ("sprites.js", "application/javascript"),
-    "/sprite_data.js": ("sprite_data.js", "application/javascript"),
+    "/tiles.js": ("client/tiles.js", "application/javascript"),
+    "/sprites.js": ("client/sprites.js", "application/javascript"),
+    "/sprite_data.js": ("client/sprite_data.js", "application/javascript"),
 }
 
 CONTENT_TYPES = {
@@ -291,7 +292,7 @@ def serve_file(path: str):
         filename, ctype = STATIC_FILES[path]
         filepath = PROJECT_ROOT / filename
     elif path == "/" or path == "":
-        filepath = PROJECT_ROOT / "content_viewer.html"
+        filepath = Path(__file__).parent / "content_viewer.html"
         ctype = "text/html"
     else:
         return None, None

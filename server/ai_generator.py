@@ -36,7 +36,7 @@ MAX_RETRIES = 1                 # single retry on validation failure
 #          "cli" shells out to local `claude` CLI (uses your subscription)
 AI_BACKEND = os.environ.get("AI_BACKEND", "cli").lower()
 
-DATA_DIR = Path(__file__).parent / "data"
+DATA_DIR = Path(__file__).parent.parent / "data"
 
 # ---------------------------------------------------------------------------
 # Rate limiter
@@ -1065,7 +1065,7 @@ def validate_room_response(data: dict, existing_tile_ids: set[str] | None = None
 # Main generation function
 # ---------------------------------------------------------------------------
 
-_PROMPT_DIR = Path(__file__).parent / "tmp_prompts"
+_PROMPT_DIR = Path(__file__).parent.parent / "tmp_prompts"
 
 
 def _dump_text(text: str, prefix: str, label: str = "") -> str:
