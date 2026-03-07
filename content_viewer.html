@@ -612,9 +612,12 @@ function showMonsterDetails(entry) {
   html += `<div class="json-block" id="jsonBlock">${JSON.stringify(d, null, 2)}</div></div>`;
 
   // Delete
-  html += `<div class="detail-delete"><button onclick="deleteItem('monster','${entry.id}')">Delete Monster</button></div>`;
+  html += `<div class="detail-delete"><button class="detail-delete-btn" data-type="monster" data-id="${entry.id}">Delete Monster</button></div>`;
 
   panel.innerHTML = html;
+
+  const delBtn = panel.querySelector('.detail-delete-btn');
+  if (delBtn) delBtn.onclick = () => deleteItem(delBtn.dataset.type, delBtn.dataset.id);
 
   // Render animated sprite preview
   const previewDiv = document.getElementById('spritePreview');
@@ -675,9 +678,12 @@ function showTileDetails(entry) {
   html += `<div class="json-block" id="jsonBlock">${JSON.stringify(d, null, 2)}</div></div>`;
 
   // Delete
-  html += `<div class="detail-delete"><button onclick="deleteItem('tile','${entry.id}')">Delete Tile</button></div>`;
+  html += `<div class="detail-delete"><button class="detail-delete-btn" data-type="tile" data-id="${entry.id}">Delete Tile</button></div>`;
 
   panel.innerHTML = html;
+
+  const delBtn = panel.querySelector('.detail-delete-btn');
+  if (delBtn) delBtn.onclick = () => deleteItem(delBtn.dataset.type, delBtn.dataset.id);
 
   // Render tile preview
   const previewDiv = document.getElementById('spritePreview');
@@ -722,9 +728,12 @@ function showRoomDetails(entry) {
   html += `<div class="json-block" id="jsonBlock">${JSON.stringify(d, null, 2)}</div></div>`;
 
   // Delete
-  html += `<div class="detail-delete"><button onclick="deleteItem('room','${entry.id}')">Delete Room</button></div>`;
+  html += `<div class="detail-delete"><button class="detail-delete-btn" data-type="room" data-id="${entry.id}">Delete Room</button></div>`;
 
   panel.innerHTML = html;
+
+  const delBtn = panel.querySelector('.detail-delete-btn');
+  if (delBtn) delBtn.onclick = () => deleteItem(delBtn.dataset.type, delBtn.dataset.id);
 }
 
 function toggleJson() {

@@ -77,8 +77,6 @@ def _patched_print(*args, **kwargs):
     _real_print(*args, **kwargs)
 
 
-builtins.print = _patched_print
-
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -143,90 +141,95 @@ def handle_libraries():
     })
 
 
-async def handle_generate(body: bytes):
+async def handle_generate(body: bytes) -> tuple[str, int]:
     """Generate a new room via AI and register results into libraries."""
-    async with generate_lock:
-        params = json.loads(body)
-        theme = params.get("theme", "dungeon")
-        difficulty = int(params.get("difficulty", 5))
+    try:
+        async with generate_lock:
+            params = json.loads(body)
+            theme = params.get("theme", "dungeon")
+            difficulty = int(params.get("difficulty", 5))
 
-        # Build existing content summaries
-        existing_monsters = [
-            {"kind": e.id, "tags": e.tags}
-            for e in monster_lib.real_entries
-        ]
-        existing_tiles = [
-            {"id": e.id, "walkable": e.data.get("walkable", False), "tags": e.tags}
-            for e in tile_lib.real_entries
-        ]
+            # Build existing content summaries
+            existing_monsters = [
+                {"kind": e.id, "tags": e.tags}
+                for e in monster_lib.real_entries
+            ]
+            existing_tiles = [
+                {"id": e.id, "walkable": e.data.get("walkable", False), "tags": e.tags}
+                for e in tile_lib.real_entries
+            ]
 
-        existing_room_names = [
-            e.data.get("name", e.id) for e in room_lib.real_entries
-        ]
+            existing_room_names = [
+                e.data.get("name", e.id) for e in room_lib.real_entries
+            ]
 
-        try:
-            result = await ai_generator.generate_room(
-                theme=theme,
-                difficulty=difficulty,
-                existing_monsters=existing_monsters,
-                existing_tiles=existing_tiles,
-                monster_library_full=monster_lib.is_full,
-                tile_library_full=tile_lib.is_full,
-                existing_room_names=existing_room_names,
-            )
-        except Exception as e:
-            tb = _traceback.format_exc()
-            server_log(f"[VIEWER] Generation exception: {e}\n{tb}", "error")
-            return json.dumps({"error": f"Exception: {e}"}), 500
+            try:
+                result = await ai_generator.generate_room(
+                    theme=theme,
+                    difficulty=difficulty,
+                    existing_monsters=existing_monsters,
+                    existing_tiles=existing_tiles,
+                    monster_library_full=monster_lib.is_full,
+                    tile_library_full=tile_lib.is_full,
+                    existing_room_names=existing_room_names,
+                )
+            except Exception as e:
+                tb = _traceback.format_exc()
+                server_log(f"[VIEWER] Generation exception: {e}\n{tb}", "error")
+                return json.dumps({"error": f"Exception: {e}"}), 500
 
-        if result is None:
-            server_log("[VIEWER] Generation returned None", "error")
-            return json.dumps({"error": "Generation failed. See server log for details."}), 500
+            if result is None:
+                server_log("[VIEWER] Generation returned None", "error")
+                return json.dumps({"error": "Generation failed. See server log for details."}), 500
 
-        # Register new monsters
-        import time
-        for m in result.get("new_monsters", []):
-            entry = LibraryEntry(
-                id=m["kind"],
-                content_type="monster",
-                tags=m.get("tags", []),
+            # Register new monsters
+            import time
+            for m in result.get("new_monsters", []):
+                entry = LibraryEntry(
+                    id=m["kind"],
+                    content_type="monster",
+                    tags=m.get("tags", []),
+                    created_at=time.time(),
+                    data=m,
+                )
+                monster_lib.add(entry)
+
+            # Register new tiles
+            for t in result.get("new_tiles", []):
+                entry = LibraryEntry(
+                    id=t["id"],
+                    content_type="tile",
+                    tags=t.get("tags", []),
+                    created_at=time.time(),
+                    data=t,
+                )
+                tile_lib.add(entry)
+
+            # Register the room itself
+            room_name = result.get("name", "Unknown Room")
+            room_id = room_name.lower().replace(" ", "_")
+            # Deduplicate room ID
+            base_id = room_id
+            counter = 1
+            while room_lib.get_by_id(room_id):
+                counter += 1
+                room_id = f"{base_id}_{counter}"
+
+            room_entry = LibraryEntry(
+                id=room_id,
+                content_type="room",
+                tags=[theme, f"difficulty_{difficulty}"],
                 created_at=time.time(),
-                data=m,
+                data=result,
             )
-            monster_lib.add(entry)
+            room_lib.add(room_entry)
 
-        # Register new tiles
-        for t in result.get("new_tiles", []):
-            entry = LibraryEntry(
-                id=t["id"],
-                content_type="tile",
-                tags=t.get("tags", []),
-                created_at=time.time(),
-                data=t,
-            )
-            tile_lib.add(entry)
-
-        # Register the room itself
-        room_name = result.get("name", "Unknown Room")
-        room_id = room_name.lower().replace(" ", "_")
-        # Deduplicate room ID
-        base_id = room_id
-        counter = 1
-        while room_lib.get_by_id(room_id):
-            counter += 1
-            room_id = f"{base_id}_{counter}"
-
-        room_entry = LibraryEntry(
-            id=room_id,
-            content_type="room",
-            tags=[theme, f"difficulty_{difficulty}"],
-            created_at=time.time(),
-            data=result,
-        )
-        room_lib.add(room_entry)
-
-        save_libraries()
-        return json.dumps(result), 200
+            save_libraries()
+            return json.dumps(result), 200
+    except Exception as e:
+        tb = _traceback.format_exc()
+        server_log(f"[VIEWER] Unexpected error in handle_generate: {e}\n{tb}", "error")
+        return json.dumps({"error": f"Unexpected error: {e}"}), 500
 
 
 def handle_delete(lib_type: str, item_id: str):
@@ -378,9 +381,16 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             try:
                 import time as _t
                 t0 = _t.time()
-                result = subprocess.run(
-                    ["claude", "-p", "Reply with exactly one word: HELLO", "--output-format", "json", "--model", model],
-                    capture_output=True, text=True, timeout=60, env=env,
+                loop = asyncio.get_running_loop()
+                result = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: subprocess.run(
+                            ["claude", "-p", "Reply with exactly one word: HELLO", "--output-format", "json", "--model", model],
+                            capture_output=True, text=True, timeout=60, env=env,
+                        )
+                    ),
+                    timeout=65,
                 )
                 elapsed = _t.time() - t0
                 server_log(f"[TEST-CLI] Finished in {elapsed:.1f}s, exit code: {result.returncode}", "info")
@@ -452,6 +462,7 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
 
 
 async def main():
+    builtins.print = _patched_print
     load_libraries()
     ai_generator.init()
 
@@ -468,7 +479,7 @@ async def main():
         print(f"  Backend: API ({'key set' if has_key else 'NO KEY — generation disabled'})")
     print()
 
-    server = await asyncio.start_server(handle_request, "0.0.0.0", PORT)
+    server = await asyncio.start_server(handle_request, "127.0.0.1", PORT)
     async with server:
         await server.serve_forever()
 

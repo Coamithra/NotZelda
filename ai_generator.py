@@ -13,6 +13,7 @@ import json
 import os
 import time
 import asyncio
+import re as _re
 from collections import deque
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -550,8 +551,6 @@ VALID_ATTACK_TYPES = {"melee", "projectile", "charge", "teleport", "area"}
 VALID_TILE_OPS = {"fill", "noise", "bricks", "grid_lines", "hstripes", "vstripes",
                   "wave", "ripple", "rects", "pixels"}
 
-import re as _re
-
 def _is_hex_color(v: str) -> bool:
     return isinstance(v, str) and bool(_re.match(r'^#[0-9a-fA-F]{6}$', v))
 
@@ -684,6 +683,15 @@ def patch_unreachable_doorways(data: dict, existing_walkable: set[str]) -> list[
         return visited
 
     reachable = flood_fill()
+
+    # Find the dominant walkable tile to use for carving (instead of hardcoded "DF")
+    walkable_counts = {}
+    for row in tilemap:
+        for cell in row:
+            if cell in walkable:
+                walkable_counts[cell] = walkable_counts.get(cell, 0) + 1
+    carve_tile = max(walkable_counts, key=walkable_counts.get) if walkable_counts else "DF"
+
     unreachable = [(r, c) for r, c in doorways if (r, c) not in reachable]
 
     if not unreachable:
@@ -716,7 +724,7 @@ def patch_unreachable_doorways(data: dict, existing_walkable: set[str]) -> list[
             while pos is not None:
                 r, c = pos
                 if tilemap[r][c] not in walkable:
-                    tilemap[r][c] = "DF"
+                    tilemap[r][c] = carve_tile
                     carved.append(f"({c},{r})")
                 pos = visited.get(pos)
             if carved:
@@ -1042,7 +1050,8 @@ def validate_room_response(data: dict, existing_tile_ids: set[str] | None = None
                 ix, iy = int(x), int(y)
                 if 0 <= iy < 11 and 0 <= ix < 15:
                     tile_at = tilemap[iy][ix]
-                    if tile_at in NON_WALKABLE and tile_at not in new_walkable_tiles and tile_at not in existing_walkable_tiles:
+                    walkable_tiles = {"DF"} | new_walkable_tiles | existing_walkable_tiles
+                    if tile_at not in walkable_tiles:
                         errors.append(f"monster_placements[{pi}] at ({ix},{iy}) is on non-walkable tile {tile_at!r}")
 
     # Cap total errors to avoid huge retry prompts

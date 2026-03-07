@@ -887,7 +887,7 @@ def player_info(p: Player) -> dict:
 
 from dungeon_layouts import DUNGEON_LAYOUTS
 
-DUNGEON_MUSIC_TRACKS = ["dungeon1", "dungeon2", "dungeon3", "dungeon4", "dungeon5", "dungeon6"]
+DUNGEON_MUSIC_TRACKS = ["dungeon1", "dungeon2", "dungeon3", "dungeon4", "dungeon5", "dungeon6", "dungeon7"]
 
 class DungeonInstance:
     def __init__(self, dungeon_id, layout, room_map, active_rooms, entrance_room_id, music_track):
@@ -2376,6 +2376,7 @@ STATIC_FILES = {
     "/music_dungeon4.mp3": ("not zelda (dungeon theme d).mp3", "audio/mpeg"),
     "/music_dungeon5.mp3": ("not zelda (dungeon theme e).mp3", "audio/mpeg"),
     "/music_dungeon6.mp3": ("not zelda (dungeon theme f).mp3", "audio/mpeg"),
+    "/music_dungeon7.mp3": ("not zelda (dungeon theme g).mp3", "audio/mpeg"),
 }
 
 
