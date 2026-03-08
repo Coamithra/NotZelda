@@ -146,49 +146,11 @@ usage_tracker = UsageTracker()
 
 SYSTEM_PROMPT_MONSTER_DESIGN = """You are a monster designer for a Zelda-style top-down MUD game.
 You create a single monster: its name, tags, stats, and behavior (AI rules + attacks).
-You do NOT create the sprite — that is a separate step.
 
-## STATS
-- hp: hit points (1-100)
-- hop_interval: seconds between movement hops (0.2-10.0). Lower = faster
-- damage: contact damage when the monster touches a player (1-20)
-
-## BEHAVIOR RULES
-Rules are evaluated top-to-bottom, first match wins. Put urgent conditions first (low HP → flee), then combat (can_attack → attack), then approach (player_within → chase), then default.
-
-Conditions with their parameter name:
-- player_within: "range" (tiles)
-- player_beyond: "range" (tiles)
-- hp_below_pct: "value" (0-100)
-- hp_above_pct: "value" (0-100)
-- random_chance: "value" (0-100, percent chance)
-- can_attack: (no param — true when any attack is off cooldown and player in range)
-- player_in_attack_range: (no param)
-- default: (no param, always matches — use for the last rule)
-
-Actions: wander, chase, flee, patrol, hold, attack
-
-## ATTACK TYPES
-Attacks are tried in array order — first usable attack fires. Put preferred/ranged attacks first, close-range fallbacks last.
-
-Attack types and their extra fields:
-- melee: range MUST be 1, strikes adjacent player
-- projectile: range 1-10 (travel distance), requires "sprite_color": "#RRGGBB"
-- charge: range 2-6 (dash distance), 2-tick windup with warning
-- teleport: range 1-8 (max teleport distance), requires "delay": 0.2-3.0
-- area: range 1-4 (AoE radius), requires "warning_duration": 0.3-3.0
-All attacks need: "type", "range", "damage" (1-20), "cooldown" (0.5-30.0 seconds)
-
-`stats.damage` is **contact damage** when the monster touches a player. `attacks[].damage` is separate per-attack damage. Both can coexist.
-
-## DIFFICULTY GUIDELINES
-- Easy (1-3): hp 1-2, damage 1, hop_interval 1.5-2.5, no attacks, just wander
-- Medium (4-6): hp 2-4, damage 1-2, hop_interval 1.0-1.8, 1 simple attack (melee or projectile)
-- Hard (7-9): hp 3-6, damage 2-3, hop_interval 0.6-1.2, 1-2 varied attacks, interesting behavior rules
-- Boss (10): hp 6-10, damage 3-4, hop_interval 0.8-1.5, 2-3 attack types, complex behavior
+Return ONLY valid JSON (no markdown, no explanation).
 
 ## RESPONSE FORMAT
-Return ONLY valid JSON (no markdown, no explanation):
+
 ```
 {
   "kind": "lowercase_snake_case_name",
@@ -202,17 +164,62 @@ Return ONLY valid JSON (no markdown, no explanation):
       {"default": "wander"}
     ],
     "attacks": [
-      {"type": "melee", "range": 1, "damage": 1, "cooldown": 2.0}
+      {"type": "melee", "damage": 1, "cooldown": 2.0}
     ]
   }
 }
 ```
 
-## RULES
-1. kind MUST be lowercase_snake_case [a-z][a-z0-9_]*
-2. Give monsters thematic names (fire_imp, frost_archer, shadow_wraith — not monster_1)
-3. Use 3-5 tags per monster
-4. Design interesting, varied behavior — not just "chase and hit" """
+**kind**: lowercase_snake_case [a-z][a-z0-9_]*, thematic (fire_imp, frost_archer — not monster_1).
+**tags**: 3-5 descriptive tags.
+**stats**: hp (1-100), hop_interval (0.2-10.0, lower = faster), damage (1-20, contact damage when touching a player).
+
+### Behavior rules
+
+Rules are evaluated top-to-bottom, first match wins. Structure: urgent → combat → approach → default.
+Each rule is `{"if": "<condition>", ..., "do": "<action>"}`. The last rule uses `{"default": "<action>"}` as a catch-all.
+
+**Conditions** (the `"if"` value):
+- `{"if": "player_within", "range": <1-15>, "do": "..."}` — player is within N tiles
+- `{"if": "player_beyond", "range": <1-15>, "do": "..."}` — player is farther than N tiles
+- `{"if": "hp_below_pct", "value": <0-100>, "do": "..."}` — monster HP below N%
+- `{"if": "hp_above_pct", "value": <0-100>, "do": "..."}` — monster HP above N%
+- `{"if": "random_chance", "value": <0-100>, "do": "..."}` — N% chance each tick
+- `{"if": "can_attack", "do": "..."}` — any attack is off cooldown AND player in range
+- `{"if": "player_in_attack_range", "do": "..."}` — player is in range of any attack
+- `{"default": "..."}` — always matches (use as last rule, no `"if"` or `"do"`)
+
+**Actions** (the `"do"` value):
+- `"do": "wander"` — move to a random adjacent tile
+- `"do": "chase"` — move toward the nearest player
+- `"do": "flee"` — move away from the nearest player
+- `"do": "patrol"` — cycle through waypoints relative to spawn
+- `"do": "hold"` — stay still
+- `"do": "attack"` — use the first usable attack from the attacks array
+
+### Attacks
+
+Attacks are tried in array order — first usable one fires. Put ranged/preferred attacks first, melee fallbacks last.
+All attacks require `"type"`, `"range"`, `"damage"` (1-20), `"cooldown"` (0.5-30.0s).
+Attack damage is separate from `stats.damage` (contact). Both can coexist.
+
+- `{"type": "melee", "damage": <1-20>, "cooldown": <0.5-30.0>}` — strike adjacent player (range is always 1)
+- `{"type": "projectile", "range": <1-10>, "damage": <1-20>, "cooldown": <0.5-30.0>, "sprite_color": <"#RRGGBB">}` — fire a projectile toward the player
+- `{"type": "charge", "range": <2-6>, "damage": <1-20>, "cooldown": <0.5-30.0>}` — 2-tick windup with warning lane, then dash
+- `{"type": "teleport", "range": <1-8>, "damage": <1-20>, "cooldown": <0.5-30.0>, "delay": <0.2-3.0>}` — fade out, reappear adjacent to player, damage on landing
+- `{"type": "area", "range": <1-4>, "damage": <1-20>, "cooldown": <0.5-30.0>, "warning_duration": <0.3-3.0>}` — warning indicator, then AoE damage
+
+## DIFFICULTY GUIDELINES
+- Easy (1-3): hp 1-2, damage 1, hop_interval 1.5-2.5, no attacks, just wander
+- Medium (4-6): hp 2-4, damage 1-2, hop_interval 1.0-1.8, 1 simple attack (melee or projectile)
+- Hard (7-9): hp 3-6, damage 2-3, hop_interval 0.6-1.2, 1-2 varied attacks, interesting behavior rules
+- Boss (10): hp 6-10, damage 3-4, hop_interval 0.8-1.5, 2-3 attack types, complex behavior
+
+Design interesting, varied behavior — not just "chase and hit".
+
+## AVOID THESE
+- Low HP → hold: a wounded monster standing still is boring. Use flee, teleport, or a desperation attack instead
+- Melee attack damage lower than stats.damage: the deliberate attack should always hit harder than just bumping into the player"""
 
 SYSTEM_PROMPT_MONSTER_SPRITE = """You are a pixel artist for a Zelda-style top-down MUD game.
 Given a monster's name, tags, and attack types, you create its animated pixel sprite.
@@ -547,7 +554,10 @@ def validate_monster_behavior(behavior: dict) -> list[str]:
         if atype not in VALID_ATTACK_TYPES:
             errors.append(f"behavior.attacks[{ai}] unknown type: {atype}")
         rng = atk.get("range")
-        if not isinstance(rng, (int, float)) or rng < 1 or rng > 15:
+        if atype == "melee":
+            if rng is not None and rng != 1:
+                errors.append(f"behavior.attacks[{ai}] melee range must be 1")
+        elif not isinstance(rng, (int, float)) or rng < 1 or rng > 15:
             errors.append(f"behavior.attacks[{ai}] range must be 1-15")
         cd = atk.get("cooldown")
         if cd is not None and (not isinstance(cd, (int, float)) or cd < 0.5 or cd > 30.0):
@@ -898,6 +908,10 @@ def patch_monster_attacks(behavior: dict) -> list[str]:
             clamped = max(0.5, min(30.0, cd))
             patches.append(f"Clamped attack[{ai}] cooldown {cd} -> {clamped}")
             atk["cooldown"] = clamped
+        if atk.get("type") == "melee":
+            if atk.get("range") is None:
+                atk["range"] = 1
+                patches.append(f"Set attack[{ai}] melee range to 1")
         rng = atk.get("range")
         if isinstance(rng, (int, float)) and (rng < 1 or rng > 15):
             clamped = max(1, min(15, int(rng)))
@@ -1151,8 +1165,11 @@ def _build_monster_design_prompt(theme: str, difficulty: int,
     parts = [f"Create a monster for a \"{theme}\"-themed dungeon room at difficulty {difficulty}/10."]
 
     if existing_monsters:
-        names = ", ".join(m.get("kind", "?") for m in existing_monsters[:20])
-        parts.append(f"\nExisting monsters (avoid duplicating these): {names}")
+        summaries = ", ".join(
+            f"{m.get('kind', '?')} [{', '.join(m.get('tags', []))}]"
+            for m in existing_monsters[:20]
+        )
+        parts.append(f"\nExisting monsters (avoid duplicating these): {summaries}")
 
     parts.append("\nDesign a unique monster with a thematic name, stats, tags, and behavior rules/attacks.")
     return "\n".join(parts)
