@@ -1,0 +1,3 @@
+Create a monster for a "{{theme}}"-themed dungeon room at difficulty {{difficulty}}/10.
+{{existing_monsters_section}}
+Design a unique monster with a thematic name, stats, tags, and behavior rules/attacks.

@@ -141,244 +141,29 @@ usage_tracker = UsageTracker()
 
 
 # ---------------------------------------------------------------------------
-# System prompts — one per generation step
+# Prompt loading — templates live in server/prompts/*.txt
 # ---------------------------------------------------------------------------
 
-SYSTEM_PROMPT_MONSTER_DESIGN = """You are a monster designer for a Zelda-style top-down MUD game.
-You create a single monster: its name, tags, stats, and behavior (AI rules + attacks).
+_PROMPTS_DIR = Path(__file__).parent / "prompts"
 
-Return ONLY valid JSON (no markdown, no explanation).
+def _load_prompt(filename: str, **kwargs: str) -> str:
+    """Load a prompt template from the prompts directory.
 
-## RESPONSE FORMAT
+    Placeholders use {{name}} syntax (double curly braces) to avoid
+    collisions with JSON examples in the prompt text.  Pass values as
+    keyword arguments: _load_prompt("file.txt", theme="fire").
+    """
+    filepath = _PROMPTS_DIR / filename
+    text = filepath.read_text(encoding="utf-8").strip()
+    for key, value in kwargs.items():
+        text = text.replace("{{" + key + "}}", str(value))
+    return text
 
-```
-{
-  "kind": "lowercase_snake_case_name",
-  "tags": ["fire", "melee", "beast"],
-  "stats": {"hp": 2, "hop_interval": 1.2, "damage": 1},
-  "behavior": {
-    "rules": [
-      {"if": "hp_below_pct", "value": 30, "do": "flee"},
-      {"if": "can_attack", "do": "attack"},
-      {"if": "player_within", "range": 4, "do": "chase"},
-      {"default": "wander"}
-    ],
-    "attacks": [
-      {"type": "melee", "damage": 1, "cooldown": 2.0}
-    ]
-  }
-}
-```
-
-**kind**: lowercase_snake_case [a-z][a-z0-9_]*, thematic (fire_imp, frost_archer — not monster_1).
-**tags**: 3-5 descriptive tags.
-**stats**: hp (1-100), hop_interval (0.2-10.0, lower = faster), damage (1-20, contact damage when touching a player).
-
-### Behavior rules
-
-Rules are evaluated top-to-bottom, first match wins. Structure: urgent → combat → approach → default.
-Each rule is `{"if": "<condition>", ..., "do": "<action>"}`. The last rule uses `{"default": "<action>"}` as a catch-all.
-
-**Conditions** (the `"if"` value):
-- `{"if": "player_within", "range": <1-15>, "do": "..."}` — player is within N tiles
-- `{"if": "player_beyond", "range": <1-15>, "do": "..."}` — player is farther than N tiles
-- `{"if": "hp_below_pct", "value": <0-100>, "do": "..."}` — monster HP below N%
-- `{"if": "hp_above_pct", "value": <0-100>, "do": "..."}` — monster HP above N%
-- `{"if": "random_chance", "value": <0-100>, "do": "..."}` — N% chance each tick
-- `{"if": "can_attack", "do": "..."}` — any attack is off cooldown AND player in range
-- `{"if": "player_in_attack_range", "do": "..."}` — player is in range of any attack
-- `{"default": "..."}` — always matches (use as last rule, no `"if"` or `"do"`)
-
-**Actions** (the `"do"` value):
-- `"do": "wander"` — move to a random adjacent tile
-- `"do": "chase"` — move toward the nearest player
-- `"do": "flee"` — move away from the nearest player
-- `"do": "patrol"` — cycle through waypoints relative to spawn
-- `"do": "hold"` — stay still
-- `"do": "attack"` — use the first usable attack from the attacks array
-
-### Attacks
-
-Attacks are tried in array order — first usable one fires. Put ranged/preferred attacks first, melee fallbacks last.
-All attacks require `"type"`, `"range"`, `"damage"` (1-20), `"cooldown"` (0.5-30.0s).
-Attack damage is separate from `stats.damage` (contact). Both can coexist.
-
-- `{"type": "melee", "damage": <1-20>, "cooldown": <0.5-30.0>}` — strike adjacent player (range is always 1)
-- `{"type": "projectile", "range": <1-10>, "damage": <1-20>, "cooldown": <0.5-30.0>, "sprite_color": <"#RRGGBB">}` — fire a projectile toward the player
-- `{"type": "charge", "range": <2-6>, "damage": <1-20>, "cooldown": <0.5-30.0>}` — 2-tick windup with warning lane, then dash
-- `{"type": "teleport", "range": <1-8>, "damage": <1-20>, "cooldown": <0.5-30.0>, "delay": <0.2-3.0>}` — fade out, reappear adjacent to player, damage on landing
-- `{"type": "area", "range": <1-4>, "damage": <1-20>, "cooldown": <0.5-30.0>, "warning_duration": <0.3-3.0>}` — warning indicator, then AoE damage
-
-## DIFFICULTY GUIDELINES
-- Easy (1-3): hp 1-2, damage 1, hop_interval 1.5-2.5, no attacks, just wander
-- Medium (4-6): hp 2-4, damage 1-2, hop_interval 1.0-1.8, 1 simple attack (melee or projectile)
-- Hard (7-9): hp 3-6, damage 2-3, hop_interval 0.6-1.2, 1-2 varied attacks, interesting behavior rules
-- Boss (10): hp 6-10, damage 3-4, hop_interval 0.8-1.5, 2-3 attack types, complex behavior
-
-Design interesting, varied behavior — not just "chase and hit".
-
-## AVOID THESE
-- Low HP → hold: a wounded monster standing still is boring. Use flee, teleport, or a desperation attack instead
-- Melee attack damage lower than stats.damage: the deliberate attack should always hit harder than just bumping into the player"""
-
-SYSTEM_PROMPT_MONSTER_SPRITE = """You are a pixel artist for a Zelda-style top-down MUD game.
-Given a monster's name, tags, and attack types, you create its animated pixel sprite.
-
-## SPRITE FORMAT
-Sprite grid is 16x16. Each layer is [colorKey, x, y, w, h] where x+w<=16, y+h<=16.
-Layers render in array order — first layer is the back, last layer is the front.
-Put shadows/bases first, details/eyes last.
-
-Sprites need 2-4 frames showing interesting animation: stretching, pulsing, limb movement, shape changes, eye blinks, wing flaps, etc. Each frame should have meaningfully different shapes/positions — NOT just a y-offset hop.
-Good examples: a slime that squishes wide (x=3,w=10,y=8) then stretches tall (x=4,w=8,y=4); a bat whose wings go from up (y=3) to down (y=7) with completely different wing positions.
-
-Use 3-6 color keys per sprite. Build recognizable silhouettes with 5-12 layers per frame.
-Tips: place eyes near the top third, use a dark color for the base/shadow, make the shape asymmetric or distinctive.
-
-## RESPONSE FORMAT
-Return ONLY valid JSON (no markdown, no explanation):
-```
-{
-  "sprite": {
-    "colors": {"body": "#cc3300", "eyes": "#ffcc00", "shadow": "#331100"},
-    "frames": [
-      [["shadow", 4, 12, 8, 3], ["body", 5, 4, 6, 9], ["eyes", 6, 6, 2, 1]],
-      [["shadow", 4, 12, 8, 3], ["body", 5, 3, 6, 10], ["eyes", 6, 5, 2, 1]]
-    ]
-  }
-}
-```
-
-## RULES
-1. Sprite colors should be thematically appropriate and visually distinct
-2. The sprite should visually match the monster's concept — a ranged caster should look different from a melee brute
-3. Make the silhouette recognizable and distinct from other monsters"""
-
-SYSTEM_PROMPT_TILES = """You are a tile designer for a Zelda-style top-down MUD game.
-You create custom tile definitions for dungeon rooms.
-
-## TILE FORMAT
-Tile grid is 16x16. Operations execute in order. Start with "fill" for base color.
-
-The "walkable" field is REQUIRED — it determines if players/monsters can walk on this tile.
-
-IMPORTANT: The "base" and "alt" color keys have special roles:
-- "base" is used as the automatic background fill
-- "alt" is used by bricks, grid_lines, hstripes, vstripes, wave, and ripple as their drawing color
-- You MUST define both "base" and "alt" in your colors dict if you use any of those operations
-
-## AVAILABLE OPERATIONS
-- fill: {"op": "fill", "color": "colorKey"} — fill entire tile with a color
-- noise: {"op": "noise", "color": "colorKey", "density": 0.0-1.0} — random scattered pixels
-- bricks: {"op": "bricks"} — brick mortar pattern drawn in "alt" color
-- grid_lines: {"op": "grid_lines", "spacing": 2-8} — grid drawn in "alt" color
-- hstripes: {"op": "hstripes", "spacing": 2-8} — horizontal stripes in "alt" color
-- vstripes: {"op": "vstripes", "spacing": 2-8} — vertical stripes in "alt" color
-- wave: {"op": "wave"} — diagonal wave pattern in "alt" color
-- ripple: {"op": "ripple"} — alternating dot pattern using "base" and "alt"
-- rects: {"op": "rects", "rects": [["colorKey", x, y, w, h], ...]} — colored rectangles
-- pixels: {"op": "pixels", "pixels": [["colorKey", x, y], ...]} — individual pixel placement
-
-## RESPONSE FORMAT
-Return ONLY valid JSON (no markdown, no explanation):
-```
-{
-  "tiles": [
-    {
-      "id": "lava_floor",
-      "walkable": true,
-      "tags": ["fire", "floor"],
-      "colors": {"base": "#3a1a0a", "alt": "#2a0a00", "glow": "#cc4400"},
-      "operations": [
-        {"op": "fill", "color": "base"},
-        {"op": "noise", "color": "alt", "density": 0.4},
-        {"op": "pixels", "pixels": [["glow", 3, 7], ["glow", 10, 4]]}
-      ]
-    }
-  ]
-}
-```
-
-## RULES
-1. IDs MUST be lowercase_snake_case [a-z][a-z0-9_]*
-2. Use 3-5 tags per tile
-3. Each tile MUST have a "walkable" boolean
-4. Create visually distinct tiles that fit the requested theme"""
-
-SYSTEM_PROMPT_LAYOUT = """You are a dungeon room layout designer for a Zelda-style top-down MUD game.
-You create room layouts (tilemaps + monster placements) using available tiles and monsters.
-
-## TILEMAP FORMAT
-- 15 columns x 11 rows grid
-- Each cell is a tile code from the available tiles list (provided in the user message)
-- Tiles are either walkable (players/monsters can traverse) or non-walkable (walls/obstacles)
-- Row 0 (top) and row 10 (bottom): columns 0-5 and 9-14 MUST be non-walkable. Columns 6-8 MUST be walkable for north/south doorways
-- Column 0 (left) and column 14 (right): rows 0-3 and 7-10 MUST be non-walkable. Rows 4-6 MUST be walkable for east/west doorways
-- Interior (rows 1-9, cols 1-13) is your creative space
-- IMPORTANT: Use wall tiles INSIDE the room to create interesting shapes:
-  - L-corridors, T-junctions, winding paths, chokepoints, alcoves, divided chambers
-  - Only 30-60% of interior should be walkable — walls create character
-  - Mix it up: some symmetric, some asymmetric
-  - ALL four doorways must be connected by walkable tiles (flood-fill reachable)
-- Monsters must be placed only on walkable tiles, away from doorways (not on row 0, row 10, col 0, or col 14). Use interior positions (rows 2-9, cols 2-13) so players aren't ambushed at entrances
-- Use a MIX of available tiles. Pick a dominant walkable tile for most floors and a dominant non-walkable tile for most interior walls. Scatter other tile types for variety
-
-## EXAMPLE LAYOUTS
-Legend: x=non-walkable (common/structural), o=non-walkable (uncommon/decorative), .=walkable (common), _=walkable (decorative)
-Each row is exactly 15 characters. All 4 doorways must be connected via walkable tiles.
-Asymmetric:
- xxxxxx...xxxxxx
- xxx..xx..xxx_.x
- xxx..xx..x_...x
- xxxx....xx....x
- ...xxx..xxo..x.
- .._....xxx.....
- .......xx.xxx..
- x..xxx.._.....x
- x..xxxx..xx...x
- x..._....xx.o.x
- xxxxxx...xxxxxx
-Symmetric:
- xxxxxx...xxxxxx
- xo.xxx...xxx.ox
- x..xxx...xxx..x
- x..x.._._..x.x
- ...xx..o..xx...
- .._.........._.
- ...xx..o..xx...
- x..x.._._..x.x
- x..xxx...xxx..x
- xo.xxx...xxx.ox
- xxxxxx...xxxxxx
-
-## DIFFICULTY GUIDELINES (monster count)
-- Easy (1-3): 1-2 monsters
-- Medium (4-6): 2-4 monsters
-- Hard (7-9): 3-5 monsters
-- Boss (10): 1 boss + 2-3 fodder
-
-## RESPONSE FORMAT
-Return ONLY valid JSON (no markdown, no explanation):
-```
-{
-  "name": "Room Name",
-  "tilemap": [
-    ["DW","DW","DW","DW","DW","DW","DF","DF","DF","DW","DW","DW","DW","DW","DW"],
-    ...11 rows total, 15 columns each...
-  ],
-  "monster_placements": [
-    {"kind": "monster_name", "x": 5, "y": 3}
-  ]
-}
-```
-
-## RULES
-1. All tile codes in the tilemap must be from the available tiles list
-2. All monster kinds in monster_placements must be from the available monsters list
-3. Place monsters only on walkable tiles, in the interior (rows 2-9, cols 2-13)
-4. Monster x must be 0-14, y must be 0-10
-5. Room names should be evocative and unique (2-3 words)
-6. All IDs MUST be lowercase_snake_case [a-z][a-z0-9_]*"""
+# System prompts (loaded once at import time)
+SYSTEM_PROMPT_MONSTER_DESIGN = _load_prompt("monster_design_system.txt")
+SYSTEM_PROMPT_MONSTER_SPRITE = _load_prompt("monster_sprite_system.txt")
+SYSTEM_PROMPT_TILES = _load_prompt("tiles_system.txt")
+SYSTEM_PROMPT_LAYOUT = _load_prompt("layout_system.txt")
 
 
 # ---------------------------------------------------------------------------
@@ -1162,17 +947,19 @@ async def _call_ai(
 
 def _build_monster_design_prompt(theme: str, difficulty: int,
                                  existing_monsters: list[dict]) -> str:
-    parts = [f"Create a monster for a \"{theme}\"-themed dungeon room at difficulty {difficulty}/10."]
-
+    existing_section = ""
     if existing_monsters:
         summaries = ", ".join(
             f"{m.get('kind', '?')} [{', '.join(m.get('tags', []))}]"
             for m in existing_monsters[:20]
         )
-        parts.append(f"\nExisting monsters (avoid duplicating these): {summaries}")
+        existing_section = f"\nExisting monsters (avoid duplicating these): {summaries}"
 
-    parts.append("\nDesign a unique monster with a thematic name, stats, tags, and behavior rules/attacks.")
-    return "\n".join(parts)
+    return _load_prompt("monster_design_user.txt",
+        theme=theme,
+        difficulty=difficulty,
+        existing_monsters_section=existing_section,
+    )
 
 
 async def generate_monster_design(
@@ -1215,14 +1002,15 @@ async def generate_monster_design(
 def _build_monster_sprite_prompt(kind: str, tags: list[str],
                                  attack_types: list[str],
                                  theme: str) -> str:
-    parts = [f"Create a pixel sprite for the monster \"{kind}\"."]
-    if tags:
-        parts.append(f"Tags: {', '.join(tags)}")
-    if attack_types:
-        parts.append(f"Attack types: {', '.join(attack_types)}")
-    parts.append(f"Theme: {theme}")
-    parts.append("\nDesign an animated sprite that visually fits this monster's concept.")
-    return "\n".join(parts)
+    tags_line = f"Tags: {', '.join(tags)}" if tags else ""
+    attacks_line = f"Attack types: {', '.join(attack_types)}" if attack_types else ""
+
+    return _load_prompt("monster_sprite_user.txt",
+        kind=kind,
+        tags_line=tags_line,
+        attacks_line=attacks_line,
+        theme=theme,
+    )
 
 
 async def generate_monster_sprite(
@@ -1256,17 +1044,20 @@ async def generate_monster_sprite(
 def _build_tiles_prompt(theme: str, difficulty: int,
                         existing_tiles: list[dict],
                         count: int) -> str:
-    parts = [f"Create {count} custom tile(s) for a \"{theme}\"-themed dungeon room at difficulty {difficulty}/10."]
-
+    existing_section = ""
     if existing_tiles:
         tile_summary = ", ".join(
             f"{t.get('id', '?')} ({'walkable' if t.get('walkable') else 'non-walkable'}, tags: {', '.join(t.get('tags', []))})"
             for t in existing_tiles[:20]
         )
-        parts.append(f"\nExisting custom tiles (avoid duplicating): {tile_summary}")
+        existing_section = f"\nExisting custom tiles (avoid duplicating): {tile_summary}"
 
-    parts.append(f"\nCreate {count} new tile(s). Include at least one walkable floor tile. Make them visually distinct and thematically appropriate.")
-    return "\n".join(parts)
+    return _load_prompt("tiles_user.txt",
+        theme=theme,
+        difficulty=difficulty,
+        count=count,
+        existing_tiles_section=existing_section,
+    )
 
 
 async def generate_tiles(
@@ -1315,10 +1106,9 @@ def _build_layout_prompt(theme: str, difficulty: int,
                          new_tile_ids: list[str],
                          new_monster_kinds: list[str],
                          existing_room_names: list[str] | None = None) -> str:
-    parts = [f"Generate a dungeon room layout with theme \"{theme}\" and difficulty {difficulty}/10."]
-
+    existing_names_section = ""
     if existing_room_names:
-        parts.append(f"\nDo NOT reuse these room names (already taken): {', '.join(existing_room_names[:30])}")
+        existing_names_section = f"\nDo NOT reuse these room names (already taken): {', '.join(existing_room_names[:30])}"
 
     # Tiles
     base_tiles = [
@@ -1332,10 +1122,10 @@ def _build_layout_prompt(theme: str, difficulty: int,
         for t in available_tiles[:20]
     ]
     tile_summary = ", ".join(base_tiles + custom_tiles)
-    parts.append(f"\nAvailable tiles: {tile_summary}")
 
+    prefer_tiles_line = ""
     if new_tile_ids:
-        parts.append(f"PREFER using these newly created tiles: {', '.join(new_tile_ids)}")
+        prefer_tiles_line = f"PREFER using these newly created tiles: {', '.join(new_tile_ids)}"
 
     # Monsters
     builtin_monsters = [
@@ -1350,12 +1140,20 @@ def _build_layout_prompt(theme: str, difficulty: int,
         for m in available_monsters[:20]
     ]
     monster_summary = ", ".join(builtin_monsters + custom_monsters)
-    parts.append(f"\nAvailable monsters: {monster_summary}")
 
+    prefer_monsters_line = ""
     if new_monster_kinds:
-        parts.append(f"PREFER placing these newly created monsters: {', '.join(new_monster_kinds)}")
+        prefer_monsters_line = f"PREFER placing these newly created monsters: {', '.join(new_monster_kinds)}"
 
-    return "\n".join(parts)
+    return _load_prompt("layout_user.txt",
+        theme=theme,
+        difficulty=difficulty,
+        existing_names_section=existing_names_section,
+        tile_summary=tile_summary,
+        prefer_tiles_line=prefer_tiles_line,
+        monster_summary=monster_summary,
+        prefer_monsters_line=prefer_monsters_line,
+    )
 
 
 async def generate_layout(

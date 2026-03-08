@@ -1,0 +1,3 @@
+Create {{count}} custom tile(s) for a "{{theme}}"-themed dungeon room at difficulty {{difficulty}}/10.
+{{existing_tiles_section}}
+Create {{count}} new tile(s). Make them visually distinct and thematically appropriate.

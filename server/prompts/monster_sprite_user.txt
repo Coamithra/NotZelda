@@ -1,0 +1,6 @@
+Create a pixel sprite for the monster "{{kind}}".
+{{tags_line}}
+{{attacks_line}}
+Theme: {{theme}}
+
+Design an animated sprite that visually fits this monster's concept.

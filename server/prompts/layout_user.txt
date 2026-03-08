@@ -1,0 +1,6 @@
+Generate a dungeon room layout with theme "{{theme}}" and difficulty {{difficulty}}/10.
+{{existing_names_section}}
+Available tiles: {{tile_summary}}
+{{prefer_tiles_line}}
+Available monsters: {{monster_summary}}
+{{prefer_monsters_line}}
