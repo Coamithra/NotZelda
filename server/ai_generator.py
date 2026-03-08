@@ -179,9 +179,6 @@ VALID_BEHAVIOR_CONDITIONS = {
 }
 VALID_BEHAVIOR_ACTIONS = {"wander", "chase", "flee", "patrol", "hold", "attack"}
 VALID_ATTACK_TYPES = {"melee", "projectile", "charge", "teleport", "area"}
-VALID_TILE_OPS = {"fill", "noise", "bricks", "grid_lines", "hstripes", "vstripes",
-                  "wave", "ripple", "rects", "pixels"}
-
 _BUILTIN_KINDS = {"slime", "bat", "scorpion", "skeleton", "swamp_blob"}
 
 
@@ -217,29 +214,19 @@ def validate_tile_definition(tile: dict, index: int = 0) -> list[str]:
             if not _is_hex_color(v):
                 errors.append(f"{prefix}.colors.{k} invalid hex: {v!r}")
 
-    ops = tile.get("operations")
-    if not isinstance(ops, list) or len(ops) < 1:
-        errors.append(f"{prefix}.operations must be non-empty list")
+    layers = tile.get("layers")
+    if not isinstance(layers, list):
+        errors.append(f"{prefix}.layers must be a list")
     else:
-        for oi, op in enumerate(ops):
-            if not isinstance(op, dict):
+        for li, layer in enumerate(layers):
+            if not isinstance(layer, list) or len(layer) != 5:
+                errors.append(f"{prefix}.layers[{li}] must be [colorKey, x, y, w, h]")
                 continue
-            if op.get("op") not in VALID_TILE_OPS:
-                errors.append(f"{prefix}.ops[{oi}] unknown op: {op.get('op')}")
-            if op.get("op") == "rects":
-                for ri, rect in enumerate(op.get("rects", [])):
-                    if isinstance(rect, list) and len(rect) == 5:
-                        _, x, y, w, h = rect
-                        if any(not isinstance(v, (int, float)) for v in (x, y, w, h)):
-                            errors.append(f"{prefix}.ops[{oi}].rects[{ri}] coords must be numbers")
-                        elif x < 0 or y < 0 or x + w > 16 or y + h > 16:
-                            errors.append(f"{prefix}.ops[{oi}].rects[{ri}] out of bounds")
-            if op.get("op") == "pixels":
-                for pi, px in enumerate(op.get("pixels", [])):
-                    if isinstance(px, list) and len(px) == 3:
-                        _, x, y = px
-                        if x < 0 or x > 15 or y < 0 or y > 15:
-                            errors.append(f"{prefix}.ops[{oi}].pixels[{pi}] out of bounds")
+            _, x, y, w, h = layer
+            if any(not isinstance(v, (int, float)) for v in (x, y, w, h)):
+                errors.append(f"{prefix}.layers[{li}] coords must be numbers")
+            elif x < 0 or y < 0 or x + w > 16 or y + h > 16:
+                errors.append(f"{prefix}.layers[{li}] out of bounds")
     return errors
 
 
@@ -1068,7 +1055,7 @@ async def generate_tiles(
 ) -> list[dict] | None:
     """Generate custom tile definitions.
 
-    Returns: list of tile dicts [{id, walkable, tags, colors, operations}], or None.
+    Returns: list of tile dicts [{id, walkable, tags, colors, layers}], or None.
     """
     if AI_BACKEND == "api" and not os.environ.get("ANTHROPIC_API_KEY"):
         print("[GEN] No ANTHROPIC_API_KEY set — skipping tile generation")

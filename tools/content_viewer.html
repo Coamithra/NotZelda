@@ -446,7 +446,7 @@ setInterval(_animTick, 400);
 function renderTileThumb(canvas, tileData) {
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, 32, 32);
-  if (!tileData.colors || !tileData.operations) return;
+  if (!tileData.colors || !tileData.layers) return;
   runTileRecipe(ctx, 32, 16, 2, tileData);
 }
 
@@ -659,15 +659,12 @@ function showTileDetails(entry) {
   }
   html += `</div>`;
 
-  // Operations
-  if (d.operations && d.operations.length) {
-    html += `<div class="detail-section"><h4>Operations</h4><ul class="ops-list">`;
-    for (const op of d.operations) {
-      html += `<li>${op.op}`;
-      if (op.color) html += ` (${op.color})`;
-      if (op.density !== undefined) html += ` density=${op.density}`;
-      if (op.spacing !== undefined) html += ` spacing=${op.spacing}`;
-      html += `</li>`;
+  // Layers
+  if (d.layers && d.layers.length) {
+    html += `<div class="detail-section"><h4>Layers (${d.layers.length})</h4><ul class="ops-list">`;
+    for (const layer of d.layers) {
+      const [colorKey, x, y, w, h] = layer;
+      html += `<li>${colorKey} [${x},${y} ${w}x${h}]</li>`;
     }
     html += `</ul></div>`;
   }

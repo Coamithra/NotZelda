@@ -6,11 +6,6 @@ from server.state import game
 
 _HEX_COLOR_RE = re.compile(r'^#[0-9a-fA-F]{6}$')
 
-VALID_TILE_OPS = frozenset({
-    "fill", "noise", "bricks", "grid_lines", "hstripes", "vstripes",
-    "wave", "ripple", "rects", "pixels",
-})
-
 VALID_BEHAVIOR_CONDITIONS = frozenset({
     "player_within", "player_beyond", "hp_below_pct", "hp_above_pct",
     "random_chance", "always", "default", "can_attack", "player_in_attack_range",
@@ -175,13 +170,13 @@ def validate_monster(data: dict) -> list[str]:
 
 
 def validate_tile(data: dict) -> list[str]:
-    """Validate a tile recipe. Returns a list of error strings (empty = valid).
+    """Validate a tile definition. Returns a list of error strings (empty = valid).
 
     Expected shape:
       id: str
       walkable: bool (optional, defaults to False)
       colors: {key: "#hex"}
-      operations: [{op: "fill"|"noise"|..., ...}, ...]
+      layers: [[colorKey, x, y, w, h], ...]
     """
     errors = []
 
@@ -199,39 +194,19 @@ def validate_tile(data: dict) -> list[str]:
             if not _is_hex_color(v):
                 errors.append(f"colors.{k} must be #RRGGBB, got {v!r}")
 
-    ops = data.get("operations")
-    if not isinstance(ops, list):
-        errors.append("operations must be a list")
+    layers = data.get("layers")
+    if not isinstance(layers, list):
+        errors.append("layers must be a list")
     else:
-        for oi, op in enumerate(ops):
-            if not isinstance(op, dict):
-                errors.append(f"operations[{oi}] must be a dict")
+        for li, layer in enumerate(layers):
+            if not isinstance(layer, list) or len(layer) != 5:
+                errors.append(f"layers[{li}] must be [colorKey, x, y, w, h]")
                 continue
-            op_name = op.get("op")
-            if op_name not in VALID_TILE_OPS:
-                errors.append(f"operations[{oi}] unknown op: {op_name}")
-            # Validate rect coordinates for rects op
-            if op_name == "rects":
-                for ri, rect in enumerate(op.get("rects", [])):
-                    if not isinstance(rect, list) or len(rect) != 5:
-                        errors.append(f"operations[{oi}].rects[{ri}] must be [colorKey, x, y, w, h]")
-                        continue
-                    _, x, y, w, h = rect
-                    if not all(isinstance(v, (int, float)) for v in (x, y, w, h)):
-                        errors.append(f"operations[{oi}].rects[{ri}] x/y/w/h must be numbers")
-                    elif x < 0 or y < 0 or x + w > 16 or y + h > 16:
-                        errors.append(f"operations[{oi}].rects[{ri}] out of 0-15 grid")
-            # Validate pixel coordinates for pixels op
-            if op_name == "pixels":
-                for pi, px in enumerate(op.get("pixels", [])):
-                    if not isinstance(px, list) or len(px) != 3:
-                        errors.append(f"operations[{oi}].pixels[{pi}] must be [colorKey, x, y]")
-                        continue
-                    _, x, y = px
-                    if not all(isinstance(v, (int, float)) for v in (x, y)):
-                        errors.append(f"operations[{oi}].pixels[{pi}] x/y must be numbers")
-                    elif x < 0 or x > 15 or y < 0 or y > 15:
-                        errors.append(f"operations[{oi}].pixels[{pi}] out of 0-15 grid")
+            _, x, y, w, h = layer
+            if not all(isinstance(v, (int, float)) for v in (x, y, w, h)):
+                errors.append(f"layers[{li}] x/y/w/h must be numbers")
+            elif x < 0 or y < 0 or x + w > 16 or y + h > 16:
+                errors.append(f"layers[{li}] out of 16x16 bounds")
 
     return errors
 
@@ -276,7 +251,7 @@ def register_tile_type(data: dict) -> tuple[bool, list[str]]:
     tile_id = data["id"]
     game.custom_tile_recipes[tile_id] = {
         "colors": data["colors"],
-        "operations": data["operations"],
+        "layers": data["layers"],
     }
 
     if data.get("walkable", False):
