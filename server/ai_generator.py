@@ -805,6 +805,7 @@ async def _call_api(system_prompt: str, user_prompt: str) -> tuple[str, int, int
                 max_tokens=4096,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
+                metadata={"user_id": "notzelda-content-gen"},
             )
         ),
         timeout=GENERATION_TIMEOUT,
