@@ -5,12 +5,12 @@
 <title>Content Viewer</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { background: #1a1a2e; color: #e0e0e0; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; }
+body { background: #1a1a2e; color: #e0e0e0; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
 
 /* Top bar */
 .topbar {
   display: flex; align-items: center; gap: 12px; padding: 8px 16px;
-  background: #16213e; border-bottom: 2px solid #0f3460;
+  background: #16213e; border-bottom: 2px solid #0f3460; flex-shrink: 0;
 }
 .topbar h1 { font-size: 16px; color: #e94560; margin-right: 16px; }
 .topbar label { color: #aaa; font-size: 12px; }
@@ -26,7 +26,7 @@ body { background: #1a1a2e; color: #e0e0e0; font-family: 'Consolas', 'Monaco', m
 #statusText { margin-left: auto; color: #aaa; font-size: 12px; }
 
 /* Main layout */
-.main { display: flex; height: calc(100vh - 106px); overflow: hidden; }
+.main { display: flex; flex: 1; min-height: 0; overflow: hidden; }
 
 /* Left panel - library browser */
 .panel-left {
@@ -112,18 +112,18 @@ body { background: #1a1a2e; color: #e0e0e0; font-family: 'Consolas', 'Monaco', m
 /* Bottom bar */
 .bottombar {
   display: flex; align-items: center; gap: 16px; padding: 6px 16px;
-  background: #16213e; border-top: 2px solid #0f3460; font-size: 12px; color: #888;
+  background: #16213e; border-top: 2px solid #0f3460; font-size: 12px; color: #888; flex-shrink: 0;
 }
 
 /* Log panel */
 .log-panel {
   background: #111; border-top: 2px solid #0f3460;
-  max-height: 0; overflow: hidden; transition: max-height 0.3s ease;
+  height: 0; overflow: hidden; flex-shrink: 0; transition: height 0.3s ease;
 }
-.log-panel.open { max-height: 200px; }
+.log-panel.open { height: 200px; }
 .log-header {
   display: flex; align-items: center; gap: 8px; padding: 4px 16px;
-  background: #16213e; cursor: pointer; user-select: none; border-top: 2px solid #0f3460;
+  background: #16213e; cursor: pointer; user-select: none; border-top: 2px solid #0f3460; flex-shrink: 0;
 }
 .log-header:hover { background: #1a2a4e; }
 .log-header h4 { font-size: 12px; color: #888; }
@@ -159,8 +159,10 @@ body { background: #1a1a2e; color: #e0e0e0; font-family: 'Consolas', 'Monaco', m
   <label>Difficulty</label>
   <input type="range" id="diffSlider" min="1" max="10" value="5">
   <span id="diffDisplay">5</span>
-  <button id="generateBtn" onclick="generateRoom()">Generate Room</button>
-  <button onclick="testCli()" style="background:#0f3460">Test CLI</button>
+  <button class="gen-btn" id="generateBtn" onclick="generateRoom()">Generate Room</button>
+  <button class="gen-btn" id="genLayoutBtn" onclick="generateLayout()" style="background:#8a5a0a">Generate Layout</button>
+  <button class="gen-btn" id="genMonsterBtn" onclick="generateMonster()" style="background:#0f3460">Generate Monster</button>
+  <button class="gen-btn" id="genTileBtn" onclick="generateTile()" style="background:#2a6a2a">Generate Tile</button>
   <span id="statusText">Ready</span>
 </div>
 
@@ -744,46 +746,84 @@ function toggleJson() {
 }
 
 // ---------------------------------------------------------------------------
-// Generate room
+// Generation helpers
 // ---------------------------------------------------------------------------
 let _generating = false;
-async function generateRoom() {
-  if (_generating) return;
-  _generating = true;
-  const btn = document.getElementById('generateBtn');
-  const status = document.getElementById('statusText');
-  btn.disabled = true;
-  const startTime = Date.now();
-  status.textContent = 'Generating...';
 
-  // Show elapsed timer
+function setGenLock(locked, label) {
+  _generating = locked;
+  const btns = document.querySelectorAll('.gen-btn');
+  btns.forEach(b => b.disabled = locked);
+  const status = document.getElementById('statusText');
+  if (locked) status.textContent = label || 'Generating...';
+}
+
+async function runGeneration(endpoint, body, label, onSuccess) {
+  if (_generating) return;
+  setGenLock(true, label);
+  const startTime = Date.now();
+
   const timer = setInterval(() => {
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    status.textContent = `Generating... (${elapsed}s)`;
+    document.getElementById('statusText').textContent = `${label} (${elapsed}s)`;
   }, 100);
 
   try {
-    const theme = document.getElementById('themeSelect').value;
-    const difficulty = parseInt(document.getElementById('diffSlider').value);
-    const { status: httpStatus, data } = await apiPost('/api/generate', { theme, difficulty });
-
+    const { status: httpStatus, data } = await apiPost(endpoint, body);
     clearInterval(timer);
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
     if (httpStatus === 200 && !data.error) {
-      status.textContent = `Generated: "${data.name}" (${elapsed}s)`;
-      await loadLibraries();
-      renderRoomPreview(data);
+      onSuccess(data, elapsed);
     } else {
-      status.textContent = `Error: ${data.error || 'Unknown error'} (${elapsed}s)`;
+      document.getElementById('statusText').textContent =
+        `Error: ${data.error || 'Unknown error'} (${elapsed}s)`;
     }
   } catch (e) {
     clearInterval(timer);
-    status.textContent = `Error: ${e.message}`;
+    document.getElementById('statusText').textContent = `Error: ${e.message}`;
   }
 
-  btn.disabled = false;
-  _generating = false;
+  setGenLock(false);
+}
+
+function generateRoom() {
+  const theme = document.getElementById('themeSelect').value;
+  const difficulty = parseInt(document.getElementById('diffSlider').value);
+  runGeneration('/api/generate', { theme, difficulty }, 'Generating room...', async (data, elapsed) => {
+    document.getElementById('statusText').textContent = `Room: "${data.name}" (${elapsed}s)`;
+    await loadLibraries();
+    renderRoomPreview(data);
+  });
+}
+
+function generateLayout() {
+  const theme = document.getElementById('themeSelect').value;
+  const difficulty = parseInt(document.getElementById('diffSlider').value);
+  runGeneration('/api/generate/layout', { theme, difficulty }, 'Generating layout...', async (data, elapsed) => {
+    document.getElementById('statusText').textContent = `Layout: "${data.name}" (${elapsed}s)`;
+    await loadLibraries();
+    renderRoomPreview(data);
+  });
+}
+
+function generateMonster() {
+  const theme = document.getElementById('themeSelect').value;
+  const difficulty = parseInt(document.getElementById('diffSlider').value);
+  runGeneration('/api/generate/monster', { theme, difficulty }, 'Generating monster...', async (data, elapsed) => {
+    document.getElementById('statusText').textContent = `Monster: "${data.kind}" (${elapsed}s)`;
+    await loadLibraries();
+  });
+}
+
+function generateTile() {
+  const theme = document.getElementById('themeSelect').value;
+  const difficulty = parseInt(document.getElementById('diffSlider').value);
+  runGeneration('/api/generate/tiles', { theme, difficulty, count: 1 }, 'Generating tile...', async (data, elapsed) => {
+    const names = (data.tiles || []).map(t => t.id).join(', ');
+    document.getElementById('statusText').textContent = `Tile: ${names} (${elapsed}s)`;
+    await loadLibraries();
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -876,24 +916,6 @@ function escapeHtml(s) {
 
 // Poll every 1s
 setInterval(pollLogs, 1000);
-
-// ---------------------------------------------------------------------------
-// Test CLI
-// ---------------------------------------------------------------------------
-async function testCli() {
-  const status = document.getElementById('statusText');
-  status.textContent = 'Testing CLI...';
-  try {
-    const { status: httpStatus, data } = await apiPost('/api/test-cli', {});
-    if (data.ok) {
-      status.textContent = `CLI OK (${data.elapsed}s): ${data.stdout.substring(0, 80)}`;
-    } else {
-      status.textContent = `CLI FAIL: ${data.error}`;
-    }
-  } catch (e) {
-    status.textContent = `CLI error: ${e.message}`;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Init

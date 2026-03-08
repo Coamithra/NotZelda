@@ -13,7 +13,6 @@ Usage: python content_viewer.py
 import asyncio
 import json
 import os
-import shutil
 import sys
 from pathlib import Path
 
@@ -173,6 +172,10 @@ async def handle_generate(body: bytes) -> tuple[str, int]:
                     monster_library_full=monster_lib.is_full,
                     tile_library_full=tile_lib.is_full,
                     existing_room_names=existing_room_names,
+                    monster_library_count=monster_lib.real_count,
+                    monster_library_capacity=monster_lib.capacity,
+                    tile_library_count=tile_lib.real_count,
+                    tile_library_capacity=tile_lib.capacity,
                 )
             except Exception as e:
                 tb = _traceback.format_exc()
@@ -231,6 +234,158 @@ async def handle_generate(body: bytes) -> tuple[str, int]:
         tb = _traceback.format_exc()
         server_log(f"[VIEWER] Unexpected error in handle_generate: {e}\n{tb}", "error")
         return json.dumps({"error": f"Unexpected error: {e}"}), 500
+
+
+async def handle_generate_monster(body: bytes) -> tuple[str, int]:
+    """Generate a single monster (sprite + behavior) and register it."""
+    try:
+        async with generate_lock:
+            params = json.loads(body)
+            theme = params.get("theme", "dungeon")
+            difficulty = int(params.get("difficulty", 5))
+
+            existing_monsters = [
+                {"kind": e.id, "tags": e.tags}
+                for e in monster_lib.real_entries
+            ]
+
+            # Step 1: Generate design (kind, tags, stats, behavior)
+            design = await ai_generator.generate_monster_design(
+                theme, difficulty, existing_monsters)
+            if design is None:
+                return json.dumps({"error": "Monster design generation failed"}), 500
+
+            # Step 2: Generate sprite
+            attack_types = [a.get("type", "") for a in design.get("behavior", {}).get("attacks", [])]
+            sprite_data = await ai_generator.generate_monster_sprite(
+                design["kind"],
+                tags=design.get("tags"),
+                attack_types=attack_types,
+                theme=theme,
+            )
+            if sprite_data and isinstance(sprite_data.get("sprite"), dict):
+                design["sprite"] = sprite_data["sprite"]
+            else:
+                return json.dumps({"error": f"Sprite generation failed for {design['kind']}"}), 500
+
+            # Register
+            import time
+            entry = LibraryEntry(
+                id=design["kind"],
+                content_type="monster",
+                tags=design.get("tags", []),
+                created_at=time.time(),
+                data=design,
+            )
+            monster_lib.add(entry)
+            save_libraries()
+            return json.dumps(design), 200
+    except Exception as e:
+        tb = _traceback.format_exc()
+        server_log(f"[VIEWER] Monster generation error: {e}\n{tb}", "error")
+        return json.dumps({"error": f"Exception: {e}"}), 500
+
+
+async def handle_generate_layout(body: bytes) -> tuple[str, int]:
+    """Generate just a layout using existing library content."""
+    try:
+        async with generate_lock:
+            params = json.loads(body)
+            theme = params.get("theme", "dungeon")
+            difficulty = int(params.get("difficulty", 5))
+
+            available_monsters = [
+                {"kind": e.id, "tags": e.tags}
+                for e in monster_lib.real_entries
+            ]
+            available_tiles = [
+                {"id": e.id, "walkable": e.data.get("walkable", False), "tags": e.tags}
+                for e in tile_lib.real_entries
+            ]
+            existing_room_names = [
+                e.data.get("name", e.id) for e in room_lib.real_entries
+            ]
+
+            layout = await ai_generator.generate_layout(
+                theme=theme,
+                difficulty=difficulty,
+                available_tiles=available_tiles,
+                available_monsters=available_monsters,
+                existing_room_names=existing_room_names,
+            )
+            if layout is None:
+                return json.dumps({"error": "Layout generation failed"}), 500
+
+            # Wrap as a room result for the preview to work
+            result = {
+                "name": layout["name"],
+                "tilemap": layout["tilemap"],
+                "new_tiles": [],
+                "new_monsters": [],
+                "monster_placements": layout["monster_placements"],
+            }
+
+            # Register as a room
+            import time
+            room_name = layout.get("name", "Unknown Room")
+            room_id = room_name.lower().replace(" ", "_")
+            base_id = room_id
+            counter = 1
+            while room_lib.get_by_id(room_id):
+                counter += 1
+                room_id = f"{base_id}_{counter}"
+
+            room_entry = LibraryEntry(
+                id=room_id,
+                content_type="room",
+                tags=[theme, f"difficulty_{difficulty}"],
+                created_at=time.time(),
+                data=result,
+            )
+            room_lib.add(room_entry)
+            save_libraries()
+            return json.dumps(result), 200
+    except Exception as e:
+        tb = _traceback.format_exc()
+        server_log(f"[VIEWER] Layout generation error: {e}\n{tb}", "error")
+        return json.dumps({"error": f"Exception: {e}"}), 500
+
+
+async def handle_generate_tiles(body: bytes) -> tuple[str, int]:
+    """Generate custom tiles and register them."""
+    try:
+        async with generate_lock:
+            params = json.loads(body)
+            theme = params.get("theme", "dungeon")
+            difficulty = int(params.get("difficulty", 5))
+            count = int(params.get("count", 2))
+
+            existing_tiles = [
+                {"id": e.id, "walkable": e.data.get("walkable", False), "tags": e.tags}
+                for e in tile_lib.real_entries
+            ]
+
+            tiles = await ai_generator.generate_tiles(
+                theme, difficulty, existing_tiles, count=count)
+            if tiles is None:
+                return json.dumps({"error": "Tile generation failed"}), 500
+
+            import time
+            for t in tiles:
+                entry = LibraryEntry(
+                    id=t["id"],
+                    content_type="tile",
+                    tags=t.get("tags", []),
+                    created_at=time.time(),
+                    data=t,
+                )
+                tile_lib.add(entry)
+            save_libraries()
+            return json.dumps({"tiles": tiles}), 200
+    except Exception as e:
+        tb = _traceback.format_exc()
+        server_log(f"[VIEWER] Tile generation error: {e}\n{tb}", "error")
+        return json.dumps({"error": f"Exception: {e}"}), 500
 
 
 def handle_delete(lib_type: str, item_id: str):
@@ -369,52 +524,20 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
                 since_id = int(qs.get("since", [0])[0])
             response_body = handle_logs(since_id).encode("utf-8")
 
-        elif method == "POST" and path == "/api/test-cli":
-            # Quick CLI smoke test — send a trivial prompt
-            import subprocess
-            env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
-            server_log("[TEST-CLI] Starting claude CLI test...", "info")
-            claude_path = shutil.which("claude")
-            server_log(f"[TEST-CLI] claude location: {claude_path or 'NOT FOUND'}", "info")
-
-            model = ai_generator.ANTHROPIC_MODEL
-            server_log(f"[TEST-CLI] Running: claude -p '...' --output-format json --model {model}", "info")
-            try:
-                import time as _t
-                t0 = _t.time()
-                loop = asyncio.get_running_loop()
-                result = await asyncio.wait_for(
-                    loop.run_in_executor(
-                        None,
-                        lambda: subprocess.run(
-                            ["claude", "-p", "Reply with exactly one word: HELLO", "--output-format", "json", "--model", model],
-                            capture_output=True, text=True, timeout=60, env=env,
-                        )
-                    ),
-                    timeout=65,
-                )
-                elapsed = _t.time() - t0
-                server_log(f"[TEST-CLI] Finished in {elapsed:.1f}s, exit code: {result.returncode}", "info")
-                server_log(f"[TEST-CLI] stdout ({len(result.stdout)} chars):", "info")
-                # Log in chunks so nothing gets cut off
-                for i in range(0, len(result.stdout), 300):
-                    server_log(f"  {result.stdout[i:i+300]}", "info")
-                if result.stderr:
-                    server_log(f"[TEST-CLI] stderr ({len(result.stderr)} chars):", "error")
-                    for i in range(0, len(result.stderr), 300):
-                        server_log(f"  {result.stderr[i:i+300]}", "error")
-                response_body = json.dumps({"ok": True, "exit_code": result.returncode, "stdout": result.stdout, "stderr": result.stderr, "elapsed": round(elapsed, 1)}).encode("utf-8")
-            except subprocess.TimeoutExpired:
-                server_log("[TEST-CLI] TIMED OUT after 60s", "error")
-                response_body = json.dumps({"ok": False, "error": "timeout after 60s"}).encode("utf-8")
-                status = 500
-            except Exception as e:
-                server_log(f"[TEST-CLI] Exception: {e}", "error")
-                response_body = json.dumps({"ok": False, "error": str(e)}).encode("utf-8")
-                status = 500
-
         elif method == "POST" and path == "/api/generate":
             result, status = await handle_generate(body)
+            response_body = result.encode("utf-8")
+
+        elif method == "POST" and path == "/api/generate/layout":
+            result, status = await handle_generate_layout(body)
+            response_body = result.encode("utf-8")
+
+        elif method == "POST" and path == "/api/generate/monster":
+            result, status = await handle_generate_monster(body)
+            response_body = result.encode("utf-8")
+
+        elif method == "POST" and path == "/api/generate/tiles":
+            result, status = await handle_generate_tiles(body)
             response_body = result.encode("utf-8")
 
         elif method == "DELETE" and path.startswith("/api/"):
