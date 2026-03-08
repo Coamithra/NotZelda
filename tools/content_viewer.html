@@ -23,7 +23,7 @@ body { background: #1a1a2e; color: #e0e0e0; font-family: 'Consolas', 'Monaco', m
 .topbar button:hover { background: #c73850; }
 .topbar button:disabled { background: #555; cursor: not-allowed; }
 #diffDisplay { color: #e94560; font-weight: bold; min-width: 24px; text-align: center; }
-#statusText { margin-left: auto; color: #aaa; font-size: 12px; }
+#statusText { color: #aaa; font-size: 12px; }
 
 /* Main layout */
 .main { display: flex; flex: 1; min-height: 0; overflow: hidden; }
@@ -163,7 +163,20 @@ body { background: #1a1a2e; color: #e0e0e0; font-family: 'Consolas', 'Monaco', m
   <button class="gen-btn" id="genLayoutBtn" onclick="generateLayout()" style="background:#8a5a0a">Generate Layout</button>
   <button class="gen-btn" id="genMonsterBtn" onclick="generateMonster()" style="background:#0f3460">Generate Monster</button>
   <button class="gen-btn" id="genTileBtn" onclick="generateTile()" style="background:#2a6a2a">Generate Tile</button>
-  <span id="statusText">Ready</span>
+  <span style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+    <label>Model</label>
+    <select id="modelSelect" onchange="updateSettings()">
+      <option value="claude-haiku-4-5-20251001">Haiku</option>
+      <option value="claude-sonnet-4-6">Sonnet</option>
+      <option value="claude-opus-4-6">Opus</option>
+    </select>
+    <label>Backend</label>
+    <select id="backendSelect" onchange="updateSettings()">
+      <option value="cli">CLI (subscription)</option>
+      <option value="api">API (paid)</option>
+    </select>
+    <span id="statusText">Ready</span>
+  </span>
 </div>
 
 <div class="main">
@@ -854,6 +867,38 @@ async function updateUsage() {
 }
 
 // ---------------------------------------------------------------------------
+// Settings (model + backend)
+// ---------------------------------------------------------------------------
+async function loadSettings() {
+  try {
+    const s = await apiGet('/api/settings');
+    document.getElementById('modelSelect').value = s.model;
+    document.getElementById('backendSelect').value = s.backend;
+    // Disable API option if no key
+    const apiOpt = document.querySelector('#backendSelect option[value="api"]');
+    if (apiOpt && !s.has_api_key) {
+      apiOpt.disabled = true;
+      apiOpt.textContent = 'API (no key)';
+    }
+  } catch (e) { /* ignore */ }
+}
+
+async function updateSettings() {
+  const model = document.getElementById('modelSelect').value;
+  const backend = document.getElementById('backendSelect').value;
+  try {
+    const { status, data } = await apiPost('/api/settings', { model, backend });
+    if (status !== 200) {
+      alert(data.error || 'Failed to update settings');
+      await loadSettings(); // revert dropdowns
+    }
+  } catch (e) {
+    alert('Failed to update settings: ' + e.message);
+    await loadSettings();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Log panel
 // ---------------------------------------------------------------------------
 let logSinceId = 0;
@@ -918,6 +963,7 @@ setInterval(pollLogs, 1000);
 // Init
 // ---------------------------------------------------------------------------
 loadLibraries();
+loadSettings();
 pollLogs();
 </script>
 </body>

@@ -423,6 +423,52 @@ def handle_logs(since_id: int = 0):
     return json.dumps({"logs": entries})
 
 
+def handle_get_settings():
+    """Return current AI backend and model settings."""
+    has_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    return json.dumps({
+        "backend": ai_generator.AI_BACKEND,
+        "model": ai_generator.ANTHROPIC_MODEL,
+        "has_api_key": has_key,
+    })
+
+
+def handle_set_settings(body: bytes) -> tuple[str, int]:
+    """Update AI backend and/or model settings."""
+    try:
+        params = json.loads(body)
+    except json.JSONDecodeError:
+        return json.dumps({"error": "Invalid JSON"}), 400
+
+    VALID_MODELS = {
+        "claude-haiku-4-5-20251001",
+        "claude-sonnet-4-6",
+        "claude-opus-4-6",
+    }
+    VALID_BACKENDS = {"cli", "api"}
+
+    model = params.get("model")
+    backend = params.get("backend")
+
+    if model and model not in VALID_MODELS:
+        return json.dumps({"error": f"Unknown model: {model}"}), 400
+    if backend and backend not in VALID_BACKENDS:
+        return json.dumps({"error": f"Unknown backend: {backend}"}), 400
+
+    if backend == "api" and not os.environ.get("ANTHROPIC_API_KEY"):
+        return json.dumps({"error": "Cannot use API backend — no ANTHROPIC_API_KEY set"}), 400
+
+    if model:
+        ai_generator.ANTHROPIC_MODEL = model
+        server_log(f"[VIEWER] Model changed to {model}")
+    if backend:
+        ai_generator.AI_BACKEND = backend
+        label = "CLI (subscription)" if backend == "cli" else "API (paid)"
+        server_log(f"[VIEWER] Backend changed to {label}")
+
+    return json.dumps({"ok": True, "model": ai_generator.ANTHROPIC_MODEL, "backend": ai_generator.AI_BACKEND}), 200
+
+
 # ---------------------------------------------------------------------------
 # Static file serving
 # ---------------------------------------------------------------------------
@@ -514,6 +560,13 @@ async def handle_request(reader: asyncio.StreamReader, writer: asyncio.StreamWri
 
         elif method == "GET" and path == "/api/usage":
             response_body = handle_usage().encode("utf-8")
+
+        elif method == "GET" and path == "/api/settings":
+            response_body = handle_get_settings().encode("utf-8")
+
+        elif method == "POST" and path == "/api/settings":
+            result, status = handle_set_settings(body)
+            response_body = result.encode("utf-8")
 
         elif method == "GET" and path.startswith("/api/logs"):
             # Parse ?since=N query param

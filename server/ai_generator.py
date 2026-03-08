@@ -762,7 +762,7 @@ async def _call_cli(system_prompt: str, user_prompt: str) -> tuple[str, int, int
 
     print(f"[GEN] Calling Claude CLI ({len(combined_prompt)} chars)...")
 
-    env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+    env = {k: v for k, v in os.environ.items() if k not in ("CLAUDECODE", "ANTHROPIC_API_KEY")}
 
     proc = await asyncio.wait_for(
         asyncio.get_running_loop().run_in_executor(

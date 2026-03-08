@@ -12,6 +12,8 @@ When pushing to git make sure to update CLAUDE.md first!
 
 **NEVER run `python worldgen.py` without explicit user permission.** The overworld `.room` files in `rooms/` contain hand-edited changes that worldgen will overwrite. Running it will destroy manual edits. Always warn the user that data will be lost before re-running.
 
+**After any changes to `server/ai_generator.py`, `tools/content_viewer.py`, or `.env`, run `python tools/test_api_leak.py` to verify the Anthropic API key cannot leak into CLI subprocess calls.** The game uses the Claude CLI (subscription-based) for AI generation — the API must never be called directly. All 4 tests must pass.
+
 ## Directory Structure
 
 ```
@@ -82,6 +84,7 @@ All server-side shared state lives on a `GameState` singleton (`game = GameState
 - **`tools/download_log.py`** — Local utility script. Fetches the server's event log via `/get-log`, saves it to `log_YYYYMMDD_HHMMSS.txt`, and clears the log on the server. Defaults to the Hetzner server; pass `http://localhost:8080` as arg for local dev.
 - **`tools/content_viewer.py`** + **`tools/content_viewer.html`** — Standalone dev tool for browsing and generating AI dungeon content. Async HTTP server on port 8081. Single-page app that can browse monster/tile/room libraries as rendered thumbnails, inspect items (tags, stats, behavior, sprite data), generate new rooms on demand with theme/difficulty controls, delete library items, and view API usage stats. Intercepts all `print()` calls into a ring buffer exposed via `/api/logs` for real-time server log streaming. Serves `client/tiles.js`, `client/sprites.js`, `client/sprite_data.js` for client-side rendering. Routes: `GET /api/libraries`, `POST /api/generate` (full room), `POST /api/generate/monster` (single monster design+sprite), `POST /api/generate/tiles` (custom tiles), `DELETE /api/{type}/{id}`, `GET /api/usage`, `GET /api/logs?since=N`. Run with `python tools/content_viewer.py`.
 - **`tools/test_content_library.py`** — Unit tests for content_library.
+- **`tools/test_api_leak.py`** — Mandatory tests verifying the Anthropic API key never leaks into CLI subprocess calls. Tests: `_call_cli` strips `ANTHROPIC_API_KEY` from env, `AI_BACKEND` defaults to `"cli"`, `.env` doesn't set `AI_BACKEND=api`, `content_viewer.py` doesn't force API backend. Run with `python tools/test_api_leak.py`.
 
 ### Docs (`docs/`)
 - **`docs/PLAN_AI_GENERATION.md`** — Staged plan for AI-powered procedural content generation. Nine stages from tag system through library-managed dungeons. Roles removed — content uses free-form tags only. Resolution uses tag-overlap scoring (shared/union). Tiles have a `walkable` boolean as a hard substitution constraint. See file for full details.
