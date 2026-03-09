@@ -95,6 +95,5 @@ Design interesting, varied behavior — not just "chase and hit".
 - Low HP → hold: a wounded monster standing still is boring. Use flee, teleport, or a desperation attack instead.
 - Attacks without warmup: charges should have warmup 1, area attacks warmup 1-2, so players can dodge. Exception is at high difficulty levels (8+).
 - Missing cooldown on attacks: without cooldown, the monster fires every single tick. Again exception at high difficulty.
-- **Overusing flee**: `hp_below → move away` should be rare — most monsters fight to the death. Reserve flee for cowardly or intelligent monsters. It's a video game: dying enemies running away is usually not fun.
-- **Overusing chase**: `player_within → move player` on every monster is boring. Many monsters should wander, patrol, hold position, or use attacks instead of blindly chasing. Chase is fine for aggressive melee monsters, but ranged/magical monsters should prefer holding ground or repositioning.
+- Overusing flee: `hp_below → move away` should be rare — most monsters fight to the death. Reserve flee for cowardly or intelligent monsters. It's a video game: dying enemies running away is usually not fun.
 - All chase: mix in hold, patrol, random wander, or different attacks at different ranges for variety. For simple (low difficulty <4) monsters, random wander is often more appropriate than chasing.
