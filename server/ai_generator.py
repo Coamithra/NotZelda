@@ -174,11 +174,12 @@ BUILTIN_TILES = {"DW", "DF", "PL", "SC"}
 NON_WALKABLE = {"DW", "PL", "SC"}
 
 VALID_BEHAVIOR_CONDITIONS = {
-    "player_within", "player_beyond", "hp_below_pct", "hp_above_pct",
-    "random_chance", "always", "default", "can_attack", "player_in_attack_range",
+    "player_within", "player_beyond", "player_in_range_line",
+    "hp_below", "hp_above", "random_chance", "always",
 }
-VALID_BEHAVIOR_ACTIONS = {"wander", "chase", "flee", "patrol", "hold", "attack"}
-VALID_ATTACK_TYPES = {"melee", "projectile", "charge", "teleport", "area"}
+VALID_BEHAVIOR_ACTIONS = {"move", "hold", "projectile", "charge", "teleport", "area"}
+VALID_DIRECTIONS = {"up", "down", "left", "right", "player", "away", "random", "patrol"}
+VALID_TELEPORT_TARGETS = {"player", "random", "away"}
 _BUILTIN_KINDS = {"slime", "bat", "scorpion", "skeleton", "swamp_blob"}
 
 
@@ -250,9 +251,9 @@ def validate_monster_design(monster: dict, index: int = 0) -> list[str]:
         hp = stats.get("hp")
         if not isinstance(hp, (int, float)) or hp < 1 or hp > 100:
             errors.append(f"{prefix}.stats.hp must be 1-100")
-        hop = stats.get("hop_interval")
-        if not isinstance(hop, (int, float)) or hop < 0.2 or hop > 10.0:
-            errors.append(f"{prefix}.stats.hop_interval must be 0.2-10.0")
+        tick = stats.get("tick_rate")
+        if not isinstance(tick, (int, float)) or tick < 0.1 or tick > 5.0:
+            errors.append(f"{prefix}.stats.tick_rate must be 0.1-5.0")
         dmg = stats.get("damage")
         if not isinstance(dmg, (int, float)) or dmg < 1 or dmg > 20:
             errors.append(f"{prefix}.stats.damage must be 1-20")
@@ -301,7 +302,7 @@ def validate_monster_sprite(sprite_data: dict) -> list[str]:
 
 
 def validate_monster_behavior(behavior: dict) -> list[str]:
-    """Validate a monster's behavior rules and attacks. Returns errors."""
+    """Validate a monster's behavior rules (attacks are inline in rules). Returns errors."""
     errors = []
 
     if not isinstance(behavior, dict):
@@ -311,29 +312,27 @@ def validate_monster_behavior(behavior: dict) -> list[str]:
     for ri, rule in enumerate(rules):
         if not isinstance(rule, dict):
             continue
-        cond = rule.get("if") or (rule.get("default") and "default")
-        if cond and cond not in VALID_BEHAVIOR_CONDITIONS:
-            errors.append(f"behavior.rules[{ri}] unknown condition: {cond}")
-        action = rule.get("do") or (rule.get("default") if "default" in rule else None)
-        if isinstance(action, str) and action not in VALID_BEHAVIOR_ACTIONS:
-            errors.append(f"behavior.rules[{ri}] unknown action: {action}")
-
-    attacks = behavior.get("attacks", [])
-    for ai, atk in enumerate(attacks):
-        if not isinstance(atk, dict):
+        cond = rule.get("if")
+        if not cond:
+            errors.append(f"behavior.rules[{ri}] missing 'if' condition")
             continue
-        atype = atk.get("type")
-        if atype not in VALID_ATTACK_TYPES:
-            errors.append(f"behavior.attacks[{ai}] unknown type: {atype}")
-        rng = atk.get("range")
-        if atype == "melee":
-            if rng is not None and rng != 1:
-                errors.append(f"behavior.attacks[{ai}] melee range must be 1")
-        elif not isinstance(rng, (int, float)) or rng < 1 or rng > 15:
-            errors.append(f"behavior.attacks[{ai}] range must be 1-15")
-        cd = atk.get("cooldown")
-        if cd is not None and (not isinstance(cd, (int, float)) or cd < 0.5 or cd > 30.0):
-            errors.append(f"behavior.attacks[{ai}] cooldown must be 0.5-30.0")
+        if cond not in VALID_BEHAVIOR_CONDITIONS:
+            errors.append(f"behavior.rules[{ri}] unknown condition: {cond}")
+        action = rule.get("do")
+        if not isinstance(action, str):
+            errors.append(f"behavior.rules[{ri}] missing 'do' action")
+            continue
+        if action not in VALID_BEHAVIOR_ACTIONS:
+            errors.append(f"behavior.rules[{ri}] unknown action: {action}")
+        direction = rule.get("direction")
+        if direction is not None and direction not in VALID_DIRECTIONS:
+            errors.append(f"behavior.rules[{ri}] unknown direction: {direction}")
+        warmup = rule.get("warmup")
+        if warmup is not None and (not isinstance(warmup, (int, float)) or warmup < 0):
+            errors.append(f"behavior.rules[{ri}] warmup must be >= 0")
+        cooldown = rule.get("cooldown")
+        if cooldown is not None and (not isinstance(cooldown, (int, float)) or cooldown < 0):
+            errors.append(f"behavior.rules[{ri}] cooldown must be >= 0")
 
     return errors
 
@@ -669,26 +668,32 @@ def patch_duplicate_name(data: dict, existing_names: list[str]) -> list[str]:
     return [f"Renamed \"{name}\" to \"{data['name']}\" (duplicate)"]
 
 
-def patch_monster_attacks(behavior: dict) -> list[str]:
-    """Clamp out-of-range attack stats to valid bounds."""
+def patch_monster_rules(behavior: dict) -> list[str]:
+    """Clamp out-of-range rule params to valid bounds."""
     patches = []
-    for ai, atk in enumerate(behavior.get("attacks", [])):
-        if not isinstance(atk, dict):
+    for ri, rule in enumerate(behavior.get("rules", [])):
+        if not isinstance(rule, dict):
             continue
-        cd = atk.get("cooldown")
-        if isinstance(cd, (int, float)) and (cd < 0.5 or cd > 30.0):
-            clamped = max(0.5, min(30.0, cd))
-            patches.append(f"Clamped attack[{ai}] cooldown {cd} -> {clamped}")
-            atk["cooldown"] = clamped
-        if atk.get("type") == "melee":
-            if atk.get("range") is None:
-                atk["range"] = 1
-                patches.append(f"Set attack[{ai}] melee range to 1")
-        rng = atk.get("range")
-        if isinstance(rng, (int, float)) and (rng < 1 or rng > 15):
-            clamped = max(1, min(15, int(rng)))
-            patches.append(f"Clamped attack[{ai}] range {rng} -> {clamped}")
-            atk["range"] = clamped
+        action = rule.get("do")
+        if action in ("projectile", "charge", "teleport", "area"):
+            dmg = rule.get("damage")
+            if isinstance(dmg, (int, float)) and (dmg < 1 or dmg > 20):
+                clamped = max(1, min(20, int(dmg)))
+                patches.append(f"Clamped rule[{ri}] damage {dmg} -> {clamped}")
+                rule["damage"] = clamped
+            rng = rule.get("range")
+            if isinstance(rng, (int, float)) and (rng < 1 or rng > 15):
+                clamped = max(1, min(15, int(rng)))
+                patches.append(f"Clamped rule[{ri}] range {rng} -> {clamped}")
+                rule["range"] = clamped
+        cd = rule.get("cooldown")
+        if isinstance(cd, (int, float)) and cd < 0:
+            patches.append(f"Clamped rule[{ri}] cooldown {cd} -> 0")
+            rule["cooldown"] = 0
+        warmup = rule.get("warmup")
+        if isinstance(warmup, (int, float)) and warmup < 0:
+            patches.append(f"Clamped rule[{ri}] warmup {warmup} -> 0")
+            rule["warmup"] = 0
     return patches
 
 
@@ -702,7 +707,7 @@ def auto_patch(data: dict, existing_walkable: set[str],
     patches.extend(patch_monster_placements(data, walkable))
     for m in data.get("new_monsters", []):
         if isinstance(m, dict) and isinstance(m.get("behavior"), dict):
-            patches.extend(patch_monster_attacks(m["behavior"]))
+            patches.extend(patch_monster_rules(m["behavior"]))
     return patches
 
 
@@ -971,7 +976,7 @@ async def generate_monster_design(
     def _patch(data):
         b = data.get("behavior")
         if isinstance(b, dict):
-            return patch_monster_attacks(b)
+            return patch_monster_rules(b)
         return []
 
     return await _call_ai(
@@ -1278,7 +1283,8 @@ async def generate_room(
             continue
 
         # Step 2: Generate sprite for this design
-        attack_types = [a.get("type", "") for a in design.get("behavior", {}).get("attacks", [])]
+        attack_types = [r.get("do") for r in design.get("behavior", {}).get("rules", [])
+                        if r.get("do") in {"projectile", "charge", "teleport", "area"}]
         sprite_data = await generate_monster_sprite(
             design["kind"],
             tags=design.get("tags"),
@@ -1375,14 +1381,14 @@ async def _test_standalone():
         print(f"  Stats: {design.get('stats', {})}")
         b = design.get("behavior", {})
         print(f"  Rules: {len(b.get('rules', []))}")
-        print(f"  Attacks: {len(b.get('attacks', []))}")
     else:
         print("  FAILED")
 
     # Test 2: Monster sprite (given design)
     if design:
         print(f"\n--- Test 2: Monster sprite for {design['kind']} ---")
-        attack_types = [a.get("type", "") for a in design.get("behavior", {}).get("attacks", [])]
+        attack_types = [r.get("do") for r in design.get("behavior", {}).get("rules", [])
+                        if r.get("do") in {"projectile", "charge", "teleport", "area"}]
         sprite_result = await generate_monster_sprite(
             design["kind"], tags=design.get("tags"), attack_types=attack_types, theme="fire")
         if sprite_result:

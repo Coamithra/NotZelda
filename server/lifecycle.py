@@ -17,8 +17,8 @@ def spawn_monsters(room_id: str) -> list[Monster]:
     monsters = []
     for t in templates:
         m = Monster(t["x"], t["y"], t["kind"])
-        # Stagger first hop by 0-4 ticks (0.25s each) so monsters don't move in sync
-        m.last_hop_time = now + random.randint(0, 4) * 0.25
+        # Stagger first tick by 0-4 intervals so monsters don't move in sync
+        m.last_tick_time = now + random.randint(0, 4) * 0.25
         monsters.append(m)
     return monsters
 

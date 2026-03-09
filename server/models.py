@@ -47,26 +47,31 @@ class Monster:
         self.spawn_y = y
         self.kind = kind
         self.alive = True
-        self.last_hop_time = time.monotonic()
-        stats = game.monster_stats.get(kind, {"hp": 1, "hop_interval": 2.0, "damage": 1})
+        self.last_tick_time = time.monotonic()
+        stats = game.monster_stats.get(kind, {"hp": 1, "tick_rate": 0.5, "damage": 1})
         self.hp = stats["hp"]
         self.max_hp = stats["hp"]
-        self.hop_interval = stats["hop_interval"]
+        self.tick_rate = stats["tick_rate"]  # ticks per second (higher = faster)
         self.damage = stats.get("damage", 1)
         # Behavior engine data (None = use default wander)
         self.behavior = game.monster_behaviors.get(kind)
-        # Attack cooldown tracking: attack_index -> last_used_time
-        self._attack_cooldowns = {}
-        # Teleporting state (monster is invisible during teleport)
-        self._teleporting = False
-        # Charge prep state: {dx, dy, atk_index, atk} or None
-        self._charge_prep = None
-        # Patrol state
-        if self.behavior:
-            patrol_wps = self.behavior.get("patrol_waypoints")
-            if patrol_wps:
-                self._patrol_waypoints = patrol_wps
-                self._patrol_index = 0
+        # Rule cooldown tracking: rule_index -> ticks remaining
+        self._rule_cooldowns = {}
+        # Pending warmup: {rule_index, ticks, action} or None
+        self._pending_warmup = None
+        # Patrol state (index into route string, shared across patrol rules)
+        self._patrol_index = 0
+
+    @property
+    def tick_interval(self):
+        """Seconds between ticks (1.0 / tick_rate)."""
+        return 1.0 / self.tick_rate if self.tick_rate > 0 else 2.0
+
+    @property
+    def intangible(self):
+        """True when monster can't be hit or deal contact damage (e.g. mid-teleport)."""
+        pw = self._pending_warmup
+        return pw is not None and pw["action"].get("action") == "teleport"
 
 
 class Projectile:

@@ -15,11 +15,11 @@ class GameState:
 
         # Monster type registry (built-in + AI-generated)
         self.monster_stats = {
-            "slime":      {"hp": 1, "hop_interval": 2.0, "damage": 1},
-            "bat":        {"hp": 1, "hop_interval": 1.0, "damage": 1},
-            "scorpion":   {"hp": 2, "hop_interval": 2.0, "damage": 2},
-            "skeleton":   {"hp": 2, "hop_interval": 2.0, "damage": 3},
-            "swamp_blob": {"hp": 1, "hop_interval": 2.0, "damage": 1},
+            "slime":      {"hp": 1, "tick_rate": 0.5, "damage": 1},
+            "bat":        {"hp": 1, "tick_rate": 1.0, "damage": 1},
+            "scorpion":   {"hp": 2, "tick_rate": 0.5, "damage": 2},
+            "skeleton":   {"hp": 2, "tick_rate": 0.5, "damage": 3},
+            "swamp_blob": {"hp": 1, "tick_rate": 0.5, "damage": 1},
         }
 
         # Custom content registries (AI-generated, Stage 2+)

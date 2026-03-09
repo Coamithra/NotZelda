@@ -385,7 +385,7 @@ function handleMessage(msg) {
         fadeOut();
       }
       if (msg.target_x !== undefined) {
-        G.areaWarnings.push({ x: msg.target_x, y: msg.target_y, range: 0, startTime: Date.now(), duration: (msg.delay || 0.5) * 1000 });
+        G.areaWarnings.push({ x: msg.target_x, y: msg.target_y, range: msg.damage_radius || 0, startTime: Date.now(), duration: (msg.delay || 0.5) * 1000 });
       }
       break;
     }

@@ -1,4 +1,4 @@
-"""Combat system — player attacks, monster attacks, projectiles, damage, monster AI tick."""
+"""Combat system — player attacks, monster actions, projectiles, damage, monster AI tick."""
 
 import asyncio
 import random
@@ -113,7 +113,7 @@ async def handle_attack(player):
     hit_x = player.x + dx
     hit_y = player.y + dy
     for i, monster in enumerate(get_room_monsters(player.room)):
-        if monster.alive and monster.x == hit_x and monster.y == hit_y:
+        if monster.alive and not monster.intangible and monster.x == hit_x and monster.y == hit_y:
             monster.hp -= 1
             if monster.hp <= 0:
                 monster.alive = False
@@ -151,81 +151,34 @@ async def handle_attack(player):
 
 
 # ---------------------------------------------------------------------------
-# Monster attack execution (Stage 5)
+# Action execution — called by monster_tick when behavior engine returns
 # ---------------------------------------------------------------------------
 
-async def execute_monster_attack(monster, room_id, monster_idx):
-    """Select and execute the best available attack for a monster."""
-    behavior = getattr(monster, "behavior", None)
-    if not behavior:
-        return
-    attacks = behavior.get("attacks", [])
-    if not attacks:
-        return
-
-    cooldowns = monster._attack_cooldowns
-    now = time.monotonic()
-    player, player_dist = behavior_engine._nearest_player(monster, room_id)
-    if player is None:
-        return
-
-    for i, atk in enumerate(attacks):
-        last_used = cooldowns.get(i, 0)
-        cd = atk.get("cooldown", 1.0)
-        if now - last_used < cd:
-            continue
-        if player_dist > atk.get("range", 1):
-            continue
-        if atk.get("type") == "charge" and monster.x != player.x and monster.y != player.y:
-            continue
-
-        # This attack is usable — execute it
-        monster._attack_cooldowns[i] = now
-        atype = atk["type"]
-
-        if atype == "melee":
-            await attack_melee(monster, room_id, monster_idx, atk, player)
-        elif atype == "projectile":
-            await attack_projectile(monster, room_id, monster_idx, atk, player)
-        elif atype == "charge":
-            await attack_charge(monster, room_id, monster_idx, atk, player)
-        elif atype == "teleport":
-            await attack_teleport(monster, room_id, monster_idx, atk, player)
-        elif atype == "area":
-            await attack_area(monster, room_id, monster_idx, atk)
-        return  # one attack per tick
-
-
-async def attack_melee(monster, room_id, monster_idx, atk, target):
-    """Enhanced melee — strike adjacent player without moving onto them."""
-    damage = atk.get("damage", monster.damage)
+async def exec_move(monster, room_id, monster_idx, action):
+    """Move the monster and check for contact damage."""
+    nx, ny = action["x"], action["y"]
+    monster.x = nx
+    monster.y = ny
     await broadcast_to_room(room_id, {
-        "type": "monster_attack",
+        "type": "monster_moved",
         "id": monster_idx,
-        "attack_type": "melee",
-        "target_x": target.x,
-        "target_y": target.y,
+        "x": nx,
+        "y": ny,
     })
-    await damage_player(target, damage, room_id)
+    # Contact damage — monster landed on a player
+    for p in players_in_room(room_id):
+        if p.x == nx and p.y == ny and p.hp > 0:
+            await damage_player(p, monster.damage, room_id)
 
 
-async def attack_projectile(monster, room_id, monster_idx, atk, target):
-    """Fire a projectile toward the nearest player in a cardinal direction."""
-    dx_raw = target.x - monster.x
-    dy_raw = target.y - monster.y
-    if dx_raw == 0 and dy_raw == 0:
-        return
-    if abs(dx_raw) >= abs(dy_raw):
-        dx, dy = (1 if dx_raw > 0 else -1), 0
-    else:
-        dx, dy = 0, (1 if dy_raw > 0 else -1)
+async def exec_projectile(monster, room_id, monster_idx, action):
+    """Spawn a projectile from the monster in the resolved direction."""
+    dx, dy = action["dx"], action["dy"]
+    damage = action.get("damage", 1)
+    color = action.get("sprite_color", "#ff0000")
+    speed = action.get("speed", 1)
+    piercing = action.get("piercing", False)
 
-    color = atk.get("sprite_color", "#ff0000")
-    damage = atk.get("damage", 1)
-    speed = atk.get("speed", 1)
-    piercing = atk.get("piercing", False)
-
-    # Projectile starts one tile away from monster
     start_x = monster.x + dx
     start_y = monster.y + dy
     if start_x < 0 or start_x >= ROOM_COLS or start_y < 0 or start_y >= ROOM_ROWS:
@@ -260,22 +213,11 @@ async def attack_projectile(monster, room_id, monster_idx, atk, target):
             return
 
 
-async def attack_charge(monster, room_id, monster_idx, atk, target):
-    """Lock in charge direction and enter prep state. Actual dash happens next tick."""
-    dx_raw = target.x - monster.x
-    dy_raw = target.y - monster.y
-    if dx_raw == 0 and dy_raw == 0:
-        return
-    if abs(dx_raw) >= abs(dy_raw):
-        dx, dy = (1 if dx_raw > 0 else -1), 0
-    else:
-        dx, dy = 0, (1 if dy_raw > 0 else -1)
+async def warmup_charge(monster, room_id, monster_idx, action):
+    """Send charge prep visuals when warmup starts."""
+    dx, dy = action["dx"], action["dy"]
+    max_range = action.get("range", 3)
 
-    # Store prep — direction is locked, charge fires next tick
-    monster._charge_prep = {"dx": dx, "dy": dy, "atk": atk}
-
-    # Build the preview lane
-    max_range = atk.get("range", 3)
     lane = []
     nx, ny = monster.x, monster.y
     for _ in range(max_range):
@@ -294,13 +236,11 @@ async def attack_charge(monster, room_id, monster_idx, atk, target):
     })
 
 
-async def execute_charge_from_prep(monster, room_id, monster_idx, prep):
-    """Execute the actual charge dash from a prepped direction."""
-    dx = prep["dx"]
-    dy = prep["dy"]
-    atk = prep["atk"]
-    max_range = atk.get("range", 3)
-    damage = atk.get("damage", monster.damage)
+async def exec_charge(monster, room_id, monster_idx, action):
+    """Execute the charge dash with locked-in direction."""
+    dx, dy = action["dx"], action["dy"]
+    max_range = action.get("range", 3)
+    damage = action.get("damage", monster.damage)
     path = []
 
     nx, ny = monster.x, monster.y
@@ -331,87 +271,91 @@ async def execute_charge_from_prep(monster, room_id, monster_idx, prep):
             await damage_player(p, damage, room_id)
 
 
-async def attack_teleport(monster, room_id, monster_idx, atk, target):
-    """Disappear, then reappear near the target player after a brief delay."""
-    damage = atk.get("damage", monster.damage)
-    delay = atk.get("delay", 0.5)
-
-    # Find a walkable tile adjacent to the target
-    target_pos = None
-    candidates = [(1, 0), (-1, 0), (0, 1), (0, -1)]
-    random.shuffle(candidates)
-    for ddx, ddy in candidates:
-        nx, ny = target.x + ddx, target.y + ddy
-        if behavior_engine._is_walkable(nx, ny, room_id):
-            target_pos = (nx, ny)
-            break
-    if target_pos is None:
-        return
-
-    monster._teleporting = True
+async def warmup_teleport(monster, room_id, monster_idx, action):
+    """Send teleport start visuals when warmup starts (monster fades out)."""
     await broadcast_to_room(room_id, {
         "type": "teleport_start",
         "id": monster_idx,
-        "target_x": target_pos[0],
-        "target_y": target_pos[1],
-        "delay": delay,
+        "target_x": action["target_x"],
+        "target_y": action["target_y"],
+        "delay": action.get("ticks", 1) * monster.tick_interval,
+        "damage_radius": action.get("damage_radius", 1),
     })
 
-    async def complete_teleport():
-        await asyncio.sleep(delay)
-        if not monster.alive:
-            monster._teleporting = False
-            return
-        monster.x = target_pos[0]
-        monster.y = target_pos[1]
-        monster._teleporting = False
-        await broadcast_to_room(room_id, {
-            "type": "teleport_end",
-            "id": monster_idx,
-            "x": target_pos[0],
-            "y": target_pos[1],
-        })
-        # Damage any adjacent player after landing
+
+async def exec_teleport(monster, room_id, monster_idx, action):
+    """Execute teleport — move monster to target and deal damage."""
+    target_x = action["target_x"]
+    target_y = action["target_y"]
+    damage = action.get("damage", monster.damage)
+
+    monster.x = target_x
+    monster.y = target_y
+
+    await broadcast_to_room(room_id, {
+        "type": "teleport_end",
+        "id": monster_idx,
+        "x": target_x,
+        "y": target_y,
+    })
+
+    # Damage players within damage_radius of landing position
+    damage_radius = action.get("damage_radius", 1)
+    if damage > 0 and damage_radius >= 0:
         for p in players_in_room(room_id):
-            if p.hp > 0 and abs(p.x - monster.x) + abs(p.y - monster.y) <= 1:
+            if p.hp > 0 and abs(p.x - monster.x) + abs(p.y - monster.y) <= damage_radius:
                 await damage_player(p, damage, room_id)
 
-    asyncio.create_task(complete_teleport())
 
-
-async def attack_area(monster, room_id, monster_idx, atk):
-    """Ground slam — warning indicator, then damage all players within range."""
-    damage = atk.get("damage", monster.damage)
-    range_val = atk.get("range", 2)
-    warning_duration = atk.get("warning_duration", 0.75)
-
+async def warmup_area(monster, room_id, monster_idx, action):
+    """Send area warning visuals when warmup starts."""
     await broadcast_to_room(room_id, {
         "type": "area_warning",
         "id": monster_idx,
-        "x": monster.x,
-        "y": monster.y,
-        "range": range_val,
-        "duration": warning_duration,
+        "x": action["x"],
+        "y": action["y"],
+        "range": action["range"],
+        "duration": action.get("ticks", 1) * monster.tick_interval,
     })
 
-    async def execute_area():
-        await asyncio.sleep(warning_duration)
-        if not monster.alive:
-            return
-        await broadcast_to_room(room_id, {
-            "type": "area_attack",
-            "id": monster_idx,
-            "x": monster.x,
-            "y": monster.y,
-            "range": range_val,
-        })
-        for p in players_in_room(room_id):
-            if p.hp > 0:
-                dist = abs(p.x - monster.x) + abs(p.y - monster.y)
-                if dist <= range_val:
-                    await damage_player(p, damage, room_id)
 
-    asyncio.create_task(execute_area())
+async def exec_area(monster, room_id, monster_idx, action):
+    """Execute area attack — damage all players within range."""
+    damage = action.get("damage", monster.damage)
+    range_val = action.get("range", 2)
+    # Use locked-in position from warmup
+    ax = action.get("x", monster.x)
+    ay = action.get("y", monster.y)
+
+    await broadcast_to_room(room_id, {
+        "type": "area_attack",
+        "id": monster_idx,
+        "x": ax,
+        "y": ay,
+        "range": range_val,
+    })
+
+    for p in players_in_room(room_id):
+        if p.hp > 0:
+            dist = abs(p.x - ax) + abs(p.y - ay)
+            if dist <= range_val:
+                await damage_player(p, damage, room_id)
+
+
+# Dispatch tables for warmup visuals and execution
+WARMUP_HANDLERS = {
+    "charge": warmup_charge,
+    "teleport": warmup_teleport,
+    "area": warmup_area,
+}
+
+EXEC_HANDLERS = {
+    "move": exec_move,
+    "projectile": exec_projectile,
+    "charge": exec_charge,
+    "teleport": exec_teleport,
+    "area": exec_area,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -469,46 +413,37 @@ async def projectile_tick():
 
 
 async def monster_tick():
-    """Background loop — hops alive monsters in rooms that have players."""
+    """Background loop — ticks alive monsters in rooms that have players."""
     while True:
         await asyncio.sleep(0.25)
         now = time.monotonic()
         for room_id, monster_list in list(game.room_monsters.items()):
-            # Only simulate rooms with players
             if not players_in_room(room_id):
                 continue
             for i, monster in enumerate(monster_list):
-                if not monster.alive or monster._teleporting:
+                if not monster.alive:
                     continue
-                if now - monster.last_hop_time < monster.hop_interval:
+                # Intangible monsters (mid-teleport) still tick for warmup countdown
+                # but non-warmup ticks are skipped
+                if monster.intangible and monster._pending_warmup is None:
                     continue
-                monster.last_hop_time = now
+                if now - monster.last_tick_time < monster.tick_interval:
+                    continue
+                monster.last_tick_time = now
 
-                # Execute pending charge prep (locked direction from previous tick)
-                if monster._charge_prep is not None:
-                    prep = monster._charge_prep
-                    monster._charge_prep = None
-                    await execute_charge_from_prep(monster, room_id, i, prep)
+                result = behavior_engine.monster_tick(monster, room_id)
+                if result is None:
                     continue
 
-                # Evaluate behavior rules -> pick action -> execute
-                action = behavior_engine.evaluate_rules(monster, room_id)
+                phase = result.get("phase")
+                action_name = result.get("action")
 
-                if action == "attack":
-                    await execute_monster_attack(monster, room_id, i)
-                else:
-                    result = behavior_engine.execute_action(action, monster, room_id)
-                    if result is not None:
-                        nx, ny = result
-                        monster.x = nx
-                        monster.y = ny
-                        await broadcast_to_room(room_id, {
-                            "type": "monster_moved",
-                            "id": i,
-                            "x": nx,
-                            "y": ny,
-                        })
-                        # Check if monster landed on a player
-                        for p in players_in_room(room_id):
-                            if p.x == nx and p.y == ny and p.hp > 0:
-                                await damage_player(p, monster.damage, room_id)
+                if phase == "warmup":
+                    handler = WARMUP_HANDLERS.get(action_name)
+                    if handler:
+                        await handler(monster, room_id, i, result)
+
+                elif phase == "execute":
+                    handler = EXEC_HANDLERS.get(action_name)
+                    if handler:
+                        await handler(monster, room_id, i, result)

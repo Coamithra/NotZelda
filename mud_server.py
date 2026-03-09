@@ -150,7 +150,7 @@ async def handle_move(player, direction: str):
     # Monster contact damage — check if player walked onto a monster
     if player.hp > 0:
         for monster in get_room_monsters(player.room):
-            if monster.alive and monster.x == new_x and monster.y == new_y:
+            if monster.alive and not monster.intangible and monster.x == new_x and monster.y == new_y:
                 await damage_player(player, monster.damage, player.room)
                 break
 

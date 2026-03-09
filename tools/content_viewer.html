@@ -589,34 +589,27 @@ function showMonsterDetails(entry) {
   html += `<div class="detail-section"><h4>Stats</h4>`;
   html += `<div class="stat-row"><span class="stat-label">HP</span><span class="stat-val">${stats.hp || '?'}</span></div>`;
   html += `<div class="stat-row"><span class="stat-label">Damage</span><span class="stat-val">${stats.damage || '?'}</span></div>`;
-  html += `<div class="stat-row"><span class="stat-label">Hop Interval</span><span class="stat-val">${stats.hop_interval || '?'}s</span></div>`;
+  html += `<div class="stat-row"><span class="stat-label">Tick Rate</span><span class="stat-val">${stats.tick_rate || '?'}/s</span></div>`;
   html += `</div>`;
 
-  // Behavior
+  // Behavior rules (attacks are inline)
   const behavior = d.behavior || {};
   if (behavior.rules && behavior.rules.length) {
     html += `<div class="detail-section"><h4>Behavior Rules</h4><ul class="rule-list">`;
     for (const rule of behavior.rules) {
-      if (rule.default) {
-        html += `<li>default: <b>${rule.default}</b></li>`;
-      } else {
-        const cond = rule['if'] || '?';
-        const val = rule.value !== undefined ? ` ${rule.value}` : (rule.range !== undefined ? ` ${rule.range}` : '');
-        html += `<li>if ${cond}${val}: <b>${rule['do'] || '?'}</b></li>`;
-      }
+      const cond = rule['if'] || '?';
+      const action = rule['do'] || '?';
+      let details = '';
+      if (rule.direction) details += ` dir:${rule.direction}`;
+      if (rule.range !== undefined) details += ` range:${rule.range}`;
+      if (rule.value !== undefined) details += ` val:${rule.value}`;
+      if (rule.damage !== undefined) details += ` dmg:${rule.damage}`;
+      if (rule.warmup) details += ` warmup:${rule.warmup}`;
+      if (rule.cooldown) details += ` cd:${rule.cooldown}`;
+      if (rule.sprite_color) details += ` <span class="color-swatch" style="background:${rule.sprite_color}"></span>`;
+      html += `<li>if ${cond}: <b>${action}</b>${details}</li>`;
     }
     html += `</ul></div>`;
-  }
-
-  // Attacks
-  if (behavior.attacks && behavior.attacks.length) {
-    html += `<div class="detail-section"><h4>Attacks</h4>`;
-    for (const atk of behavior.attacks) {
-      html += `<div class="attack-item">${atk.type} &mdash; range: ${atk.range}, dmg: ${atk.damage}, cd: ${atk.cooldown}s`;
-      if (atk.sprite_color) html += ` <span class="color-swatch" style="background:${atk.sprite_color}"></span>`;
-      html += `</div>`;
-    }
-    html += `</div>`;
   }
 
   // Sprite preview

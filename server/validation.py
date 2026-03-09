@@ -7,17 +7,19 @@ from server.state import game
 _HEX_COLOR_RE = re.compile(r'^#[0-9a-fA-F]{6}$')
 
 VALID_BEHAVIOR_CONDITIONS = frozenset({
-    "player_within", "player_beyond", "hp_below_pct", "hp_above_pct",
-    "random_chance", "always", "default", "can_attack", "player_in_attack_range",
+    "player_within", "player_beyond", "player_in_range_line",
+    "hp_below", "hp_above", "random_chance", "always",
 })
 
 VALID_BEHAVIOR_ACTIONS = frozenset({
-    "wander", "chase", "flee", "patrol", "hold", "attack",
+    "move", "hold", "projectile", "charge", "teleport", "area",
 })
 
-VALID_ATTACK_TYPES = frozenset({
-    "melee", "projectile", "charge", "teleport", "area",
+VALID_DIRECTIONS = frozenset({
+    "up", "down", "left", "right", "player", "away", "random", "patrol",
 })
+
+VALID_TELEPORT_TARGETS = frozenset({"player", "random", "away"})
 
 
 def _is_hex_color(s) -> bool:
@@ -30,9 +32,9 @@ def validate_monster(data: dict) -> list[str]:
 
     Expected shape:
       kind: str
-      stats: {hp: int, hop_interval: float, damage: int}
+      stats: {hp: int, tick_rate: float, damage: int}
       sprite: {colors: {key: "#hex"}, frames: [[[colorKey, x, y, w, h], ...], ...]}
-      behavior: {rules: [...], attacks: [...]}  (optional)
+      behavior: {rules: [...]}  (optional)
       death_sprite: {colors: {...}, frames: [...]}  (optional)
     """
     errors = []
@@ -52,9 +54,9 @@ def validate_monster(data: dict) -> list[str]:
         hp = stats.get("hp")
         if not isinstance(hp, (int, float)) or hp < 1 or hp > 100:
             errors.append("stats.hp must be 1-100")
-        hop = stats.get("hop_interval")
-        if not isinstance(hop, (int, float)) or hop < 0.2 or hop > 10.0:
-            errors.append("stats.hop_interval must be 0.2-10.0")
+        tick = stats.get("tick_rate")
+        if not isinstance(tick, (int, float)) or tick < 0.1 or tick > 5.0:
+            errors.append("stats.tick_rate must be 0.1-5.0")
         dmg = stats.get("damage")
         if not isinstance(dmg, (int, float)) or dmg < 1 or dmg > 20:
             errors.append("stats.damage must be 1-20")
@@ -95,61 +97,7 @@ def validate_monster(data: dict) -> list[str]:
         if not isinstance(behavior, dict):
             errors.append("behavior must be a dict")
         else:
-            rules = behavior.get("rules", [])
-            if not isinstance(rules, list):
-                errors.append("behavior.rules must be a list")
-            else:
-                for ri, rule in enumerate(rules):
-                    if not isinstance(rule, dict):
-                        errors.append(f"behavior.rules[{ri}] must be a dict")
-                        continue
-                    # Check condition
-                    cond = rule.get("if") or rule.get("default") and "default"
-                    if cond and cond not in VALID_BEHAVIOR_CONDITIONS:
-                        errors.append(f"behavior.rules[{ri}] unknown condition: {cond}")
-                    # Check action
-                    action = rule.get("do") or (rule.get("default") if "default" in rule else None)
-                    if isinstance(action, str) and action not in VALID_BEHAVIOR_ACTIONS:
-                        errors.append(f"behavior.rules[{ri}] unknown action: {action}")
-
-            attacks = behavior.get("attacks", [])
-            if not isinstance(attacks, list):
-                errors.append("behavior.attacks must be a list")
-            else:
-                for ai, atk in enumerate(attacks):
-                    if not isinstance(atk, dict):
-                        errors.append(f"behavior.attacks[{ai}] must be a dict")
-                        continue
-                    atype = atk.get("type")
-                    if atype not in VALID_ATTACK_TYPES:
-                        errors.append(f"behavior.attacks[{ai}] unknown type: {atype}")
-                    rng = atk.get("range")
-                    if not isinstance(rng, (int, float)) or rng < 1 or rng > 15:
-                        errors.append(f"behavior.attacks[{ai}] range must be 1-15")
-                    cd = atk.get("cooldown")
-                    if cd is not None and (not isinstance(cd, (int, float)) or cd < 0.5 or cd > 30.0):
-                        errors.append(f"behavior.attacks[{ai}] cooldown must be 0.5-30.0")
-                    dmg = atk.get("damage")
-                    if dmg is not None and (not isinstance(dmg, (int, float)) or dmg < 1 or dmg > 20):
-                        errors.append(f"behavior.attacks[{ai}] damage must be 1-20")
-                    if atype == "projectile":
-                        sc = atk.get("sprite_color")
-                        if sc is not None and not _is_hex_color(sc):
-                            errors.append(f"behavior.attacks[{ai}] sprite_color must be #RRGGBB")
-                        spd = atk.get("speed")
-                        if spd is not None and (not isinstance(spd, (int, float)) or spd < 1 or spd > 5):
-                            errors.append(f"behavior.attacks[{ai}] speed must be 1-5")
-                        prc = atk.get("piercing")
-                        if prc is not None and not isinstance(prc, bool):
-                            errors.append(f"behavior.attacks[{ai}] piercing must be boolean")
-                    if atype == "teleport":
-                        dly = atk.get("delay")
-                        if dly is not None and (not isinstance(dly, (int, float)) or dly < 0.2 or dly > 3.0):
-                            errors.append(f"behavior.attacks[{ai}] delay must be 0.2-3.0")
-                    if atype == "area":
-                        wd = atk.get("warning_duration")
-                        if wd is not None and (not isinstance(wd, (int, float)) or wd < 0.3 or wd > 3.0):
-                            errors.append(f"behavior.attacks[{ai}] warning_duration must be 0.3-3.0")
+            errors.extend(_validate_behavior(behavior))
 
     # -- death_sprite (optional) --
     death_sprite = data.get("death_sprite")
@@ -165,6 +113,98 @@ def validate_monster(data: dict) -> list[str]:
             dframes = death_sprite.get("frames")
             if not isinstance(dframes, list) or len(dframes) < 1:
                 errors.append("death_sprite.frames must be a non-empty list")
+
+    return errors
+
+
+def _validate_behavior(behavior: dict) -> list[str]:
+    """Validate behavior rules. Returns error list."""
+    errors = []
+    rules = behavior.get("rules", [])
+    if not isinstance(rules, list):
+        errors.append("behavior.rules must be a list")
+        return errors
+
+    for ri, rule in enumerate(rules):
+        if not isinstance(rule, dict):
+            errors.append(f"behavior.rules[{ri}] must be a dict")
+            continue
+
+        # Condition
+        cond = rule.get("if")
+        if not cond:
+            errors.append(f"behavior.rules[{ri}] missing 'if' condition")
+            continue
+        if cond not in VALID_BEHAVIOR_CONDITIONS:
+            errors.append(f"behavior.rules[{ri}] unknown condition: {cond}")
+
+        # Action
+        action = rule.get("do")
+        if not isinstance(action, str):
+            errors.append(f"behavior.rules[{ri}] missing 'do' action")
+            continue
+        if action not in VALID_BEHAVIOR_ACTIONS:
+            errors.append(f"behavior.rules[{ri}] unknown action: {action}")
+
+        # Direction (for actions that use it)
+        direction = rule.get("direction")
+        if direction is not None and direction not in VALID_DIRECTIONS:
+            errors.append(f"behavior.rules[{ri}] unknown direction: {direction}")
+
+        # Patrol route (required when direction is "patrol")
+        if direction == "patrol":
+            patrol_route = rule.get("patrol_route")
+            if not isinstance(patrol_route, str) or not patrol_route:
+                errors.append(f"behavior.rules[{ri}] patrol requires 'patrol_route' string (e.g. 'RRDDLLUU')")
+            elif not all(c in "UDLRudlr" for c in patrol_route):
+                errors.append(f"behavior.rules[{ri}] patrol_route must contain only U/D/L/R characters")
+
+        # Warmup / cooldown
+        warmup = rule.get("warmup")
+        if warmup is not None and (not isinstance(warmup, (int, float)) or warmup < 0 or warmup > 20):
+            errors.append(f"behavior.rules[{ri}] warmup must be 0-20")
+        cooldown = rule.get("cooldown")
+        if cooldown is not None and (not isinstance(cooldown, (int, float)) or cooldown < 0 or cooldown > 50):
+            errors.append(f"behavior.rules[{ri}] cooldown must be 0-50")
+
+        # Action-specific params
+        if action == "projectile":
+            sc = rule.get("sprite_color")
+            if sc is not None and not _is_hex_color(sc):
+                errors.append(f"behavior.rules[{ri}] sprite_color must be #RRGGBB")
+            spd = rule.get("speed")
+            if spd is not None and (not isinstance(spd, (int, float)) or spd < 1 or spd > 5):
+                errors.append(f"behavior.rules[{ri}] speed must be 1-5")
+            prc = rule.get("piercing")
+            if prc is not None and not isinstance(prc, bool):
+                errors.append(f"behavior.rules[{ri}] piercing must be boolean")
+        elif action == "charge":
+            rng = rule.get("range")
+            if rng is not None and (not isinstance(rng, (int, float)) or rng < 1 or rng > 15):
+                errors.append(f"behavior.rules[{ri}] range must be 1-15")
+        elif action == "teleport":
+            target = rule.get("target")
+            if target is not None and target not in VALID_TELEPORT_TARGETS:
+                errors.append(f"behavior.rules[{ri}] target must be player/random/away")
+            drift = rule.get("drift")
+            if drift is not None and (not isinstance(drift, (int, float)) or drift < 0 or drift > 10):
+                errors.append(f"behavior.rules[{ri}] drift must be 0-10")
+            rng = rule.get("range")
+            if rng is not None and (not isinstance(rng, (int, float)) or rng < 1 or rng > 15):
+                errors.append(f"behavior.rules[{ri}] range must be 1-15")
+            dr = rule.get("damage_radius")
+            if dr is not None and (not isinstance(dr, (int, float)) or dr < 0 or dr > 6):
+                errors.append(f"behavior.rules[{ri}] damage_radius must be 0-6")
+        elif action == "area":
+            rng = rule.get("range")
+            if rng is not None and (not isinstance(rng, (int, float)) or rng < 1 or rng > 6):
+                errors.append(f"behavior.rules[{ri}] range must be 1-6")
+
+        # Damage (for attack actions)
+        if action in ("projectile", "charge", "teleport", "area"):
+            dmg = rule.get("damage")
+            if dmg is not None and (not isinstance(dmg, (int, float)) or dmg < 1 or dmg > 20):
+                errors.append(f"behavior.rules[{ri}] damage must be 1-20")
 
     return errors
 
@@ -223,7 +263,7 @@ def register_monster_type(data: dict) -> tuple[bool, list[str]]:
 
     game.monster_stats[kind] = {
         "hp": int(stats["hp"]),
-        "hop_interval": float(stats["hop_interval"]),
+        "tick_rate": float(stats["tick_rate"]),
         "damage": int(stats["damage"]),
     }
 
@@ -238,7 +278,7 @@ def register_monster_type(data: dict) -> tuple[bool, list[str]]:
         game.monster_behaviors[kind] = behavior
 
     print(f"[REG] Monster type registered: {kind} "
-          f"(hp={stats['hp']}, dmg={stats['damage']}, hop={stats['hop_interval']})")
+          f"(hp={stats['hp']}, dmg={stats['damage']}, tick={stats['tick_rate']})")
     return True, []
 
 

@@ -12,12 +12,12 @@ from server.validation import register_monster_type
 DEBUG_MONSTERS = {
     "fire_slime": {
         "kind": "fire_slime",
-        "stats": {"hp": 2, "hop_interval": 1.5, "damage": 2},
+        "stats": {"hp": 2, "tick_rate": 0.7, "damage": 2},
         "behavior": {
             "rules": [
-                {"if": "hp_below_pct", "value": 30, "do": "flee"},
-                {"if": "player_within", "range": 5, "do": "chase"},
-                {"default": "wander"},
+                {"if": "hp_below", "value": 2, "do": "move", "direction": "away"},
+                {"if": "player_within", "range": 5, "do": "move", "direction": "player"},
+                {"if": "always", "do": "move", "direction": "random"},
             ],
         },
         "sprite": {
@@ -46,12 +46,12 @@ DEBUG_MONSTERS = {
     },
     "ice_bat": {
         "kind": "ice_bat",
-        "stats": {"hp": 1, "hop_interval": 0.8, "damage": 1},
+        "stats": {"hp": 1, "tick_rate": 1.25, "damage": 1},
         "behavior": {
             "rules": [
-                {"if": "player_within", "range": 3, "do": "flee"},
+                {"if": "player_within", "range": 3, "do": "move", "direction": "away"},
                 {"if": "player_within", "range": 7, "do": "hold"},
-                {"default": "wander"},
+                {"if": "always", "do": "move", "direction": "random"},
             ],
         },
         "sprite": {
@@ -80,13 +80,13 @@ DEBUG_MONSTERS = {
     },
     "shadow_skull": {
         "kind": "shadow_skull",
-        "stats": {"hp": 3, "hop_interval": 2.0, "damage": 3},
+        "stats": {"hp": 3, "tick_rate": 0.5, "damage": 3},
         "behavior": {
             "rules": [
-                {"if": "hp_below_pct", "value": 50, "do": "flee"},
-                {"if": "player_within", "range": 4, "do": "chase"},
-                {"if": "random_chance", "value": 30, "do": "wander"},
-                {"default": "hold"},
+                {"if": "hp_below", "value": 2, "do": "move", "direction": "away"},
+                {"if": "player_within", "range": 4, "do": "move", "direction": "player"},
+                {"if": "random_chance", "value": 30, "do": "move", "direction": "random"},
+                {"if": "always", "do": "hold"},
             ],
         },
         "sprite": {
@@ -115,20 +115,18 @@ DEBUG_MONSTERS = {
             ],
         },
     },
-    # --- Stage 5: Debug monsters with attacks ---
     "skeleton_archer": {
         "kind": "skeleton_archer",
-        "stats": {"hp": 2, "hop_interval": 2.0, "damage": 1},
+        "stats": {"hp": 2, "tick_rate": 0.5, "damage": 1},
         "behavior": {
             "rules": [
-                {"if": "hp_below_pct", "value": 30, "do": "flee"},
-                {"if": "can_attack", "do": "attack"},
-                {"if": "player_within", "range": 3, "do": "flee"},
+                {"if": "hp_below", "value": 2, "do": "move", "direction": "away"},
+                {"if": "player_in_range_line", "range": 6, "los": True,
+                 "do": "projectile", "direction": "player", "damage": 1,
+                 "sprite_color": "#ccbb88", "cooldown": 3},
+                {"if": "player_within", "range": 3, "do": "move", "direction": "away"},
                 {"if": "player_within", "range": 8, "do": "hold"},
-                {"default": "wander"},
-            ],
-            "attacks": [
-                {"type": "projectile", "range": 6, "damage": 1, "cooldown": 2.0, "sprite_color": "#ccbb88"},
+                {"if": "always", "do": "move", "direction": "random"},
             ],
         },
         "sprite": {
@@ -161,15 +159,14 @@ DEBUG_MONSTERS = {
     },
     "ghost_teleporter": {
         "kind": "ghost_teleporter",
-        "stats": {"hp": 2, "hop_interval": 2.5, "damage": 2},
+        "stats": {"hp": 2, "tick_rate": 0.4, "damage": 2},
         "behavior": {
             "rules": [
-                {"if": "can_attack", "do": "attack"},
-                {"if": "player_within", "range": 3, "do": "flee"},
-                {"default": "wander"},
-            ],
-            "attacks": [
-                {"type": "teleport", "range": 8, "damage": 2, "cooldown": 4.0},
+                {"if": "player_within", "range": 8,
+                 "do": "teleport", "target": "player", "drift": 1, "range": 8,
+                 "damage": 2, "damage_radius": 1, "warmup": 1, "cooldown": 4},
+                {"if": "player_within", "range": 3, "do": "move", "direction": "away"},
+                {"if": "always", "do": "move", "direction": "random"},
             ],
         },
         "sprite": {
@@ -198,15 +195,14 @@ DEBUG_MONSTERS = {
     },
     "war_boar": {
         "kind": "war_boar",
-        "stats": {"hp": 4, "hop_interval": 1.5, "damage": 2},
+        "stats": {"hp": 4, "tick_rate": 0.7, "damage": 2},
         "behavior": {
             "rules": [
-                {"if": "can_attack", "do": "attack"},
-                {"if": "player_within", "range": 6, "do": "chase"},
-                {"default": "wander"},
-            ],
-            "attacks": [
-                {"type": "charge", "range": 4, "damage": 3, "cooldown": 3.0},
+                {"if": "player_in_range_line", "range": 4, "los": True,
+                 "do": "charge", "direction": "player", "range": 4, "damage": 3,
+                 "warmup": 1, "cooldown": 4},
+                {"if": "player_within", "range": 6, "do": "move", "direction": "player"},
+                {"if": "always", "do": "move", "direction": "random"},
             ],
         },
         "sprite": {
@@ -239,18 +235,19 @@ DEBUG_MONSTERS = {
     },
     "flame_mage": {
         "kind": "flame_mage",
-        "stats": {"hp": 3, "hop_interval": 2.5, "damage": 2},
+        "stats": {"hp": 3, "tick_rate": 0.4, "damage": 2},
         "behavior": {
             "rules": [
-                {"if": "hp_below_pct", "value": 30, "do": "flee"},
-                {"if": "can_attack", "do": "attack"},
-                {"if": "player_within", "range": 3, "do": "flee"},
+                {"if": "hp_below", "value": 2, "do": "move", "direction": "away"},
+                {"if": "player_within", "range": 2,
+                 "do": "area", "range": 2, "damage": 2,
+                 "warmup": 2, "cooldown": 5},
+                {"if": "player_in_range_line", "range": 5, "los": True,
+                 "do": "projectile", "direction": "player", "damage": 1,
+                 "sprite_color": "#ff6600", "cooldown": 3},
+                {"if": "player_within", "range": 3, "do": "move", "direction": "away"},
                 {"if": "player_within", "range": 7, "do": "hold"},
-                {"default": "wander"},
-            ],
-            "attacks": [
-                {"type": "area", "range": 2, "damage": 2, "cooldown": 4.0},
-                {"type": "projectile", "range": 5, "damage": 1, "cooldown": 2.5, "sprite_color": "#ff6600"},
+                {"if": "always", "do": "move", "direction": "random"},
             ],
         },
         "sprite": {
@@ -275,6 +272,171 @@ DEBUG_MONSTERS = {
                     ["dark",  9, 3, 1, 1],
                     ["fire",  5, 1, 2, 2],
                     ["glow",  6, 0, 1, 1],
+                ],
+            ],
+        },
+    },
+    # --- Coverage gap monsters ---
+    "sentinel_golem": {
+        "kind": "sentinel_golem",
+        "stats": {"hp": 5, "tick_rate": 0.5, "damage": 2},
+        "behavior": {
+            "rules": [
+                {"if": "player_within", "range": 2,
+                 "do": "area", "range": 2, "damage": 3,
+                 "warmup": 2, "cooldown": 5},
+                {"if": "player_within", "range": 5, "do": "move", "direction": "player"},
+                {"if": "player_beyond", "range": 5, "do": "move", "direction": "patrol", "patrol_route": "RRRDDDLLLUU"},
+                {"if": "always", "do": "move", "direction": "patrol", "patrol_route": "RRRDDDLLLUUU"},
+            ],
+        },
+        "sprite": {
+            "colors": {"body": "#7a7a7a", "dark": "#4a4a4a", "eyes": "#44ff44", "highlight": "#9a9a9a"},
+            "frames": [
+                [
+                    ["dark",      3,10,10, 4],
+                    ["body",      3, 4,10, 9],
+                    ["body",      4, 3, 8, 1],
+                    ["dark",      4, 9, 8, 2],
+                    ["highlight", 5, 4, 6, 2],
+                    ["eyes",      5, 5, 2, 2],
+                    ["eyes",      9, 5, 2, 2],
+                ],
+                [
+                    ["dark",      3, 9,10, 4],
+                    ["body",      3, 3,10, 9],
+                    ["body",      4, 2, 8, 1],
+                    ["dark",      4, 8, 8, 2],
+                    ["highlight", 5, 3, 6, 2],
+                    ["eyes",      5, 4, 2, 2],
+                    ["eyes",      9, 4, 2, 2],
+                ],
+            ],
+        },
+    },
+    "storm_archer": {
+        "kind": "storm_archer",
+        "stats": {"hp": 2, "tick_rate": 0.7, "damage": 1},
+        "behavior": {
+            "rules": [
+                {"if": "player_in_range_line", "range": 8, "los": False,
+                 "do": "projectile", "direction": "player", "damage": 1,
+                 "sprite_color": "#00ccff", "speed": 2, "piercing": True,
+                 "cooldown": 2},
+                {"if": "hp_below", "value": 2, "do": "move", "direction": "away"},
+                {"if": "hp_above", "value": 1, "do": "hold"},
+                {"if": "always", "do": "move", "direction": "random"},
+            ],
+        },
+        "sprite": {
+            "colors": {"body": "#2a4a6a", "bolt": "#00ccff", "eyes": "#00eeff", "dark": "#1a2a3a"},
+            "frames": [
+                [
+                    ["dark",  5,10, 6, 4],
+                    ["body",  5, 4, 6, 8],
+                    ["body",  6, 3, 4, 1],
+                    ["bolt",  3, 5, 2, 5],
+                    ["bolt",  2, 6, 1, 3],
+                    ["eyes",  6, 5, 1, 1],
+                    ["eyes",  9, 5, 1, 1],
+                    ["dark",  6, 7, 4, 1],
+                ],
+                [
+                    ["dark",  5, 9, 6, 4],
+                    ["body",  5, 3, 6, 8],
+                    ["body",  6, 2, 4, 1],
+                    ["bolt",  3, 4, 2, 5],
+                    ["bolt",  2, 5, 1, 3],
+                    ["eyes",  6, 4, 1, 1],
+                    ["eyes",  9, 4, 1, 1],
+                    ["dark",  6, 6, 4, 1],
+                ],
+            ],
+        },
+    },
+    "phase_fox": {
+        "kind": "phase_fox",
+        "stats": {"hp": 3, "tick_rate": 0.5, "damage": 1},
+        "behavior": {
+            "rules": [
+                {"if": "hp_below", "value": 2,
+                 "do": "teleport", "target": "away", "drift": 3, "range": 10,
+                 "damage": 1, "damage_radius": 0, "warmup": 1, "cooldown": 3},
+                {"if": "player_within", "range": 3,
+                 "do": "teleport", "target": "player", "drift": 0, "range": 8,
+                 "damage": 2, "damage_radius": 0, "warmup": 1, "cooldown": 4},
+                {"if": "random_chance", "value": 15,
+                 "do": "teleport", "target": "random", "drift": 2, "range": 12,
+                 "damage": 1, "damage_radius": 0, "warmup": 1, "cooldown": 3},
+                {"if": "player_within", "range": 6, "do": "move", "direction": "player"},
+                {"if": "always", "do": "move", "direction": "random"},
+            ],
+        },
+        "sprite": {
+            "colors": {"body": "#8844aa", "light": "#bb77dd", "eyes": "#ffcc00", "dark": "#553377"},
+            "frames": [
+                [
+                    ["dark",   6,11, 4, 3],
+                    ["body",   5, 5, 6, 7],
+                    ["body",   6, 4, 4, 1],
+                    ["light",  6, 5, 4, 3],
+                    ["body",   3, 3, 3, 4],
+                    ["body",  10, 3, 3, 4],
+                    ["eyes",   6, 6, 1, 1],
+                    ["eyes",   9, 6, 1, 1],
+                    ["dark",   7, 8, 2, 1],
+                ],
+                [
+                    ["dark",   6,10, 4, 3],
+                    ["body",   5, 4, 6, 7],
+                    ["body",   6, 3, 4, 1],
+                    ["light",  6, 4, 4, 3],
+                    ["body",   3, 2, 3, 4],
+                    ["body",  10, 2, 3, 4],
+                    ["eyes",   6, 5, 1, 1],
+                    ["eyes",   9, 5, 1, 1],
+                    ["dark",   7, 7, 2, 1],
+                ],
+            ],
+        },
+    },
+    "magma_wyrm": {
+        "kind": "magma_wyrm",
+        "stats": {"hp": 6, "tick_rate": 0.8, "damage": 3},
+        "behavior": {
+            "rules": [
+                {"if": "player_in_range_line", "range": 5, "los": True,
+                 "do": "charge", "direction": "player", "range": 5, "damage": 4,
+                 "warmup": 1, "cooldown": 4},
+                {"if": "random_chance", "value": 25,
+                 "do": "charge", "direction": "random", "range": 3, "damage": 3,
+                 "warmup": 1, "cooldown": 3},
+                {"if": "player_within", "range": 4, "do": "move", "direction": "player"},
+                {"if": "always", "do": "move", "direction": "random"},
+            ],
+        },
+        "sprite": {
+            "colors": {"body": "#cc3300", "dark": "#881100", "belly": "#ff6600", "eyes": "#ffff00", "glow": "#ffaa00"},
+            "frames": [
+                [
+                    ["dark",   3,10,10, 4],
+                    ["body",   3, 4,10, 8],
+                    ["body",   4, 3, 8, 1],
+                    ["belly",  5, 8, 6, 3],
+                    ["dark",   4, 7, 8, 1],
+                    ["eyes",   5, 5, 2, 1],
+                    ["eyes",   9, 5, 2, 1],
+                    ["glow",   6, 6, 4, 1],
+                ],
+                [
+                    ["dark",   3, 9,10, 4],
+                    ["body",   3, 3,10, 8],
+                    ["body",   4, 2, 8, 1],
+                    ["belly",  5, 7, 6, 3],
+                    ["dark",   4, 6, 8, 1],
+                    ["eyes",   5, 4, 2, 1],
+                    ["eyes",   9, 4, 2, 1],
+                    ["glow",   6, 5, 4, 1],
                 ],
             ],
         },
@@ -329,7 +491,7 @@ async def handle_debug_spawn(player, args: str):
 
     # Create and add the monster
     monster = Monster(spawn_x, spawn_y, kind)
-    monster.last_hop_time = time.monotonic()
+    monster.last_tick_time = time.monotonic()
     if player.room not in game.room_monsters:
         game.room_monsters[player.room] = []
     monster_list = game.room_monsters[player.room]
