@@ -191,7 +191,7 @@ Tag-based replacement examples:
 
 ## Staged Implementation Plan
 
-**Current status: Stages 1–6 complete. Next up: Stage 7 (Library-Managed Dungeon Generation).**
+**Current status: Stages 1–6 complete. Next up: Stage 6.5 (Unified Content Refactor), then Stage 7 (Library-Managed Dungeon Generation).**
 
 ### Stage 1: Tag & Metadata System ✅
 **Goal:** Define the data structures that everything else builds on.
@@ -402,128 +402,211 @@ Run with full libraries — verify no new content created, just arrangement.
 
 ---
 
+### Stage 6.5: Unified Content Refactor (Prerequisite)
+**Goal:** All dungeon content — precreated and AI-generated — uses the
+same data-driven system. No hardcoded built-in content in source code.
+Precreated content is just library entries with a `permanent` flag.
+
+**Key principle: the dungeon system treats all content uniformly.** A
+precreated skeleton and an AI-generated flame_wyrm look identical in the
+library. The AI prompt sees a flat list of all available monsters/tiles
+with no "built-in vs custom" distinction.
+
+**Sprite delivery (Option B):** All dungeon monster sprites and tile
+recipes are defined server-side and sent to clients via `custom_sprites`
+/ `custom_tiles` in `room_enter`. Precreated monsters like skeleton/bat
+still have static sprites in `sprite_data.js` for overworld use, but
+inside dungeons they go through the custom registry pipeline like
+everything else. This means zero special-case rendering logic in the
+dungeon client path.
+
+#### Precreated Content
+
+**4 Precreated Monsters** (permanent library entries):
+
+| Kind | HP | Tick | Dmg | Behavior |
+|---|---|---|---|---|
+| skeleton | 2 | 0.5 | 3 | Chase within 5, wander otherwise |
+| bat | 1 | 1.0 | 1 | Random movement (fast tick = unpredictable) |
+| dungeon_slime | 3 | 0.4 | 1 | Slow tank, chase within 4, wander |
+| phantom | 2 | 0.4 | 2 | Teleport near player (warmup 1, cd 4), flee if close |
+
+**7 Precreated Tiles** (permanent library entries):
+
+| Code | Name | Walkable | Description |
+|---|---|---|---|
+| DW | dungeon_wall | No | Smooth dark stone wall |
+| DF | dungeon_floor | Yes | Worn stone floor |
+| PL | pillar | No | Stone pillar |
+| SC | sconce_wall | No | Wall with torch sconce |
+| BZ | brazier | No | Stone pedestal with fire |
+| MF | mosaic_floor | Yes | Floor with decorative inlay |
+| CF | cracked_floor | Yes | Damaged floor with cracks |
+
+**64 Precreated Rooms** (permanent library entries):
+- 32 **primary** rooms — used for the ~50% precreated allocation
+- 32 **fallback** rooms — safety net when custom library is empty + API down
+- Both loaded from existing `rooms/dungeon1/*.room` files
+- Some primary rooms updated to use new monsters (dungeon_slime, phantom)
+  and new tiles (BZ, MF, CF)
+
+#### Library Changes
+
+`LibraryEntry` gets a `permanent: bool` field:
+- Permanent entries are loaded at startup, never expire, cannot be deleted
+- `expire_oldest()` skips permanent entries
+- `remove()` refuses to delete permanent entries
+- Permanent entries take up slots in the library; the remaining slots
+  are placeholders available for custom content
+
+#### Persistence — Separate Files for Permanent vs Custom
+
+Permanent and custom content have **separate** underlying data sources:
+
+- **Permanent** content is loaded from checked-in source files at startup:
+  - Monsters/tiles: `server/dungeon_content.py` (Python data dicts)
+  - Rooms: `rooms/dungeon1/*.room` (existing `.room` format)
+  - These are in git, hand-editable, never overwritten by the server
+- **Custom** content persists to gitignored JSON files in `data/`:
+  - `data/room_library.json`
+  - `data/monster_library.json`
+  - `data/tile_library.json`
+  - Only custom (non-permanent) entries are serialized/deserialized
+  - Server writes these after generation and expiry events
+
+On startup: permanent entries are loaded first (from source), then custom
+entries are loaded from `data/*.json` and added to the remaining slots.
+
+#### Library Capacities (total = permanent + custom)
+
+| Library | Permanent | Custom | Total Capacity |
+|---|---|---|---|
+| Rooms | 64 | 32 | 96 |
+| Monsters | 4 | 4 | 8 |
+| Tiles | 7 | 7 | 14 |
+
+#### AI Prompt Changes
+
+`_build_layout_prompt()` no longer has hardcoded `base_tiles` and
+`builtin_monsters` lists. Instead, the caller passes a single flat list
+of all available content from the libraries (permanent + custom).
+
+#### Tasks
+- [ ] Add `permanent: bool` to `LibraryEntry`, update expiry/remove/serialize
+- [ ] Add BZ, MF, CF tile IDs to `constants.py` + `TILE_CODES` + `WALKABLE_TILES`
+- [ ] Add BZ, MF, CF tile art to `client/tiles.js`
+- [ ] Create `server/dungeon_content.py` with:
+  - Full data dicts for 4 precreated monsters (stats, sprite, behavior)
+  - Full data dicts for 7 precreated tiles (colors, layers, walkable)
+  - Tags for each entry
+  - `load_precreated_content()` function to populate libraries at startup
+- [ ] Create room library entries from `rooms/dungeon1/*.room` files
+  (convert existing template format → library entry `data` payload)
+- [ ] Update `_build_layout_prompt()` — remove hardcoded builtins,
+  accept flat list from caller
+- [ ] Update content viewer — hide delete button for permanent entries
+- [ ] Update some primary `.room` files to use dungeon_slime, phantom,
+  BZ, MF, CF
+
+**Test:** Content viewer shows all precreated content as non-deletable.
+`/debug_spawn dungeon_slime` and `/debug_spawn phantom` work.
+New tiles render correctly in dungeon rooms.
+
+---
+
 ### Stage 7: Library-Managed Dungeon Generation (Lazy)
-**Goal:** Dungeons are built from the self-managing library. Content is
-generated **lazily** — only when a player actually enters a room, not all
-at once. This keeps dungeon entry instant.
+**Goal:** Dungeons are built from the self-managing library. Custom
+rooms are generated **lazily** — only when a player actually enters,
+not all at once. Precreated rooms are always instant.
 
-The key principle: **layout assignment is instant, content resolution is
-deferred to room entry.**
+The key principle: **layout assignment is instant, custom content
+resolution is deferred to room entry.**
 
-Tasks:
-- [ ] Create room library (capacity 50), monster library (capacity 40),
-      tile library (capacity 30) — all with placeholder slots
-- [ ] Expiry runs inside `destroy_dungeon()` (when all players leave) —
-      the one moment when nothing references library content:
-  - Expire oldest ~N% of each library (configurable)
-  - Only expire entries older than a minimum age (configurable)
-  - If nothing qualifies (all content is recent), nothing expires
+#### Dungeon Build Flow
+
+1. Pick layout (N cells, 20–38 depending on shape)
+2. Randomly flag ~50% of cells as "precreated", ~50% as "custom"
+3. **Precreated cells** → random pick from 32 primary room library
+   entries (always instant)
+4. **Custom cells** → pull from custom room library slots:
+   - **Real entry** → use it (instant, late-bind any expired
+     monster/tile refs via tag-overlap fallback)
+   - **Placeholder** → lazy-generate on player entry via
+     `generate_room()` (the AI prompt gets the flat list of ALL
+     available monsters and tiles from the libraries)
+   - **Fallback** → if API fails, timeout, or library empty: pick
+     random from the 32 fallback room library entries
+
+#### Tasks
+- [ ] Expiry runs inside `destroy_dungeon()`:
+  - Expire oldest ~N% of custom (non-permanent) entries per library
+  - Only expire entries older than a minimum age
+  - **Production defaults:** 10% rate, 24h minimum age
+  - **Test defaults:** 50% rate, 5s minimum age
   - Save libraries to disk after expiry
-  - No separate timer/cron needed — piggybacking on dungeon teardown
-    avoids "is the dungeon active?" race conditions entirely
-  - **Production defaults:** 10% expiry rate, 24 hour minimum age
-  - **Test defaults:** 50% expiry rate, 5 second minimum age (forces
-    rapid rotation so you can observe the full lifecycle quickly)
 - [ ] Refactor `create_dungeon()` — instant, no API calls:
   1. Pick layout (existing logic)
-  2. Shuffle room library (real + placeholders), assign slots to cells
-  3. Store assignments in dungeon instance: `cell → library_slot`
-  4. Only resolve the entrance room (1 API call max if placeholder)
-  5. Player enters dungeon immediately
+  2. Flag ~50% of cells as precreated, ~50% as custom
+  3. Precreated cells → random pick from permanent room entries
+  4. Custom cells → random pick from custom room library slots
+  5. Store assignments in dungeon instance: `cell → library_entry`
+  6. Resolve entrance room immediately (if placeholder, generate it)
+  7. Player enters dungeon immediately
 - [ ] Add lazy resolution in `on_player_enter_room()`:
-  1. Is this dungeon room already resolved? Use it (instant).
-  2. Not yet? Check the assigned library slot:
-     - **Real entry** → room template already exists. Resolve any
-       monster/tile references that may have expired since the
-       template was created (late binding fallback chain). Instant.
-     - **Placeholder** → call `generate_room()` (single API call).
-       The prompt includes existing library content, so the AI
-       reuses known monsters/tiles where fitting and only creates
-       new ones if needed. Any new monsters/tiles are added to
-       their respective libraries. The room itself is added to the
-       room library.
-  3. Register any new custom sprites/tiles with the client, build
-     the room, send `room_enter` to client.
-- [ ] The AI prompt adapts to library fullness:
-  - Monster library has room → "reuse these if fitting, create new
-    if needed: [list of kind/role/tags]"
-  - Monster library full → "use only these monsters: [list]"
-  - Same for tiles
-  - This means early rooms are slower (more new content per call)
-    and later rooms are faster (AI just arranges existing pieces)
-- [ ] **Loading animation** — client-side "conjuring" screen shown while
-      a room is being generated:
-  - Server sends `{ type: "room_generating" }` when lazy resolution
-    starts an API call
-  - Client shows a full-screen dark overlay with animated effects:
-    flickering torchlight (orange glow pulsing), drifting particles
-    (small dots floating upward), mystical rune circles or arcane
-    symbols fading in and out
-  - Atmospheric text: "The dungeon shifts..." or "Dark forces stir..."
-    (could be AI-generated too, or a random pick from a list)
-  - Seamlessly transitions into the normal room-enter slide/fade
-    when the room is ready
-  - Animation has a **minimum duration** (e.g., 1.5s) even if the room
-    resolves instantly from library. For instant rooms the animation
-    is purely cosmetic; for generated rooms the API call happens
-    behind it
-  - **Only plays on first visit** to a room within a dungeon instance.
-    Returning to an already-visited room uses the normal slide/fade
-    transition. The dungeon instance tracks which rooms the player
-    has seen
-  - Animation should feel like the dungeon is alive and building
-    itself, not like a loading screen
-- [ ] Fallback: if API fails or times out (>5s), swap placeholder for
-      random real library entry — player never gets stuck
-- [ ] Resolved rooms stay resolved for the dungeon's lifetime — walking
-      back into an already-visited room is always instant
+  1. Already resolved? Use it (instant).
+  2. Real library entry? Late-bind monster/tile refs → instant.
+  3. Placeholder? Call `generate_room()` → add results to libraries.
+  4. API failure? Use fallback room from permanent entries.
+  5. Send all needed custom_sprites/custom_tiles to client.
+- [ ] **Loading animation** — client-side "conjuring" screen:
+  - Server sends `{ type: "room_generating" }` on lazy resolution
+  - Dark overlay with flickering torchlight, drifting particles,
+    mystical rune circles fading in/out
+  - Atmospheric text: "The dungeon shifts..." / "Dark forces stir..."
+  - Minimum 1.5s duration (cosmetic for instant rooms)
+  - Only on first visit per room — returning uses normal transition
+  - Should feel like the dungeon building itself, not a loading screen
+- [ ] Resolved rooms stay resolved for dungeon lifetime
 - [ ] Persist libraries to disk after each generation
-- [ ] **Verbose server log** — written to `generation_log.txt` using
-      existing `log_event()` system. Logged for every generation event:
-  - `[GEN] Room generated: "Ember Sanctum" (placeholder #23, 1.8s,
-    482 tokens, 2 new monsters, 1 new tile)`
-  - `[GEN] Room resolved from library: "Frost Chamber" (slot #7, instant,
-    3 monsters reused, 0 new)`
-  - `[GEN] Monster created: "flame_wyrm" (mode A, medium_melee, fire)`
-  - `[GEN] Monster variant: "frost_wyrm" based on "flame_wyrm" (mode B)`
-  - `[GEN] Tile created: "lava_crack" (floor_variant, fire)`
-  - `[GEN] Expiry: removed 5 rooms, 4 monsters, 3 tiles (oldest >24h)`
-  - `[GEN] Fallback: API timeout, swapped placeholder #12 for library
-    room "Shadow Hall"`
-  - `[GEN] Library status: rooms 45/50, monsters 38/40, tiles 28/30`
-  - `[GEN] API error: <error message> (retry 1/1)`
-- [ ] **In-game debug panel** — condensed version shown in the existing
-      debug overlay (backtick / pi button toggle):
-  - Current library fill: `Lib: R:45/50 M:38/40 T:28/30`
-  - Last generation: `Gen: "Ember Sanctum" 1.8s 482tok`
-  - Room source: `Room: generated` or `Room: library #7` or
-    `Room: fallback`
+- [ ] **Verbose server log** with `[GEN]` prefix for all events
+- [ ] **Debug panel** in backtick overlay:
+  - Library fill: `Lib: R:72/96 M:6/8 T:10/14`
+  - Last gen: `Gen: "Ember Sanctum" 1.8s 482tok`
+  - Room source: `Room: precreated` / `Room: custom (library)` /
+    `Room: custom (generated)` / `Room: fallback`
   - API stats: `API: 12 calls today, $0.008`
-  - Shown only for dungeon rooms (no clutter in overworld)
+  - Only shown for dungeon rooms
 
 **Flow example:**
 ```
 Player enters dungeon → layout assigned (instant)
-  → entrance room resolved (1 API call if placeholder, ~1-2s)
-  → player is in
+  → entrance room: precreated → instant → player is in
 
-Player walks north → first visit, room is a real library entry
-  → conjuring animation (1.5s min) → player is in
+Player walks north → first visit, precreated room
+  → instant (precreated rooms never need generation)
 
-Player walks east → next room is a placeholder
-  → "conjuring" animation plays → API call (~1-2s)
-  → room generated, added to library → animation ends → player is in
+Player walks east → first visit, custom room (real library entry)
+  → conjuring animation (1.5s cosmetic) → instant resolution
 
-Player walks west back → already visited → normal slide transition
+Player walks south → first visit, custom room (placeholder)
+  → conjuring animation → generate_room() API call (~1-2s)
+  → room + any new monsters/tiles added to libraries → player is in
+
+Player walks north back → already visited → normal slide transition
+
+API is down? → custom placeholder falls back to one of 32 fallback rooms
 ```
 
-At steady state (~20% placeholders), most room transitions are instant.
-Worst case is 1-2 seconds for a single room, never a multi-room stall.
+At steady state (~20% placeholders in custom slots), most transitions
+are instant. ~50% of rooms are always precreated (instant). Worst case
+for a custom room is 1-2 seconds, never a multi-room stall.
 
-**Test:** Start with empty libraries. Enter dungeon — entrance loads in
-~2s. Walk around — some rooms instant, some pause briefly. Walk back —
-always instant. Enter another dungeon — verify more rooms are instant
-(library has grown). Simulate expiry, verify fresh rooms appear.
+**Test:** Start with empty custom libraries. Enter dungeon — ~50% of
+rooms are precreated (instant), ~50% need generation. Walk around —
+custom rooms generate on first visit. Walk back — always instant.
+Enter another dungeon — more custom rooms come from library (fewer API
+calls). Simulate expiry, verify fresh rooms appear. Kill the API —
+verify fallback rooms work.
 
 ---
 
@@ -580,6 +663,8 @@ Stage 3: Server Dynamic Registration                   │
     │                  │                               │
     └── Stage 6: Claude API Integration ◄──────────────┘
                 │
+        Stage 6.5: Unified Content Refactor
+                │
         Stage 7: Library-Managed Dungeons
                 │
         Stage 8: Monster Variants
@@ -587,44 +672,47 @@ Stage 3: Server Dynamic Registration                   │
         Stage 9: Polish & Resilience
 ```
 
-Stages 4-5 (behavior engine) and Stage 6 (API integration) can be built
-in parallel — they converge at Stage 7.
+Stage 6.5 unifies all dungeon content into the library system. Precreated
+content (rooms, monsters, tiles) uses the same data format as AI-generated
+content, with a `permanent` flag to prevent expiry/deletion. The AI prompt
+sees a flat list of all available content — no built-in vs custom distinction.
 
 
 ## File Structure
 
 ```
 mud_server.py              — main server (extended protocol, dungeon builder)
-content_library.py         — library system, tag queries, expiry, persistence
-behavior_engine.py         — rule evaluator, action functions, attack execution
-ai_generator.py            — Claude API calls, prompts, validation
-client.html                — dynamic sprite/tile registries, projectile rendering
-sprite_data.js             — static sprites (unchanged, backward compat)
-tiles.js                   — static tiles + dynamic recipe interpreter
-generation_config.json     — tunables (capacities, expiry rate, timeouts)
+server/
+  content_library.py       — library system, tag queries, expiry, persistence
+  dungeon_content.py       — precreated dungeon monsters, tiles, room loaders
+  behavior_engine.py       — rule evaluator, action functions, attack execution
+  ai_generator.py          — Claude API calls, prompts, validation
+  dungeons.py              — dungeon instance system (uses libraries)
+client/
+  client.html              — dynamic sprite/tile registries, projectile rendering
+  sprite_data.js           — static sprites (overworld; dungeon uses custom path)
+  tiles.js                 — static tiles (overworld; dungeon uses custom path)
 data/
-  room_library.json        — generated room templates with metadata
-  monster_library.json     — generated monster definitions with metadata
-  tile_library.json        — generated tile recipes with metadata
-  generation_log.txt       — verbose event log (room created, expiry, errors)
+  room_library.json        — custom (non-permanent) room templates
+  monster_library.json     — custom (non-permanent) monster definitions
+  tile_library.json        — custom (non-permanent) tile recipes
   api_usage.json           — token counts + cost tracking per day
 rooms/                     — hand-crafted rooms (unchanged, never touched)
-rooms/dungeon1/            — hand-crafted dungeon templates (unchanged)
+rooms/dungeon1/            — precreated dungeon templates (loaded as permanent entries)
 ```
 
 
 ## Configuration
 
-All tunables in one place (e.g., top of `content_library.py` or a
-`generation_config.json`):
+All tunables in one place (top of `content_library.py`):
 
 ```python
-# Library capacities
-ROOM_LIBRARY_CAPACITY = 50
-MONSTER_LIBRARY_CAPACITY = 40
-TILE_LIBRARY_CAPACITY = 30
+# Library capacities (total = permanent + custom placeholders)
+ROOM_LIBRARY_CAPACITY = 96     # 64 permanent + 32 custom
+MONSTER_LIBRARY_CAPACITY = 8   # 4 permanent + 4 custom
+TILE_LIBRARY_CAPACITY = 14     # 7 permanent + 7 custom
 
-# Expiry settings — production
+# Expiry settings — production (only affects custom entries)
 EXPIRY_RATE = 0.10          # expire 10% of library per teardown
 EXPIRY_MIN_AGE = 86400      # 24 hours — content lives at least this long
 
@@ -635,12 +723,9 @@ EXPIRY_MIN_AGE = 86400      # 24 hours — content lives at least this long
 # AI generation
 GENERATION_TIMEOUT = 5.0    # seconds before falling back to library
 CONJURING_MIN_DURATION = 1.5  # seconds — animation always plays at least this long
-MAX_API_CALLS_PER_MINUTE = 5
-MAX_API_CALLS_PER_DAY = 100
+MAX_API_CALLS_PER_MINUTE = 15
+MAX_API_CALLS_PER_DAY = 600
 VARIANT_MODE_RATIO = 0.70   # 70% tweaks, 30% brand new (when library has >10 monsters)
-
-# Monster behavior defaults
-DEFAULT_BEHAVIOR = {"rules": [{"default": "wander"}], "attacks": []}
 ```
 
 
@@ -648,9 +733,12 @@ DEFAULT_BEHAVIOR = {"rules": [{"default": "wander"}], "attacks": []}
 
 Claude Haiku at ~$0.25/M input, $1.25/M output tokens:
 - System prompt + examples: ~1200 tokens input (fixed per call)
-- Room generation: ~500 tokens output → ~$0.001
-- Monster generation: ~400 tokens output → ~$0.0008
+- Room generation (layout only): ~500 tokens output → ~$0.001
+- Monster generation (design + sprite): ~800 tokens output → ~$0.002
 - Tile generation: ~200 tokens output → ~$0.0005
-- Full dungeon (5 rooms + 8 monsters + 4 tiles): ~$0.01
-- 10 dungeons/day for a month: ~$3/month
-- With $5 monthly console spending cap: impossible to overspend
+- Typical dungeon: ~15 custom rooms, ~50% placeholder at steady state
+  → ~7-8 rooms generated per dungeon, each may create 0-2 monsters/tiles
+- First dungeon (empty libraries): ~$0.03 (many new monsters/tiles)
+- Steady-state dungeon (~20% placeholders): ~$0.005 (mostly reuse)
+- 10 dungeons/day for a month: ~$2-5/month
+- With $5 monthly console spending cap: safe
