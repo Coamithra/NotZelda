@@ -31,7 +31,9 @@ from server.lifecycle import (
 from server.combat import damage_player, handle_attack, monster_tick, projectile_tick
 from server.quests import handle_quest_npc
 from server.debug_monsters import handle_debug_spawn, auto_register_debug_monsters
-from server.dungeon_content import register_precreated_types
+from server.dungeon_content import register_precreated_types, load_precreated_content
+from server.content_library import ContentLibrary, MONSTER_LIBRARY_CAPACITY, TILE_LIBRARY_CAPACITY, ROOM_LIBRARY_CAPACITY
+from server.validation import register_monster_type, register_tile_type
 
 
 # ---------------------------------------------------------------------------
@@ -210,6 +212,13 @@ async def handle_chat(player, text: str):
                 await broadcast_to_room(player.room, {
                     "type": "chat", "from": player.name, "text": f"*{action}*",
                 })
+        elif cmd == "cheat":
+            player.grant_flag("has_sword")
+            player.grant_flag("invulnerable")
+            player.hp = player.max_hp
+            await send_to(player, {"type": "sword_obtained"})
+            await send_to(player, {"type": "hp_update", "hp": player.hp, "max_hp": player.max_hp})
+            await send_to(player, {"type": "info", "text": "Cheat mode: sword + invulnerability"})
         elif cmd == "debug_spawn":
             await handle_debug_spawn(player, parts[1] if len(parts) > 1 else "")
         else:
@@ -370,6 +379,34 @@ async def main():
     load_dungeon_templates()
     register_precreated_types()
     auto_register_debug_monsters()
+
+    # Initialize content libraries (Stage 7)
+    data_dir = ROOT_DIR / "data"
+    game.monster_library = ContentLibrary("monster", MONSTER_LIBRARY_CAPACITY)
+    game.tile_library = ContentLibrary("tile", TILE_LIBRARY_CAPACITY)
+    game.room_library = ContentLibrary("room", ROOM_LIBRARY_CAPACITY)
+    load_precreated_content(game.monster_library, game.tile_library, game.room_library, game.dungeon_templates)
+    game.monster_library.load_custom(data_dir / "monster_library.json")
+    game.tile_library.load_custom(data_dir / "tile_library.json")
+    game.room_library.load_custom(data_dir / "room_library.json")
+
+    # Register custom library entries into game registries so send_room_enter()
+    # can send sprites/tile recipes and monsters can spawn correctly
+    for entry in game.monster_library.real_entries:
+        if not entry.permanent and entry.id not in game.custom_sprites:
+            ok, errors = register_monster_type(entry.data)
+            if not ok:
+                print(f"[LIBS] WARNING: Failed to register monster {entry.id}: {errors}")
+    for entry in game.tile_library.real_entries:
+        if not entry.permanent and entry.id not in game.custom_tile_recipes:
+            ok, errors = register_tile_type(entry.data)
+            if not ok:
+                print(f"[LIBS] WARNING: Failed to register tile {entry.id}: {errors}")
+
+    print(f"[LIBS] monster {game.monster_library.real_count}/{game.monster_library.capacity}, "
+          f"tile {game.tile_library.real_count}/{game.tile_library.capacity}, "
+          f"room {game.room_library.real_count}/{game.room_library.capacity}")
+
     behavior_engine.init(players_in_room, ROOM_COLS, ROOM_ROWS, game.is_walkable_tile, game.guards, game.rooms)
     port = 8080
     server = await websockets.serve(

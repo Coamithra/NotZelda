@@ -134,15 +134,23 @@ const TILE_SPRITE_DATA = {
     ["alt",9,13,2,1], ["alt",0,14,1,1], ["alt",7,14,1,1], ["alt",11,14,1,1],
     ["alt",1,15,2,1], ["alt",6,15,1,1], ["alt",8,15,1,1],
   ],
-  9: [ // stairs_up
-    ["alt",0,0,16,1], ["alt",0,3,16,1], ["alt",0,6,16,1], ["alt",0,9,16,1],
-    ["alt",0,12,16,1], ["alt",0,15,16,1], ["#fff",7,3,2,8], ["#fff",5,5,2,2],
-    ["#fff",9,5,2,2],
+  9: [ // stairs_up — steps ascending upward
+    ["#6a5a3a",3,0,10,3],  ["#7a6a44",4,0,8,2],   // top step (lightest)
+    ["#5a4a2a",3,3,10,3],  ["#6a5a3a",4,3,8,2],   // second step
+    ["#4a3a1a",3,6,10,3],  ["#5a4a2a",4,6,8,2],   // third step
+    ["#3a2a10",3,9,10,3],  ["#4a3a1a",4,9,8,2],   // fourth step (darkest)
+    ["alt",3,12,10,4],                              // base
+    ["#aaa",7,1,2,1],                               // up arrow highlight
+    ["#aaa",6,2,4,1],
   ],
-  10: [ // stairs_down
-    ["alt",0,0,16,1], ["alt",0,3,16,1], ["alt",0,6,16,1], ["alt",0,9,16,1],
-    ["alt",0,12,16,1], ["alt",0,15,16,1], ["#fff",7,3,2,8], ["#fff",5,9,2,2],
-    ["#fff",9,9,2,2],
+  10: [ // stairs_down — steps descending downward
+    ["alt",3,0,10,4],                               // top base
+    ["#3a2a10",3,4,10,3],  ["#4a3a1a",4,4,8,2],   // first step (darkest)
+    ["#4a3a1a",3,7,10,3],  ["#5a4a2a",4,7,8,2],   // second step
+    ["#5a4a2a",3,10,10,3], ["#6a5a3a",4,10,8,2],  // third step
+    ["#6a5a3a",3,13,10,3], ["#7a6a44",4,13,8,2],  // bottom step (lightest)
+    ["#aaa",7,14,2,1],                              // down arrow highlight
+    ["#aaa",6,13,4,1],
   ],
   11: [ // anvil
     ["#9a9a9a",0,0,16,16], ["#3a3a3a",4,6,8,4], ["#3a3a3a",3,4,10,3],

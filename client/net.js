@@ -86,7 +86,34 @@ function handleMessage(msg) {
       }
       break;
 
+    case "room_generating":
+      // Server is generating a dungeon room — show conjuring animation
+      G.conjuring = { startTime: Date.now(), pendingRoomEnter: null };
+      break;
+
     case "room_enter": {
+      // If conjuring animation is active, check minimum duration
+      if (G.conjuring) {
+        const elapsed = Date.now() - G.conjuring.startTime;
+        const MIN_CONJURE_MS = 1500;
+        if (elapsed < MIN_CONJURE_MS) {
+          // Queue this message until minimum time passes
+          G.conjuring.pendingRoomEnter = msg;
+          setTimeout(() => {
+            if (G.conjuring && G.conjuring.pendingRoomEnter) {
+              const pending = G.conjuring.pendingRoomEnter;
+              G.conjuring = null;
+              handleMessage(pending);
+            }
+          }, MIN_CONJURE_MS - elapsed);
+          break;
+        }
+        G.conjuring = null;
+      }
+
+      // Store dungeon debug info if present
+      G.dungeonDebug = msg.dungeon_debug || null;
+
       let oldCanvas = null;
       const prevRoom = G.currentRoom;
       if (prevRoom) {

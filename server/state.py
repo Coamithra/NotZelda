@@ -29,6 +29,11 @@ class GameState:
         self.custom_walkable_tiles = set()
         self.monster_behaviors = {}      # kind -> behavior dict
 
+        # Content libraries (Stage 7 — tag-based content management)
+        self.monster_library = None  # ContentLibrary | None
+        self.tile_library = None     # ContentLibrary | None
+        self.room_library = None     # ContentLibrary | None
+
         # Live game state
         self.players = {}            # websocket -> Player
         self.room_monsters = {}      # room_id -> [Monster]

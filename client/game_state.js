@@ -89,10 +89,12 @@ const G = {
 
   // Transition
   transition: null,      // {direction, oldCanvas, startTime, duration}
+  conjuring: null,       // {startTime, pendingRoomEnter} — dungeon room generating animation
   gameLoopStarted: false,
 
   // Debug
   showDebug: false,
+  dungeonDebug: null,    // {lib_monsters, lib_tiles, lib_rooms, room_source} — from server
   debugLog: [],
   MAX_DEBUG_LINES: 8,
 

@@ -8,8 +8,9 @@ const ATTACK_FRAME_MS = 150;
 const ATTACK_FRAMES = 2;
 const DYING_PLAYER_FRAME_MS = 200;
 
-// matches server WALKABLE_TILES
-const WALKABLE = new Set([0, 1, 2, 7, 8, 9, 10, 15, 16, 19, 20, 22, 26, 27, 28, 30, 33]);
+// matches server WALKABLE_TILES (numeric IDs + string tile codes)
+const WALKABLE = new Set([0, 1, 2, 7, 8, 9, 10, 15, 16, 19, 20, 22, 26, 27, 28, 30, 33,
+  "GR", "ST", "WD", "FL", "DT", "SU", "SD", "DR", "SW", "DF", "MF", "CF", 37, 38]);
 
 function renderRoom() {
   if (!G.currentRoom) return;
@@ -561,5 +562,95 @@ function renderTransition(now) {
 
   if (progress >= 1) {
     G.transition = null;
+  }
+}
+
+const CONJURE_TEXTS = [
+  "The dungeon shifts...",
+  "Dark forces stir...",
+  "Ancient stones rearrange...",
+  "Shadows coalesce...",
+  "The air grows heavy...",
+];
+
+function renderConjuring(now) {
+  if (!G.conjuring) return false;
+  const elapsed = now - G.conjuring.startTime;
+  const t = elapsed / 1000; // seconds
+
+  // Dark background
+  G.ctx.fillStyle = "#0a0a12";
+  G.ctx.fillRect(0, 0, CW, CH);
+
+  // Flickering torchlight — two torch sources
+  const torches = [
+    { x: CW * 0.25, y: CH * 0.4 },
+    { x: CW * 0.75, y: CH * 0.4 },
+  ];
+  for (const torch of torches) {
+    const flicker = 0.3 + 0.15 * Math.sin(t * 8.3) + 0.1 * Math.sin(t * 13.7);
+    const r = 80 + 30 * Math.sin(t * 5.1);
+    const grad = G.ctx.createRadialGradient(torch.x, torch.y, 0, torch.x, torch.y, r);
+    grad.addColorStop(0, `rgba(255, 170, 50, ${flicker * 0.4})`);
+    grad.addColorStop(0.6, `rgba(200, 100, 20, ${flicker * 0.15})`);
+    grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+    G.ctx.fillStyle = grad;
+    G.ctx.fillRect(0, 0, CW, CH);
+
+    // Torch flame
+    const fw = 6 + 2 * Math.sin(t * 9);
+    const fh = 12 + 4 * Math.sin(t * 7);
+    G.ctx.fillStyle = `rgba(255, 200, 60, ${0.6 + 0.3 * Math.sin(t * 11)})`;
+    G.ctx.fillRect(torch.x - fw/2, torch.y - fh, fw, fh);
+    G.ctx.fillStyle = `rgba(255, 100, 20, ${0.4 + 0.2 * Math.sin(t * 8)})`;
+    G.ctx.fillRect(torch.x - fw/2 - 1, torch.y - fh * 0.6, fw + 2, fh * 0.6);
+  }
+
+  // Drifting particles
+  const seed = G.conjuring.startTime;
+  for (let i = 0; i < 12; i++) {
+    const px = ((seed * 7 + i * 137) % CW);
+    const py = CH - ((t * 30 + i * 50) % CH);
+    const alpha = 0.2 + 0.3 * Math.sin(t * 2 + i);
+    const size = 1 + (i % 3);
+    G.ctx.fillStyle = `rgba(180, 160, 120, ${alpha})`;
+    G.ctx.fillRect(px + Math.sin(t * 1.5 + i * 0.7) * 10, py, size, size);
+  }
+
+  // Atmospheric text
+  const textIdx = Math.floor(t / 2) % CONJURE_TEXTS.length;
+  const textAlpha = 0.5 + 0.3 * Math.sin(t * 2);
+  G.ctx.font = "18px monospace";
+  G.ctx.fillStyle = `rgba(180, 170, 140, ${textAlpha})`;
+  G.ctx.textAlign = "center";
+  G.ctx.fillText(CONJURE_TEXTS[textIdx], CW / 2, CH * 0.65);
+  G.ctx.textAlign = "start";
+
+  return true; // signal that conjuring is active
+}
+
+function renderDungeonDebug() {
+  if (!G.showDebug || !G.dungeonDebug) return;
+  const d = G.dungeonDebug;
+  const lines = [];
+  if (d.room_source) lines.push("src: " + d.room_source);
+  if (d.lib_rooms) lines.push("rooms: " + d.lib_rooms);
+  if (d.lib_monsters) lines.push("monsters: " + d.lib_monsters);
+  if (d.lib_tiles) lines.push("tiles: " + d.lib_tiles);
+  if (lines.length === 0) return;
+
+  G.ctx.font = "9px monospace";
+  const lineH = 12;
+  const padding = 4;
+  const boxW = 200;
+  const boxH = lines.length * lineH + padding * 2;
+  const boxX = CW - boxW - 4;
+  const boxY = 24;
+
+  G.ctx.fillStyle = "rgba(0,0,0,0.75)";
+  G.ctx.fillRect(boxX, boxY, boxW, boxH);
+  G.ctx.fillStyle = "#8af";
+  for (let i = 0; i < lines.length; i++) {
+    G.ctx.fillText(lines[i], boxX + padding, boxY + padding + (i + 1) * lineH - 2);
   }
 }

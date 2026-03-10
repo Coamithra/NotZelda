@@ -18,6 +18,8 @@ from server.dungeons import is_dungeon_room
 
 async def damage_player(player, damage: int, room_id: str):
     """Apply contact damage to a player from a monster."""
+    if player.has_flag("invulnerable"):
+        return
     now = time.monotonic()
     if now - player.last_damage_time < INVINCIBILITY_DURATION:
         return
@@ -367,6 +369,9 @@ async def projectile_tick():
     while True:
         await asyncio.sleep(PROJECTILE_TICK_RATE)
         for room_id in list(game.room_projectiles.keys()):
+            if room_id not in game.rooms:
+                del game.room_projectiles[room_id]
+                continue
             projs = game.room_projectiles[room_id]
             to_remove = []
             for proj_id, proj in list(projs.items()):
@@ -418,6 +423,8 @@ async def monster_tick():
         await asyncio.sleep(0.25)
         now = time.monotonic()
         for room_id, monster_list in list(game.room_monsters.items()):
+            if room_id not in game.rooms:
+                continue
             if not players_in_room(room_id):
                 continue
             for i, monster in enumerate(monster_list):

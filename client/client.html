@@ -351,7 +351,9 @@ function gameLoop(timestamp) {
   // Render
   G.ctx.clearRect(0, 0, CW, CH);
 
-  if (G.transition) {
+  if (renderConjuring(Date.now())) {
+    // Conjuring animation is active — skip normal rendering
+  } else if (G.transition) {
     renderTransition(Date.now());
   } else {
     renderRoom();
@@ -365,6 +367,7 @@ function gameLoop(timestamp) {
     renderSpeechBubbles();
     renderSwordPickups();
     renderUI();
+    renderDungeonDebug();
     if (G.dyingPlayerSelf) renderDeathAnimation();
   }
   renderHeartsHUD();

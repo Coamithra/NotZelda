@@ -306,25 +306,34 @@ PRECREATED_TILES = [
 # ---------------------------------------------------------------------------
 
 def register_precreated_types() -> None:
-    """Register new precreated monster types in the game engine.
+    """Register all precreated monster and tile types in the game engine.
 
-    This makes dungeon_slime and phantom available for /debug_spawn,
-    monster spawning, and custom sprite rendering. Call at server startup.
+    All 4 monsters get sprites/behaviors/stats registered so send_room_enter()
+    can send custom_sprites to clients for dungeon rooms. skeleton/bat stats
+    already exist as built-in but their sprites and behaviors still need
+    registration.
 
-    Note: skeleton/bat are already built-in. BZ/MF/CF tiles are built-in
-    numeric tiles (constants.py + tiles.js) and don't need custom registration.
+    All 7 tiles get registered as custom_tile_recipes so dungeon rooms using
+    string tile codes (DW, DF, etc.) work through the custom tile pipeline.
     """
-    from server.validation import register_monster_type
+    from server.validation import register_monster_type, register_tile_type
+    from server.state import game
 
     for mdata in PRECREATED_MONSTERS:
         kind = mdata["kind"]
-        # Only register new types — skeleton/bat already exist as built-in
-        if kind in ("dungeon_slime", "phantom"):
-            ok, errors = register_monster_type(mdata)
-            if not ok:
-                print(f"[CONTENT] WARNING: Failed to register {kind}: {errors}")
-            else:
-                print(f"[CONTENT] Registered monster type: {kind}")
+        ok, errors = register_monster_type(mdata)
+        if not ok:
+            print(f"[CONTENT] WARNING: Failed to register {kind}: {errors}")
+        else:
+            print(f"[CONTENT] Registered monster type: {kind}")
+
+    for tdata in PRECREATED_TILES:
+        tile_id = tdata["id"]
+        ok, errors = register_tile_type(tdata)
+        if not ok:
+            print(f"[CONTENT] WARNING: Failed to register tile {tile_id}: {errors}")
+        else:
+            print(f"[CONTENT] Registered tile type: {tile_id}")
 
 
 # ---------------------------------------------------------------------------

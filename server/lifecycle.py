@@ -7,7 +7,7 @@ from server.state import game
 from server.constants import ROOM_RESET_COOLDOWN, ENTRY_DIR, EDGE_SPAWN_POINTS, DEFAULT_SPAWN
 from server.models import Monster
 from server.net import send_to, broadcast_to_room, players_in_room, player_info
-from server.dungeons import create_dungeon, destroy_dungeon, dungeon_player_count
+from server.dungeons import create_dungeon, destroy_dungeon, dungeon_player_count, resolve_dungeon_room, is_dungeon_room
 
 
 def spawn_monsters(room_id: str) -> list[Monster]:
@@ -131,6 +131,30 @@ async def send_room_enter(player, exit_direction: str = None):
     if custom_tiles:
         msg["custom_tiles"] = custom_tiles
 
+    # Attach dungeon debug info for dungeon rooms
+    if is_dungeon_room(player.room) and game.active_dungeon:
+        debug = {}
+        if game.monster_library:
+            debug["lib_monsters"] = f"{game.monster_library.real_count}/{game.monster_library.capacity}"
+        if game.tile_library:
+            debug["lib_tiles"] = f"{game.tile_library.real_count}/{game.tile_library.capacity}"
+        if game.room_library:
+            debug["lib_rooms"] = f"{game.room_library.real_count}/{game.room_library.capacity}"
+        # Find source for this room
+        for cell, assignment in game.active_dungeon.cell_assignments.items():
+            room_id_check = f"d1_{cell[0]}_{cell[1]}"
+            if room_id_check == player.room:
+                entry = assignment.get("entry")
+                source = assignment["source"]
+                if entry is None:
+                    debug["room_source"] = "custom (generated)"
+                elif source == "precreated":
+                    debug["room_source"] = f"precreated ({entry.id})"
+                else:
+                    debug["room_source"] = f"custom ({entry.id})"
+                break
+        msg["dungeon_debug"] = debug
+
     await send_to(player, msg)
 
 
@@ -146,6 +170,21 @@ async def do_room_transition(player, exit_direction: str):
                 await send_to(player, {"type": "info", "text": "The dungeon entrance is sealed."})
                 return
         new_room_id = game.active_dungeon.entrance_room_id
+
+    # Lazy resolution — if this is an unresolved dungeon room, resolve it now
+    if game.active_dungeon and new_room_id in game.active_dungeon.active_rooms:
+        if new_room_id not in game.rooms:
+            # Find the cell for this room_id
+            for cell, assignment in game.active_dungeon.cell_assignments.items():
+                room_id_check = f"d1_{cell[0]}_{cell[1]}"
+                if room_id_check == new_room_id and not assignment["resolved"]:
+                    # Send conjuring animation for custom rooms (placeholder or library)
+                    if assignment["source"] == "custom":
+                        await send_to(player, {"type": "room_generating"})
+                    if not resolve_dungeon_room(game.active_dungeon, cell):
+                        await send_to(player, {"type": "info", "text": "The way is blocked."})
+                        return
+                    break
 
     new_room = game.rooms[new_room_id]
 

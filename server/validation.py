@@ -223,8 +223,8 @@ def validate_tile(data: dict) -> list[str]:
     tile_id = data.get("id")
     if not isinstance(tile_id, str) or not tile_id:
         errors.append("id must be a non-empty string")
-    elif not re.match(r'^[a-z][a-z0-9_]*$', tile_id):
-        errors.append("id must be lowercase alphanumeric with underscores")
+    elif not re.match(r'^[a-zA-Z][a-zA-Z0-9_]*$', tile_id):
+        errors.append("id must be alphanumeric with underscores")
 
     colors = data.get("colors")
     if not isinstance(colors, dict):
