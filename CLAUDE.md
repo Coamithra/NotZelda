@@ -91,6 +91,7 @@ All server-side shared state lives on a `GameState` singleton (`game = GameState
 
 ### Docs (`docs/`)
 - **`docs/PLAN_AI_GENERATION.md`** — Staged plan for AI-powered procedural content generation. Stages 1–6 complete. Stage 6.5 (Unified Content Refactor) adds `permanent` flag to library entries so precreated dungeon content (4 monsters, 7 tiles, 64 rooms) uses the same data-driven system as AI-generated content. Stage 7 (Library-Managed Dungeons) builds ~50% precreated / ~50% custom rooms with lazy generation. All dungeon sprites/tiles sent via custom registries (Option B). AI prompt sees a flat list of all content — no built-in vs custom distinction. See file for full details.
+- **`docs/PLAN_STAGE7_SUBSTEPS.md`** — Detailed implementation sub-steps for Stage 7 (Library-Managed Dungeon Generation). Step-by-step with file lists, dependency ordering, and known risks.
 - **`docs/world_map.png`**, **`docs/dungeon_layouts.png`**, **`docs/dungeon_rooms.png`** — Generated reference images.
 
 ### Deploy (`deploy/`)

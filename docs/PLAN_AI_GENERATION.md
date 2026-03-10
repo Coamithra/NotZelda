@@ -519,6 +519,10 @@ New tiles render correctly in dungeon rooms.
 rooms are generated **lazily** — only when a player actually enters,
 not all at once. Precreated rooms are always instant.
 
+> **Detailed sub-steps:** See [PLAN_STAGE7_SUBSTEPS.md](PLAN_STAGE7_SUBSTEPS.md)
+> for the step-by-step implementation plan with file lists, risks, and
+> dependency ordering.
+
 The key principle: **layout assignment is instant, custom content
 resolution is deferred to room entry.**
 
