@@ -191,7 +191,7 @@ Tag-based replacement examples:
 
 ## Staged Implementation Plan
 
-**Current status: Stages 1–6 complete. Next up: Stage 6.5 (Unified Content Refactor), then Stage 7 (Library-Managed Dungeon Generation).**
+**Current status: Stages 1–6.5 complete. Next up: Stage 7 (Library-Managed Dungeon Generation).**
 
 ### Stage 1: Tag & Metadata System ✅
 **Goal:** Define the data structures that everything else builds on.
@@ -402,7 +402,7 @@ Run with full libraries — verify no new content created, just arrangement.
 
 ---
 
-### Stage 6.5: Unified Content Refactor (Prerequisite)
+### Stage 6.5: Unified Content Refactor (Prerequisite) ✅
 **Goal:** All dungeon content — precreated and AI-generated — uses the
 same data-driven system. No hardcoded built-in content in source code.
 Precreated content is just library entries with a `permanent` flag.
@@ -492,20 +492,20 @@ entries are loaded from `data/*.json` and added to the remaining slots.
 of all available content from the libraries (permanent + custom).
 
 #### Tasks
-- [ ] Add `permanent: bool` to `LibraryEntry`, update expiry/remove/serialize
-- [ ] Add BZ, MF, CF tile IDs to `constants.py` + `TILE_CODES` + `WALKABLE_TILES`
-- [ ] Add BZ, MF, CF tile art to `client/tiles.js`
-- [ ] Create `server/dungeon_content.py` with:
+- [x] Add `permanent: bool` to `LibraryEntry`, update expiry/remove/serialize
+- [x] Add BZ, MF, CF tile IDs to `constants.py` + `TILE_CODES` + `WALKABLE_TILES`
+- [x] Add BZ, MF, CF tile art to `client/tiles.js`
+- [x] Create `server/dungeon_content.py` with:
   - Full data dicts for 4 precreated monsters (stats, sprite, behavior)
   - Full data dicts for 7 precreated tiles (colors, layers, walkable)
   - Tags for each entry
   - `load_precreated_content()` function to populate libraries at startup
-- [ ] Create room library entries from `rooms/dungeon1/*.room` files
+- [x] Create room library entries from `rooms/dungeon1/*.room` files
   (convert existing template format → library entry `data` payload)
-- [ ] Update `_build_layout_prompt()` — remove hardcoded builtins,
+- [x] Update `_build_layout_prompt()` — remove hardcoded builtins,
   accept flat list from caller
-- [ ] Update content viewer — hide delete button for permanent entries
-- [ ] Update some primary `.room` files to use dungeon_slime, phantom,
+- [x] Update content viewer — hide delete button for permanent entries
+- [x] Update some primary `.room` files to use dungeon_slime, phantom,
   BZ, MF, CF
 
 **Test:** Content viewer shows all precreated content as non-deletable.

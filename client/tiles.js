@@ -38,6 +38,9 @@ const TILE_COLORS = {
   33: { name: "dungeon_floor", base: "#5a5a5a", alt: "#4a4a4a" },
   34: { name: "pillar",        base: "#5a5a5a", alt: "#4a4a4a", cap: "#7a7a7a", body: "#6a6a6a" },
   35: { name: "sconce_wall",   base: "#3a3a4a", alt: "#2a2a3a", flame: "#fc3" },
+  36: { name: "brazier",       base: "#5a5a5a", alt: "#4a4a4a", pedestal: "#7a7a7a", flame: "#fc3", ember: "#f83" },
+  37: { name: "mosaic_floor",  base: "#5a5a5a", alt: "#4a4a4a", pattern: "#7a6a5a", highlight: "#8a7a6a" },
+  38: { name: "cracked_floor", base: "#5a5a5a", alt: "#4a4a4a", crack: "#3a3a3a", deep: "#2a2a2a" },
 };
 
 // ---------------------------------------------------------------------------
@@ -434,6 +437,31 @@ const TILE_SPRITE_DATA = {
     ["alt",12,4,1,1], ["alt",0,7,16,1], ["alt",0,8,1,1], ["alt",8,8,1,1],
     ["alt",0,11,16,1], ["alt",4,12,1,1], ["alt",12,12,1,1], ["alt",0,15,16,1],
     ["#5a5a5a",6,6,4,4], ["#5a5a5a",7,10,2,2], ["flame",7,3,2,4], ["#f83",6,4,4,2],
+  ],
+  36: [ // brazier — stone pedestal with fire on dungeon floor
+    ["alt",0,0,1,1], ["alt",3,1,1,1], ["alt",13,0,1,1], ["alt",1,14,1,1],
+    ["alt",14,14,1,1], ["alt",1,15,1,1], ["alt",12,15,1,1],
+    ["pedestal",5,10,6,5], ["pedestal",6,8,4,3],
+    ["#6a6a6a",4,7,8,2],
+    ["flame",5,2,6,6], ["ember",6,3,4,4], ["#fff4aa",7,2,2,2],
+  ],
+  37: [ // mosaic_floor — decorative diamond inlay
+    ["alt",1,1,1,1], ["alt",14,1,1,1], ["alt",1,14,1,1], ["alt",14,14,1,1],
+    ["pattern",0,0,16,1], ["pattern",0,15,16,1],
+    ["pattern",0,0,1,16], ["pattern",15,0,1,16],
+    ["pattern",7,3,2,1], ["pattern",6,4,4,1], ["pattern",5,5,6,1],
+    ["pattern",4,6,8,1], ["pattern",3,7,10,1], ["pattern",4,8,8,1],
+    ["pattern",5,9,6,1], ["pattern",6,10,4,1], ["pattern",7,11,2,1],
+    ["highlight",7,7,2,1],
+  ],
+  38: [ // cracked_floor — damaged floor with cracks
+    ["alt",2,0,1,1], ["alt",9,1,1,1], ["alt",14,0,1,1],
+    ["alt",0,5,1,1], ["alt",12,7,1,1], ["alt",1,12,1,1], ["alt",10,14,1,1],
+    ["crack",3,0,1,3], ["crack",4,2,1,2], ["crack",5,3,1,3], ["crack",4,5,1,2],
+    ["crack",3,6,1,2], ["crack",2,7,1,3], ["crack",3,9,1,2],
+    ["crack",10,1,1,2], ["crack",11,2,1,3], ["crack",12,4,1,2], ["crack",11,5,1,2],
+    ["crack",5,11,3,1], ["crack",7,12,3,1], ["crack",9,11,2,1],
+    ["deep",4,3,1,1], ["deep",3,7,1,1], ["deep",11,3,1,1], ["deep",7,12,1,1],
   ],
 };
 

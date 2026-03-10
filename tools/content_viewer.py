@@ -85,9 +85,13 @@ PORT = 8081
 DATA_DIR = Path(__file__).parent.parent / "data"
 PROJECT_ROOT = Path(__file__).parent.parent
 
-MONSTER_CAPACITY = 7
-TILE_CAPACITY = 12
-ROOM_CAPACITY = 50
+from server.content_library import (
+    MONSTER_LIBRARY_CAPACITY, TILE_LIBRARY_CAPACITY, ROOM_LIBRARY_CAPACITY,
+)
+
+MONSTER_CAPACITY = MONSTER_LIBRARY_CAPACITY
+TILE_CAPACITY = TILE_LIBRARY_CAPACITY
+ROOM_CAPACITY = ROOM_LIBRARY_CAPACITY
 
 # ---------------------------------------------------------------------------
 # Libraries (loaded at startup)
@@ -101,9 +105,25 @@ generate_lock = asyncio.Lock()
 
 def load_libraries():
     global monster_lib, tile_lib, room_lib
-    monster_lib = ContentLibrary.load("monster", MONSTER_CAPACITY, DATA_DIR / "monster_library.json")
-    tile_lib = ContentLibrary.load("tile", TILE_CAPACITY, DATA_DIR / "tile_library.json")
-    room_lib = ContentLibrary.load("room", ROOM_CAPACITY, DATA_DIR / "room_library.json")
+    from server.dungeon_content import load_precreated_content
+    from server.rooms import load_dungeon_templates
+    from server.state import game
+
+    # Create fresh libraries
+    monster_lib = ContentLibrary("monster", MONSTER_CAPACITY)
+    tile_lib = ContentLibrary("tile", TILE_CAPACITY)
+    room_lib = ContentLibrary("room", ROOM_CAPACITY)
+
+    # Load dungeon templates (needed for room library entries)
+    load_dungeon_templates()
+
+    # Add permanent precreated content first
+    load_precreated_content(monster_lib, tile_lib, room_lib, game.dungeon_templates)
+
+    # Then load custom entries from JSON into remaining slots
+    monster_lib.load_custom(DATA_DIR / "monster_library.json")
+    tile_lib.load_custom(DATA_DIR / "tile_library.json")
+    room_lib.load_custom(DATA_DIR / "room_library.json")
 
 
 def save_libraries():
@@ -122,6 +142,7 @@ def handle_libraries():
         return {
             "capacity": lib.capacity,
             "real_count": lib.real_count,
+            "permanent_count": lib.permanent_count,
             "placeholder_count": lib.placeholder_count,
             "entries": [
                 {
@@ -129,6 +150,7 @@ def handle_libraries():
                     "tags": e.tags,
                     "created_at": e.created_at,
                     "data": e.data,
+                    "permanent": e.permanent,
                 }
                 for e in lib.real_entries
             ],
@@ -389,11 +411,16 @@ async def handle_generate_tiles(body: bytes) -> tuple[str, int]:
 
 
 def handle_delete(lib_type: str, item_id: str):
-    """Delete an item from a library."""
+    """Delete an item from a library. Permanent items cannot be deleted."""
     lib_map = {"monster": monster_lib, "tile": tile_lib, "room": room_lib}
     lib = lib_map.get(lib_type)
     if not lib:
         return json.dumps({"error": f"Unknown library type: {lib_type}"}), 404
+
+    # Check if it's a permanent entry
+    entry = lib.get_by_id(item_id)
+    if entry and entry.permanent:
+        return json.dumps({"error": f"Cannot delete permanent item: {item_id}"}), 403
 
     if lib.remove(item_id):
         save_libraries()

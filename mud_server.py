@@ -31,6 +31,7 @@ from server.lifecycle import (
 from server.combat import damage_player, handle_attack, monster_tick, projectile_tick
 from server.quests import handle_quest_npc
 from server.debug_monsters import handle_debug_spawn, auto_register_debug_monsters
+from server.dungeon_content import register_precreated_types
 
 
 # ---------------------------------------------------------------------------
@@ -367,6 +368,7 @@ async def process_request(path, request_headers):
 async def main():
     load_room_files()
     load_dungeon_templates()
+    register_precreated_types()
     auto_register_debug_monsters()
     behavior_engine.init(players_in_room, ROOM_COLS, ROOM_ROWS, game.is_walkable_tile, game.guards, game.rooms)
     port = 8080

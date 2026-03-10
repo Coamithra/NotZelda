@@ -15,34 +15,35 @@ You create room layouts (tilemaps + monster placements) using available tiles an
   - ALL four doorways must be connected by walkable tiles (flood-fill reachable)
 - Monsters must be placed only on walkable tiles, away from doorways (not on row 0, row 10, col 0, or col 14). Use interior positions (rows 2-9, cols 2-13) so players aren't ambushed at entrances
 - Use a MIX of available tiles. Pick a dominant walkable tile for most floors and a dominant non-walkable tile for most interior walls. Scatter other tile types for variety
+- Doorway tiles (the 3-wide openings on each edge) can be ANY walkable tile — decorative walkable tiles work great there for visual variety
 
 ## EXAMPLE LAYOUTS
 Legend: x=non-walkable (common/structural), o=non-walkable (uncommon/decorative), .=walkable (common), _=walkable (decorative)
 Each row is exactly 15 characters. All 4 doorways must be connected via walkable tiles.
 Asymmetric:
- xxxxxx...xxxxxx
+ xxxxxx._.xxxxxx
  xxx..xx..xxx_.x
  xxx..xx..x_...x
  xxxx....xx....x
- ...xxx..xxo..x.
+ _..xxx..xxo..x.
  .._....xxx.....
- .......xx.xxx..
+ ...._..xx.xxx..
  x..xxx.._.....x
  x..xxxx..xx...x
  x..._....xx.o.x
- xxxxxx...xxxxxx
+ xxxxxx._.xxxxxx
 Symmetric:
- xxxxxx...xxxxxx
+ xxxxxx._.xxxxxx
  xo.xxx...xxx.ox
  x..xxx...xxx..x
  x..x.._._..x.x
- ...xx..o..xx...
+ _..xx..o..xx.._
  .._.........._.
  ...xx..o..xx...
  x..x.._._..x.x
  x..xxx...xxx..x
  xo.xxx...xxx.ox
- xxxxxx...xxxxxx
+ xxxxxx._.xxxxxx
 
 ## DIFFICULTY GUIDELINES (monster count)
 - Easy (1-3): 1-2 monsters

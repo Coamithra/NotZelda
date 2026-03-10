@@ -40,10 +40,13 @@ DUNGEON_WALL  = 32   # DW - smooth dark stone wall (non-walkable)
 DUNGEON_FLOOR = 33   # DF - worn stone floor (walkable)
 PILLAR        = 34   # PL - stone pillar (non-walkable)
 SCONCE_WALL   = 35   # SC - wall with torch sconce (non-walkable)
+BRAZIER       = 36   # BZ - stone pedestal with fire (non-walkable)
+MOSAIC_FLOOR  = 37   # MF - floor with decorative inlay (walkable)
+CRACKED_FLOOR = 38   # CF - damaged floor with cracks (walkable)
 
 WALKABLE_TILES = {GRASS, STONE, WOOD, FLOWERS, DIRT, STAIRS_UP, STAIRS_DOWN, DOOR,
                   SAND, CAVE_FLOOR, SWAMP, BRIDGE, RUINS_FLOOR, TALL_GRASS, ROAD,
-                  SHALLOW_WATER, DUNGEON_FLOOR}
+                  SHALLOW_WATER, DUNGEON_FLOOR, MOSAIC_FLOOR, CRACKED_FLOOR}
 
 # Tile code string -> numeric ID (for .room file parsing)
 TILE_CODES = {
@@ -55,6 +58,7 @@ TILE_CODES = {
     "RW": RUINS_WALL, "RF": RUINS_FLOOR, "TG": TALL_GRASS, "RD": ROAD, "CL": CLIFF,
     "SH": SHALLOW_WATER, "BO": BOULDER,
     "DW": DUNGEON_WALL, "DF": DUNGEON_FLOOR, "PL": PILLAR, "SC": SCONCE_WALL,
+    "BZ": BRAZIER, "MF": MOSAIC_FLOOR, "CF": CRACKED_FLOOR,
 }
 
 # ---------------------------------------------------------------------------

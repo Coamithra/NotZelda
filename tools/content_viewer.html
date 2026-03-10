@@ -356,11 +356,13 @@ function createMonsterItem(entry) {
   name.textContent = entry.id;
   div.appendChild(name);
 
-  const del = document.createElement('button');
-  del.className = 'del-btn';
-  del.textContent = '\u00D7';
-  del.onclick = (e) => { e.stopPropagation(); deleteItem('monster', entry.id); };
-  div.appendChild(del);
+  if (!entry.permanent) {
+    const del = document.createElement('button');
+    del.className = 'del-btn';
+    del.textContent = '\u00D7';
+    del.onclick = (e) => { e.stopPropagation(); deleteItem('monster', entry.id); };
+    div.appendChild(del);
+  }
 
   div.onclick = () => selectItem('monster', entry);
   return div;
@@ -383,11 +385,13 @@ function createTileItem(entry) {
   name.textContent = entry.id;
   div.appendChild(name);
 
-  const del = document.createElement('button');
-  del.className = 'del-btn';
-  del.textContent = '\u00D7';
-  del.onclick = (e) => { e.stopPropagation(); deleteItem('tile', entry.id); };
-  div.appendChild(del);
+  if (!entry.permanent) {
+    const del = document.createElement('button');
+    del.className = 'del-btn';
+    del.textContent = '\u00D7';
+    del.onclick = (e) => { e.stopPropagation(); deleteItem('tile', entry.id); };
+    div.appendChild(del);
+  }
 
   div.onclick = () => selectItem('tile', entry);
   return div;
@@ -413,11 +417,13 @@ function createRoomItem(entry) {
   info.appendChild(meta);
   div.appendChild(info);
 
-  const del = document.createElement('button');
-  del.className = 'del-btn';
-  del.textContent = '\u00D7';
-  del.onclick = (e) => { e.stopPropagation(); deleteItem('room', entry.id); };
-  div.appendChild(del);
+  if (!entry.permanent) {
+    const del = document.createElement('button');
+    del.className = 'del-btn';
+    del.textContent = '\u00D7';
+    del.onclick = (e) => { e.stopPropagation(); deleteItem('room', entry.id); };
+    div.appendChild(del);
+  }
 
   div.onclick = () => selectItem('room', entry);
   return div;
@@ -619,8 +625,10 @@ function showMonsterDetails(entry) {
   html += `<div class="detail-section"><span class="json-toggle" onclick="toggleJson()">Show raw JSON</span>`;
   html += `<div class="json-block" id="jsonBlock">${JSON.stringify(d, null, 2)}</div></div>`;
 
-  // Delete
-  html += `<div class="detail-delete"><button class="detail-delete-btn" data-type="monster" data-id="${entry.id}">Delete Monster</button></div>`;
+  // Delete (hidden for permanent entries)
+  if (!entry.permanent) {
+    html += `<div class="detail-delete"><button class="detail-delete-btn" data-type="monster" data-id="${entry.id}">Delete Monster</button></div>`;
+  }
 
   panel.innerHTML = html;
 
@@ -682,8 +690,10 @@ function showTileDetails(entry) {
   html += `<div class="detail-section"><span class="json-toggle" onclick="toggleJson()">Show raw JSON</span>`;
   html += `<div class="json-block" id="jsonBlock">${JSON.stringify(d, null, 2)}</div></div>`;
 
-  // Delete
-  html += `<div class="detail-delete"><button class="detail-delete-btn" data-type="tile" data-id="${entry.id}">Delete Tile</button></div>`;
+  // Delete (hidden for permanent entries)
+  if (!entry.permanent) {
+    html += `<div class="detail-delete"><button class="detail-delete-btn" data-type="tile" data-id="${entry.id}">Delete Tile</button></div>`;
+  }
 
   panel.innerHTML = html;
 
@@ -732,8 +742,10 @@ function showRoomDetails(entry) {
   html += `<div class="detail-section"><span class="json-toggle" onclick="toggleJson()">Show raw JSON</span>`;
   html += `<div class="json-block" id="jsonBlock">${JSON.stringify(d, null, 2)}</div></div>`;
 
-  // Delete
-  html += `<div class="detail-delete"><button class="detail-delete-btn" data-type="room" data-id="${entry.id}">Delete Room</button></div>`;
+  // Delete (hidden for permanent entries)
+  if (!entry.permanent) {
+    html += `<div class="detail-delete"><button class="detail-delete-btn" data-type="room" data-id="${entry.id}">Delete Room</button></div>`;
+  }
 
   panel.innerHTML = html;
 

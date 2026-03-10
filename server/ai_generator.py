@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 # Configuration
 # ---------------------------------------------------------------------------
 
-ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
+ANTHROPIC_MODEL = "claude-haiku-4-5"
 GENERATION_TIMEOUT = 15.0       # seconds before giving up on API call
 CLI_TIMEOUT = 600.0             # CLI is much slower than API
 MAX_API_CALLS_PER_MINUTE = 15   # higher limit: one room = multiple calls
@@ -78,7 +78,7 @@ class RateLimiter:
 # ---------------------------------------------------------------------------
 
 MODEL_PRICING = {
-    "claude-haiku-4-5-20251001": (1.00, 5.00),
+    "claude-haiku-4-5":          (1.00, 5.00),
     "claude-sonnet-4-6":        (3.00, 15.00),
     "claude-opus-4-6":          (15.00, 75.00),
 }
@@ -170,8 +170,8 @@ SYSTEM_PROMPT_LAYOUT = _load_prompt("layout_system.txt")
 # Validation constants
 # ---------------------------------------------------------------------------
 
-BUILTIN_TILES = {"DW", "DF", "PL", "SC"}
-NON_WALKABLE = {"DW", "PL", "SC"}
+BUILTIN_TILES = {"DW", "DF", "PL", "SC", "BZ", "MF", "CF"}
+NON_WALKABLE = {"DW", "PL", "SC", "BZ"}
 
 VALID_BEHAVIOR_CONDITIONS = {
     "player_within", "player_beyond", "player_in_range_line",
@@ -180,7 +180,8 @@ VALID_BEHAVIOR_CONDITIONS = {
 VALID_BEHAVIOR_ACTIONS = {"move", "hold", "projectile", "charge", "teleport", "area"}
 VALID_DIRECTIONS = {"up", "down", "left", "right", "player", "away", "random", "patrol"}
 VALID_TELEPORT_TARGETS = {"player", "random", "away"}
-_BUILTIN_KINDS = {"slime", "bat", "scorpion", "skeleton", "swamp_blob"}
+_BUILTIN_KINDS = {"slime", "bat", "scorpion", "skeleton", "swamp_blob",
+                   "dungeon_slime", "phantom"}
 
 
 def _is_hex_color(v: str) -> bool:
@@ -697,12 +698,72 @@ def patch_monster_rules(behavior: dict) -> list[str]:
     return patches
 
 
+def patch_doorway_tiles(data: dict, walkable: set[str]) -> list[str]:
+    """Fix non-walkable tiles in doorway positions.
+
+    For each doorway tile that isn't walkable, pick the best replacement:
+    1. Look at adjacent interior tiles — if any are walkable, use the most common one
+    2. Otherwise use the room's dominant walkable tile
+    3. Last resort: "DF"
+    """
+    patches = []
+    tilemap = data.get("tilemap")
+    if not tilemap or len(tilemap) != 11:
+        return patches
+    if not all(isinstance(r, list) and len(r) == 15 for r in tilemap):
+        return patches
+
+    # Gather doorway positions
+    doorway_positions = []
+    for c in range(6, 9):
+        doorway_positions.append((0, c))
+        doorway_positions.append((10, c))
+    for r in range(4, 7):
+        doorway_positions.append((r, 0))
+        doorway_positions.append((r, 14))
+
+    # Find dominant walkable tile as fallback
+    walkable_counts: dict[str, int] = {}
+    for row in tilemap:
+        for cell in row:
+            if cell in walkable:
+                walkable_counts[cell] = walkable_counts.get(cell, 0) + 1
+    dominant = max(walkable_counts, key=walkable_counts.get) if walkable_counts else "DF"
+
+    for r, c in doorway_positions:
+        tile = tilemap[r][c]
+        if tile in walkable:
+            continue
+
+        # Look at neighbors for a nearby walkable tile
+        neighbors: list[str] = []
+        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            nr, nc = r + dr, c + dc
+            if 0 <= nr <= 10 and 0 <= nc <= 14:
+                ntile = tilemap[nr][nc]
+                if ntile in walkable:
+                    neighbors.append(ntile)
+
+        if neighbors:
+            # Pick the most common neighbor walkable tile
+            from collections import Counter
+            replacement = Counter(neighbors).most_common(1)[0][0]
+        else:
+            replacement = dominant
+
+        tilemap[r][c] = replacement
+        patches.append(f"[PATCH] Doorway ({c},{r}): {tile} -> {replacement}")
+
+    return patches
+
+
 def auto_patch(data: dict, existing_walkable: set[str],
                existing_room_names: list[str] | None = None) -> list[str]:
     """Apply all auto-patches to a complete room. Backward compat wrapper."""
     walkable = _build_walkability_set(data, existing_walkable)
     patches = []
     patches.extend(patch_duplicate_name(data, existing_room_names or []))
+    patches.extend(patch_doorway_tiles(data, walkable))
     patches.extend(patch_unreachable_doorways(data, walkable))
     patches.extend(patch_monster_placements(data, walkable))
     for m in data.get("new_monsters", []):
@@ -1103,36 +1164,23 @@ def _build_layout_prompt(theme: str, difficulty: int,
     if existing_room_names:
         existing_names_section = f"\nDo NOT reuse these room names (already taken): {', '.join(existing_room_names[:30])}"
 
-    # Tiles
-    base_tiles = [
-        "DW (non-walkable, tags: dungeon, wall, stone)",
-        "DF (walkable, tags: dungeon, floor, stone)",
-        "PL (non-walkable, tags: dungeon, wall, decorative)",
-        "SC (non-walkable, tags: dungeon, wall, light)",
-    ]
-    custom_tiles = [
+    # Tiles — flat list from libraries (no hardcoded builtins)
+    all_tiles = [
         f"{t.get('id', '?')} ({'walkable' if t.get('walkable') else 'non-walkable'}, tags: {', '.join(t.get('tags', []))})"
-        for t in available_tiles[:20]
+        for t in available_tiles[:30]
     ]
-    tile_summary = ", ".join(base_tiles + custom_tiles)
+    tile_summary = ", ".join(all_tiles) if all_tiles else "(none available)"
 
     prefer_tiles_line = ""
     if new_tile_ids:
         prefer_tiles_line = f"PREFER using these newly created tiles: {', '.join(new_tile_ids)}"
 
-    # Monsters
-    builtin_monsters = [
-        "slime (tags: forest, melee)",
-        "bat (tags: cave, flying)",
-        "scorpion (tags: desert, melee)",
-        "skeleton (tags: undead, melee)",
-        "swamp_blob (tags: swamp, melee)",
-    ]
-    custom_monsters = [
+    # Monsters — flat list from libraries (no hardcoded builtins)
+    all_monsters = [
         f"{m.get('kind', '?')} (tags: {', '.join(m.get('tags', []))})"
-        for m in available_monsters[:20]
+        for m in available_monsters[:30]
     ]
-    monster_summary = ", ".join(builtin_monsters + custom_monsters)
+    monster_summary = ", ".join(all_monsters) if all_monsters else "(none available)"
 
     prefer_monsters_line = ""
     if new_monster_kinds:
@@ -1175,16 +1223,17 @@ async def generate_layout(
         existing_room_names,
     )
 
-    # Build tile/monster ID sets for validation
-    all_tile_ids = set(BUILTIN_TILES)
-    all_walkable = {"DF"}
+    # Build tile/monster ID sets for validation from available lists
+    # (includes both permanent/precreated and custom entries)
+    all_tile_ids = set(BUILTIN_TILES)  # always valid as fallback
+    all_walkable = set()
     for t in available_tiles:
         tid = t.get("id", "")
         all_tile_ids.add(tid)
         if t.get("walkable", False):
             all_walkable.add(tid)
 
-    all_monster_kinds = set(_BUILTIN_KINDS)
+    all_monster_kinds = set(_BUILTIN_KINDS)  # always valid as fallback
     for m in available_monsters:
         all_monster_kinds.add(m.get("kind", ""))
 
@@ -1194,6 +1243,7 @@ async def generate_layout(
     def _patch(data):
         patches = []
         patches.extend(patch_duplicate_name(data, existing_room_names or []))
+        patches.extend(patch_doorway_tiles(data, all_walkable))
         patches.extend(patch_unreachable_doorways(data, all_walkable))
         patches.extend(patch_monster_placements(data, all_walkable))
         return patches

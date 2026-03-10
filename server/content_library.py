@@ -33,9 +33,9 @@ def normalize_tags(tags: list[str]) -> list[str]:
 # Configuration defaults
 # ---------------------------------------------------------------------------
 
-ROOM_LIBRARY_CAPACITY = 50
-MONSTER_LIBRARY_CAPACITY = 40
-TILE_LIBRARY_CAPACITY = 30
+ROOM_LIBRARY_CAPACITY = 96      # 64 permanent + 32 custom
+MONSTER_LIBRARY_CAPACITY = 8    # 4 permanent + 4 custom
+TILE_LIBRARY_CAPACITY = 14      # 7 permanent + 7 custom
 
 EXPIRY_RATE = 0.10          # expire 10% of library per teardown
 EXPIRY_MIN_AGE = 86400      # 24 hours
@@ -55,6 +55,7 @@ class LibraryEntry:
     tags: list[str] = field(default_factory=list)
     created_at: float = 0.0             # time.time() when created
     data: dict[str, Any] = field(default_factory=dict)  # full payload
+    permanent: bool = False             # permanent entries never expire or get deleted
 
     @property
     def is_placeholder(self) -> bool:
@@ -74,6 +75,7 @@ class LibraryEntry:
             tags=d.get("tags", []),
             created_at=d.get("created_at", 0.0),
             data=d.get("data", {}),
+            permanent=d.get("permanent", False),
         )
 
     @classmethod
@@ -120,6 +122,14 @@ class ContentLibrary:
     @property
     def real_count(self) -> int:
         return len(self._entries) - self.placeholder_count
+
+    @property
+    def permanent_count(self) -> int:
+        return sum(1 for e in self._entries if e.permanent)
+
+    @property
+    def custom_count(self) -> int:
+        return sum(1 for e in self._entries if not e.is_placeholder and not e.permanent)
 
     @property
     def is_full(self) -> bool:
@@ -199,20 +209,24 @@ class ContentLibrary:
         return False  # library full, no placeholders
 
     def remove(self, entry_id: str) -> bool:
-        """Remove an entry by ID, replacing it with a placeholder."""
+        """Remove an entry by ID, replacing it with a placeholder.
+        Permanent entries cannot be removed."""
         for i, e in enumerate(self._entries):
             if e.id == entry_id and not e.is_placeholder:
+                if e.permanent:
+                    return False
                 self._entries[i] = LibraryEntry.placeholder(self.content_type)
                 return True
         return False
 
     def expire_oldest(self, rate: float = EXPIRY_RATE, min_age: float = EXPIRY_MIN_AGE) -> list[str]:
-        """Expire the oldest N% of entries that exceed min_age. Returns IDs of expired entries."""
+        """Expire the oldest N% of entries that exceed min_age. Returns IDs of expired entries.
+        Permanent entries are never expired."""
         now = time.time()
-        # Collect eligible entries with their indices
+        # Collect eligible entries with their indices (skip permanent)
         eligible = []
         for i, e in enumerate(self._entries):
-            if not e.is_placeholder and (now - e.created_at) >= min_age:
+            if not e.is_placeholder and not e.permanent and (now - e.created_at) >= min_age:
                 eligible.append((i, e))
 
         if not eligible:
@@ -279,8 +293,10 @@ class ContentLibrary:
     # -- Persistence --
 
     def to_json(self) -> list[dict]:
-        """Serialize real entries only (placeholders are reconstructed on load)."""
-        return [e.to_dict() for e in self._entries if not e.is_placeholder]
+        """Serialize custom (non-permanent) real entries only.
+        Placeholders are reconstructed on load; permanent entries are loaded from source."""
+        return [e.to_dict() for e in self._entries
+                if not e.is_placeholder and not e.permanent]
 
     @classmethod
     def from_json(cls, content_type: str, capacity: int, data: list[dict]) -> "ContentLibrary":
@@ -292,6 +308,19 @@ class ContentLibrary:
                 break
             lib._entries[i] = LibraryEntry.from_dict(d)
         return lib
+
+    def load_custom(self, filepath: Path) -> int:
+        """Load custom (non-permanent) entries from a JSON file into remaining placeholder slots.
+        Call this AFTER permanent entries have been added. Returns count loaded."""
+        if not filepath.exists():
+            return 0
+        data = json.loads(filepath.read_text(encoding="utf-8"))
+        count = 0
+        for d in data:
+            entry = LibraryEntry.from_dict(d)
+            if self.add(entry):
+                count += 1
+        return count
 
     def save(self, filepath: Path) -> None:
         filepath.parent.mkdir(parents=True, exist_ok=True)
@@ -306,5 +335,6 @@ class ContentLibrary:
 
     def __repr__(self) -> str:
         return (f"ContentLibrary({self.content_type}, "
-                f"{self.real_count}/{self.capacity} real, "
+                f"{self.real_count}/{self.capacity} real "
+                f"[{self.permanent_count}p+{self.custom_count}c], "
                 f"{self.placeholder_count} placeholders)")
