@@ -102,6 +102,11 @@ tile_lib: ContentLibrary | None = None
 room_lib: ContentLibrary | None = None
 generate_lock = asyncio.Lock()
 
+# Deprecated content — removed from libraries but still referenced by rooms.
+# Maps id -> entry dict (for display in the viewer).
+deprecated_monsters: dict[str, dict] = {}
+deprecated_tiles: dict[str, dict] = {}
+
 
 def load_libraries():
     global monster_lib, tile_lib, room_lib
@@ -156,11 +161,30 @@ def handle_libraries():
             ],
         }
 
-    return json.dumps({
+    # Build deprecated entries with ref counts
+    dep_monsters = []
+    for mid, entry_data in deprecated_monsters.items():
+        dep_entry = dict(entry_data)
+        dep_entry["deprecated"] = True
+        dep_entry["ref_count"] = _count_room_references(mid, "monster")
+        dep_monsters.append(dep_entry)
+
+    dep_tiles = []
+    for tid, entry_data in deprecated_tiles.items():
+        dep_entry = dict(entry_data)
+        dep_entry["deprecated"] = True
+        dep_entry["ref_count"] = _count_room_references(tid, "tile")
+        dep_tiles.append(dep_entry)
+
+    result = {
         "monsters": lib_json(monster_lib),
         "tiles": lib_json(tile_lib),
         "rooms": lib_json(room_lib),
-    })
+    }
+    result["deprecated_monsters"] = dep_monsters
+    result["deprecated_tiles"] = dep_tiles
+
+    return json.dumps(result)
 
 
 async def handle_generate(body: bytes) -> tuple[str, int]:
@@ -171,14 +195,16 @@ async def handle_generate(body: bytes) -> tuple[str, int]:
             theme = params.get("theme", "dungeon")
             difficulty = int(params.get("difficulty", 5))
 
-            # Build existing content summaries
+            # Build existing content summaries (exclude deprecated)
             existing_monsters = [
                 {"kind": e.id, "tags": e.tags}
                 for e in monster_lib.real_entries
+                if e.id not in deprecated_monsters
             ]
             existing_tiles = [
                 {"id": e.id, "walkable": e.data.get("walkable", False), "tags": e.tags}
                 for e in tile_lib.real_entries
+                if e.id not in deprecated_tiles
             ]
 
             existing_room_names = [
@@ -269,6 +295,7 @@ async def handle_generate_monster(body: bytes) -> tuple[str, int]:
             existing_monsters = [
                 {"kind": e.id, "tags": e.tags}
                 for e in monster_lib.real_entries
+                if e.id not in deprecated_monsters
             ]
 
             # Step 1: Generate design (kind, tags, stats, behavior)
@@ -319,10 +346,12 @@ async def handle_generate_layout(body: bytes) -> tuple[str, int]:
             available_monsters = [
                 {"kind": e.id, "tags": e.tags}
                 for e in monster_lib.real_entries
+                if e.id not in deprecated_monsters
             ]
             available_tiles = [
                 {"id": e.id, "walkable": e.data.get("walkable", False), "tags": e.tags}
                 for e in tile_lib.real_entries
+                if e.id not in deprecated_tiles
             ]
             existing_room_names = [
                 e.data.get("name", e.id) for e in room_lib.real_entries
@@ -385,6 +414,7 @@ async def handle_generate_tiles(body: bytes) -> tuple[str, int]:
             existing_tiles = [
                 {"id": e.id, "walkable": e.data.get("walkable", False), "tags": e.tags}
                 for e in tile_lib.real_entries
+                if e.id not in deprecated_tiles
             ]
 
             tiles = await ai_generator.generate_tiles(
@@ -410,23 +440,80 @@ async def handle_generate_tiles(body: bytes) -> tuple[str, int]:
         return json.dumps({"error": f"Exception: {e}"}), 500
 
 
+def _count_room_references(item_id: str, item_type: str) -> int:
+    """Count how many rooms in the library reference a monster kind or tile ID."""
+    count = 0
+    for entry in room_lib.real_entries:
+        data = entry.data
+        if item_type == "monster":
+            for p in data.get("monster_placements", []):
+                if p["kind"] == item_id:
+                    count += 1
+                    break
+        elif item_type == "tile":
+            for row in data.get("tilemap", []):
+                if item_id in row:
+                    count += 1
+                    break
+    return count
+
+
+def _cleanup_deprecated():
+    """Remove any deprecated monsters/tiles that are no longer referenced."""
+    for mid in list(deprecated_monsters):
+        if _count_room_references(mid, "monster") == 0:
+            del deprecated_monsters[mid]
+            server_log(f"[VIEWER] Cleaned up deprecated monster '{mid}'")
+    for tid in list(deprecated_tiles):
+        if _count_room_references(tid, "tile") == 0:
+            del deprecated_tiles[tid]
+            server_log(f"[VIEWER] Cleaned up deprecated tile '{tid}'")
+
+
 def handle_delete(lib_type: str, item_id: str):
-    """Delete an item from a library. Permanent items cannot be deleted."""
+    """Delete an item from a library.
+
+    Monsters/tiles: deprecated if still referenced by rooms, deleted if not.
+    Rooms: deleted immediately, then deprecated monsters/tiles are cleaned up.
+    Permanent items cannot be deleted.
+    """
     lib_map = {"monster": monster_lib, "tile": tile_lib, "room": room_lib}
     lib = lib_map.get(lib_type)
     if not lib:
         return json.dumps({"error": f"Unknown library type: {lib_type}"}), 404
 
-    # Check if it's a permanent entry
     entry = lib.get_by_id(item_id)
-    if entry and entry.permanent:
+    if not entry:
+        return json.dumps({"error": f"Item not found: {item_id}"}), 404
+    if entry.permanent:
         return json.dumps({"error": f"Cannot delete permanent item: {item_id}"}), 403
 
-    if lib.remove(item_id):
+    if lib_type in ("monster", "tile"):
+        ref_count = _count_room_references(item_id, lib_type)
+        deprecated_set = deprecated_monsters if lib_type == "monster" else deprecated_tiles
+        # Save entry data before removing from library
+        entry_data = {
+            "id": entry.id,
+            "tags": entry.tags,
+            "created_at": entry.created_at,
+            "data": entry.data,
+            "permanent": entry.permanent,
+        }
+        lib.remove(item_id)
+        if ref_count > 0:
+            deprecated_set[item_id] = entry_data
+            server_log(f"[VIEWER] Deprecated {lib_type} '{item_id}' ({ref_count} room refs)")
+        else:
+            server_log(f"[VIEWER] Deleted {lib_type} '{item_id}'")
         save_libraries()
+        return json.dumps({"ok": True, "deprecated": ref_count > 0, "ref_count": ref_count}), 200
+
+    else:  # room
+        lib.remove(item_id)
+        save_libraries()
+        _cleanup_deprecated()
+        server_log(f"[VIEWER] Deleted room '{item_id}'")
         return json.dumps({"ok": True}), 200
-    else:
-        return json.dumps({"error": f"Item not found: {item_id}"}), 404
 
 
 def handle_usage():

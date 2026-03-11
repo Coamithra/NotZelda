@@ -109,6 +109,16 @@ body { background: #1a1a2e; color: #e0e0e0; font-family: 'Consolas', 'Monaco', m
 .placement-list { list-style: none; padding: 0; }
 .placement-list li { font-size: 12px; padding: 1px 0; }
 
+/* Deprecated entries */
+.lib-item.deprecated { opacity: 0.55; }
+.lib-item.deprecated .name { text-decoration: line-through; color: #888; }
+.ref-badge {
+  background: #6a4a0a; color: #fda; font-size: 10px; padding: 0 5px;
+  border-radius: 8px; min-width: 16px; text-align: center; white-space: nowrap;
+}
+.badge-deprecated { background: #6a4a0a; color: #fda; }
+.deprecated-header { color: #6a4a0a; font-size: 11px; margin-top: 8px; margin-bottom: 4px; }
+
 /* Bottom bar */
 .bottombar {
   display: flex; align-items: center; gap: 16px; padding: 6px 16px;
@@ -303,6 +313,18 @@ function renderLibraryPanel() {
     const item = createMonsterItem(entry);
     mList.appendChild(item);
   }
+  // Deprecated monsters
+  const depM = libData.deprecated_monsters || [];
+  if (depM.length) {
+    const header = document.createElement('div');
+    header.className = 'deprecated-header';
+    header.textContent = `Deprecated (${depM.length})`;
+    mList.appendChild(header);
+    for (const entry of depM) {
+      const item = createMonsterItem(entry);
+      mList.appendChild(item);
+    }
+  }
 
   // Tiles
   const t = libData.tiles;
@@ -313,6 +335,18 @@ function renderLibraryPanel() {
   for (const entry of t.entries) {
     const item = createTileItem(entry);
     tList.appendChild(item);
+  }
+  // Deprecated tiles
+  const depT = libData.deprecated_tiles || [];
+  if (depT.length) {
+    const header = document.createElement('div');
+    header.className = 'deprecated-header';
+    header.textContent = `Deprecated (${depT.length})`;
+    tList.appendChild(header);
+    for (const entry of depT) {
+      const item = createTileItem(entry);
+      tList.appendChild(item);
+    }
   }
 
   // Rooms
@@ -342,6 +376,7 @@ function renderLibraryPanel() {
 function createMonsterItem(entry) {
   const div = document.createElement('div');
   div.className = 'lib-item';
+  if (entry.deprecated) div.classList.add('deprecated');
   div.dataset.type = 'monster';
   div.dataset.id = entry.id;
   if (selectedType === 'monster' && selectedId === entry.id) div.classList.add('selected');
@@ -356,7 +391,13 @@ function createMonsterItem(entry) {
   name.textContent = entry.id;
   div.appendChild(name);
 
-  if (!entry.permanent) {
+  if (entry.deprecated) {
+    const badge = document.createElement('span');
+    badge.className = 'ref-badge';
+    badge.textContent = `${entry.ref_count}r`;
+    badge.title = `Referenced by ${entry.ref_count} room(s)`;
+    div.appendChild(badge);
+  } else if (!entry.permanent) {
     const del = document.createElement('button');
     del.className = 'del-btn';
     del.textContent = '\u00D7';
@@ -371,6 +412,7 @@ function createMonsterItem(entry) {
 function createTileItem(entry) {
   const div = document.createElement('div');
   div.className = 'lib-item';
+  if (entry.deprecated) div.classList.add('deprecated');
   div.dataset.type = 'tile';
   div.dataset.id = entry.id;
   if (selectedType === 'tile' && selectedId === entry.id) div.classList.add('selected');
@@ -385,7 +427,13 @@ function createTileItem(entry) {
   name.textContent = entry.id;
   div.appendChild(name);
 
-  if (!entry.permanent) {
+  if (entry.deprecated) {
+    const badge = document.createElement('span');
+    badge.className = 'ref-badge';
+    badge.textContent = `${entry.ref_count}r`;
+    badge.title = `Referenced by ${entry.ref_count} room(s)`;
+    div.appendChild(badge);
+  } else if (!entry.permanent) {
     const del = document.createElement('button');
     del.className = 'del-btn';
     del.textContent = '\u00D7';
@@ -625,9 +673,12 @@ function showMonsterDetails(entry) {
   html += `<div class="detail-section"><span class="json-toggle" onclick="toggleJson()">Show raw JSON</span>`;
   html += `<div class="json-block" id="jsonBlock">${JSON.stringify(d, null, 2)}</div></div>`;
 
-  // Delete (hidden for permanent entries)
-  if (!entry.permanent) {
-    html += `<div class="detail-delete"><button class="detail-delete-btn" data-type="monster" data-id="${entry.id}">Delete Monster</button></div>`;
+  // Deprecated badge or delete button
+  if (entry.deprecated) {
+    html += `<div class="detail-section"><span class="badge badge-deprecated">Deprecated</span> `;
+    html += `<span style="color:#fda;font-size:12px">Referenced by ${entry.ref_count} room(s)</span></div>`;
+  } else if (!entry.permanent) {
+    html += `<div class="detail-delete"><button class="detail-delete-btn" data-type="monster" data-id="${entry.id}">Deprecate Monster</button></div>`;
   }
 
   panel.innerHTML = html;
@@ -690,9 +741,12 @@ function showTileDetails(entry) {
   html += `<div class="detail-section"><span class="json-toggle" onclick="toggleJson()">Show raw JSON</span>`;
   html += `<div class="json-block" id="jsonBlock">${JSON.stringify(d, null, 2)}</div></div>`;
 
-  // Delete (hidden for permanent entries)
-  if (!entry.permanent) {
-    html += `<div class="detail-delete"><button class="detail-delete-btn" data-type="tile" data-id="${entry.id}">Delete Tile</button></div>`;
+  // Deprecated badge or delete button
+  if (entry.deprecated) {
+    html += `<div class="detail-section"><span class="badge badge-deprecated">Deprecated</span> `;
+    html += `<span style="color:#fda;font-size:12px">Referenced by ${entry.ref_count} room(s)</span></div>`;
+  } else if (!entry.permanent) {
+    html += `<div class="detail-delete"><button class="detail-delete-btn" data-type="tile" data-id="${entry.id}">Deprecate Tile</button></div>`;
   }
 
   panel.innerHTML = html;
@@ -847,12 +901,18 @@ function generateTile() {
 async function deleteItem(type, id) {
   const { status, data } = await apiDelete(`/api/${type}/${encodeURIComponent(id)}`);
   if (status === 200) {
-    if (selectedType === type && selectedId === id) {
+    await loadLibraries();
+    // If the item was deprecated (not fully deleted), re-select it to show updated state
+    if (data.deprecated && selectedType === type && selectedId === id) {
+      const depList = type === 'monster' ? (libData.deprecated_monsters || [])
+                                         : (libData.deprecated_tiles || []);
+      const depEntry = depList.find(e => e.id === id);
+      if (depEntry) selectItem(type, depEntry);
+    } else if (selectedType === type && selectedId === id) {
       selectedType = null;
       selectedId = null;
       document.getElementById('detailPanel').innerHTML = '<div class="no-room">Select an item to view details</div>';
     }
-    await loadLibraries();
   }
 }
 

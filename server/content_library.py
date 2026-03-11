@@ -33,7 +33,7 @@ def normalize_tags(tags: list[str]) -> list[str]:
 # Configuration defaults
 # ---------------------------------------------------------------------------
 
-ROOM_LIBRARY_CAPACITY = 96      # 64 permanent + 32 custom
+ROOM_LIBRARY_CAPACITY = 79      # 64 permanent + 15 custom
 MONSTER_LIBRARY_CAPACITY = 8    # 4 permanent + 4 custom
 TILE_LIBRARY_CAPACITY = 14      # 7 permanent + 7 custom
 

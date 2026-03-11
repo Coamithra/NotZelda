@@ -129,10 +129,11 @@ def create_dungeon() -> DungeonInstance | None:
     cell_assignments = {}
 
     # Assign library entries to cells
-    # Split: ~50% precreated, ~50% custom (placeholder or real custom)
+    # Split: ~50% precreated, ~50% custom, capped at 15 custom per dungeon
     permanent_entries = [e for e in game.room_library.real_entries if e.permanent]
     custom_entries = [e for e in game.room_library.real_entries if not e.permanent]
     has_placeholders = game.room_library.placeholder_count > 0
+    max_custom_per_dungeon = 15
 
     random.shuffle(permanent_entries)
     random.shuffle(custom_entries)
@@ -140,25 +141,29 @@ def create_dungeon() -> DungeonInstance | None:
     # Decide per-cell: entrance always gets a precreated room
     perm_idx = 0
     custom_idx = 0
+    custom_assigned = 0
     for cell in active_cells:
         room_id = f"d1_{cell[0]}_{cell[1]}"
         active_rooms.add(room_id)
         room_map[cell] = room_id  # legacy compat — now maps cell to room_id
 
         is_entrance = (cell[0] == entrance_col and cell[1] == entrance_row)
+        custom_exhausted = custom_assigned >= max_custom_per_dungeon
 
-        if is_entrance or not custom_entries and not has_placeholders:
+        if is_entrance or custom_exhausted or (not custom_entries and not has_placeholders):
             # Use precreated
             entry = permanent_entries[perm_idx % len(permanent_entries)]
             perm_idx += 1
             cell_assignments[cell] = {"source": "precreated", "entry": entry, "resolved": False}
-        elif random.random() < 0.5 and custom_entries:
-            # Use existing custom entry
-            entry = custom_entries[custom_idx % len(custom_entries)]
+        elif random.random() < 0.5 and custom_entries and custom_idx < len(custom_entries):
+            # Use existing custom entry (no wrapping — each entry used at most once)
+            entry = custom_entries[custom_idx]
             custom_idx += 1
+            custom_assigned += 1
             cell_assignments[cell] = {"source": "custom", "entry": entry, "resolved": False}
         elif has_placeholders:
             # Placeholder — will need generation later
+            custom_assigned += 1
             cell_assignments[cell] = {"source": "custom", "entry": None, "resolved": False}
         else:
             # Fallback to precreated
@@ -248,6 +253,54 @@ def _save_libraries():
     print("[DUNGEON] Libraries saved to disk")
 
 
+def get_active_content_lists():
+    """Build monster/tile lists for AI prompts, excluding deprecated entries."""
+    monsters = []
+    if game.monster_library:
+        for e in game.monster_library.real_entries:
+            if e.id not in game.deprecated_monsters:
+                monsters.append({"kind": e.id, "tags": e.tags})
+    tiles = []
+    if game.tile_library:
+        for e in game.tile_library.real_entries:
+            if e.id not in game.deprecated_tiles:
+                tiles.append({"id": e.id, "walkable": e.data.get("walkable", False), "tags": e.tags})
+    return monsters, tiles
+
+
+def _get_referenced_ids(room_library):
+    """Scan all rooms in the library for referenced monster kinds and tile IDs."""
+    referenced_monsters = set()
+    referenced_tiles = set()
+    if not room_library:
+        return referenced_monsters, referenced_tiles
+    for entry in room_library.real_entries:
+        data = entry.data
+        for p in data.get("monster_placements", []):
+            referenced_monsters.add(p["kind"])
+        for row in data.get("tilemap", []):
+            for tid in row:
+                if isinstance(tid, str):
+                    referenced_tiles.add(tid)
+    return referenced_monsters, referenced_tiles
+
+
+def _cleanup_monster(mid):
+    """Fully remove a monster from game registries."""
+    game.monster_stats.pop(mid, None)
+    game.custom_sprites.pop(mid, None)
+    game.custom_death_sprites.pop(mid, None)
+    game.monster_behaviors.pop(mid, None)
+    game.deprecated_monsters.discard(mid)
+
+
+def _cleanup_tile(tid):
+    """Fully remove a tile from game registries."""
+    game.custom_tile_recipes.pop(tid, None)
+    game.custom_walkable_tiles.discard(tid)
+    game.deprecated_tiles.discard(tid)
+
+
 def destroy_dungeon():
     """Tear down the active dungeon instance and expire old custom content."""
     if game.active_dungeon is None:
@@ -264,30 +317,52 @@ def destroy_dungeon():
 
     layout_name = game.active_dungeon.layout['name']
 
-    # Expire oldest custom entries from libraries (skip permanent, respect min age)
-    expired = {}
-    for lib_name, lib in [("monster", game.monster_library),
-                          ("tile", game.tile_library),
-                          ("room", game.room_library)]:
-        if lib:
-            ids = lib.expire_oldest()
-            if ids:
-                expired[lib_name] = ids
-                # Clean up game registries for expired monsters/tiles
-                if lib_name == "monster":
-                    for mid in ids:
-                        game.monster_stats.pop(mid, None)
-                        game.custom_sprites.pop(mid, None)
-                        game.custom_death_sprites.pop(mid, None)
-                        game.monster_behaviors.pop(mid, None)
-                elif lib_name == "tile":
-                    for tid in ids:
-                        game.custom_tile_recipes.pop(tid, None)
-                        game.custom_walkable_tiles.discard(tid)
+    # Expire oldest custom rooms from the room library
+    expired_rooms = []
+    if game.room_library:
+        expired_rooms = game.room_library.expire_oldest()
+        if expired_rooms:
+            print(f"[DUNGEON] Expired rooms: {expired_rooms}")
 
-    if expired:
-        parts = [f"{k}: {v}" for k, v in expired.items()]
-        print(f"[DUNGEON] Expired: {', '.join(parts)}")
+    # Expire oldest custom monsters/tiles from their libraries
+    expired_monsters = []
+    expired_tiles = []
+    if game.monster_library:
+        expired_monsters = game.monster_library.expire_oldest()
+    if game.tile_library:
+        expired_tiles = game.tile_library.expire_oldest()
+
+    # Scan remaining rooms for referenced monster/tile IDs
+    ref_monsters, ref_tiles = _get_referenced_ids(game.room_library)
+
+    # Handle expired monsters: deprecate if still referenced, remove if not
+    for mid in expired_monsters:
+        if mid in ref_monsters:
+            game.deprecated_monsters.add(mid)
+            print(f"[DUNGEON] Deprecated monster '{mid}' (still referenced)")
+        else:
+            _cleanup_monster(mid)
+            print(f"[DUNGEON] Removed monster '{mid}'")
+
+    # Handle expired tiles: deprecate if still referenced, remove if not
+    for tid in expired_tiles:
+        if tid in ref_tiles:
+            game.deprecated_tiles.add(tid)
+            print(f"[DUNGEON] Deprecated tile '{tid}' (still referenced)")
+        else:
+            _cleanup_tile(tid)
+            print(f"[DUNGEON] Removed tile '{tid}'")
+
+    # Clean up previously deprecated entries that are no longer referenced
+    stale_monsters = game.deprecated_monsters - ref_monsters
+    for mid in stale_monsters:
+        _cleanup_monster(mid)
+        print(f"[DUNGEON] Cleaned up deprecated monster '{mid}'")
+
+    stale_tiles = game.deprecated_tiles - ref_tiles
+    for tid in stale_tiles:
+        _cleanup_tile(tid)
+        print(f"[DUNGEON] Cleaned up deprecated tile '{tid}'")
 
     # Save libraries to disk
     _save_libraries()

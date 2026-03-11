@@ -34,6 +34,12 @@ class GameState:
         self.tile_library = None     # ContentLibrary | None
         self.room_library = None     # ContentLibrary | None
 
+        # Deprecated content — removed from libraries but kept in game
+        # registries because existing rooms still reference them.
+        # Cleaned up when no room references them anymore.
+        self.deprecated_monsters = set()  # kind IDs
+        self.deprecated_tiles = set()     # tile IDs
+
         # Live game state
         self.players = {}            # websocket -> Player
         self.room_monsters = {}      # room_id -> [Monster]

@@ -191,7 +191,7 @@ Tag-based replacement examples:
 
 ## Staged Implementation Plan
 
-**Current status: Stages 1–6.5 complete. Next up: Stage 7 (Library-Managed Dungeon Generation).**
+**Current status: Stages 1–7 mostly complete. Stage 7 remaining: late-binding of monster/tile refs, wiring async `generate_room()` into placeholder resolution.**
 
 ### Stage 1: Tag & Metadata System ✅
 **Goal:** Define the data structures that everything else builds on.
@@ -481,7 +481,7 @@ entries are loaded from `data/*.json` and added to the remaining slots.
 
 | Library | Permanent | Custom | Total Capacity |
 |---|---|---|---|
-| Rooms | 64 | 32 | 96 |
+| Rooms | 64 | 15 | 79 |
 | Monsters | 4 | 4 | 8 |
 | Tiles | 7 | 7 | 14 |
 
@@ -514,7 +514,7 @@ New tiles render correctly in dungeon rooms.
 
 ---
 
-### Stage 7: Library-Managed Dungeon Generation (Lazy)
+### Stage 7: Library-Managed Dungeon Generation (Lazy) ⚙️
 **Goal:** Dungeons are built from the self-managing library. Custom
 rooms are generated **lazily** — only when a player actually enters,
 not all at once. Precreated rooms are always instant.
@@ -530,9 +530,11 @@ resolution is deferred to room entry.**
 
 1. Pick layout (N cells, 20–38 depending on shape)
 2. Randomly flag ~50% of cells as "precreated", ~50% as "custom"
-3. **Precreated cells** → random pick from 32 primary room library
+   (capped at 15 custom per dungeon)
+3. **Precreated cells** → random pick from 64 permanent room library
    entries (always instant)
-4. **Custom cells** → pull from custom room library slots:
+4. **Custom cells** → pull from custom room library slots (no
+   duplicates — each custom entry used at most once):
    - **Real entry** → use it (instant, late-bind any expired
      monster/tile refs via tag-overlap fallback)
    - **Placeholder** → lazy-generate on player entry via
@@ -542,27 +544,28 @@ resolution is deferred to room entry.**
      random from the 32 fallback room library entries
 
 #### Tasks
-- [ ] Expiry runs inside `destroy_dungeon()`:
+- [x] Expiry runs inside `destroy_dungeon()`:
   - Expire oldest ~N% of custom (non-permanent) entries per library
   - Only expire entries older than a minimum age
   - **Production defaults:** 10% rate, 24h minimum age
   - **Test defaults:** 50% rate, 5s minimum age
   - Save libraries to disk after expiry
-- [ ] Refactor `create_dungeon()` — instant, no API calls:
+- [x] Refactor `create_dungeon()` — instant, no API calls:
   1. Pick layout (existing logic)
-  2. Flag ~50% of cells as precreated, ~50% as custom
+  2. Flag ~50% of cells as precreated, ~50% as custom (capped at 15)
   3. Precreated cells → random pick from permanent room entries
-  4. Custom cells → random pick from custom room library slots
+  4. Custom cells → random pick from custom room library slots (no
+     wrapping — each entry used at most once)
   5. Store assignments in dungeon instance: `cell → library_entry`
   6. Resolve entrance room immediately (if placeholder, generate it)
   7. Player enters dungeon immediately
 - [ ] Add lazy resolution in `on_player_enter_room()`:
-  1. Already resolved? Use it (instant).
-  2. Real library entry? Late-bind monster/tile refs → instant.
-  3. Placeholder? Call `generate_room()` → add results to libraries.
-  4. API failure? Use fallback room from permanent entries.
-  5. Send all needed custom_sprites/custom_tiles to client.
-- [ ] **Loading animation** — client-side "conjuring" screen:
+  1. Already resolved? Use it (instant). ✅
+  2. Real library entry? Late-bind monster/tile refs → instant. **← NOT DONE**
+  3. Placeholder? Call `generate_room()` → add results to libraries. **← NOT DONE** (falls back to random permanent room)
+  4. API failure? Use fallback room from permanent entries. ✅
+  5. Send all needed custom_sprites/custom_tiles to client. ✅
+- [x] **Loading animation** — client-side "conjuring" screen:
   - Server sends `{ type: "room_generating" }` on lazy resolution
   - Dark overlay with flickering torchlight, drifting particles,
     mystical rune circles fading in/out
@@ -570,15 +573,13 @@ resolution is deferred to room entry.**
   - Minimum 1.5s duration (cosmetic for instant rooms)
   - Only on first visit per room — returning uses normal transition
   - Should feel like the dungeon building itself, not a loading screen
-- [ ] Resolved rooms stay resolved for dungeon lifetime
-- [ ] Persist libraries to disk after each generation
-- [ ] **Verbose server log** with `[GEN]` prefix for all events
-- [ ] **Debug panel** in backtick overlay:
-  - Library fill: `Lib: R:72/96 M:6/8 T:10/14`
-  - Last gen: `Gen: "Ember Sanctum" 1.8s 482tok`
+- [x] Resolved rooms stay resolved for dungeon lifetime
+- [x] Persist libraries to disk after each generation
+- [x] **Verbose server log** with `[DUNGEON]` prefix for all events
+- [x] **Debug panel** in backtick overlay:
+  - Library fill: `Lib: R:72/79 M:6/8 T:10/14`
   - Room source: `Room: precreated` / `Room: custom (library)` /
     `Room: custom (generated)` / `Room: fallback`
-  - API stats: `API: 12 calls today, $0.008`
   - Only shown for dungeon rooms
 
 **Flow example:**
@@ -712,7 +713,7 @@ All tunables in one place (top of `content_library.py`):
 
 ```python
 # Library capacities (total = permanent + custom placeholders)
-ROOM_LIBRARY_CAPACITY = 96     # 64 permanent + 32 custom
+ROOM_LIBRARY_CAPACITY = 79     # 64 permanent + 15 custom
 MONSTER_LIBRARY_CAPACITY = 8   # 4 permanent + 4 custom
 TILE_LIBRARY_CAPACITY = 14     # 7 permanent + 7 custom
 

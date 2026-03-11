@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 # Configuration
 # ---------------------------------------------------------------------------
 
-ANTHROPIC_MODEL = "claude-haiku-4-5"
+ANTHROPIC_MODEL = "claude-sonnet-4-6"
 GENERATION_TIMEOUT = 15.0       # seconds before giving up on API call
 CLI_TIMEOUT = 600.0             # CLI is much slower than API
 MAX_API_CALLS_PER_MINUTE = 15   # higher limit: one room = multiple calls
