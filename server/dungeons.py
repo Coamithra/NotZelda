@@ -271,7 +271,7 @@ async def _resolve_custom_slot(instance, assignment, room_id, player=None):
     if instance.custom_slots:
         slot = instance.custom_slots.pop()
     else:
-        slot = None  # pool exhausted — will generate fresh content
+        slot = None  # pool exhausted
 
     # Slot has existing content — use it directly
     if slot is not None and slot.get("data") is not None:
@@ -280,7 +280,22 @@ async def _resolve_custom_slot(instance, assignment, room_id, player=None):
         assignment["entry"] = entry
         return slot["data"], f"custom:{entry_id}"
 
-    # Empty slot or pool exhausted — generate new content
+    # Pool exhausted — fall back to a precreated room not already used in this dungeon
+    if slot is None and game.room_library:
+        used_ids = {a.get("entry").id for a in instance.cell_assignments.values()
+                    if a.get("entry") is not None}
+        available = [e for e in game.room_library.real_entries
+                     if e.permanent and e.id not in used_ids]
+        if not available:
+            # All permanent rooms used — allow duplicates as last resort
+            available = [e for e in game.room_library.real_entries if e.permanent]
+        if available:
+            pick = random.choice(available)
+            assignment["entry"] = pick
+            print(f"[DUNGEON] Pool exhausted for {room_id}, using precreated '{pick.id}'")
+            return pick.data, f"precreated-overflow:{pick.id}"
+
+    # Empty slot (placeholder) — generate new content via AI
     entry_data, source_label = await _generate_slot_content(
         instance, room_id, player)
 
