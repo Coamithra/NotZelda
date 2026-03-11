@@ -27,7 +27,8 @@ from dataclasses import dataclass, field
 # Configuration
 # ---------------------------------------------------------------------------
 
-ANTHROPIC_MODEL = "claude-sonnet-4-6"
+_debug = os.environ.get("DEBUG_MODE", "").lower() in ("1", "true")
+ANTHROPIC_MODEL = "claude-haiku-4-5-20251001" if _debug else "claude-sonnet-4-6"
 GENERATION_TIMEOUT = 15.0       # seconds before giving up on API call
 CLI_TIMEOUT = 600.0             # CLI is much slower than API
 MAX_API_CALLS_PER_MINUTE = 15   # higher limit: one room = multiple calls
@@ -79,6 +80,7 @@ class RateLimiter:
 
 MODEL_PRICING = {
     "claude-haiku-4-5":          (1.00, 5.00),
+    "claude-haiku-4-5-20251001": (1.00, 5.00),
     "claude-sonnet-4-6":        (3.00, 15.00),
     "claude-opus-4-6":          (15.00, 75.00),
 }

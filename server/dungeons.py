@@ -28,6 +28,11 @@ class DungeonInstance:
         self.cell_assignments = {}
         self.resolved_rooms = set()        # room_ids that have been materialized into game.rooms
 
+        # Custom slot pool — shared pool of room content for custom cells.
+        # Each slot: {"data": dict, "entry": LibraryEntry} or None (needs generation).
+        # Custom cells pick a random slot at resolution time.
+        self.custom_slots = []
+
 
 def _get_cell_exits(cell, room_map, layout, entrance_col, entrance_row):
     """Compute exits for a cell based on layout adjacency."""
@@ -131,47 +136,50 @@ async def create_dungeon() -> DungeonInstance | None:
     cell_assignments = {}
 
     # Assign library entries to cells
-    # Split: ~50% precreated, ~50% custom, capped at 15 custom per dungeon
     permanent_entries = [e for e in game.room_library.real_entries if e.permanent]
     custom_entries = [e for e in game.room_library.real_entries if not e.permanent]
     has_placeholders = game.room_library.placeholder_count > 0
-    max_custom_per_dungeon = 15
+    max_custom_slots = 15
 
     random.shuffle(permanent_entries)
     random.shuffle(custom_entries)
 
-    # Decide per-cell: entrance always gets a precreated room
+    # Shuffle cells so precreated/custom rooms are spatially distributed
+    random.shuffle(active_cells)
+
+    # Split: entrance always precreated, ~50% of rest are custom
+    non_entrance = [c for c in active_cells if not (c[0] == entrance_col and c[1] == entrance_row)]
+    if custom_entries or has_placeholders:
+        num_custom = len(non_entrance) // 2
+    else:
+        num_custom = 0
+    custom_cell_set = set(non_entrance[:num_custom])
+
     perm_idx = 0
-    custom_idx = 0
-    custom_assigned = 0
     for cell in active_cells:
         room_id = f"d1_{cell[0]}_{cell[1]}"
         active_rooms.add(room_id)
-        room_map[cell] = room_id  # legacy compat — now maps cell to room_id
+        room_map[cell] = room_id
 
-        is_entrance = (cell[0] == entrance_col and cell[1] == entrance_row)
-        custom_exhausted = custom_assigned >= max_custom_per_dungeon
-
-        if is_entrance or custom_exhausted or (not custom_entries and not has_placeholders):
-            # Use precreated
-            entry = permanent_entries[perm_idx % len(permanent_entries)]
-            perm_idx += 1
-            cell_assignments[cell] = {"source": "precreated", "entry": entry, "resolved": False}
-        elif random.random() < 0.5 and custom_entries and custom_idx < len(custom_entries):
-            # Use existing custom entry (no wrapping — each entry used at most once)
-            entry = custom_entries[custom_idx]
-            custom_idx += 1
-            custom_assigned += 1
-            cell_assignments[cell] = {"source": "custom", "entry": entry, "resolved": False}
-        elif has_placeholders:
-            # Placeholder — will need generation later
-            custom_assigned += 1
-            cell_assignments[cell] = {"source": "custom", "entry": None, "resolved": False}
+        if cell in custom_cell_set:
+            cell_assignments[cell] = {"source": "custom", "resolved": False}
         else:
-            # Fallback to precreated
             entry = permanent_entries[perm_idx % len(permanent_entries)]
             perm_idx += 1
             cell_assignments[cell] = {"source": "precreated", "entry": entry, "resolved": False}
+
+    # Build custom slot pool: pre-fill with existing custom library entries, rest need generation
+    if has_placeholders:
+        num_slots = max_custom_slots
+    else:
+        num_slots = min(len(custom_entries), max_custom_slots)
+    custom_slots = []
+    for i in range(num_slots):
+        if i < len(custom_entries):
+            custom_slots.append({"data": custom_entries[i].data, "entry": custom_entries[i]})
+        else:
+            custom_slots.append(None)
+    random.shuffle(custom_slots)
 
     instance = DungeonInstance(
         dungeon_id="d1",
@@ -182,15 +190,18 @@ async def create_dungeon() -> DungeonInstance | None:
         music_track=music_track,
     )
     instance.cell_assignments = cell_assignments
+    instance.custom_slots = custom_slots
     game.active_dungeon = instance
 
-    # Count sources for logging
+    # Logging
     precreated_count = sum(1 for a in cell_assignments.values() if a["source"] == "precreated")
-    custom_real = sum(1 for a in cell_assignments.values() if a["source"] == "custom" and a["entry"] is not None)
-    custom_placeholder = sum(1 for a in cell_assignments.values() if a["source"] == "custom" and a["entry"] is None)
+    custom_count = sum(1 for a in cell_assignments.values() if a["source"] == "custom")
+    filled_slots = sum(1 for s in custom_slots if s is not None)
+    empty_slots = num_slots - filled_slots
 
     print(f"[DUNGEON] Created instance: layout={layout['name']}, "
-          f"rooms={len(active_rooms)} ({precreated_count}p/{custom_real}c/{custom_placeholder}g), "
+          f"rooms={len(active_rooms)} ({precreated_count}p/{custom_count}c), "
+          f"slots={num_slots} ({filled_slots}filled/{empty_slots}empty), "
           f"entrance={entrance_room_id}, music={music_track}")
 
     # Resolve the entrance room immediately (always precreated, so instant)
@@ -202,8 +213,8 @@ async def create_dungeon() -> DungeonInstance | None:
 async def resolve_dungeon_room(instance: DungeonInstance, cell: tuple, player=None) -> bool:
     """Materialize a library entry into a live game.rooms[] entry.
 
-    For precreated or real custom entries, this is instant.
-    For placeholders (entry is None), calls AI generation with permanent fallback.
+    For precreated entries, uses the pre-assigned library entry (instant).
+    For custom entries, picks a random slot from the shared pool — generates if needed.
     player: optional Player object for sending progress updates (DEBUG_GENERATION).
     Returns True if successfully resolved.
     """
@@ -211,49 +222,95 @@ async def resolve_dungeon_room(instance: DungeonInstance, cell: tuple, player=No
     if not assignment or assignment["resolved"]:
         return True  # already resolved
 
-    # Concurrency: if another coroutine is already generating this cell, wait
+    # Concurrency: if another coroutine is already resolving this cell, wait
     resolve_event = assignment.get("_resolve_event")
     if resolve_event is not None:
         await resolve_event.wait()
         return assignment["resolved"]
 
-    col, row = cell
-    room_id = f"d1_{col}_{row}"
-    entrance_col, entrance_row = instance.layout["entrance"]
-    is_entrance = (col == entrance_col and row == entrance_row)
+    # Mark cell as being resolved
+    event = asyncio.Event()
+    assignment["_resolve_event"] = event
 
-    exits = _get_cell_exits(cell, {c: True for c in instance.cell_assignments},
-                            instance.layout, entrance_col, entrance_row)
+    try:
+        col, row = cell
+        room_id = f"d1_{col}_{row}"
+        entrance_col, entrance_row = instance.layout["entrance"]
+        is_entrance = (col == entrance_col and row == entrance_row)
 
-    entry = assignment["entry"]
-    if entry is not None:
-        # Real entry (precreated or custom) — use its data directly
-        entry_data = entry.data
-        source_label = f"{assignment['source']}:{entry.id}"
-    else:
-        # Placeholder — try AI generation, fall back to permanent room on failure
-        event = asyncio.Event()
-        assignment["_resolve_event"] = event
-        try:
-            entry_data, source_label = await _generate_placeholder_room(
+        exits = _get_cell_exits(cell, {c: True for c in instance.cell_assignments},
+                                instance.layout, entrance_col, entrance_row)
+
+        if assignment["source"] == "precreated":
+            entry_data = assignment["entry"].data
+            source_label = f"precreated:{assignment['entry'].id}"
+        else:
+            # Custom cell — pick a random slot from the shared pool
+            entry_data, source_label = await _resolve_custom_slot(
                 instance, assignment, room_id, player)
-        finally:
-            event.set()
+            if entry_data is None:
+                return False
 
-        if entry_data is None:
-            return False
+        _resolve_room_from_entry(room_id, entry_data, exits, cell, instance.music_track, is_entrance)
 
-    _resolve_room_from_entry(room_id, entry_data, exits, cell, instance.music_track, is_entrance)
+        assignment["resolved"] = True
+        instance.resolved_rooms.add(room_id)
+        print(f"[DUNGEON] Resolved {room_id} ({source_label})")
+        return True
+    finally:
+        event.set()
 
-    assignment["resolved"] = True
-    instance.resolved_rooms.add(room_id)
-    print(f"[DUNGEON] Resolved {room_id} ({source_label})")
-    return True
+
+async def _resolve_custom_slot(instance, assignment, room_id, player=None):
+    """Pick a random custom slot and use/generate its content.
+
+    Returns (entry_data, source_label) on success, or (None, None) on failure.
+    """
+    slot_idx = random.randint(0, len(instance.custom_slots) - 1)
+    slot = instance.custom_slots[slot_idx]
+
+    # Slot already has content — use it directly
+    if slot is not None and slot.get("data") is not None:
+        entry = slot.get("entry")
+        entry_id = entry.id if entry else "unknown"
+        assignment["entry"] = entry
+        assignment["slot_idx"] = slot_idx
+        return slot["data"], f"slot:{slot_idx}:{entry_id}"
+
+    # Slot is being generated by another coroutine — wait for it
+    if slot is not None and slot.get("_event") is not None:
+        await slot["_event"].wait()
+        slot = instance.custom_slots[slot_idx]
+        if slot and slot.get("data"):
+            assignment["entry"] = slot.get("entry")
+            assignment["slot_idx"] = slot_idx
+            return slot["data"], f"slot:{slot_idx}:waited"
+        # Generation failed — slot now has fallback data or is still None
+        if slot and slot.get("data") is None:
+            return None, None
+
+    # Slot is empty — generate content for it
+    slot_event = asyncio.Event()
+    instance.custom_slots[slot_idx] = {"_event": slot_event, "data": None, "entry": None}
+
+    try:
+        entry_data, source_label = await _generate_slot_content(
+            instance, slot_idx, room_id, player)
+    finally:
+        slot_event.set()
+
+    if entry_data is not None:
+        assignment["entry"] = instance.custom_slots[slot_idx].get("entry")
+        assignment["slot_idx"] = slot_idx
+        return entry_data, f"slot:{slot_idx}:{source_label}"
+
+    return None, None
 
 
-async def _generate_placeholder_room(instance, assignment, room_id, player=None):
-    """Generate a room via AI for a placeholder cell, or fall back to a permanent room.
+async def _generate_slot_content(instance, slot_idx, room_id, player=None):
+    """Generate content for an empty custom slot via AI, with permanent fallback.
 
+    Stores the result on instance.custom_slots[slot_idx].
     Returns (entry_data, source_label) on success, or (None, None) on hard failure.
     """
     from server import ai_generator
@@ -285,7 +342,7 @@ async def _generate_placeholder_room(instance, assignment, room_id, player=None)
         e.data.get("name", e.id) for e in game.room_library.real_entries
     ]
 
-    print(f"[DUNGEON] Generating room for {room_id} via AI...")
+    print(f"[DUNGEON] Generating content for slot {slot_idx} (triggered by {room_id}) via AI...")
     result = await ai_generator.generate_room(
         theme="dungeon",
         difficulty=random.randint(3, 7),
@@ -303,17 +360,17 @@ async def _generate_placeholder_room(instance, assignment, room_id, player=None)
 
     # Check if dungeon was destroyed while we were awaiting AI
     if game.active_dungeon is not instance:
-        print(f"[DUNGEON] Dungeon destroyed during generation of {room_id}")
+        print(f"[DUNGEON] Dungeon destroyed during generation of slot {slot_idx}")
         return None, None
 
     if result is None:
         # AI generation failed — fall back to a random permanent room
-        print(f"[DUNGEON] AI generation failed for {room_id}, using fallback")
+        print(f"[DUNGEON] AI generation failed for slot {slot_idx}, using fallback")
         fallback = game.room_library.get_random_real()
         if fallback is None:
-            print(f"[DUNGEON] ERROR: No fallback room for {room_id}")
+            print(f"[DUNGEON] ERROR: No fallback room for slot {slot_idx}")
             return None, None
-        assignment["entry"] = fallback
+        instance.custom_slots[slot_idx] = {"data": fallback.data, "entry": fallback}
         return fallback.data, f"fallback:{fallback.id}"
 
     # Register new monsters into game registries + library
@@ -361,13 +418,15 @@ async def _generate_placeholder_room(instance, assignment, room_id, player=None)
         data=result,
     )
     game.room_library.add(room_entry)
-    assignment["entry"] = room_entry
+
+    # Store on slot for reuse by other cells
+    instance.custom_slots[slot_idx] = {"data": result, "entry": room_entry}
 
     _save_libraries()
 
     new_m = [m["kind"] for m in result.get("new_monsters", [])]
     new_t = [t["id"] for t in result.get("new_tiles", [])]
-    print(f"[DUNGEON] Generated {room_id}: \"{room_name}\" "
+    print(f"[DUNGEON] Generated slot {slot_idx}: \"{room_name}\" "
           f"(monsters={new_m}, tiles={new_t})")
     return result, f"generated:{lib_id}"
 

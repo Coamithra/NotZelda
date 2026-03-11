@@ -56,8 +56,13 @@ async def on_player_enter_room(room_id: str):
     game.room_monsters[room_id] = monsters
 
 
-async def on_player_leave_room(room_id: str):
-    """Called after a player leaves a room. Cleans up if room is now empty."""
+async def on_player_leave_room(room_id: str, skip_dungeon_teardown: bool = False):
+    """Called after a player leaves a room. Cleans up if room is now empty.
+
+    skip_dungeon_teardown: set True when the player is transitioning to another
+    dungeon room (they're temporarily removed from game.players so the count
+    would incorrectly hit 0).
+    """
     if players_in_room(room_id):
         return  # still has players
 
@@ -76,9 +81,10 @@ async def on_player_leave_room(room_id: str):
             game.room_cooldowns[room_id] = time.monotonic()
 
     # Dungeon cleanup — destroy instance when all players have left
-    if game.active_dungeon and room_id in game.active_dungeon.active_rooms:
-        if dungeon_player_count() == 0:
-            destroy_dungeon()
+    if not skip_dungeon_teardown:
+        if game.active_dungeon and room_id in game.active_dungeon.active_rooms:
+            if dungeon_player_count() == 0:
+                destroy_dungeon()
 
 
 async def send_room_enter(player, exit_direction: str = None):
@@ -146,14 +152,17 @@ async def send_room_enter(player, exit_direction: str = None):
         for cell, assignment in inst.cell_assignments.items():
             room_id_check = f"d1_{cell[0]}_{cell[1]}"
             if room_id_check == player.room:
-                entry = assignment.get("entry")
                 source = assignment["source"]
-                if entry is None:
-                    debug["room_source"] = "custom (generated)"
-                elif source == "precreated":
-                    debug["room_source"] = f"precreated ({entry.id})"
+                if source == "precreated":
+                    entry = assignment.get("entry")
+                    debug["room_source"] = f"precreated ({entry.id})" if entry else "precreated"
                 else:
-                    debug["room_source"] = f"custom ({entry.id})"
+                    slot_idx = assignment.get("slot_idx", "?")
+                    entry = assignment.get("entry")
+                    if entry:
+                        debug["room_source"] = f"custom slot {slot_idx} ({entry.id})"
+                    else:
+                        debug["room_source"] = f"custom slot {slot_idx}"
                 break
 
         # Minimap data (DEBUG_MODE only)
@@ -165,7 +174,7 @@ async def send_room_enter(player, exit_direction: str = None):
                     "c": c, "r": r,
                     "src": asn["source"],           # "precreated" or "custom"
                     "res": asn["resolved"],          # True/False
-                    "gen": asn["entry"] is not None,  # has content (vs placeholder)
+                    "gen": asn.get("entry") is not None,  # has content assigned
                     "ent": c == entrance_col and r == entrance_row,
                 })
             # Find which cell the player is in
@@ -246,37 +255,51 @@ async def do_room_transition(player, exit_direction: str):
                     # Send conjuring animation for custom rooms (placeholder or library)
                     if assignment["source"] == "custom":
                         await send_to(player, {"type": "room_generating"})
-                    if not await resolve_dungeon_room(game.active_dungeon, cell, player=player):
+                    # Remove player from game during generation so monsters can't target them
+                    game.players.pop(player.ws, None)
+                    try:
+                        resolved = await resolve_dungeon_room(game.active_dungeon, cell, player=player)
+                    finally:
+                        game.players[player.ws] = player
+                    if not resolved:
                         await send_to(player, {"type": "info", "text": "The way is blocked."})
                         return
                     break
 
     new_room = game.rooms[new_room_id]
 
-    # Broadcast departure
-    await broadcast_to_room(old_room, {"type": "player_left", "name": player.name}, exclude=player.ws)
+    # Remove player from game during the transition so monster ticks / projectiles
+    # can't target them while they're between rooms.
+    game.players.pop(player.ws, None)
+    try:
+        # Broadcast departure (player already removed, so exclude isn't needed
+        # but other players in old room still see the message)
+        await broadcast_to_room(old_room, {"type": "player_left", "name": player.name})
 
-    # Move player — preserve column/row through the doorway
-    old_x, old_y = player.x, player.y
-    player.room = new_room_id
-    entry = ENTRY_DIR.get(exit_direction, "default")
-    spawn = new_room["spawn_points"].get(entry, new_room["spawn_points"]["default"])
-    player.x, player.y = spawn
-    if exit_direction in ("north", "south"):
-        player.x = old_x  # keep column
-    elif exit_direction in ("east", "west"):
-        player.y = old_y  # keep row
+        # Move player — preserve column/row through the doorway
+        old_x, old_y = player.x, player.y
+        player.room = new_room_id
+        entry = ENTRY_DIR.get(exit_direction, "default")
+        spawn = new_room["spawn_points"].get(entry, new_room["spawn_points"]["default"])
+        player.x, player.y = spawn
+        if exit_direction in ("north", "south"):
+            player.x = old_x  # keep column
+        elif exit_direction in ("east", "west"):
+            player.y = old_y  # keep row
 
-    # Monster lifecycle — leave old room, enter new room
-    await on_player_leave_room(old_room)
-    await on_player_enter_room(new_room_id)
+        # Monster lifecycle — leave old room, enter new room
+        # Skip dungeon teardown if the player is moving to another dungeon room
+        # (they're removed from game.players so dungeon_player_count would be wrong)
+        entering_dungeon = is_dungeon_room(new_room_id)
+        await on_player_leave_room(old_room, skip_dungeon_teardown=entering_dungeon)
+        await on_player_enter_room(new_room_id)
 
-    # Send new room to player
-    await send_room_enter(player, exit_direction=exit_direction)
-
-    # Broadcast arrival
-    await broadcast_to_room(
-        new_room_id,
-        {"type": "player_entered", **player_info(player)},
-        exclude=player.ws,
-    )
+        # Send new room data and broadcast arrival while still removed,
+        # so monster_tick can't target us before the client has loaded.
+        await send_room_enter(player, exit_direction=exit_direction)
+        await broadcast_to_room(
+            new_room_id,
+            {"type": "player_entered", **player_info(player)},
+        )
+    finally:
+        game.players[player.ws] = player

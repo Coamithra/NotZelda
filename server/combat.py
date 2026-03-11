@@ -66,28 +66,33 @@ async def damage_player(player, damage: int, room_id: str):
 
         # Respawn after delay (match client death animation duration)
         await asyncio.sleep(PLAYER_RESPAWN_DELAY)
-        old_room = player.room
-        player.hp = player.max_hp
-        player.room = STARTING_ROOM
-        spawn = game.rooms[STARTING_ROOM]["spawn_points"]["default"]
-        player.x, player.y = spawn
-        player.direction = "down"
-        player.dancing = False
 
-        # Import here to avoid circular dependency (lifecycle -> combat -> lifecycle)
-        from server.lifecycle import on_player_enter_room, on_player_leave_room, send_room_enter
+        # Remove from game during respawn so ticks/projectiles can't target us
+        game.players.pop(player.ws, None)
+        try:
+            old_room = player.room
+            player.hp = player.max_hp
+            player.room = STARTING_ROOM
+            spawn = game.rooms[STARTING_ROOM]["spawn_points"]["default"]
+            player.x, player.y = spawn
+            player.direction = "down"
+            player.dancing = False
 
-        await broadcast_to_room(old_room, {
-            "type": "player_left", "name": player.name,
-        })
-        await on_player_leave_room(old_room)
-        await on_player_enter_room(STARTING_ROOM)
-        await send_room_enter(player)
-        await broadcast_to_room(
-            STARTING_ROOM,
-            {"type": "player_entered", **player_info(player)},
-            exclude=player.ws,
-        )
+            # Import here to avoid circular dependency (lifecycle -> combat -> lifecycle)
+            from server.lifecycle import on_player_enter_room, on_player_leave_room, send_room_enter
+
+            await broadcast_to_room(old_room, {
+                "type": "player_left", "name": player.name,
+            })
+            await on_player_leave_room(old_room)
+            await on_player_enter_room(STARTING_ROOM)
+            await send_room_enter(player)
+            await broadcast_to_room(
+                STARTING_ROOM,
+                {"type": "player_entered", **player_info(player)},
+            )
+        finally:
+            game.players[player.ws] = player
 
 
 async def handle_attack(player):
