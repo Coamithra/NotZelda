@@ -1296,15 +1296,22 @@ async def generate_room(
     monster_library_capacity: int = 20,
     tile_library_count: int = 0,
     tile_library_capacity: int = 20,
+    progress=None,
 ) -> dict | None:
     """Generate a complete dungeon room via multiple focused AI calls.
 
     Rolls for 0-2 new monsters and 0-2 new tiles, generates them first,
     then generates the layout with the full inventory.
 
+    progress: optional async callback(step: str, detail: str) called at each step.
+
     Returns the validated room dict, or None on failure.
     Each dict has: name, tilemap, new_tiles, new_monsters, monster_placements.
     """
+    async def _progress(step, detail=""):
+        if progress:
+            await progress(step, detail)
+
     if AI_BACKEND == "api" and not os.environ.get("ANTHROPIC_API_KEY"):
         print("[GEN] No ANTHROPIC_API_KEY set — skipping generation")
         return None
@@ -1324,6 +1331,7 @@ async def generate_room(
     new_monsters = []
     for i in range(num_new_monsters):
         # Step 1: Generate design (kind, tags, stats, behavior)
+        await _progress("monster_design", f"Designing monster {i+1}/{num_new_monsters}...")
         design = await generate_monster_design(
             theme, difficulty,
             existing_monsters + [{"kind": m["kind"], "tags": m.get("tags", [])} for m in new_monsters],
@@ -1333,6 +1341,7 @@ async def generate_room(
             continue
 
         # Step 2: Generate sprite for this design
+        await _progress("monster_sprite", f"Drawing {design['kind']}...")
         attack_types = [r.get("do") for r in design.get("behavior", {}).get("rules", [])
                         if r.get("do") in {"projectile", "charge", "teleport", "area"}]
         sprite_data = await generate_monster_sprite(
@@ -1357,6 +1366,7 @@ async def generate_room(
 
     new_tiles = []
     if num_new_tiles > 0:
+        await _progress("tiles", f"Crafting {num_new_tiles} tile(s)...")
         tile_result = await generate_tiles(
             theme, difficulty, existing_tiles, count=num_new_tiles)
         if tile_result:
@@ -1366,6 +1376,7 @@ async def generate_room(
             print("[GEN] Tile generation failed, continuing with existing tiles only")
 
     # --- Step 3: Generate layout ---
+    await _progress("layout", "Designing room layout...")
     all_monsters = existing_monsters + [
         {"kind": m["kind"], "tags": m.get("tags", [])} for m in new_monsters
     ]
@@ -1396,6 +1407,7 @@ async def generate_room(
         "new_monsters": new_monsters,
         "monster_placements": layout["monster_placements"],
     }
+    await _progress("done", f"Room complete: \"{result['name']}\"")
     print(f"[GEN] Room complete: \"{result['name']}\" "
           f"({len(new_monsters)} new monsters, {len(new_tiles)} new tiles, "
           f"{len(result['monster_placements'])} placements)")

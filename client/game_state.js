@@ -89,12 +89,13 @@ const G = {
 
   // Transition
   transition: null,      // {direction, oldCanvas, startTime, duration}
-  conjuring: null,       // {startTime, pendingRoomEnter} — dungeon room generating animation
+  conjuring: null,       // {startTime, pendingRoomEnter, progressSteps[]} — dungeon room generating animation
   gameLoopStarted: false,
 
   // Debug
+  debugMode: false,      // server-controlled via DEBUG_MODE env var
   showDebug: false,
-  dungeonDebug: null,    // {lib_monsters, lib_tiles, lib_rooms, room_source} — from server
+  dungeonDebug: null,    // {lib_monsters, lib_tiles, lib_rooms, room_source, minimap?} — from server
   debugLog: [],
   MAX_DEBUG_LINES: 8,
 

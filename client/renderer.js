@@ -624,6 +624,27 @@ function renderConjuring(now) {
   G.ctx.fillStyle = `rgba(180, 170, 140, ${textAlpha})`;
   G.ctx.textAlign = "center";
   G.ctx.fillText(CONJURE_TEXTS[textIdx], CW / 2, CH * 0.65);
+
+  // Debug progress steps (sent when DEBUG_MODE is on)
+  const steps = G.conjuring.progressSteps;
+  if (steps && steps.length > 0) {
+    G.ctx.font = "12px monospace";
+    // Show last 5 steps, most recent at bottom
+    const visible = steps.slice(-5);
+    for (let i = 0; i < visible.length; i++) {
+      const s = visible[i];
+      const age = (Date.now() - s.time) / 1000;
+      const isLatest = i === visible.length - 1;
+      // Latest step pulses, older steps are dim
+      const a = isLatest ? 0.5 + 0.3 * Math.sin(t * 3) : Math.max(0.15, 0.4 - age * 0.03);
+      const prefix = isLatest ? "> " : "  ";
+      G.ctx.fillStyle = isLatest
+        ? `rgba(120, 220, 160, ${a})`
+        : `rgba(140, 140, 120, ${a})`;
+      G.ctx.fillText(prefix + s.detail, CW / 2, CH * 0.75 + i * 16);
+    }
+  }
+
   G.ctx.textAlign = "start";
 
   return true; // signal that conjuring is active
@@ -653,4 +674,95 @@ function renderDungeonDebug() {
   for (let i = 0; i < lines.length; i++) {
     G.ctx.fillText(lines[i], boxX + padding, boxY + padding + (i + 1) * lineH - 2);
   }
+}
+
+function renderDungeonMinimap() {
+  if (!G.showDebug) return;
+  const mm = G.dungeonDebug && G.dungeonDebug.minimap;
+  if (!mm || !mm.cells || mm.cells.length === 0) return;
+
+  const cells = mm.cells;
+  const pc = mm.player; // [col, row] of player's current cell
+
+  // Find grid bounds
+  let minC = Infinity, maxC = -Infinity, minR = Infinity, maxR = -Infinity;
+  for (const cell of cells) {
+    if (cell.c < minC) minC = cell.c;
+    if (cell.c > maxC) maxC = cell.c;
+    if (cell.r < minR) minR = cell.r;
+    if (cell.r > maxR) maxR = cell.r;
+  }
+  const gridW = maxC - minC + 1;
+  const gridH = maxR - minR + 1;
+
+  const cellSize = 10;
+  const gap = 2;
+  const step = cellSize + gap;
+  const pad = 8;
+
+  const mapW = gridW * step - gap + pad * 2;
+  const mapH = gridH * step - gap + pad * 2;
+  const mapX = CW - mapW - 6;
+  const mapY = CH - mapH - 6;
+
+  // Semi-transparent background
+  G.ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+  roundRect(G.ctx, mapX, mapY, mapW, mapH, 4);
+  G.ctx.fill();
+
+  // Draw each cell
+  for (const cell of cells) {
+    const cx = mapX + pad + (cell.c - minC) * step;
+    const cy = mapY + pad + (cell.r - minR) * step;
+
+    // Color based on state
+    if (!cell.res && !cell.gen) {
+      // Unresolved placeholder — dashed outline, no fill
+      G.ctx.strokeStyle = "rgba(100, 100, 100, 0.6)";
+      G.ctx.setLineDash([2, 2]);
+      G.ctx.strokeRect(cx + 0.5, cy + 0.5, cellSize - 1, cellSize - 1);
+      G.ctx.setLineDash([]);
+    } else if (!cell.res) {
+      // Unresolved but has content — dim outline
+      G.ctx.strokeStyle = "rgba(140, 140, 100, 0.7)";
+      G.ctx.strokeRect(cx + 0.5, cy + 0.5, cellSize - 1, cellSize - 1);
+    } else if (cell.src === "precreated") {
+      // Resolved precreated — blue
+      G.ctx.fillStyle = "rgba(80, 140, 220, 0.7)";
+      G.ctx.fillRect(cx, cy, cellSize, cellSize);
+    } else {
+      // Resolved custom — green
+      G.ctx.fillStyle = "rgba(80, 200, 120, 0.7)";
+      G.ctx.fillRect(cx, cy, cellSize, cellSize);
+    }
+
+    // Entrance marker — small diamond
+    if (cell.ent) {
+      G.ctx.fillStyle = "rgba(255, 220, 80, 0.9)";
+      const mx = cx + cellSize / 2, my = cy + cellSize / 2;
+      G.ctx.beginPath();
+      G.ctx.moveTo(mx, my - 3);
+      G.ctx.lineTo(mx + 3, my);
+      G.ctx.lineTo(mx, my + 3);
+      G.ctx.lineTo(mx - 3, my);
+      G.ctx.closePath();
+      G.ctx.fill();
+    }
+  }
+
+  // Player position — pulsing white border
+  if (pc) {
+    const px = mapX + pad + (pc[0] - minC) * step;
+    const py = mapY + pad + (pc[1] - minR) * step;
+    const pulse = 0.6 + 0.4 * Math.sin(Date.now() / 200);
+    G.ctx.strokeStyle = `rgba(255, 255, 255, ${pulse})`;
+    G.ctx.lineWidth = 2;
+    G.ctx.strokeRect(px - 1, py - 1, cellSize + 2, cellSize + 2);
+    G.ctx.lineWidth = 1;
+  }
+
+  // Legend — tiny text below the map
+  G.ctx.font = "7px monospace";
+  G.ctx.fillStyle = "rgba(180, 180, 180, 0.6)";
+  G.ctx.fillText(mm.layout, mapX + pad, mapY + mapH + 8);
 }

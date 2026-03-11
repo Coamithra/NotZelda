@@ -30,7 +30,7 @@ document.addEventListener("keydown", (e) => {
     return;
   }
 
-  if (e.key === "`" && !G.chatFocused) {
+  if (e.key === "`" && !G.chatFocused && G.debugMode) {
     G.showDebug = !G.showDebug;
     return;
   }
@@ -201,7 +201,7 @@ if (G.isMobile) {
   };
 }
 
-// Debug overlay toggle
+// Debug overlay toggle (only works when server has DEBUG_MODE on)
 document.getElementById("debug-btn").addEventListener("click", () => {
-  G.showDebug = !G.showDebug;
+  if (G.debugMode) G.showDebug = !G.showDebug;
 });

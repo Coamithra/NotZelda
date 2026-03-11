@@ -1,5 +1,6 @@
 """Room lifecycle — monster spawning, room enter/leave, room transitions."""
 
+import os
 import random
 import time
 
@@ -133,6 +134,7 @@ async def send_room_enter(player, exit_direction: str = None):
 
     # Attach dungeon debug info for dungeon rooms
     if is_dungeon_room(player.room) and game.active_dungeon:
+        inst = game.active_dungeon
         debug = {}
         if game.monster_library:
             debug["lib_monsters"] = f"{game.monster_library.real_count}/{game.monster_library.capacity}"
@@ -141,7 +143,7 @@ async def send_room_enter(player, exit_direction: str = None):
         if game.room_library:
             debug["lib_rooms"] = f"{game.room_library.real_count}/{game.room_library.capacity}"
         # Find source for this room
-        for cell, assignment in game.active_dungeon.cell_assignments.items():
+        for cell, assignment in inst.cell_assignments.items():
             room_id_check = f"d1_{cell[0]}_{cell[1]}"
             if room_id_check == player.room:
                 entry = assignment.get("entry")
@@ -153,6 +155,31 @@ async def send_room_enter(player, exit_direction: str = None):
                 else:
                     debug["room_source"] = f"custom ({entry.id})"
                 break
+
+        # Minimap data (DEBUG_MODE only)
+        if os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+            entrance_col, entrance_row = inst.layout["entrance"]
+            cells = []
+            for (c, r), asn in inst.cell_assignments.items():
+                cells.append({
+                    "c": c, "r": r,
+                    "src": asn["source"],           # "precreated" or "custom"
+                    "res": asn["resolved"],          # True/False
+                    "gen": asn["entry"] is not None,  # has content (vs placeholder)
+                    "ent": c == entrance_col and r == entrance_row,
+                })
+            # Find which cell the player is in
+            player_cell = None
+            for (c, r) in inst.cell_assignments:
+                if f"d1_{c}_{r}" == player.room:
+                    player_cell = [c, r]
+                    break
+            debug["minimap"] = {
+                "cells": cells,
+                "player": player_cell,
+                "layout": inst.layout["name"],
+            }
+
         msg["dungeon_debug"] = debug
 
     await send_to(player, msg)
@@ -181,7 +208,7 @@ async def do_room_transition(player, exit_direction: str):
                     # Send conjuring animation for custom rooms (placeholder or library)
                     if assignment["source"] == "custom":
                         await send_to(player, {"type": "room_generating"})
-                    if not await resolve_dungeon_room(game.active_dungeon, cell):
+                    if not await resolve_dungeon_room(game.active_dungeon, cell, player=player):
                         await send_to(player, {"type": "info", "text": "The way is blocked."})
                         return
                     break

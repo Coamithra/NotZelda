@@ -1,6 +1,7 @@
 """Dungeon instance system — procedurally generated dungeon layouts."""
 
 import asyncio
+import os
 import random
 import time
 
@@ -198,11 +199,12 @@ async def create_dungeon() -> DungeonInstance | None:
     return instance
 
 
-async def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
+async def resolve_dungeon_room(instance: DungeonInstance, cell: tuple, player=None) -> bool:
     """Materialize a library entry into a live game.rooms[] entry.
 
     For precreated or real custom entries, this is instant.
     For placeholders (entry is None), calls AI generation with permanent fallback.
+    player: optional Player object for sending progress updates (DEBUG_GENERATION).
     Returns True if successfully resolved.
     """
     assignment = instance.cell_assignments.get(cell)
@@ -234,7 +236,7 @@ async def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
         assignment["_resolve_event"] = event
         try:
             entry_data, source_label = await _generate_placeholder_room(
-                instance, assignment, room_id)
+                instance, assignment, room_id, player)
         finally:
             event.set()
 
@@ -249,7 +251,7 @@ async def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
     return True
 
 
-async def _generate_placeholder_room(instance, assignment, room_id):
+async def _generate_placeholder_room(instance, assignment, room_id, player=None):
     """Generate a room via AI for a placeholder cell, or fall back to a permanent room.
 
     Returns (entry_data, source_label) on success, or (None, None) on hard failure.
@@ -257,6 +259,20 @@ async def _generate_placeholder_room(instance, assignment, room_id):
     from server import ai_generator
     from server.validation import register_monster_type, register_tile_type
     from server.content_library import LibraryEntry
+    from server.net import send_to
+
+    # Progress callback — sends updates to the waiting player if DEBUG_MODE is on
+    progress_cb = None
+    if player and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+        async def progress_cb(step, detail):
+            try:
+                await send_to(player, {
+                    "type": "room_generating_progress",
+                    "step": step,
+                    "detail": detail,
+                })
+            except Exception:
+                pass  # player may have disconnected
 
     existing_monsters, existing_tiles = get_active_content_lists()
     existing_room_names = [
@@ -276,6 +292,7 @@ async def _generate_placeholder_room(instance, assignment, room_id):
         monster_library_capacity=game.monster_library.capacity,
         tile_library_count=game.tile_library.real_count,
         tile_library_capacity=game.tile_library.capacity,
+        progress=progress_cb,
     )
 
     # Check if dungeon was destroyed while we were awaiting AI

@@ -76,6 +76,7 @@ function handleMessage(msg) {
       G.myColorIndex = msg.color_index;
       G.myHp = msg.hp;
       G.myMaxHp = msg.max_hp;
+      G.debugMode = !!msg.debug_mode;
       G.playerFlags = new Set();
       G.loginScreen.classList.add("hidden");
       G.gameScreen.classList.add("active");
@@ -88,7 +89,18 @@ function handleMessage(msg) {
 
     case "room_generating":
       // Server is generating a dungeon room — show conjuring animation
-      G.conjuring = { startTime: Date.now(), pendingRoomEnter: null };
+      G.conjuring = { startTime: Date.now(), pendingRoomEnter: null, progressSteps: [] };
+      break;
+
+    case "room_generating_progress":
+      // Debug mode: AI generation progress update
+      if (G.conjuring) {
+        G.conjuring.progressSteps.push({
+          step: msg.step,
+          detail: msg.detail,
+          time: Date.now(),
+        });
+      }
       break;
 
     case "room_enter": {

@@ -7,9 +7,19 @@ Then open http://localhost:8080 in your browser.
 
 import asyncio
 import json
+import os
 import time
 from http import HTTPStatus
 from pathlib import Path
+
+# Load .env file if present (before any server imports that read env vars)
+_env_path = Path(__file__).parent / ".env"
+if _env_path.exists():
+    for _line in _env_path.read_text().splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _key, _, _val = _line.partition("=")
+            os.environ.setdefault(_key.strip(), _val.strip())
 
 import websockets
 
@@ -212,14 +222,14 @@ async def handle_chat(player, text: str):
                 await broadcast_to_room(player.room, {
                     "type": "chat", "from": player.name, "text": f"*{action}*",
                 })
-        elif cmd == "cheat":
+        elif cmd == "cheat" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
             player.grant_flag("has_sword")
             player.grant_flag("invulnerable")
             player.hp = player.max_hp
             await send_to(player, {"type": "sword_obtained"})
             await send_to(player, {"type": "hp_update", "hp": player.hp, "max_hp": player.max_hp})
             await send_to(player, {"type": "info", "text": "Cheat mode: sword + invulnerability"})
-        elif cmd == "debug_spawn":
+        elif cmd == "debug_spawn" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
             await handle_debug_spawn(player, parts[1] if len(parts) > 1 else "")
         else:
             await send_to(player, {"type": "info", "text": "Unknown command. Try /help"})
@@ -272,7 +282,10 @@ async def handle_connection(websocket):
         log_event("JOIN", f"{name} ({player.description})")
         print(f"[JOIN] {name} from {addr}")
 
-        await send_to(player, {"type": "login_ok", "color_index": color_index, "hp": PLAYER_MAX_HP, "max_hp": PLAYER_MAX_HP})
+        login_msg = {"type": "login_ok", "color_index": color_index, "hp": PLAYER_MAX_HP, "max_hp": PLAYER_MAX_HP}
+        if os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+            login_msg["debug_mode"] = True
+        await send_to(player, login_msg)
         await on_player_enter_room(player.room)
         await send_room_enter(player)
         await broadcast_to_room(
