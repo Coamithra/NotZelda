@@ -115,21 +115,32 @@ async def send_room_enter(player, exit_direction: str = None):
         "max_hp": player.max_hp,
     }
 
-    # Attach custom sprite/tile data for any AI-generated content in this room
+    # Attach custom sprite/tile data so the client can render them.
+    # For dungeon rooms, send ALL registered custom content (the player may
+    # encounter any of it as they explore). For overworld rooms, send only
+    # what's present in the current room.
+    is_dungeon = is_dungeon_room(player.room)
     custom_sprites = {}
     custom_death_sprites = {}
-    for m in monsters:
-        kind = m["kind"]
-        if kind in game.custom_sprites:
-            custom_sprites[kind] = game.custom_sprites[kind]
-        if kind in game.custom_death_sprites:
-            custom_death_sprites[kind] = game.custom_death_sprites[kind]
+    if is_dungeon:
+        custom_sprites = dict(game.custom_sprites)
+        custom_death_sprites = dict(game.custom_death_sprites)
+    else:
+        for m in monsters:
+            kind = m["kind"]
+            if kind in game.custom_sprites:
+                custom_sprites[kind] = game.custom_sprites[kind]
+            if kind in game.custom_death_sprites:
+                custom_death_sprites[kind] = game.custom_death_sprites[kind]
     custom_tiles = {}
-    tilemap = room["tilemap"]
-    for row in tilemap:
-        for tid in row:
-            if isinstance(tid, str) and tid in game.custom_tile_recipes:
-                custom_tiles[tid] = game.custom_tile_recipes[tid]
+    if is_dungeon:
+        custom_tiles = dict(game.custom_tile_recipes)
+    else:
+        tilemap = room["tilemap"]
+        for row in tilemap:
+            for tid in row:
+                if isinstance(tid, str) and tid in game.custom_tile_recipes:
+                    custom_tiles[tid] = game.custom_tile_recipes[tid]
 
     if custom_sprites:
         msg["custom_sprites"] = custom_sprites
@@ -157,12 +168,11 @@ async def send_room_enter(player, exit_direction: str = None):
                     entry = assignment.get("entry")
                     debug["room_source"] = f"precreated ({entry.id})" if entry else "precreated"
                 else:
-                    slot_idx = assignment.get("slot_idx", "?")
                     entry = assignment.get("entry")
                     if entry:
-                        debug["room_source"] = f"custom slot {slot_idx} ({entry.id})"
+                        debug["room_source"] = f"custom ({entry.id})"
                     else:
-                        debug["room_source"] = f"custom slot {slot_idx}"
+                        debug["room_source"] = "custom"
                 break
 
         # Minimap data (DEBUG_MODE only)
@@ -206,6 +216,7 @@ def _build_library_icons():
         return "#888"
 
     monsters = []
+    monster_empty = 0
     if game.monster_library:
         for e in game.monster_library.real_entries:
             color = _primary_color(game.custom_sprites.get(e.id, {}).get("colors", {}))
@@ -216,8 +227,10 @@ def _build_library_icons():
             else:
                 status = "cus"
             monsters.append({"id": e.id, "s": status, "color": color})
+        monster_empty = game.monster_library.placeholder_count
 
     tiles = []
+    tile_empty = 0
     if game.tile_library:
         for e in game.tile_library.real_entries:
             color = _primary_color(game.custom_tile_recipes.get(e.id, {}).get("colors", {}))
@@ -228,8 +241,10 @@ def _build_library_icons():
             else:
                 status = "cus"
             tiles.append({"id": e.id, "s": status, "color": color})
+        tile_empty = game.tile_library.placeholder_count
 
-    return {"monsters": monsters, "tiles": tiles}
+    return {"monsters": monsters, "tiles": tiles,
+            "monster_empty": monster_empty, "tile_empty": tile_empty}
 
 
 async def do_room_transition(player, exit_direction: str):

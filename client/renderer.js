@@ -684,13 +684,14 @@ function renderDungeonDebug() {
     G.ctx.fillText(lines[i], boxX + padding, boxY + padding + (i + 1) * lineH - 2);
   }
 
-  // Library icons with actual sprites/tiles (below the text panel)
+  // Library icons with actual sprites/tiles (just below the room name)
   const libs = d.libraries;
   if (libs) {
     const iconS = 16;   // icon size (matches 16x16 sprite grid at S=1)
     const iconG = 2;    // gap between icons
-    const rowG = 14;    // gap between rows
-    const lx = 4, ly = boxY + boxH + 6;
+    const rowG = 12;    // gap between rows (label + spacing)
+    const perRow = 5;   // max icons per row
+    const lx = 4, ly = 32;
     const statusBorder = {
       pre: "#58a0f0",  // blue — precreated
       cus: "#50d878",  // green — custom
@@ -699,57 +700,60 @@ function renderDungeonDebug() {
 
     let nextY = ly;
 
-    // Monster row — render actual sprites
-    if (libs.monsters && libs.monsters.length > 0) {
+    // Helper: draw a grid of icons with wrapping at perRow
+    function drawIconGrid(items, emptyCount, label, drawIcon) {
+      const total = items.length + emptyCount;
+      if (total === 0) return;
       G.ctx.font = "8px monospace";
       G.ctx.fillStyle = "rgba(180, 180, 160, 0.7)";
-      G.ctx.fillText("monsters", lx, nextY);
+      G.ctx.fillText(label, lx, nextY);
       nextY += 3;
-      for (let i = 0; i < libs.monsters.length; i++) {
-        const m = libs.monsters[i];
-        const ix = lx + (iconS + iconG) * i;
-        const iy = nextY;
-        // Dark background
+      let idx = 0;
+      for (let i = 0; i < items.length; i++, idx++) {
+        const col = idx % perRow, row = Math.floor(idx / perRow);
+        const ix = lx + (iconS + iconG) * col;
+        const iy = nextY + (iconS + iconG) * row;
         G.ctx.fillStyle = "#0a0a12";
         G.ctx.fillRect(ix, iy, iconS, iconS);
-        // Draw actual monster sprite at S=1
-        drawMonsterSprite(G.ctx, ix, iy, m.id, 0, 1);
-        // Status border
-        G.ctx.strokeStyle = statusBorder[m.s] || "#888";
+        drawIcon(items[i], ix, iy);
+        G.ctx.strokeStyle = statusBorder[items[i].s] || "#888";
         G.ctx.lineWidth = 1.5;
         G.ctx.strokeRect(ix + 0.5, iy + 0.5, iconS - 1, iconS - 1);
       }
+      for (let i = 0; i < emptyCount; i++, idx++) {
+        const col = idx % perRow, row = Math.floor(idx / perRow);
+        const ix = lx + (iconS + iconG) * col;
+        const iy = nextY + (iconS + iconG) * row;
+        G.ctx.fillStyle = "#0a0a12";
+        G.ctx.fillRect(ix, iy, iconS, iconS);
+        G.ctx.strokeStyle = "#333";
+        G.ctx.lineWidth = 1;
+        G.ctx.setLineDash([2, 2]);
+        G.ctx.strokeRect(ix + 0.5, iy + 0.5, iconS - 1, iconS - 1);
+        G.ctx.setLineDash([]);
+      }
       G.ctx.lineWidth = 1;
-      nextY += iconS + rowG;
+      const rows = Math.ceil((items.length + emptyCount) / perRow);
+      nextY += rows * (iconS + iconG) + rowG - iconG;
     }
 
-    // Tile row — render actual tile graphics
-    if (libs.tiles && libs.tiles.length > 0) {
-      G.ctx.font = "8px monospace";
-      G.ctx.fillStyle = "rgba(180, 180, 160, 0.7)";
-      G.ctx.fillText("tiles", lx, nextY);
-      nextY += 3;
-      for (let i = 0; i < libs.tiles.length; i++) {
-        const ti = libs.tiles[i];
-        const ix = lx + (iconS + iconG) * i;
-        const iy = nextY;
-        // Render actual tile scaled down from full-size cached canvas
-        const tc = getTileCanvas(ti.id, TS, TILE, SCALE);
-        if (tc) {
-          G.ctx.imageSmoothingEnabled = false;
-          G.ctx.drawImage(tc, 0, 0, tc.width, tc.height, ix, iy, iconS, iconS);
-          G.ctx.imageSmoothingEnabled = true;
-        } else {
-          G.ctx.fillStyle = ti.color;
-          G.ctx.fillRect(ix, iy, iconS, iconS);
-        }
-        // Status border
-        G.ctx.strokeStyle = statusBorder[ti.s] || "#888";
-        G.ctx.lineWidth = 1.5;
-        G.ctx.strokeRect(ix + 0.5, iy + 0.5, iconS - 1, iconS - 1);
+    // Monster icons
+    drawIconGrid(libs.monsters || [], libs.monster_empty || 0, "monsters", (m, ix, iy) => {
+      drawMonsterSprite(G.ctx, ix, iy, m.id, 0, 1);
+    });
+
+    // Tile icons
+    drawIconGrid(libs.tiles || [], libs.tile_empty || 0, "tiles", (ti, ix, iy) => {
+      const tc = getTileCanvas(ti.id, TS, TILE, SCALE);
+      if (tc) {
+        G.ctx.imageSmoothingEnabled = false;
+        G.ctx.drawImage(tc, 0, 0, tc.width, tc.height, ix, iy, iconS, iconS);
+        G.ctx.imageSmoothingEnabled = true;
+      } else {
+        G.ctx.fillStyle = ti.color;
+        G.ctx.fillRect(ix, iy, iconS, iconS);
       }
-      G.ctx.lineWidth = 1;
-    }
+    });
   }
 }
 
