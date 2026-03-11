@@ -226,13 +226,13 @@
 <button id="debug-btn">&pi;</button>
 
 <!-- Game scripts — load order matters -->
-<script src="game_state.js?v=1"></script>
+<script src="game_state.js?v=2"></script>
 <script src="tiles.js?v=3"></script>
 <script src="sprite_data.js?v=3"></script>
 <script src="sprites.js?v=3"></script>
 <script src="music.js?v=9"></script>
-<script src="renderer.js?v=1"></script>
-<script src="net.js?v=1"></script>
+<script src="renderer.js?v=2"></script>
+<script src="net.js?v=2"></script>
 <script>
 // ---------------------------------------------------------------------------
 // Init — bind DOM refs and start game loop
@@ -375,6 +375,6 @@ function gameLoop(timestamp) {
 }
 </script>
 <!-- Input must load after DOM refs are bound and functions defined -->
-<script src="input.js?v=1"></script>
+<script src="input.js?v=2"></script>
 </body>
 </html>

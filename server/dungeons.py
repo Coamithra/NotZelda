@@ -274,6 +274,12 @@ async def _generate_placeholder_room(instance, assignment, room_id, player=None)
             except Exception:
                 pass  # player may have disconnected
 
+        # Send backend info as first progress message
+        backend = ai_generator.AI_BACKEND
+        model = ai_generator.ANTHROPIC_MODEL
+        label = f"{model} via {backend}" + (" (subscription)" if backend == "cli" else " (API)")
+        await progress_cb("init", label)
+
     existing_monsters, existing_tiles = get_active_content_lists()
     existing_room_names = [
         e.data.get("name", e.id) for e in game.room_library.real_entries

@@ -628,9 +628,18 @@ function renderConjuring(now) {
   // Debug progress steps (sent when DEBUG_MODE is on)
   const steps = G.conjuring.progressSteps;
   if (steps && steps.length > 0) {
+    // Backend/model header (from "init" step) — persistent dim text
+    const initStep = steps.find(s => s.step === "init");
+    if (initStep) {
+      G.ctx.font = "10px monospace";
+      G.ctx.fillStyle = "rgba(120, 120, 100, 0.5)";
+      G.ctx.fillText(initStep.detail, CW / 2, CH * 0.73);
+    }
+
+    // Generation steps (skip "init")
     G.ctx.font = "12px monospace";
-    // Show last 5 steps, most recent at bottom
-    const visible = steps.slice(-5);
+    const work = steps.filter(s => s.step !== "init");
+    const visible = work.slice(-5);
     for (let i = 0; i < visible.length; i++) {
       const s = visible[i];
       const age = (Date.now() - s.time) / 1000;
@@ -641,7 +650,7 @@ function renderConjuring(now) {
       G.ctx.fillStyle = isLatest
         ? `rgba(120, 220, 160, ${a})`
         : `rgba(140, 140, 120, ${a})`;
-      G.ctx.fillText(prefix + s.detail, CW / 2, CH * 0.75 + i * 16);
+      G.ctx.fillText(prefix + s.detail, CW / 2, CH * 0.77 + i * 16);
     }
   }
 
@@ -673,6 +682,74 @@ function renderDungeonDebug() {
   G.ctx.fillStyle = "#8af";
   for (let i = 0; i < lines.length; i++) {
     G.ctx.fillText(lines[i], boxX + padding, boxY + padding + (i + 1) * lineH - 2);
+  }
+
+  // Library icons with actual sprites/tiles (below the text panel)
+  const libs = d.libraries;
+  if (libs) {
+    const iconS = 16;   // icon size (matches 16x16 sprite grid at S=1)
+    const iconG = 2;    // gap between icons
+    const rowG = 14;    // gap between rows
+    const lx = 4, ly = boxY + boxH + 6;
+    const statusBorder = {
+      pre: "#58a0f0",  // blue — precreated
+      cus: "#50d878",  // green — custom
+      dep: "#e05040",  // red — deprecated
+    };
+
+    let nextY = ly;
+
+    // Monster row — render actual sprites
+    if (libs.monsters && libs.monsters.length > 0) {
+      G.ctx.font = "8px monospace";
+      G.ctx.fillStyle = "rgba(180, 180, 160, 0.7)";
+      G.ctx.fillText("monsters", lx, nextY);
+      nextY += 3;
+      for (let i = 0; i < libs.monsters.length; i++) {
+        const m = libs.monsters[i];
+        const ix = lx + (iconS + iconG) * i;
+        const iy = nextY;
+        // Dark background
+        G.ctx.fillStyle = "#0a0a12";
+        G.ctx.fillRect(ix, iy, iconS, iconS);
+        // Draw actual monster sprite at S=1
+        drawMonsterSprite(G.ctx, ix, iy, m.id, 0, 1);
+        // Status border
+        G.ctx.strokeStyle = statusBorder[m.s] || "#888";
+        G.ctx.lineWidth = 1.5;
+        G.ctx.strokeRect(ix + 0.5, iy + 0.5, iconS - 1, iconS - 1);
+      }
+      G.ctx.lineWidth = 1;
+      nextY += iconS + rowG;
+    }
+
+    // Tile row — render actual tile graphics
+    if (libs.tiles && libs.tiles.length > 0) {
+      G.ctx.font = "8px monospace";
+      G.ctx.fillStyle = "rgba(180, 180, 160, 0.7)";
+      G.ctx.fillText("tiles", lx, nextY);
+      nextY += 3;
+      for (let i = 0; i < libs.tiles.length; i++) {
+        const ti = libs.tiles[i];
+        const ix = lx + (iconS + iconG) * i;
+        const iy = nextY;
+        // Render actual tile scaled down from full-size cached canvas
+        const tc = getTileCanvas(ti.id, TS, TILE, SCALE);
+        if (tc) {
+          G.ctx.imageSmoothingEnabled = false;
+          G.ctx.drawImage(tc, 0, 0, tc.width, tc.height, ix, iy, iconS, iconS);
+          G.ctx.imageSmoothingEnabled = true;
+        } else {
+          G.ctx.fillStyle = ti.color;
+          G.ctx.fillRect(ix, iy, iconS, iconS);
+        }
+        // Status border
+        G.ctx.strokeStyle = statusBorder[ti.s] || "#888";
+        G.ctx.lineWidth = 1.5;
+        G.ctx.strokeRect(ix + 0.5, iy + 0.5, iconS - 1, iconS - 1);
+      }
+      G.ctx.lineWidth = 1;
+    }
   }
 }
 

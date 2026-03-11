@@ -179,10 +179,48 @@ async def send_room_enter(player, exit_direction: str = None):
                 "player": player_cell,
                 "layout": inst.layout["name"],
             }
+            debug["libraries"] = _build_library_icons()
 
         msg["dungeon_debug"] = debug
 
     await send_to(player, msg)
+
+
+def _build_library_icons():
+    """Build compact library summary for the conjuring screen debug overlay."""
+    def _primary_color(colors_dict):
+        """Extract the first color value from a colors dict."""
+        if isinstance(colors_dict, dict):
+            for v in colors_dict.values():
+                if isinstance(v, str) and v.startswith("#"):
+                    return v
+        return "#888"
+
+    monsters = []
+    if game.monster_library:
+        for e in game.monster_library.real_entries:
+            color = _primary_color(game.custom_sprites.get(e.id, {}).get("colors", {}))
+            if e.id in game.deprecated_monsters:
+                status = "dep"
+            elif e.permanent:
+                status = "pre"
+            else:
+                status = "cus"
+            monsters.append({"id": e.id, "s": status, "color": color})
+
+    tiles = []
+    if game.tile_library:
+        for e in game.tile_library.real_entries:
+            color = _primary_color(game.custom_tile_recipes.get(e.id, {}).get("colors", {}))
+            if e.id in game.deprecated_tiles:
+                status = "dep"
+            elif e.permanent:
+                status = "pre"
+            else:
+                status = "cus"
+            tiles.append({"id": e.id, "s": status, "color": color})
+
+    return {"monsters": monsters, "tiles": tiles}
 
 
 async def do_room_transition(player, exit_direction: str):
