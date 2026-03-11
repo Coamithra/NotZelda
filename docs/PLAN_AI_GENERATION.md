@@ -191,7 +191,7 @@ Tag-based replacement examples:
 
 ## Staged Implementation Plan
 
-**Current status: Stages 1–7 mostly complete. Stage 7 remaining: late-binding of monster/tile refs, wiring async `generate_room()` into placeholder resolution.**
+**Current status: Stages 1–7 complete. Async `generate_room()` wired into `resolve_dungeon_room()` for placeholder cells. Remaining polish: late-binding of monster/tile refs, refactor monster_tick to remove awaits.**
 
 ### Stage 1: Tag & Metadata System ✅
 **Goal:** Define the data structures that everything else builds on.
@@ -562,7 +562,7 @@ resolution is deferred to room entry.**
 - [ ] Add lazy resolution in `on_player_enter_room()`:
   1. Already resolved? Use it (instant). ✅
   2. Real library entry? Late-bind monster/tile refs → instant. **← NOT DONE**
-  3. Placeholder? Call `generate_room()` → add results to libraries. **← NOT DONE** (falls back to random permanent room)
+  3. Placeholder? Call `generate_room()` → register monsters/tiles, add to libraries, persist. Falls back to permanent room on failure. ✅
   4. API failure? Use fallback room from permanent entries. ✅
   5. Send all needed custom_sprites/custom_tiles to client. ✅
 - [x] **Loading animation** — client-side "conjuring" screen:

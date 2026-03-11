@@ -2,6 +2,7 @@
 
 import asyncio
 import random
+import time
 
 from server.state import game
 from server.constants import (
@@ -101,7 +102,7 @@ def _resolve_room_from_entry(room_id, entry_data, exits, cell, music_track, is_e
         ]
 
 
-def create_dungeon() -> DungeonInstance | None:
+async def create_dungeon() -> DungeonInstance | None:
     """Create a new dungeon instance using library-managed content.
 
     Picks a random layout, assigns library entries to each cell (~50% precreated,
@@ -191,22 +192,28 @@ def create_dungeon() -> DungeonInstance | None:
           f"rooms={len(active_rooms)} ({precreated_count}p/{custom_real}c/{custom_placeholder}g), "
           f"entrance={entrance_room_id}, music={music_track}")
 
-    # Resolve the entrance room immediately
-    resolve_dungeon_room(instance, (entrance_col, entrance_row))
+    # Resolve the entrance room immediately (always precreated, so instant)
+    await resolve_dungeon_room(instance, (entrance_col, entrance_row))
 
     return instance
 
 
-def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
+async def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
     """Materialize a library entry into a live game.rooms[] entry.
 
     For precreated or real custom entries, this is instant.
-    For placeholders (entry is None), falls back to a random permanent room.
+    For placeholders (entry is None), calls AI generation with permanent fallback.
     Returns True if successfully resolved.
     """
     assignment = instance.cell_assignments.get(cell)
     if not assignment or assignment["resolved"]:
         return True  # already resolved
+
+    # Concurrency: if another coroutine is already generating this cell, wait
+    resolve_event = assignment.get("_resolve_event")
+    if resolve_event is not None:
+        await resolve_event.wait()
+        return assignment["resolved"]
 
     col, row = cell
     room_id = f"d1_{col}_{row}"
@@ -218,19 +225,21 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
 
     entry = assignment["entry"]
     if entry is not None:
-        # Real entry (precreated or custom) — use its data
+        # Real entry (precreated or custom) — use its data directly
         entry_data = entry.data
         source_label = f"{assignment['source']}:{entry.id}"
     else:
-        # Placeholder — fall back to a random permanent room for now
-        # (async generation will be added in a later step)
-        fallback = game.room_library.get_random_real()
-        if fallback is None:
-            print(f"[DUNGEON] ERROR: No fallback room for {room_id}")
+        # Placeholder — try AI generation, fall back to permanent room on failure
+        event = asyncio.Event()
+        assignment["_resolve_event"] = event
+        try:
+            entry_data, source_label = await _generate_placeholder_room(
+                instance, assignment, room_id)
+        finally:
+            event.set()
+
+        if entry_data is None:
             return False
-        entry_data = fallback.data
-        assignment["entry"] = fallback
-        source_label = f"fallback:{fallback.id}"
 
     _resolve_room_from_entry(room_id, entry_data, exits, cell, instance.music_track, is_entrance)
 
@@ -238,6 +247,106 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
     instance.resolved_rooms.add(room_id)
     print(f"[DUNGEON] Resolved {room_id} ({source_label})")
     return True
+
+
+async def _generate_placeholder_room(instance, assignment, room_id):
+    """Generate a room via AI for a placeholder cell, or fall back to a permanent room.
+
+    Returns (entry_data, source_label) on success, or (None, None) on hard failure.
+    """
+    from server import ai_generator
+    from server.validation import register_monster_type, register_tile_type
+    from server.content_library import LibraryEntry
+
+    existing_monsters, existing_tiles = get_active_content_lists()
+    existing_room_names = [
+        e.data.get("name", e.id) for e in game.room_library.real_entries
+    ]
+
+    print(f"[DUNGEON] Generating room for {room_id} via AI...")
+    result = await ai_generator.generate_room(
+        theme="dungeon",
+        difficulty=random.randint(3, 7),
+        existing_monsters=existing_monsters,
+        existing_tiles=existing_tiles,
+        monster_library_full=game.monster_library.is_full,
+        tile_library_full=game.tile_library.is_full,
+        existing_room_names=existing_room_names,
+        monster_library_count=game.monster_library.real_count,
+        monster_library_capacity=game.monster_library.capacity,
+        tile_library_count=game.tile_library.real_count,
+        tile_library_capacity=game.tile_library.capacity,
+    )
+
+    # Check if dungeon was destroyed while we were awaiting AI
+    if game.active_dungeon is not instance:
+        print(f"[DUNGEON] Dungeon destroyed during generation of {room_id}")
+        return None, None
+
+    if result is None:
+        # AI generation failed — fall back to a random permanent room
+        print(f"[DUNGEON] AI generation failed for {room_id}, using fallback")
+        fallback = game.room_library.get_random_real()
+        if fallback is None:
+            print(f"[DUNGEON] ERROR: No fallback room for {room_id}")
+            return None, None
+        assignment["entry"] = fallback
+        return fallback.data, f"fallback:{fallback.id}"
+
+    # Register new monsters into game registries + library
+    for m in result.get("new_monsters", []):
+        ok, errors = register_monster_type(m)
+        if ok:
+            game.monster_library.add(LibraryEntry(
+                id=m["kind"],
+                content_type="monster",
+                tags=m.get("tags", []),
+                created_at=time.time(),
+                data=m,
+            ))
+        else:
+            print(f"[DUNGEON] Monster registration failed for {m.get('kind')}: {errors}")
+
+    # Register new tiles into game registries + library
+    for t in result.get("new_tiles", []):
+        ok, errors = register_tile_type(t)
+        if ok:
+            game.tile_library.add(LibraryEntry(
+                id=t["id"],
+                content_type="tile",
+                tags=t.get("tags", []),
+                created_at=time.time(),
+                data=t,
+            ))
+        else:
+            print(f"[DUNGEON] Tile registration failed for {t.get('id')}: {errors}")
+
+    # Add room to library (deduplicate ID)
+    room_name = result.get("name", "Unknown Room")
+    lib_id = room_name.lower().replace(" ", "_")
+    base_id = lib_id
+    counter = 1
+    while game.room_library.get_by_id(lib_id):
+        counter += 1
+        lib_id = f"{base_id}_{counter}"
+
+    room_entry = LibraryEntry(
+        id=lib_id,
+        content_type="room",
+        tags=[],
+        created_at=time.time(),
+        data=result,
+    )
+    game.room_library.add(room_entry)
+    assignment["entry"] = room_entry
+
+    _save_libraries()
+
+    new_m = [m["kind"] for m in result.get("new_monsters", [])]
+    new_t = [t["id"] for t in result.get("new_tiles", [])]
+    print(f"[DUNGEON] Generated {room_id}: \"{room_name}\" "
+          f"(monsters={new_m}, tiles={new_t})")
+    return result, f"generated:{lib_id}"
 
 
 def _save_libraries():

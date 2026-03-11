@@ -166,7 +166,7 @@ async def do_room_transition(player, exit_direction: str):
     # Dungeon entrance — create instance on demand
     if new_room_id == "d1_entrance":
         if game.active_dungeon is None:
-            if create_dungeon() is None:
+            if await create_dungeon() is None:
                 await send_to(player, {"type": "info", "text": "The dungeon entrance is sealed."})
                 return
         new_room_id = game.active_dungeon.entrance_room_id
@@ -181,7 +181,7 @@ async def do_room_transition(player, exit_direction: str):
                     # Send conjuring animation for custom rooms (placeholder or library)
                     if assignment["source"] == "custom":
                         await send_to(player, {"type": "room_generating"})
-                    if not resolve_dungeon_room(game.active_dungeon, cell):
+                    if not await resolve_dungeon_room(game.active_dungeon, cell):
                         await send_to(player, {"type": "info", "text": "The way is blocked."})
                         return
                     break
