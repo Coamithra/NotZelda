@@ -443,6 +443,11 @@ async def monster_tick():
                     continue
                 monster.last_tick_time = now
 
+                # Re-check: room may have been deleted during a previous
+                # monster's await (dungeon teardown mid-iteration)
+                if room_id not in game.rooms:
+                    break
+
                 result = behavior_engine.monster_tick(monster, room_id)
                 if result is None:
                     continue
