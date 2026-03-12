@@ -223,69 +223,151 @@ def _resolve_direction(direction, monster, room_id):
 # ---------------------------------------------------------------------------
 
 def _resolve_move(rule, monster, room_id):
-    """Resolve a move action. Returns {"action": "move", "x", "y"} or None."""
+    """Resolve a move action. Returns {"action": "move", "x", "y"} or None.
+
+    The `speed` parameter (default 1) controls how many tiles the monster
+    moves in a single action. The monster takes up to `speed` steps, stopping
+    early if blocked by a wall or NPC.
+
+    The `diagonal` parameter (default false) controls whether multi-step
+    movement can change direction between steps. When false, the monster picks
+    one direction and continues straight. When true, direction is re-evaluated
+    each step, allowing diagonal paths (only matters for player/away with speed > 1).
+    """
     direction = rule.get("direction", "random")
+    speed = max(1, int(rule.get("speed", 1)))
+    diagonal = rule.get("diagonal", False)
 
     if direction == "patrol":
-        return _resolve_patrol_move(rule, monster, room_id)
+        return _resolve_patrol_move(rule, monster, room_id, speed)
 
     if direction == "random":
-        # Wander: try random adjacent walkable tiles
+        # Wander: pick a random direction, move up to `speed` tiles
         dirs = [(0, -1), (0, 1), (-1, 0), (1, 0)]
         random.shuffle(dirs)
         for dx, dy in dirs:
-            nx, ny = monster.x + dx, monster.y + dy
-            if _is_walkable(nx, ny, room_id):
+            nx, ny = monster.x, monster.y
+            for _ in range(speed):
+                tx, ty = nx + dx, ny + dy
+                if not _is_walkable(tx, ty, room_id):
+                    break
+                nx, ny = tx, ty
+            if (nx, ny) != (monster.x, monster.y):
                 return {"action": "move", "x": nx, "y": ny}
         return None
 
     if direction == "player":
-        # Chase: greedy move toward nearest player
+        # Chase: move toward nearest player
         target, _ = _nearest_player(monster, room_id)
         if target is None:
-            return _resolve_move({"direction": "random"}, monster, room_id)
-        best = None
-        best_dist = float("inf")
-        dirs = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-        random.shuffle(dirs)
-        for dx, dy in dirs:
-            nx, ny = monster.x + dx, monster.y + dy
-            if not _is_walkable(nx, ny, room_id):
-                continue
-            dist = abs(target.x - nx) + abs(target.y - ny)
-            if dist < best_dist:
-                best_dist = dist
-                best = (nx, ny)
-        if best:
-            return {"action": "move", "x": best[0], "y": best[1]}
+            return _resolve_move({"direction": "random", "speed": speed}, monster, room_id)
+        if diagonal:
+            # Re-evaluate direction each step — allows diagonal paths
+            cx, cy = monster.x, monster.y
+            for _ in range(speed):
+                best = None
+                best_dist = float("inf")
+                dirs = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+                random.shuffle(dirs)
+                for dx, dy in dirs:
+                    nx, ny = cx + dx, cy + dy
+                    if not _is_walkable(nx, ny, room_id):
+                        continue
+                    dist = abs(target.x - nx) + abs(target.y - ny)
+                    if dist < best_dist:
+                        best_dist = dist
+                        best = (nx, ny)
+                if best is None:
+                    break
+                cx, cy = best
+            if (cx, cy) != (monster.x, monster.y):
+                return {"action": "move", "x": cx, "y": cy}
+        else:
+            # Pick best direction once, continue straight
+            best_dir = None
+            best_dist = float("inf")
+            dirs = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+            random.shuffle(dirs)
+            for dx, dy in dirs:
+                nx, ny = monster.x + dx, monster.y + dy
+                if not _is_walkable(nx, ny, room_id):
+                    continue
+                dist = abs(target.x - nx) + abs(target.y - ny)
+                if dist < best_dist:
+                    best_dist = dist
+                    best_dir = (dx, dy)
+            if best_dir:
+                cx, cy = monster.x, monster.y
+                for _ in range(speed):
+                    tx, ty = cx + best_dir[0], cy + best_dir[1]
+                    if not _is_walkable(tx, ty, room_id):
+                        break
+                    cx, cy = tx, ty
+                if (cx, cy) != (monster.x, monster.y):
+                    return {"action": "move", "x": cx, "y": cy}
         return None
 
     if direction == "away":
-        # Flee: greedy move away from nearest player
+        # Flee: move away from nearest player
         target, _ = _nearest_player(monster, room_id)
         if target is None:
-            return _resolve_move({"direction": "random"}, monster, room_id)
-        best = None
-        best_dist = -1
-        dirs = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-        random.shuffle(dirs)
-        for dx, dy in dirs:
-            nx, ny = monster.x + dx, monster.y + dy
-            if not _is_walkable(nx, ny, room_id):
-                continue
-            dist = abs(target.x - nx) + abs(target.y - ny)
-            if dist > best_dist:
-                best_dist = dist
-                best = (nx, ny)
-        if best:
-            return {"action": "move", "x": best[0], "y": best[1]}
+            return _resolve_move({"direction": "random", "speed": speed}, monster, room_id)
+        if diagonal:
+            # Re-evaluate direction each step — allows diagonal paths
+            cx, cy = monster.x, monster.y
+            for _ in range(speed):
+                best = None
+                best_dist = -1
+                dirs = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+                random.shuffle(dirs)
+                for dx, dy in dirs:
+                    nx, ny = cx + dx, cy + dy
+                    if not _is_walkable(nx, ny, room_id):
+                        continue
+                    dist = abs(target.x - nx) + abs(target.y - ny)
+                    if dist > best_dist:
+                        best_dist = dist
+                        best = (nx, ny)
+                if best is None:
+                    break
+                cx, cy = best
+            if (cx, cy) != (monster.x, monster.y):
+                return {"action": "move", "x": cx, "y": cy}
+        else:
+            # Pick best direction once, continue straight
+            best_dir = None
+            best_dist = -1
+            dirs = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+            random.shuffle(dirs)
+            for dx, dy in dirs:
+                nx, ny = monster.x + dx, monster.y + dy
+                if not _is_walkable(nx, ny, room_id):
+                    continue
+                dist = abs(target.x - nx) + abs(target.y - ny)
+                if dist > best_dist:
+                    best_dist = dist
+                    best_dir = (dx, dy)
+            if best_dir:
+                cx, cy = monster.x, monster.y
+                for _ in range(speed):
+                    tx, ty = cx + best_dir[0], cy + best_dir[1]
+                    if not _is_walkable(tx, ty, room_id):
+                        break
+                    cx, cy = tx, ty
+                if (cx, cy) != (monster.x, monster.y):
+                    return {"action": "move", "x": cx, "y": cy}
         return None
 
-    # Cardinal direction
+    # Cardinal direction — move up to `speed` tiles
     d = CARDINAL_DIRS.get(direction)
     if d:
-        nx, ny = monster.x + d[0], monster.y + d[1]
-        if _is_walkable(nx, ny, room_id):
+        nx, ny = monster.x, monster.y
+        for _ in range(speed):
+            tx, ty = nx + d[0], ny + d[1]
+            if not _is_walkable(tx, ty, room_id):
+                break
+            nx, ny = tx, ty
+        if (nx, ny) != (monster.x, monster.y):
             return {"action": "move", "x": nx, "y": ny}
     return None
 
@@ -293,21 +375,29 @@ def _resolve_move(rule, monster, room_id):
 _PATROL_DIRS = {"U": (0, -1), "D": (0, 1), "L": (-1, 0), "R": (1, 0)}
 
 
-def _resolve_patrol_move(rule, monster, room_id):
-    """Move along a patrol route string (e.g. 'RRDDLLUU'). Falls back to random wander."""
+def _resolve_patrol_move(rule, monster, room_id, speed=1):
+    """Move along a patrol route string (e.g. 'RRDDLLUU'). Falls back to random wander.
+
+    With speed > 1, consumes multiple steps from the route per tick.
+    """
     route = rule.get("patrol_route", "")
     if not route:
-        return _resolve_move({"direction": "random"}, monster, room_id)
+        return _resolve_move({"direction": "random", "speed": speed}, monster, room_id)
 
+    nx, ny = monster.x, monster.y
     idx = getattr(monster, "_patrol_index", 0) % len(route)
-    step = route[idx].upper()
-    d = _PATROL_DIRS.get(step)
-    if not d:
-        return _resolve_move({"direction": "random"}, monster, room_id)
-
-    nx, ny = monster.x + d[0], monster.y + d[1]
-    monster._patrol_index = (idx + 1) % len(route)
-    if _is_walkable(nx, ny, room_id):
+    for _ in range(speed):
+        step = route[idx].upper()
+        d = _PATROL_DIRS.get(step)
+        if not d:
+            break
+        tx, ty = nx + d[0], ny + d[1]
+        idx = (idx + 1) % len(route)
+        if not _is_walkable(tx, ty, room_id):
+            break
+        nx, ny = tx, ty
+    monster._patrol_index = idx
+    if (nx, ny) != (monster.x, monster.y):
         return {"action": "move", "x": nx, "y": ny}
     return None
 

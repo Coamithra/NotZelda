@@ -276,6 +276,43 @@ DEBUG_MONSTERS = {
             ],
         },
     },
+    "swift_wolf": {
+        "kind": "swift_wolf",
+        "stats": {"hp": 2, "tick_rate": 1.0, "damage": 1},
+        "behavior": {
+            "rules": [
+                {"if": "player_within", "range": 5, "do": "move", "direction": "player", "speed": 2, "diagonal": True},
+                {"if": "always", "do": "move", "direction": "random", "speed": 2},
+            ],
+        },
+        "sprite": {
+            "colors": {"body": "#8a7a6a", "dark": "#5a4a3a", "belly": "#c8b8a0", "eyes": "#ffcc00", "nose": "#222222"},
+            "frames": [
+                [
+                    ["dark",   4,11, 8, 3],
+                    ["body",   3, 5,10, 7],
+                    ["body",   4, 4, 8, 1],
+                    ["belly",  5, 8, 6, 3],
+                    ["body",   2, 3, 3, 3],
+                    ["body",  11, 3, 3, 3],
+                    ["eyes",   5, 5, 2, 1],
+                    ["eyes",   9, 5, 2, 1],
+                    ["nose",   7, 7, 2, 1],
+                ],
+                [
+                    ["dark",   4,10, 8, 3],
+                    ["body",   3, 4,10, 7],
+                    ["body",   4, 3, 8, 1],
+                    ["belly",  5, 7, 6, 3],
+                    ["body",   2, 2, 3, 3],
+                    ["body",  11, 2, 3, 3],
+                    ["eyes",   5, 4, 2, 1],
+                    ["eyes",   9, 4, 2, 1],
+                    ["nose",   7, 6, 2, 1],
+                ],
+            ],
+        },
+    },
     # --- Coverage gap monsters ---
     "sentinel_golem": {
         "kind": "sentinel_golem",

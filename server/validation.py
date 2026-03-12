@@ -168,7 +168,14 @@ def _validate_behavior(behavior: dict) -> list[str]:
             errors.append(f"behavior.rules[{ri}] cooldown must be 0-50")
 
         # Action-specific params
-        if action == "projectile":
+        if action == "move":
+            spd = rule.get("speed")
+            if spd is not None and (not isinstance(spd, (int, float)) or spd < 1 or spd > 5):
+                errors.append(f"behavior.rules[{ri}] speed must be 1-5")
+            diag = rule.get("diagonal")
+            if diag is not None and not isinstance(diag, bool):
+                errors.append(f"behavior.rules[{ri}] diagonal must be boolean")
+        elif action == "projectile":
             sc = rule.get("sprite_color")
             if sc is not None and not _is_hex_color(sc):
                 errors.append(f"behavior.rules[{ri}] sprite_color must be #RRGGBB")

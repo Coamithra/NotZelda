@@ -51,9 +51,11 @@ Each rule: `{"if": "<condition>", ...params, "do": "<action>", ...params}`
 
 ### Actions
 
-#### move — Move one tile.
+#### move — Move tiles.
 - `direction` (required): `random` (wander), `player` (chase), `away` (flee), `up`, `down`, `left`, `right`, `patrol` (follow a route).
-- `patrol_route` (required if direction is `patrol`): A string of U/D/L/R characters the monster repeats, e.g. `"RRDDLLUU"` walks a square loop.
+- `speed` (1-5, optional): Tiles moved per action. Default: 1. Higher values make the monster cover ground faster — e.g. `speed: 2` moves 2 tiles at once. Stops early if blocked by a wall. Use for fast/nimble monsters.
+- `diagonal` (bool, optional): When true and `speed > 1`, the monster can change direction between steps, allowing diagonal paths (e.g. right then up). Default: false (monster picks one direction and goes straight). Only affects `player` and `away` directions.
+- `patrol_route` (required if direction is `patrol`): A string of U/D/L/R characters the monster repeats, e.g. `"RRDDLLUU"` walks a square loop. With `speed > 1`, consumes multiple steps per tick.
 
 #### hold — Stay still. No params.
 

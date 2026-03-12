@@ -97,8 +97,8 @@ PRECREATED_MONSTERS = [
         "tags": ["dungeon", "melee", "tank"],
         "stats": {"hp": 3, "tick_rate": 0.4, "damage": 1},
         "behavior": {"rules": [
-            {"if": "player_within", "range": 4, "do": "move", "direction": "player"},
-            {"if": "always", "do": "move", "direction": "random"},
+            {"if": "player_within", "range": 4, "do": "move", "direction": "player", "speed": 2},
+            {"if": "always", "do": "move", "direction": "random", "speed": 2},
         ]},
         "sprite": {
             "colors": {"body": "#5a4a6a", "dark": "#3a2a4a", "eyes": "#cc4444", "highlight": "#8a7a9a"},
