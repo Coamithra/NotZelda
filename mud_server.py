@@ -286,7 +286,10 @@ async def handle_connection(websocket):
         if os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
             login_msg["debug_mode"] = True
             player.grant_flag("has_sword")
+            player.grant_flag("invulnerable")
         await send_to(player, login_msg)
+        if os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+            await send_to(player, {"type": "sword_obtained"})
         await on_player_enter_room(player.room)
         await send_room_enter(player)
         await broadcast_to_room(

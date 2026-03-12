@@ -1,10 +1,9 @@
 """
-Content Library — Tag-based storage, querying, and expiry for AI-generated content.
+Content Library — Fixed-capacity storage and expiry for AI-generated content.
 
 Manages rooms, monsters, and tiles in fixed-capacity libraries with placeholder
-slots. Supports late binding via semantic tags: preferred → best tag overlap → generate.
-Tags are free-form strings (normalized on ingestion). Tag-overlap scoring ranks
-candidates when exact matches fail. Persists to JSON files in data/.
+slots. Tags are free-form strings (normalized on ingestion). Persists to JSON
+files in data/.
 """
 
 import json
@@ -84,22 +83,11 @@ class LibraryEntry:
 
 
 # ---------------------------------------------------------------------------
-# Resolution result
-# ---------------------------------------------------------------------------
-
-@dataclass
-class ResolutionResult:
-    """Result of resolving a content reference."""
-    entry: Optional[LibraryEntry]
-    method: str   # "preferred", "tag_match", "any", "generate"
-
-
-# ---------------------------------------------------------------------------
 # Content library
 # ---------------------------------------------------------------------------
 
 class ContentLibrary:
-    """Fixed-capacity library with placeholder slots, tag-based queries, and expiry."""
+    """Fixed-capacity library with placeholder slots and expiry."""
 
     def __init__(self, content_type: str, capacity: int):
         self.content_type = content_type
@@ -141,54 +129,11 @@ class ContentLibrary:
                 return e
         return None
 
-    def query_by_tags(self, tags: list[str]) -> list[LibraryEntry]:
-        """Find real entries matching ALL given tags (exact)."""
-        normed = normalize_tags(tags)
-        tag_set = set(normed)
-        return [e for e in self._entries
-                if not e.is_placeholder and tag_set.issubset(set(e.tags))]
-
-    def query_by_tag_overlap(self, tags: list[str],
-                              min_overlap: int = 1) -> list[tuple[float, LibraryEntry]]:
-        """Find real entries ranked by tag overlap score.
-
-        Score = number of shared tags / total unique tags across both sets.
-        Returns (score, entry) pairs sorted by descending score,
-        filtered to entries with at least min_overlap shared tags.
-        """
-        normed = set(normalize_tags(tags))
-        if not normed:
-            return []
-        scored = []
-        for e in self._entries:
-            if e.is_placeholder:
-                continue
-            entry_tags = set(e.tags)
-            shared = len(normed & entry_tags)
-            if shared < min_overlap:
-                continue
-            union = len(normed | entry_tags)
-            score = shared / union if union else 0.0
-            scored.append((score, e))
-        scored.sort(key=lambda x: x[0], reverse=True)
-        return scored
-
     def get_random_real(self) -> Optional[LibraryEntry]:
         """Return a random real entry, or None if library is empty."""
         import random
         real = self.real_entries
         return random.choice(real) if real else None
-
-    def all_tags(self) -> set[str]:
-        """Return the set of all tags currently used by real entries.
-
-        Useful for including in AI prompts so the AI reuses existing tags.
-        """
-        tags: set[str] = set()
-        for e in self._entries:
-            if not e.is_placeholder:
-                tags.update(e.tags)
-        return tags
 
     # -- Mutations --
 
@@ -246,49 +191,6 @@ class ContentLibrary:
             self._entries[i] = LibraryEntry.placeholder(self.content_type)
 
         return expired_ids
-
-    # -- Resolution (late binding) --
-
-    def resolve(self, preferred_id: Optional[str], tags: list[str],
-                walkable: Optional[bool] = None) -> ResolutionResult:
-        """
-        Resolve a content reference using the fallback chain:
-        1. preferred ID exists in library → use it
-        2. best tag overlap match → pick highest scoring
-        3. any real entry (respecting walkability constraint) → pick random
-        4. nothing found → signal that generation is needed
-
-        For tiles, walkable is a hard constraint: a walkable tile can only be
-        substituted with another walkable tile, and vice versa.
-        """
-        import random
-
-        def _walkability_ok(entry: LibraryEntry) -> bool:
-            if walkable is None:
-                return True
-            return entry.data.get("walkable", False) == walkable
-
-        # Step 1: preferred
-        if preferred_id:
-            entry = self.get_by_id(preferred_id)
-            if entry is not None and _walkability_ok(entry):
-                return ResolutionResult(entry=entry, method="preferred")
-
-        # Step 2: best tag overlap
-        if tags:
-            matches = self.query_by_tag_overlap(tags)
-            # Filter by walkability
-            matches = [(s, e) for s, e in matches if _walkability_ok(e)]
-            if matches:
-                return ResolutionResult(entry=matches[0][1], method="tag_match")
-
-        # Step 3: any real entry
-        candidates = [e for e in self.real_entries if _walkability_ok(e)]
-        if candidates:
-            return ResolutionResult(entry=random.choice(candidates), method="any")
-
-        # Step 4: nothing — generation needed
-        return ResolutionResult(entry=None, method="generate")
 
     # -- Persistence --
 

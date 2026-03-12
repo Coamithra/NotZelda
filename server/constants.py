@@ -82,8 +82,8 @@ ENTRY_DIR = {
 }
 
 EDGE_SPAWN_POINTS = {
-    "north": (7, 1), "south": (7, 9),
-    "east": (13, 5), "west": (1, 5),
+    "north": (7, 0), "south": (7, 10),
+    "east": (14, 5), "west": (0, 5),
 }
 DEFAULT_SPAWN = (7, 5)
 

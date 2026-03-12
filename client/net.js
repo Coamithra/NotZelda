@@ -132,7 +132,20 @@ function handleMessage(msg) {
         oldCanvas = document.createElement("canvas");
         oldCanvas.width = CW;
         oldCanvas.height = CH;
-        oldCanvas.getContext("2d").drawImage(G.canvas, 0, 0);
+        const oldCtx = oldCanvas.getContext("2d");
+        const savedCtx = G.ctx;
+        G.ctx = oldCtx;
+        renderRoom();
+        renderAreaWarnings();
+        renderHeartPickups();
+        renderChargePreps();
+        renderChargeTrails();
+        renderPlayers();
+        renderProjectiles();
+        renderMonsterAttackFlashes();
+        renderSpeechBubbles();
+        renderSwordPickups();
+        G.ctx = savedCtx;
       }
 
       const prevExits = G.currentRoom ? G.currentRoom.exits : null;

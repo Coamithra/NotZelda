@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from server.content_library import (
-    ContentLibrary, LibraryEntry, ResolutionResult, PLACEHOLDER_ID,
+    ContentLibrary, LibraryEntry, PLACEHOLDER_ID,
     normalize_tag, normalize_tags,
 )
 
@@ -113,46 +113,6 @@ def test_get_by_id():
     assert lib.get_by_id("skeleton") is not None
     assert lib.get_by_id("nonexistent") is None
 
-def test_query_by_tags():
-    lib = ContentLibrary("monster", 10)
-    lib.add(LibraryEntry(id="fire_bat", content_type="monster", tags=["fire", "flying"]))
-    lib.add(LibraryEntry(id="ice_bat", content_type="monster", tags=["ice", "flying"]))
-    lib.add(LibraryEntry(id="fire_golem", content_type="monster", tags=["fire"]))
-
-    # Match all given tags
-    results = lib.query_by_tags(["fire"])
-    assert len(results) == 2
-    assert {r.id for r in results} == {"fire_bat", "fire_golem"}
-
-    # Match subset of tags
-    results = lib.query_by_tags(["flying"])
-    assert len(results) == 2
-
-    # Match multiple tags (intersection)
-    results = lib.query_by_tags(["fire", "flying"])
-    assert len(results) == 1
-    assert results[0].id == "fire_bat"
-
-    # No match
-    results = lib.query_by_tags(["shadow"])
-    assert len(results) == 0
-
-def test_query_by_tag_overlap():
-    lib = ContentLibrary("monster", 10)
-    lib.add(LibraryEntry(id="fire_bat", content_type="monster", tags=["fire", "flying", "dungeon"]))
-    lib.add(LibraryEntry(id="ice_bat", content_type="monster", tags=["ice", "flying"]))
-    lib.add(LibraryEntry(id="fire_golem", content_type="monster", tags=["fire"]))
-
-    # Query with ["fire", "flying"] — fire_bat has 2 overlap, others have 1
-    results = lib.query_by_tag_overlap(["fire", "flying"])
-    assert len(results) == 3
-    assert results[0][1].id == "fire_bat"  # best overlap
-
-    # min_overlap filters
-    results = lib.query_by_tag_overlap(["fire", "flying"], min_overlap=2)
-    assert len(results) == 1
-    assert results[0][1].id == "fire_bat"
-
 
 # ---------------------------------------------------------------------------
 # Expiry
@@ -199,80 +159,6 @@ def test_expire_at_least_one():
     expired = lib.expire_oldest(rate=0.01, min_age=1.0)
     assert len(expired) == 1
 
-
-# ---------------------------------------------------------------------------
-# Resolution (late binding fallback chain)
-# ---------------------------------------------------------------------------
-
-def test_resolve_preferred():
-    lib = ContentLibrary("monster", 10)
-    lib.add(LibraryEntry(id="flame_wyrm", content_type="monster", tags=["fire"]))
-    result = lib.resolve("flame_wyrm", ["fire"])
-    assert result.method == "preferred"
-    assert result.entry.id == "flame_wyrm"
-
-def test_resolve_fallback_tag_match():
-    lib = ContentLibrary("monster", 10)
-    lib.add(LibraryEntry(id="fire_golem", content_type="monster", tags=["fire"]))
-    # preferred is gone, but tags overlap
-    result = lib.resolve("flame_wyrm", ["fire"])
-    assert result.method == "tag_match"
-    assert result.entry.id == "fire_golem"
-
-def test_resolve_fallback_any():
-    lib = ContentLibrary("monster", 10)
-    lib.add(LibraryEntry(id="stone_golem", content_type="monster", tags=["stone"]))
-    # preferred gone, no fire tags, but there's something in the library
-    result = lib.resolve("flame_wyrm", ["fire"])
-    assert result.method == "any"
-    assert result.entry.id == "stone_golem"
-
-def test_resolve_fallback_generate():
-    lib = ContentLibrary("monster", 10)
-    # Empty library — nothing to resolve
-    result = lib.resolve("flame_wyrm", ["fire"])
-    assert result.method == "generate"
-    assert result.entry is None
-
-def test_resolve_no_preferred_skips_to_tags():
-    lib = ContentLibrary("tile", 10)
-    lib.add(LibraryEntry(id="brazier", content_type="tile", tags=["fire", "wall_mounted"]))
-    result = lib.resolve(None, ["fire"])
-    assert result.method == "tag_match"
-    assert result.entry.id == "brazier"
-
-def test_resolve_empty_tags_falls_to_any():
-    lib = ContentLibrary("tile", 10)
-    lib.add(LibraryEntry(id="lamp", content_type="tile", tags=["metal"]))
-    result = lib.resolve(None, [])
-    assert result.method == "any"
-    assert result.entry.id == "lamp"
-
-def test_resolve_walkability_constraint():
-    """Walkable tiles can only be substituted with walkable tiles."""
-    lib = ContentLibrary("tile", 10)
-    lib.add(LibraryEntry(id="lava_floor", content_type="tile", tags=["fire"],
-                         data={"walkable": True}))
-    lib.add(LibraryEntry(id="fire_wall", content_type="tile", tags=["fire"],
-                         data={"walkable": False}))
-
-    # Looking for a walkable fire tile — should get lava_floor
-    result = lib.resolve(None, ["fire"], walkable=True)
-    assert result.entry.id == "lava_floor"
-
-    # Looking for a non-walkable fire tile — should get fire_wall
-    result = lib.resolve(None, ["fire"], walkable=False)
-    assert result.entry.id == "fire_wall"
-
-def test_resolve_walkability_blocks_wrong_type():
-    """If only non-walkable tiles exist, walkable resolve should fall through."""
-    lib = ContentLibrary("tile", 10)
-    lib.add(LibraryEntry(id="fire_wall", content_type="tile", tags=["fire"],
-                         data={"walkable": False}))
-
-    result = lib.resolve(None, ["fire"], walkable=True)
-    assert result.method == "generate"
-    assert result.entry is None
 
 
 # ---------------------------------------------------------------------------
@@ -348,20 +234,6 @@ def test_tags_normalized_on_from_dict():
     })
     assert e.tags == ["stone", "dark_dungeon"]
 
-
-# ---------------------------------------------------------------------------
-# all_tags (prompt-side inventory)
-# ---------------------------------------------------------------------------
-
-def test_all_tags():
-    lib = ContentLibrary("monster", 10)
-    lib.add(LibraryEntry(id="a", content_type="monster", tags=["fire", "beast"]))
-    lib.add(LibraryEntry(id="b", content_type="monster", tags=["ice", "beast"]))
-    assert lib.all_tags() == {"fire", "beast", "ice"}
-
-def test_all_tags_empty():
-    lib = ContentLibrary("monster", 10)
-    assert lib.all_tags() == set()
 
 
 # ---------------------------------------------------------------------------
