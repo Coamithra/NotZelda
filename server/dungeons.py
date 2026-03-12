@@ -4,6 +4,7 @@ import asyncio
 import os
 import random
 import time
+from collections import deque
 
 from server.state import game
 from server.constants import (
@@ -24,7 +25,7 @@ class DungeonInstance:
         self.music_track = music_track
 
         # Stage 7: Library-managed cell tracking
-        # (col, row) -> {"source": "precreated"|"custom", "entry": LibraryEntry|None, "resolved": bool}
+        # (col, row) -> {"source": "precreated"|"custom"|"special", "entry": LibraryEntry|None, "resolved": bool}
         self.cell_assignments = {}
         self.resolved_rooms = set()        # room_ids that have been materialized into game.rooms
 
@@ -33,19 +34,109 @@ class DungeonInstance:
         # Custom cells pick a random slot at resolution time.
         self.custom_slots = []
 
+        # Dungeon path — connectivity graph (set of frozensets of cell tuples)
+        self.connections = set()
+        self.boss_cell = None       # (col, row)
+        self.treasure_cell = None   # (col, row)
 
-def _get_cell_exits(cell, room_map, layout, entrance_col, entrance_row):
-    """Compute exits for a cell based on layout adjacency."""
+
+def _build_dungeon_path(active_cells, entrance):
+    """Build a connectivity graph through the dungeon.
+
+    Uses randomized DFS to create a spanning tree, then adds ~25% extra
+    edges for non-linearity. Finds the furthest leaf node from the entrance
+    as the treasure room, with its parent as the boss room. The treasure
+    room is guaranteed to have exactly one connection (the boss room).
+
+    Returns (connections, boss_cell, treasure_cell) where connections is
+    a set of frozensets of cell tuples.
+    """
+    cell_set = set(active_cells)
+
+    # Build adjacency list from grid neighbors
+    adj = {c: [] for c in cell_set}
+    for (col, row) in cell_set:
+        for dc, dr in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
+            neighbor = (col + dc, row + dr)
+            if neighbor in cell_set:
+                adj[(col, row)].append(neighbor)
+
+    # Randomized DFS spanning tree
+    visited = {entrance}
+    tree_edges = set()
+    tree_parent = {entrance: None}
+    stack = [entrance]
+
+    while stack:
+        cell = stack[-1]
+        neighbors = [n for n in adj[cell] if n not in visited]
+        if neighbors:
+            random.shuffle(neighbors)
+            next_cell = neighbors[0]
+            tree_edges.add(frozenset((cell, next_cell)))
+            tree_parent[next_cell] = cell
+            visited.add(next_cell)
+            stack.append(next_cell)
+        else:
+            stack.pop()
+
+    # BFS on the tree to find distances from entrance
+    dist = {entrance: 0}
+    bfs_parent = {entrance: None}
+    queue = deque([entrance])
+    while queue:
+        cell = queue.popleft()
+        for n in adj[cell]:
+            edge = frozenset((cell, n))
+            if edge in tree_edges and n not in dist:
+                dist[n] = dist[cell] + 1
+                bfs_parent[n] = cell
+                queue.append(n)
+
+    # Find leaf nodes (degree 1 in tree, excluding entrance)
+    tree_degree = {c: 0 for c in cell_set}
+    for edge in tree_edges:
+        for c in edge:
+            tree_degree[c] += 1
+    leaf_nodes = [c for c in cell_set if tree_degree[c] == 1 and c != entrance]
+
+    # Treasure = furthest leaf from entrance
+    if leaf_nodes:
+        treasure_cell = max(leaf_nodes, key=lambda c: dist.get(c, 0))
+    else:
+        # Fallback: furthest cell overall (shouldn't happen with real layouts)
+        treasure_cell = max(dist, key=dist.get)
+    boss_cell = bfs_parent.get(treasure_cell, entrance)
+
+    # Build final connections: tree + extra edges for non-linearity
+    connections = set(tree_edges)
+
+    # Add ~25% of remaining adjacent edges, but never touching treasure cell
+    non_tree_edges = []
+    for cell in cell_set:
+        for n in adj[cell]:
+            edge = frozenset((cell, n))
+            if edge not in connections and treasure_cell not in edge:
+                non_tree_edges.append(edge)
+    # Deduplicate (frozenset handles order, but list may have dupes)
+    non_tree_edges = list(set(non_tree_edges))
+    if non_tree_edges:
+        extra_count = max(1, len(non_tree_edges) // 4)
+        extras = random.sample(non_tree_edges, min(extra_count, len(non_tree_edges)))
+        connections.update(extras)
+
+    return connections, boss_cell, treasure_cell
+
+
+def _get_cell_exits(cell, connections, entrance_col, entrance_row):
+    """Compute exits for a cell based on the dungeon connection graph."""
     col, row = cell
     exits = {}
-    if (col, row - 1) in room_map:
-        exits["north"] = f"d1_{col}_{row - 1}"
-    if (col, row + 1) in room_map:
-        exits["south"] = f"d1_{col}_{row + 1}"
-    if (col - 1, row) in room_map:
-        exits["west"] = f"d1_{col - 1}_{row}"
-    if (col + 1, row) in room_map:
-        exits["east"] = f"d1_{col + 1}_{row}"
+    for direction, (dc, dr) in [("north", (0, -1)), ("south", (0, 1)),
+                                 ("west", (-1, 0)), ("east", (1, 0))]:
+        neighbor = (col + dc, row + dr)
+        if frozenset((cell, neighbor)) in connections:
+            exits[direction] = f"d1_{neighbor[0]}_{neighbor[1]}"
     if col == entrance_col and row == entrance_row:
         exits["up"] = "clearing"
     return exits
@@ -181,6 +272,26 @@ async def create_dungeon() -> DungeonInstance | None:
             custom_slots.append(None)
     random.shuffle(custom_slots)
 
+    # Build dungeon path — spanning tree with extra edges, find boss/treasure
+    entrance = (entrance_col, entrance_row)
+    connections, boss_cell, treasure_cell = _build_dungeon_path(active_cells, entrance)
+
+    # Override boss/treasure cells with special templates
+    from server.dungeon_content import _convert_room_template
+    from server.content_library import LibraryEntry
+    for special_id, special_cell in [("d1_boss", boss_cell), ("d1_treasure", treasure_cell)]:
+        template = game.dungeon_templates.get(special_id)
+        if template:
+            room_data = _convert_room_template(template)
+            entry = LibraryEntry(
+                id=special_id, content_type="room",
+                tags=["dungeon", "special"], created_at=time.time(),
+                data=room_data, permanent=True,
+            )
+            cell_assignments[special_cell] = {
+                "source": "special", "entry": entry, "resolved": False,
+            }
+
     instance = DungeonInstance(
         dungeon_id="d1",
         layout=layout,
@@ -191,19 +302,27 @@ async def create_dungeon() -> DungeonInstance | None:
     )
     instance.cell_assignments = cell_assignments
     instance.custom_slots = custom_slots
+    instance.connections = connections
+    instance.boss_cell = boss_cell
+    instance.treasure_cell = treasure_cell
     game.active_dungeon = instance
 
     # Logging
     precreated_count = sum(1 for a in cell_assignments.values() if a["source"] == "precreated")
     custom_count = sum(1 for a in cell_assignments.values() if a["source"] == "custom")
+    special_count = sum(1 for a in cell_assignments.values() if a["source"] == "special")
     filled_slots = sum(1 for s in custom_slots if s is not None)
     empty_slots = num_slots - filled_slots
 
+    boss_id = f"d1_{boss_cell[0]}_{boss_cell[1]}"
+    treasure_id = f"d1_{treasure_cell[0]}_{treasure_cell[1]}"
     print(f"[DUNGEON] Created instance: layout={layout['name']}, "
-          f"rooms={len(active_rooms)} ({precreated_count}p/{custom_count}c), "
+          f"rooms={len(active_rooms)} ({precreated_count}p/{custom_count}c/{special_count}s), "
           f"slots={num_slots} ({filled_slots}filled/{empty_slots}empty), "
-          f"entrance={entrance_room_id}, music={music_track}")
-    broadcast_debug(f"Dungeon created: {layout['name']} ({len(active_rooms)} rooms, {precreated_count}p/{custom_count}c)")
+          f"entrance={entrance_room_id}, boss={boss_id}, treasure={treasure_id}, "
+          f"music={music_track}, connections={len(connections)}")
+    broadcast_debug(f"Dungeon created: {layout['name']} ({len(active_rooms)} rooms, "
+                    f"boss={boss_id}, treasure={treasure_id})")
 
     # Resolve the entrance room immediately (always precreated, so instant)
     resolve_dungeon_room(instance, (entrance_col, entrance_row))
@@ -228,12 +347,11 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
     entrance_col, entrance_row = instance.layout["entrance"]
     is_entrance = (col == entrance_col and row == entrance_row)
 
-    exits = _get_cell_exits(cell, {c: True for c in instance.cell_assignments},
-                            instance.layout, entrance_col, entrance_row)
+    exits = _get_cell_exits(cell, instance.connections, entrance_col, entrance_row)
 
-    if assignment["source"] == "precreated":
+    if assignment["source"] in ("precreated", "special"):
         entry_data = assignment["entry"].data
-        source_label = f"precreated:{assignment['entry'].id}"
+        source_label = f"{assignment['source']}:{assignment['entry'].id}"
     else:
         # Custom cell — pick a random slot from the shared pool
         entry_data, source_label = _resolve_custom_slot(

@@ -164,39 +164,46 @@ async def send_room_enter(player, exit_direction: str = None):
             room_id_check = f"d1_{cell[0]}_{cell[1]}"
             if room_id_check == player.room:
                 source = assignment["source"]
-                if source == "precreated":
-                    entry = assignment.get("entry")
-                    debug["room_source"] = f"precreated ({entry.id})" if entry else "precreated"
+                entry = assignment.get("entry")
+                if entry:
+                    debug["room_source"] = f"{source} ({entry.id})"
                 else:
-                    entry = assignment.get("entry")
-                    if entry:
-                        debug["room_source"] = f"custom ({entry.id})"
-                    else:
-                        debug["room_source"] = "custom"
+                    debug["room_source"] = source
                 break
 
-        # Minimap data (DEBUG_MODE only)
+        # Minimap + library debug (DEBUG_MODE only)
         if os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
             entrance_col, entrance_row = inst.layout["entrance"]
             cells = []
             for (c, r), asn in inst.cell_assignments.items():
-                cells.append({
+                cell_info = {
                     "c": c, "r": r,
-                    "src": asn["source"],           # "precreated" or "custom"
+                    "src": asn["source"],           # "precreated", "custom", or "special"
                     "res": asn["resolved"],          # True/False
                     "gen": asn.get("entry") is not None,  # has content assigned
                     "ent": c == entrance_col and r == entrance_row,
-                })
+                }
+                if (c, r) == inst.boss_cell:
+                    cell_info["boss"] = True
+                if (c, r) == inst.treasure_cell:
+                    cell_info["treasure"] = True
+                cells.append(cell_info)
             # Find which cell the player is in
             player_cell = None
             for (c, r) in inst.cell_assignments:
                 if f"d1_{c}_{r}" == player.room:
                     player_cell = [c, r]
                     break
+            # Serialize connections as [[c1,r1,c2,r2], ...]
+            conn_list = []
+            for edge in inst.connections:
+                a, b = tuple(edge)
+                conn_list.append([a[0], a[1], b[0], b[1]])
             debug["minimap"] = {
                 "cells": cells,
                 "player": player_cell,
                 "layout": inst.layout["name"],
+                "connections": conn_list,
             }
             debug["libraries"] = _build_library_icons()
 

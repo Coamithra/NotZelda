@@ -418,8 +418,13 @@ def load_precreated_content(
           f"{[t['id'] for t in PRECREATED_TILES]}")
 
     # --- Rooms (from dungeon templates) ---
+    # Special rooms (boss, treasure) are kept in game.dungeon_templates
+    # but excluded from the regular library pool
+    SPECIAL_ROOMS = {"d1_boss", "d1_treasure"}
     room_count = 0
     for template_id in sorted(dungeon_templates.keys()):
+        if template_id in SPECIAL_ROOMS:
+            continue
         template = dungeon_templates[template_id]
         room_data = _convert_room_template(template)
 

@@ -774,6 +774,7 @@ function renderDungeonMinimap() {
 
   const cells = mm.cells;
   const pc = mm.player; // [col, row] of player's current cell
+  const conns = mm.connections || [];
 
   // Find grid bounds
   let minC = Infinity, maxC = -Infinity, minR = Infinity, maxR = -Infinity;
@@ -801,13 +802,40 @@ function renderDungeonMinimap() {
   roundRect(G.ctx, mapX, mapY, mapW, mapH, 4);
   G.ctx.fill();
 
+  // Helper: get center of a cell on the minimap
+  const cellCenter = (c, r) => ({
+    x: mapX + pad + (c - minC) * step + cellSize / 2,
+    y: mapY + pad + (r - minR) * step + cellSize / 2,
+  });
+
+  // Draw connections between cells
+  G.ctx.strokeStyle = "rgba(160, 160, 160, 0.5)";
+  G.ctx.lineWidth = 2;
+  for (const conn of conns) {
+    const a = cellCenter(conn[0], conn[1]);
+    const b = cellCenter(conn[2], conn[3]);
+    G.ctx.beginPath();
+    G.ctx.moveTo(a.x, a.y);
+    G.ctx.lineTo(b.x, b.y);
+    G.ctx.stroke();
+  }
+  G.ctx.lineWidth = 1;
+
   // Draw each cell
   for (const cell of cells) {
     const cx = mapX + pad + (cell.c - minC) * step;
     const cy = mapY + pad + (cell.r - minR) * step;
 
     // Color based on state
-    if (!cell.res && !cell.gen) {
+    if (cell.boss) {
+      // Boss room — red
+      G.ctx.fillStyle = cell.res ? "rgba(220, 60, 60, 0.8)" : "rgba(220, 60, 60, 0.3)";
+      G.ctx.fillRect(cx, cy, cellSize, cellSize);
+    } else if (cell.treasure) {
+      // Treasure room — gold
+      G.ctx.fillStyle = cell.res ? "rgba(255, 200, 40, 0.8)" : "rgba(255, 200, 40, 0.3)";
+      G.ctx.fillRect(cx, cy, cellSize, cellSize);
+    } else if (!cell.res && !cell.gen) {
       // Unresolved placeholder — dashed outline, no fill
       G.ctx.strokeStyle = "rgba(100, 100, 100, 0.6)";
       G.ctx.setLineDash([2, 2]);
