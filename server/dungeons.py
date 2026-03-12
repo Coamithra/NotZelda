@@ -205,66 +205,55 @@ async def create_dungeon() -> DungeonInstance | None:
           f"entrance={entrance_room_id}, music={music_track}")
 
     # Resolve the entrance room immediately (always precreated, so instant)
-    await resolve_dungeon_room(instance, (entrance_col, entrance_row))
+    resolve_dungeon_room(instance, (entrance_col, entrance_row))
 
     return instance
 
 
-async def resolve_dungeon_room(instance: DungeonInstance, cell: tuple, player=None) -> bool:
+def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
     """Materialize a library entry into a live game.rooms[] entry.
 
-    For precreated entries, uses the pre-assigned library entry (instant).
-    For custom entries, picks a random slot from the shared pool — generates if needed.
-    player: optional Player object for sending progress updates (DEBUG_GENERATION).
-    Returns True if successfully resolved.
+    For precreated entries, uses the pre-assigned library entry.
+    For custom entries, picks from the shared pool; falls back to precreated
+    if the pool is exhausted or the slot was a placeholder.
+    Fully synchronous — no AI generation, no awaits.
     """
     assignment = instance.cell_assignments.get(cell)
     if not assignment or assignment["resolved"]:
         return True  # already resolved
 
-    # Concurrency: if another coroutine is already resolving this cell, wait
-    resolve_event = assignment.get("_resolve_event")
-    if resolve_event is not None:
-        await resolve_event.wait()
-        return assignment["resolved"]
+    col, row = cell
+    room_id = f"d1_{col}_{row}"
+    entrance_col, entrance_row = instance.layout["entrance"]
+    is_entrance = (col == entrance_col and row == entrance_row)
 
-    # Mark cell as being resolved
-    event = asyncio.Event()
-    assignment["_resolve_event"] = event
+    exits = _get_cell_exits(cell, {c: True for c in instance.cell_assignments},
+                            instance.layout, entrance_col, entrance_row)
 
-    try:
-        col, row = cell
-        room_id = f"d1_{col}_{row}"
-        entrance_col, entrance_row = instance.layout["entrance"]
-        is_entrance = (col == entrance_col and row == entrance_row)
+    if assignment["source"] == "precreated":
+        entry_data = assignment["entry"].data
+        source_label = f"precreated:{assignment['entry'].id}"
+    else:
+        # Custom cell — pick a random slot from the shared pool
+        entry_data, source_label = _resolve_custom_slot(
+            instance, assignment, room_id)
+        if entry_data is None:
+            return False
 
-        exits = _get_cell_exits(cell, {c: True for c in instance.cell_assignments},
-                                instance.layout, entrance_col, entrance_row)
+    _resolve_room_from_entry(room_id, entry_data, exits, cell, instance.music_track, is_entrance)
 
-        if assignment["source"] == "precreated":
-            entry_data = assignment["entry"].data
-            source_label = f"precreated:{assignment['entry'].id}"
-        else:
-            # Custom cell — pick a random slot from the shared pool
-            entry_data, source_label = await _resolve_custom_slot(
-                instance, assignment, room_id, player)
-            if entry_data is None:
-                return False
-
-        _resolve_room_from_entry(room_id, entry_data, exits, cell, instance.music_track, is_entrance)
-
-        assignment["resolved"] = True
-        instance.resolved_rooms.add(room_id)
-        print(f"[DUNGEON] Resolved {room_id} ({source_label})")
-        return True
-    finally:
-        event.set()
+    assignment["resolved"] = True
+    instance.resolved_rooms.add(room_id)
+    print(f"[DUNGEON] Resolved {room_id} ({source_label})")
+    return True
 
 
-async def _resolve_custom_slot(instance, assignment, room_id, player=None):
-    """Pop a slot from the custom pool and use/generate its content.
+def _resolve_custom_slot(instance, assignment, room_id):
+    """Pop a slot from the custom pool and use its content.
 
     Each cell gets a unique slot (popped, not shared).
+    Falls back to a precreated room if the pool is exhausted or the slot
+    was a placeholder (empty). Background regen fills placeholders later.
     Returns (entry_data, source_label) on success, or (None, None) on failure.
     """
     # Pop a slot from the pool (already shuffled at dungeon creation)
@@ -280,8 +269,9 @@ async def _resolve_custom_slot(instance, assignment, room_id, player=None):
         assignment["entry"] = entry
         return slot["data"], f"custom:{entry_id}"
 
-    # Pool exhausted — fall back to a precreated room not already used in this dungeon
-    if slot is None and game.room_library:
+    # Pool exhausted or empty slot — fall back to a precreated room
+    reason = "pool exhausted" if slot is None else "empty slot"
+    if game.room_library:
         used_ids = {a.get("entry").id for a in instance.cell_assignments.values()
                     if a.get("entry") is not None}
         available = [e for e in game.room_library.real_entries
@@ -292,141 +282,10 @@ async def _resolve_custom_slot(instance, assignment, room_id, player=None):
         if available:
             pick = random.choice(available)
             assignment["entry"] = pick
-            print(f"[DUNGEON] Pool exhausted for {room_id}, using precreated '{pick.id}'")
+            print(f"[DUNGEON] {reason} for {room_id}, using precreated '{pick.id}'")
             return pick.data, f"precreated-overflow:{pick.id}"
 
-    # Empty slot (placeholder) — generate new content via AI
-    entry_data, source_label = await _generate_slot_content(
-        instance, room_id, player)
-
-    if entry_data is not None:
-        assignment["entry"] = instance._last_generated_entry
-        return entry_data, source_label
-
     return None, None
-
-
-async def _generate_slot_content(instance, room_id, player=None):
-    """Generate a room via AI, with permanent fallback.
-
-    On success, stores the resulting LibraryEntry on instance._last_generated_entry.
-    Returns (entry_data, source_label) on success, or (None, None) on hard failure.
-    """
-    instance._last_generated_entry = None
-    from server import ai_generator
-    from server.validation import register_monster_type, register_tile_type
-    from server.content_library import LibraryEntry
-    from server.net import send_to
-
-    # Progress callback — sends updates to the waiting player if DEBUG_MODE is on
-    progress_cb = None
-    if player and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
-        async def progress_cb(step, detail):
-            try:
-                await send_to(player, {
-                    "type": "room_generating_progress",
-                    "step": step,
-                    "detail": detail,
-                })
-            except Exception:
-                pass  # player may have disconnected
-
-        # Send backend info as first progress message
-        backend = ai_generator.AI_BACKEND
-        model = ai_generator.ANTHROPIC_MODEL
-        label = f"{model} via {backend}" + (" (subscription)" if backend == "cli" else " (API)")
-        await progress_cb("init", label)
-
-    existing_monsters, existing_tiles = get_active_content_lists()
-    existing_room_names = [
-        e.data.get("name", e.id) for e in game.room_library.real_entries
-    ]
-
-    print(f"[DUNGEON] Generating room for {room_id} via AI...")
-    result = await ai_generator.generate_room(
-        theme="dungeon",
-        difficulty=random.randint(3, 7),
-        existing_monsters=existing_monsters,
-        existing_tiles=existing_tiles,
-        monster_library_full=game.monster_library.is_full,
-        tile_library_full=game.tile_library.is_full,
-        existing_room_names=existing_room_names,
-        monster_library_count=game.monster_library.real_count,
-        monster_library_capacity=game.monster_library.capacity,
-        tile_library_count=game.tile_library.real_count,
-        tile_library_capacity=game.tile_library.capacity,
-        progress=progress_cb,
-    )
-
-    # Check if dungeon was destroyed while we were awaiting AI
-    if game.active_dungeon is not instance:
-        print(f"[DUNGEON] Dungeon destroyed during generation of {room_id}")
-        return None, None
-
-    if result is None:
-        # AI generation failed — fall back to a random permanent room
-        print(f"[DUNGEON] AI generation failed for {room_id}, using fallback")
-        fallback = game.room_library.get_random_real()
-        if fallback is None:
-            print(f"[DUNGEON] ERROR: No fallback room for {room_id}")
-            return None, None
-        instance._last_generated_entry = fallback
-        return fallback.data, f"fallback:{fallback.id}"
-
-    # Register new monsters into game registries + library
-    for m in result.get("new_monsters", []):
-        ok, errors = register_monster_type(m)
-        if ok:
-            game.monster_library.add(LibraryEntry(
-                id=m["kind"],
-                content_type="monster",
-                tags=m.get("tags", []),
-                created_at=time.time(),
-                data=m,
-            ))
-        else:
-            print(f"[DUNGEON] Monster registration failed for {m.get('kind')}: {errors}")
-
-    # Register new tiles into game registries + library
-    for t in result.get("new_tiles", []):
-        ok, errors = register_tile_type(t)
-        if ok:
-            game.tile_library.add(LibraryEntry(
-                id=t["id"],
-                content_type="tile",
-                tags=t.get("tags", []),
-                created_at=time.time(),
-                data=t,
-            ))
-        else:
-            print(f"[DUNGEON] Tile registration failed for {t.get('id')}: {errors}")
-
-    # Add room to library (deduplicate ID)
-    room_name = result.get("name", "Unknown Room")
-    lib_id = room_name.lower().replace(" ", "_")
-    base_id = lib_id
-    counter = 1
-    while game.room_library.get_by_id(lib_id):
-        counter += 1
-        lib_id = f"{base_id}_{counter}"
-
-    room_entry = LibraryEntry(
-        id=lib_id,
-        content_type="room",
-        tags=[],
-        created_at=time.time(),
-        data=result,
-    )
-    game.room_library.add(room_entry)
-    instance._last_generated_entry = room_entry
-
-    _save_libraries()
-
-    new_m = [m["kind"] for m in result.get("new_monsters", [])]
-    new_t = [t["id"] for t in result.get("new_tiles", [])]
-    print(f"[DUNGEON] Generated {room_id}: \"{room_name}\" "
-          f"(monsters={new_m}, tiles={new_t})")
-    return result, f"generated:{lib_id}"
 
 
 def _save_libraries():
@@ -440,6 +299,26 @@ def _save_libraries():
     if game.room_library:
         game.room_library.save(data_dir / "room_library.json")
     print("[DUNGEON] Libraries saved to disk")
+
+
+def _save_deprecation_timestamp():
+    """Persist the last deprecation timestamp to disk."""
+    import json
+    from pathlib import Path
+    path = Path(__file__).parent.parent / "data" / "deprecation.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"last_deprecation_time": game.last_deprecation_time}), encoding="utf-8")
+
+
+def load_deprecation_timestamp():
+    """Load the last deprecation timestamp from disk (call at startup)."""
+    import json
+    from pathlib import Path
+    path = Path(__file__).parent.parent / "data" / "deprecation.json"
+    if path.exists():
+        data = json.loads(path.read_text(encoding="utf-8"))
+        game.last_deprecation_time = data.get("last_deprecation_time", 0.0)
+        print(f"[DEPRECATION] Last deprecation: {time.strftime('%Y-%m-%d %H:%M', time.localtime(game.last_deprecation_time))}")
 
 
 def get_active_content_lists():
@@ -491,7 +370,7 @@ def _cleanup_tile(tid):
 
 
 def destroy_dungeon():
-    """Tear down the active dungeon instance and expire old custom content."""
+    """Tear down the active dungeon instance. Content deprecation is handled by the daily task."""
     if game.active_dungeon is None:
         return
 
@@ -505,15 +384,46 @@ def destroy_dungeon():
         game.room_projectiles.pop(room_id, None)
 
     layout_name = game.active_dungeon.layout['name']
+    print(f"[DUNGEON] Destroyed instance: layout={layout_name}")
+    game.active_dungeon = None
 
-    # Expire oldest custom rooms from the room library
+    # Run daily content deprecation if enough time has passed
+    _maybe_run_deprecation()
+
+
+DEPRECATION_INTERVAL = 86400  # 24 hours between deprecation passes
+
+
+def _maybe_run_deprecation():
+    """Run content deprecation if at least 24 hours have passed since the last run."""
+    now = time.time()
+    if now - game.last_deprecation_time < DEPRECATION_INTERVAL:
+        elapsed = now - game.last_deprecation_time
+        remaining = DEPRECATION_INTERVAL - elapsed
+        hours = int(remaining // 3600)
+        mins = int((remaining % 3600) // 60)
+        print(f"[DEPRECATION] Skipped — next pass in {hours}h{mins}m")
+        return
+    num_expired = _run_content_deprecation()
+    game.last_deprecation_time = now
+    _save_deprecation_timestamp()
+
+    # Start background regen to refill expired slots (skip in debug mode — use /regen)
+    is_debug = os.environ.get("DEBUG_MODE", "").lower() in ("1", "true")
+    if num_expired > 0 and not is_debug:
+        start_background_regen(num_expired)
+
+
+def _run_content_deprecation():
+    """Execute one round of content deprecation. Returns count of expired rooms."""
+    # Expire oldest 10% of custom rooms — just remove, no usage check
     expired_rooms = []
     if game.room_library:
         expired_rooms = game.room_library.expire_oldest()
         if expired_rooms:
-            print(f"[DUNGEON] Expired rooms: {expired_rooms}")
+            print(f"[DEPRECATION] Expired rooms: {expired_rooms}")
 
-    # Expire oldest custom monsters/tiles from their libraries
+    # Expire oldest 10% of custom monsters/tiles
     expired_monsters = []
     expired_tiles = []
     if game.monster_library:
@@ -528,36 +438,203 @@ def destroy_dungeon():
     for mid in expired_monsters:
         if mid in ref_monsters:
             game.deprecated_monsters.add(mid)
-            print(f"[DUNGEON] Deprecated monster '{mid}' (still referenced)")
+            print(f"[DEPRECATION] Deprecated monster '{mid}' (still referenced)")
         else:
             _cleanup_monster(mid)
-            print(f"[DUNGEON] Removed monster '{mid}'")
+            print(f"[DEPRECATION] Removed monster '{mid}'")
 
     # Handle expired tiles: deprecate if still referenced, remove if not
     for tid in expired_tiles:
         if tid in ref_tiles:
             game.deprecated_tiles.add(tid)
-            print(f"[DUNGEON] Deprecated tile '{tid}' (still referenced)")
+            print(f"[DEPRECATION] Deprecated tile '{tid}' (still referenced)")
         else:
             _cleanup_tile(tid)
-            print(f"[DUNGEON] Removed tile '{tid}'")
+            print(f"[DEPRECATION] Removed tile '{tid}'")
 
     # Clean up previously deprecated entries that are no longer referenced
     stale_monsters = game.deprecated_monsters - ref_monsters
     for mid in stale_monsters:
         _cleanup_monster(mid)
-        print(f"[DUNGEON] Cleaned up deprecated monster '{mid}'")
+        print(f"[DEPRECATION] Cleaned up deprecated monster '{mid}'")
 
     stale_tiles = game.deprecated_tiles - ref_tiles
     for tid in stale_tiles:
         _cleanup_tile(tid)
-        print(f"[DUNGEON] Cleaned up deprecated tile '{tid}'")
+        print(f"[DEPRECATION] Cleaned up deprecated tile '{tid}'")
 
     # Save libraries to disk
     _save_libraries()
 
-    print(f"[DUNGEON] Destroyed instance: layout={layout_name}")
-    game.active_dungeon = None
+    total = len(expired_rooms) + len(expired_monsters) + len(expired_tiles)
+    stale_count = len(stale_monsters) + len(stale_tiles)
+    if total > 0 or stale_count > 0:
+        print(f"[DEPRECATION] Deprecation complete: "
+              f"{len(expired_rooms)} rooms, {len(expired_monsters)} monsters, "
+              f"{len(expired_tiles)} tiles expired, {stale_count} stale cleaned up")
+    else:
+        print("[DEPRECATION] Nothing to deprecate")
+
+    return len(expired_rooms)
+
+
+def start_background_regen(num_rooms):
+    """Start background content generation to refill libraries.
+
+    Takes a snapshot of library state synchronously (before any await),
+    then hands it to the async task. The task never reads from game.* —
+    it only writes at the very end via _apply_staged_content().
+    """
+    if game.regen_task is not None and not game.regen_task.done():
+        print("[REGEN] Already in progress, skipping")
+        return
+    if num_rooms <= 0:
+        return
+
+    # Snapshot everything synchronously before launching the task
+    existing_monsters, existing_tiles = get_active_content_lists()
+    existing_room_names = [
+        e.data.get("name", e.id) for e in game.room_library.real_entries
+    ]
+    snapshot = {
+        "existing_monsters": existing_monsters,
+        "existing_tiles": existing_tiles,
+        "existing_room_names": existing_room_names,
+        "monster_count": game.monster_library.real_count if game.monster_library else 0,
+        "monster_cap": game.monster_library.capacity if game.monster_library else 0,
+        "tile_count": game.tile_library.real_count if game.tile_library else 0,
+        "tile_cap": game.tile_library.capacity if game.tile_library else 0,
+    }
+
+    game.regen_task = asyncio.create_task(_background_regen(num_rooms, snapshot))
+
+
+async def _background_regen(num_rooms, snapshot):
+    """Generate rooms in the background to refill libraries after deprecation.
+
+    Uses only the provided snapshot — never reads from game.* directly.
+    Applies all results at the end via _apply_staged_content().
+    """
+    from server import ai_generator
+
+    print(f"[REGEN] Starting background generation of {num_rooms} room(s)...")
+    staged = []
+
+    # Unpack snapshot into local working copies
+    existing_monsters = snapshot["existing_monsters"]
+    existing_tiles = snapshot["existing_tiles"]
+    existing_room_names = snapshot["existing_room_names"]
+    monster_count = snapshot["monster_count"]
+    monster_cap = snapshot["monster_cap"]
+    tile_count = snapshot["tile_count"]
+    tile_cap = snapshot["tile_cap"]
+
+    for i in range(num_rooms):
+        try:
+            result = await ai_generator.generate_room(
+                theme="dungeon",
+                difficulty=random.randint(3, 7),
+                existing_monsters=existing_monsters,
+                existing_tiles=existing_tiles,
+                monster_library_full=(monster_count >= monster_cap),
+                tile_library_full=(tile_count >= tile_cap),
+                existing_room_names=existing_room_names,
+                monster_library_count=monster_count,
+                monster_library_capacity=monster_cap,
+                tile_library_count=tile_count,
+                tile_library_capacity=tile_cap,
+                progress=None,
+            )
+        except Exception as e:
+            print(f"[REGEN] Room {i+1}/{num_rooms} failed: {type(e).__name__}: {e}")
+            continue
+
+        if result is None:
+            print(f"[REGEN] Room {i+1}/{num_rooms} returned None, skipping")
+            continue
+
+        staged.append(result)
+
+        # Update snapshot so next room sees what we've generated
+        for m in result.get("new_monsters", []):
+            existing_monsters.append({"kind": m["kind"], "tags": m.get("tags", [])})
+            monster_count += 1
+        for t in result.get("new_tiles", []):
+            existing_tiles.append({
+                "id": t["id"], "walkable": t.get("walkable", False),
+                "tags": t.get("tags", []),
+            })
+            tile_count += 1
+        existing_room_names.append(result.get("name", "Unknown"))
+
+        print(f"[REGEN] Room {i+1}/{num_rooms} generated: \"{result.get('name', '?')}\"")
+
+    if staged:
+        _apply_staged_content(staged)
+    else:
+        print("[REGEN] No rooms generated successfully")
+
+    game.regen_task = None
+
+
+def _apply_staged_content(results):
+    """Register staged content into game registries and libraries.
+
+    Fully synchronous — no awaits — so no interleaving with other coroutines.
+    """
+    from server.validation import register_monster_type, register_tile_type
+    from server.content_library import LibraryEntry
+
+    total_monsters = 0
+    total_tiles = 0
+    total_rooms = 0
+
+    for result in results:
+        # Register new monsters
+        for m in result.get("new_monsters", []):
+            ok, errors = register_monster_type(m)
+            if ok:
+                added = game.monster_library.add(LibraryEntry(
+                    id=m["kind"], content_type="monster",
+                    tags=m.get("tags", []), created_at=time.time(), data=m,
+                ))
+                if added:
+                    total_monsters += 1
+            else:
+                print(f"[REGEN] Monster registration failed for {m.get('kind')}: {errors}")
+
+        # Register new tiles
+        for t in result.get("new_tiles", []):
+            ok, errors = register_tile_type(t)
+            if ok:
+                added = game.tile_library.add(LibraryEntry(
+                    id=t["id"], content_type="tile",
+                    tags=t.get("tags", []), created_at=time.time(), data=t,
+                ))
+                if added:
+                    total_tiles += 1
+            else:
+                print(f"[REGEN] Tile registration failed for {t.get('id')}: {errors}")
+
+        # Add room to library (deduplicate ID)
+        room_name = result.get("name", "Unknown Room")
+        lib_id = room_name.lower().replace(" ", "_")
+        base_id = lib_id
+        counter = 1
+        while game.room_library.get_by_id(lib_id):
+            counter += 1
+            lib_id = f"{base_id}_{counter}"
+
+        added = game.room_library.add(LibraryEntry(
+            id=lib_id, content_type="room",
+            tags=[], created_at=time.time(), data=result,
+        ))
+        if added:
+            total_rooms += 1
+
+    _save_libraries()
+    print(f"[REGEN] Applied staged content: {total_rooms} rooms, "
+          f"{total_monsters} monsters, {total_tiles} tiles")
 
 
 def is_dungeon_room(room_id: str) -> bool:

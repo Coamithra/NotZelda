@@ -55,6 +55,10 @@ class GameState:
         self.next_color_index = 0
         self.next_projectile_id = 0
 
+        # Content deprecation & background regen
+        self.last_deprecation_time = 0.0  # timestamp of last deprecation pass
+        self.regen_task = None             # asyncio.Task for background content generation
+
         # Activity log path
         self.log_file = Path(__file__).parent.parent / "event_log.txt"
 

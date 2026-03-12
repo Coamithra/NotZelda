@@ -42,6 +42,7 @@ from server.combat import damage_player, handle_attack, monster_tick, projectile
 from server.quests import handle_quest_npc
 from server.debug_monsters import handle_debug_spawn, auto_register_debug_monsters
 from server.dungeon_content import register_precreated_types, load_precreated_content
+from server.dungeons import load_deprecation_timestamp, _run_content_deprecation, start_background_regen
 from server.content_library import ContentLibrary, MONSTER_LIBRARY_CAPACITY, TILE_LIBRARY_CAPACITY, ROOM_LIBRARY_CAPACITY
 from server.validation import register_monster_type, register_tile_type
 
@@ -231,6 +232,16 @@ async def handle_chat(player, text: str):
             await send_to(player, {"type": "info", "text": "Cheat mode: sword + invulnerability"})
         elif cmd == "debug_spawn" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
             await handle_debug_spawn(player, parts[1] if len(parts) > 1 else "")
+        elif cmd == "deprecate" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+            _run_content_deprecation()
+            await send_to(player, {"type": "info", "text": "Forced content deprecation pass — check server log"})
+        elif cmd == "regen" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+            count = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else game.room_library.placeholder_count
+            if count <= 0:
+                await send_to(player, {"type": "info", "text": "No room library slots to fill"})
+            else:
+                start_background_regen(count)
+                await send_to(player, {"type": "info", "text": f"Background regen started: {count} room(s) — check server log"})
         else:
             await send_to(player, {"type": "info", "text": "Unknown command. Try /help"})
         return
@@ -434,6 +445,7 @@ async def main():
     )
     asyncio.create_task(monster_tick())
     asyncio.create_task(projectile_tick())
+    load_deprecation_timestamp()
     print("MUD server running!")
     print(f"Local:  http://localhost:{port}")
 

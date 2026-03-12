@@ -267,15 +267,10 @@ async def do_room_transition(player, exit_direction: str):
             for cell, assignment in game.active_dungeon.cell_assignments.items():
                 room_id_check = f"d1_{cell[0]}_{cell[1]}"
                 if room_id_check == new_room_id and not assignment["resolved"]:
-                    # Send conjuring animation for custom rooms (placeholder or library)
+                    # Send conjuring animation for custom rooms
                     if assignment["source"] == "custom":
                         await send_to(player, {"type": "room_generating"})
-                    # Remove player from game during generation so monsters can't target them
-                    game.players.pop(player.ws, None)
-                    try:
-                        resolved = await resolve_dungeon_room(game.active_dungeon, cell, player=player)
-                    finally:
-                        game.players[player.ws] = player
+                    resolved = resolve_dungeon_room(game.active_dungeon, cell)
                     if not resolved:
                         await send_to(player, {"type": "info", "text": "The way is blocked."})
                         return
