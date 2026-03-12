@@ -463,7 +463,7 @@ def _deprecate_oldest(library, deprecated_set):
     if not candidates:
         return []
     candidates.sort()
-    count = max(1, math.ceil(library.capacity * 0.10))
+    count = max(1, math.ceil(len(candidates) * 0.10))
     count = min(count, len(candidates))
     newly = [cid for _, cid in candidates[:count]]
     deprecated_set.update(newly)

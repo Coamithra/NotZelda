@@ -178,9 +178,9 @@ class ContentLibrary:
         # Sort by created_at ascending (oldest first)
         eligible.sort(key=lambda x: x[1].created_at)
 
-        # Expire up to rate * capacity entries (round up, minimum 1)
+        # Expire up to rate * custom entries (round up, minimum 1)
         import math
-        count = max(1, math.ceil(self.capacity * rate))
+        count = max(1, math.ceil(len(eligible) * rate))
         count = min(count, len(eligible))
 
         expired_ids = []
