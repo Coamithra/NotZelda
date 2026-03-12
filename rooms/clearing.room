@@ -15,5 +15,5 @@ TR TR GR GR GR GR FL GR GR GR GR GR GR TR TR
 TR TR TR GR GR GR GR GR GR GR GR TR TR TR TR
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 ---
-npc Guard 7 2 guard Careful, it's dangerous to go alone!
+npc Guard 7 2 guard Careful, it's dangerous to go alone! | Nervous young guard posted at the clearing. Scared of the dungeon entrance nearby but won't admit it. Warns adventurers about the dangers below. Has seen strange lights coming from the dungeon at night. Looks up to the town guard in the square.
 monster slime 7 8

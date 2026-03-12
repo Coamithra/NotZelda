@@ -42,6 +42,7 @@ from server.lifecycle import (
 from server.combat import damage_player, handle_attack, monster_tick, projectile_tick
 from server.quests import handle_quest_npc
 from server.debug_monsters import handle_debug_spawn, auto_register_debug_monsters
+from server.npc_chat import find_adjacent_npc, handle_npc_chat, clear_player_history
 from server.dungeon_content import register_precreated_types, load_precreated_content
 from server.dungeons import load_deprecation_timestamp, load_deprecated_sets, _run_content_deprecation, start_background_regen
 from server.content_library import ContentLibrary, MONSTER_LIBRARY_CAPACITY, TILE_LIBRARY_CAPACITY, ROOM_LIBRARY_CAPACITY
@@ -300,6 +301,11 @@ async def handle_chat(player, text: str):
         "text": text,
     })
 
+    # Check if player is adjacent to an NPC — trigger LLM conversation
+    guard = find_adjacent_npc(player)
+    if guard:
+        await handle_npc_chat(player, guard, text)
+
 
 # ---------------------------------------------------------------------------
 # Connection lifecycle
@@ -388,6 +394,7 @@ async def handle_connection(websocket):
             del game.players[websocket]
             log_event("LEAVE", player.name)
             print(f"[LEAVE] {player.name}")
+            clear_player_history(player.name)
             await broadcast_to_room(
                 leaving_room,
                 {"type": "player_left", "name": player.name},

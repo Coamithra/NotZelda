@@ -306,13 +306,17 @@ function handleMessage(msg) {
       startDance(msg.name);
       break;
 
-    case "chat":
+    case "chat": {
+      // NPC responses get longer display time and more lines
+      const isNpc = G.guards && G.guards.some(g => g.name === msg.from);
       G.speechBubbles.push({
         from: msg.from,
         text: msg.text,
-        expires: Date.now() + 4000,
+        npc: isNpc,
+        expires: Date.now() + (isNpc ? 8000 : 4000),
       });
       break;
+    }
 
     case "player_hurt": {
       if (msg.name === G.myName) {

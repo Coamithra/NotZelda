@@ -15,5 +15,5 @@ TR SH GR GR GR GR GR BR GR WA WA GR GR GR TR
 TR GR GR GR GR GR GR GR BR WA GR GR GR GR TR
 TR TR TR TR TR TR GR GR BR TR WA TR TR TR TR
 ---
-npc River_Guard 7 4 guard The rapids are treacherous. Use the bridges or you'll be swept away.
+npc River_Guard 7 4 guard The rapids are treacherous. Use the bridges or you'll be swept away. | Stern river guard who has pulled too many fools from the rapids. Speaks with authority. Knows every crossing point along the river. Takes his duty seriously.
 monster slime 4 7

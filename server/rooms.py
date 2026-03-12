@@ -107,12 +107,21 @@ def load_room_files(directory: str = "rooms"):
                     npc_x = int(tokens[2])
                     npc_y = int(tokens[3])
                     npc_sprite = tokens[4]
-                    npc_dialog = " ".join(tokens[5:]) if len(tokens) > 5 else ""
+                    npc_rest = " ".join(tokens[5:]) if len(tokens) > 5 else ""
+                    # Split on | to separate static dialog from personality
+                    if "|" in npc_rest:
+                        npc_dialog, npc_personality = npc_rest.split("|", 1)
+                        npc_dialog = npc_dialog.strip()
+                        npc_personality = npc_personality.strip()
+                    else:
+                        npc_dialog = npc_rest
+                        npc_personality = ""
                     if room_id not in game.guards:
                         game.guards[room_id] = []
                     game.guards[room_id].append({
                         "name": npc_name, "x": npc_x, "y": npc_y,
                         "sprite": npc_sprite, "dialog": npc_dialog,
+                        "personality": npc_personality,
                     })
                 elif tokens[0] == "monster" and len(tokens) >= 4:
                     kind = tokens[1]
@@ -180,11 +189,17 @@ def load_dungeon_templates(directory: str = "rooms/dungeon1"):
                     continue
                 tokens = line.split()
                 if tokens[0] == "npc" and len(tokens) >= 5:
+                    rest = " ".join(tokens[5:]) if len(tokens) > 5 else ""
+                    if "|" in rest:
+                        dlg, pers = rest.split("|", 1)
+                        dlg, pers = dlg.strip(), pers.strip()
+                    else:
+                        dlg, pers = rest, ""
                     guards.append({
                         "name": tokens[1].replace("_", " "),
                         "x": int(tokens[2]), "y": int(tokens[3]),
                         "sprite": tokens[4],
-                        "dialog": " ".join(tokens[5:]) if len(tokens) > 5 else "",
+                        "dialog": dlg, "personality": pers,
                     })
                 elif tokens[0] == "monster" and len(tokens) >= 4:
                     monsters.append({"kind": tokens[1], "x": int(tokens[2]), "y": int(tokens[3])})

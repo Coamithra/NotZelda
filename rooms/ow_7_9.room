@@ -15,6 +15,6 @@ RW RF ST RF ST RF RF RF RF RF RF ST RF RF RW
 RW RF RF RF RF RF RF RF RF RF RF RF RF RF RW
 RW RW RW RW RW RW RW RW RW RW RW RW RW RW RW
 ---
-npc Ghost_Knight 7 5 ghost_knight The armory held a hundred swords. Now only dust and echoes remain.
+npc Ghost_Knight 7 5 ghost_knight The armory held a hundred swords. Now only dust and echoes remain. | Ghost of a noble knight who served the castle. Speaks with honor and sadness. Remembers the kingdom's last stand. Bound by his oath to protect the castle even in death.
 monster skeleton 10 3
 monster bat 4 8

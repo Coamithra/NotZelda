@@ -15,6 +15,6 @@ DK SM SM SM SM SM SM SM SM SM SM SM DK SM DK
 DK SM SM SM SM SM SM SM SM SM SM SM SM SM DK
 DK DK DK DK DK DK SM SM SM DK DK DK DK DK DK
 ---
-npc Swamp_Witch 7 3 witch Beware the deep waters. Not all who sink are found.
+npc Swamp_Witch 7 3 witch Beware the deep waters. Not all who sink are found. | Mysterious swamp witch who brews potions from marsh herbs. Speaks in cryptic warnings and dark humor. Knows forbidden magic and ancient curses. May know something about Amara's curse but won't say directly.
 monster swamp_blob 3 7
 monster swamp_blob 11 3

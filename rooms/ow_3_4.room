@@ -15,5 +15,5 @@ TR GR GR GR FL GR GR RD GR GR GR FL GR GR TR
 TR GR GR GR GR GR GR RD GR GR GR GR GR GR TR
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 ---
-npc Well_Keeper 4 5 farmer This well has been dry for years. They say the water went underground.
+npc Well_Keeper 4 5 farmer This well has been dry for years. They say the water went underground. | Patient farmer who still tends a dry well out of habit. Speaks slowly and thoughtfully. Hopes the water will return someday. Knows old stories about the land.
 monster slime 11 6

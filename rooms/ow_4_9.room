@@ -15,5 +15,5 @@ TR GR GR FL TG FL GR RD GR GR TG FL TG GR TR
 TR GR GR GR FL GR GR RD GR GR GR GR GR GR TR
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 ---
-npc Shepherd 3 3 farmer My flock grazes here in summer. Wolves come from the east at night.
+npc Shepherd 3 3 farmer My flock grazes here in summer. Wolves come from the east at night. | Protective shepherd who watches over his flock. Speaks simply and honestly. Worried about wolves and stranger things coming from the east. Knows the plains well.
 monster slime 11 4

@@ -15,5 +15,5 @@ TR GR GR GR FL GR GR DT GR GR GR GR GR GR TR
 TR GR GR FL GR FL GR DT GR GR GR GR GR GR TR
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 ---
-npc Old_Hunter 10 5 ranger This cabin's been abandoned for years. Something drove the woodsman away.
+npc Old_Hunter 10 5 ranger This cabin's been abandoned for years. Something drove the woodsman away. | Retired hunter investigating an abandoned cabin. Wary and observant. Suspects something unnatural drove the previous occupant away. Carries a crossbow he hasn't used in years.
 monster slime 3 3

@@ -15,6 +15,6 @@ IF GR GR GR GR BO GR GS GR GR BO GR GR GR IF
 IF GR GR GR GR BO BO BO DR BO BO GR GR GR IF
 IF IF IF IF IF IF IF IF IF IF IF IF IF IF IF
 ---
-npc Gravedigger 7 8 elder The oldest graves are deeper in. Some say the dead don't stay buried.
+npc Gravedigger 7 8 elder The oldest graves are deeper in. Some say the dead don't stay buried. | Weathered gravedigger who has worked this cemetery for years. Dark sense of humor. Has seen things crawl out of graves at night but nobody believes him. Speaks matter-of-factly about death.
 monster skeleton 3 3
 monster skeleton 10 2

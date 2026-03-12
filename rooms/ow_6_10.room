@@ -15,5 +15,5 @@ TR GR GR GR TG GR GR RD GR GR GR GR GR GR TR
 TR GR GR GR GR GR GR RD GR GR GR GR GR GR TR
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 ---
-npc Watchman 10 4 guard The old watchtower. You can see the castle from up here on a clear day.
+npc Watchman 10 4 guard The old watchtower. You can see the castle from up here on a clear day. | Lonely watchman stationed at a crumbling tower. Speaks wistfully about the view. Has watched the castle ruins for years. Reports strange movements in the graveyard below.
 monster slime 3 3

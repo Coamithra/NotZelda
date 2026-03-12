@@ -15,6 +15,6 @@ CC DT DT SA SA SA SA ST SA SA SA CC SA SA CC
 CC SA SA SA SA SA SA SA SA SA SA SA SA SA CC
 CC CC CC CC CC CC CC CC CC CC CC CC CC CC CC
 ---
-npc Desert_Nomad 7 8 nomad Water is scarce. The oasis lies to the south.
+npc Desert_Nomad 7 8 nomad Water is scarce. The oasis lies to the south. | Weathered desert traveler who navigates by the stars. Speaks sparingly — every word matters in the desert. Warns about scorpions and sandstorms. Knows where to find water.
 monster scorpion 11 3
 monster scorpion 3 5

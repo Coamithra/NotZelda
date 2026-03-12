@@ -377,6 +377,7 @@ function renderSpeechBubbles() {
 
     G.ctx.font = "11px monospace";
     const maxWidth = 200;
+    const maxLines = 3;
     const words = bubble.text.split(" ");
     const lines = [];
     let line = "";
@@ -390,7 +391,7 @@ function renderSpeechBubbles() {
       }
     }
     if (line) lines.push(line);
-    if (lines.length > 3) lines.length = 3;
+    if (lines.length > maxLines) lines.length = maxLines;
 
     const lineHeight = 14;
     const pad = 6;

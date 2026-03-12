@@ -15,6 +15,6 @@ CC SA SA SA SA SA CC SA SA SA SA SA SA SA CC
 CC SA SA SA SA SA SA SA SA SA SA CC SA SA CC
 CC CC CC CC CC CC SA SA SA CC CC CC CC CC CC
 ---
-npc Nomad 3 4 nomad We camped here once. The stones still hold heat from ancient fires.
+npc Nomad 3 4 nomad We camped here once. The stones still hold heat from ancient fires. | Desert nomad resting at an old campsite. Speaks poetically about the desert and its harsh beauty. Travels between oases and trading posts. Knows desert survival lore.
 monster scorpion 10 3
 monster scorpion 8 7
