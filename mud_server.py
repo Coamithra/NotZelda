@@ -270,12 +270,16 @@ async def handle_chat(player, text: str):
                     "type": "chat", "from": player.name, "text": f"*{action}*",
                 })
         elif cmd == "cheat" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
-            player.grant_flag("has_sword")
-            player.grant_flag("invulnerable")
-            player.hp = player.max_hp
-            await send_to(player, {"type": "sword_obtained"})
-            await send_to(player, {"type": "hp_update", "hp": player.hp, "max_hp": player.max_hp})
-            await send_to(player, {"type": "info", "text": "Cheat mode: sword + invulnerability"})
+            if player.has_flag("invulnerable"):
+                player.flags.discard("invulnerable")
+                await send_to(player, {"type": "info", "text": "Cheat mode off: vulnerable again"})
+            else:
+                player.grant_flag("has_sword")
+                player.grant_flag("invulnerable")
+                player.hp = player.max_hp
+                await send_to(player, {"type": "sword_obtained"})
+                await send_to(player, {"type": "hp_update", "hp": player.hp, "max_hp": player.max_hp})
+                await send_to(player, {"type": "info", "text": "Cheat mode: sword + invulnerability"})
         elif cmd == "debug_spawn" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
             await handle_debug_spawn(player, parts[1] if len(parts) > 1 else "")
         elif cmd == "deprecate" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):

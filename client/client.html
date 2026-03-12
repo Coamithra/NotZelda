@@ -92,6 +92,25 @@
   #server-log .log-line.regen { color: #3fb950; }
   #server-log .log-line.deprecation { color: #d2a8ff; }
 
+  /* ---------- Chat log ---------- */
+  #chat-log {
+    width: 720px;
+    height: 120px;
+    background: #0d1117;
+    border: 2px solid #30363d;
+    border-top: none;
+    overflow-y: auto;
+    padding: 4px 8px;
+    font-size: .8rem;
+    color: #8b949e;
+    scrollbar-width: thin;
+    scrollbar-color: #30363d #0d1117;
+  }
+  #chat-log .chat-line { margin: 2px 0; line-height: 1.3; }
+  #chat-log .chat-name { color: #e6b422; font-weight: bold; }
+  #chat-log .chat-npc { color: #d2a8ff; }
+  #chat-log .chat-system { color: #484f58; font-style: italic; }
+
   /* ---------- Chat bar ---------- */
   #chat-bar {
     display: flex;
@@ -200,6 +219,7 @@
   }
 
   /* ---------- Mobile overrides ---------- */
+  body.mobile #chat-log { display: none; }
   body.mobile #dpad { display: block; }
   body.mobile #mobile-chat-btn, body.mobile #mobile-sword-btn { display: flex; align-items: center; justify-content: center; }
   body.mobile #debug-btn { bottom: 20px; right: 20px; width: 36px; height: 36px; font-size: 18px; }
@@ -235,6 +255,7 @@
 <div id="game-screen">
   <div id="game-col">
     <canvas id="game" width="720" height="528"></canvas>
+    <div id="chat-log"></div>
     <div id="chat-bar">
       <input id="chat-input" type="text" placeholder="Press Enter to chat..." autocomplete="off">
       <span id="chat-hint">ESC to close</span>
@@ -304,6 +325,7 @@ G.ctx         = G.canvas.getContext("2d");
 G.chatInput   = document.getElementById("chat-input");
 G.chatBar     = document.getElementById("chat-bar");
 G.chatHint    = document.getElementById("chat-hint");
+G.chatLog     = document.getElementById("chat-log");
 G.serverLog   = document.getElementById("server-log");
 
 // ---------------------------------------------------------------------------

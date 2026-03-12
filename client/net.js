@@ -1,5 +1,19 @@
 /* WebSocket connection, message handling, and reconnection logic. */
 
+function escHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function appendChatLog(html) {
+  if (!G.chatLog) return;
+  const div = document.createElement("div");
+  div.className = "chat-line";
+  div.innerHTML = html;
+  G.chatLog.appendChild(div);
+  while (G.chatLog.childElementCount > 100) G.chatLog.removeChild(G.chatLog.firstChild);
+  G.chatLog.scrollTop = G.chatLog.scrollHeight;
+}
+
 function dbg(msg) {
   const ts = new Date().toLocaleTimeString();
   const line = `${ts} ${msg}`;
@@ -140,6 +154,7 @@ function handleMessage(msg) {
 
       // Store dungeon debug info if present
       G.dungeonDebug = msg.dungeon_debug || null;
+
 
       const isFirstRoom = !G.currentRoom;
       let oldCanvas = null;
@@ -290,12 +305,14 @@ function handleMessage(msg) {
           moving: false,
         };
         if (msg.dancing) startDance(msg.name);
+        appendChatLog(`<span class="chat-system">${escHtml(msg.name)} entered the room</span>`);
       }
       break;
 
     case "player_left":
       delete G.otherPlayers[msg.name];
       stopDance(msg.name);
+      appendChatLog(`<span class="chat-system">${escHtml(msg.name)} left the room</span>`);
       break;
 
     case "attack":
@@ -315,6 +332,8 @@ function handleMessage(msg) {
         npc: isNpc,
         expires: Date.now() + (isNpc ? 8000 : 4000),
       });
+      const nameClass = isNpc ? "chat-name chat-npc" : "chat-name";
+      appendChatLog(`<span class="${nameClass}">${escHtml(msg.from)}:</span> ${escHtml(msg.text)}`);
       break;
     }
 
@@ -336,6 +355,7 @@ function handleMessage(msg) {
     case "you_died":
       G.dyingPlayerSelf = { x: msg.x, y: msg.y, frame: 0, startTime: Date.now() };
       G.myHp = 0;
+      appendChatLog(`<span class="chat-system">You died!</span>`);
       break;
 
     case "player_died":
@@ -347,6 +367,7 @@ function handleMessage(msg) {
         frame: 0,
         nextTime: Date.now() + DYING_PLAYER_FRAME_MS,
       };
+      appendChatLog(`<span class="chat-system">${escHtml(msg.name)} died!</span>`);
       break;
 
     case "hp_update":
@@ -551,6 +572,7 @@ function handleMessage(msg) {
       const lines = msg.text.split("\n");
       for (const line of lines) {
         G.infoMessages.push({ text: line, expires: Date.now() + 5000 });
+        appendChatLog(`<span class="chat-system">${escHtml(line)}</span>`);
       }
       break;
     }
