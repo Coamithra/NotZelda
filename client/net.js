@@ -80,6 +80,7 @@ function handleMessage(msg) {
       G.playerFlags = new Set();
       G.loginScreen.classList.add("hidden");
       G.gameScreen.classList.add("active");
+      if (G.debugMode && G.serverLog) G.serverLog.classList.add("active");
       MusicPlayer.start();
       if (!G.gameLoopStarted) {
         G.gameLoopStarted = true;
@@ -491,6 +492,27 @@ function handleMessage(msg) {
       }
       break;
     }
+
+    case "debug_log":
+      dbg(msg.text);
+      break;
+
+    case "server_log":
+      if (G.serverLog) {
+        const line = document.createElement("div");
+        line.className = "log-line";
+        const t = msg.text;
+        if (t.includes("[REGEN]")) line.classList.add("regen");
+        else if (t.includes("[DEPRECATION]")) line.classList.add("deprecation");
+        else if (t.includes("[DUNGEON]")) line.classList.add("highlight");
+        else if (t.includes("ERROR") || t.includes("failed") || t.includes("Traceback")) line.classList.add("error");
+        line.textContent = t;
+        G.serverLog.appendChild(line);
+        // Cap at 200 lines
+        while (G.serverLog.childElementCount > 200) G.serverLog.removeChild(G.serverLog.firstChild);
+        G.serverLog.scrollTop = G.serverLog.scrollHeight;
+      }
+      break;
 
     case "info": {
       const lines = msg.text.split("\n");

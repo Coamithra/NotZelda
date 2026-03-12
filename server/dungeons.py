@@ -10,7 +10,7 @@ from server.constants import (
     STAIRS_UP, EDGE_SPAWN_POINTS, DEFAULT_SPAWN, DUNGEON_MUSIC_TRACKS,
 )
 from server.dungeon_layouts import DUNGEON_LAYOUTS
-from server.net import players_in_room
+from server.net import players_in_room, broadcast_debug
 
 
 class DungeonInstance:
@@ -203,6 +203,7 @@ async def create_dungeon() -> DungeonInstance | None:
           f"rooms={len(active_rooms)} ({precreated_count}p/{custom_count}c), "
           f"slots={num_slots} ({filled_slots}filled/{empty_slots}empty), "
           f"entrance={entrance_room_id}, music={music_track}")
+    broadcast_debug(f"Dungeon created: {layout['name']} ({len(active_rooms)} rooms, {precreated_count}p/{custom_count}c)")
 
     # Resolve the entrance room immediately (always precreated, so instant)
     resolve_dungeon_room(instance, (entrance_col, entrance_row))
@@ -385,6 +386,7 @@ def destroy_dungeon():
 
     layout_name = game.active_dungeon.layout['name']
     print(f"[DUNGEON] Destroyed instance: layout={layout_name}")
+    broadcast_debug(f"Dungeon destroyed ({layout_name})")
     game.active_dungeon = None
 
     # Run daily content deprecation if enough time has passed
@@ -403,15 +405,20 @@ def _maybe_run_deprecation():
         hours = int(remaining // 3600)
         mins = int((remaining % 3600) // 60)
         print(f"[DEPRECATION] Skipped — next pass in {hours}h{mins}m")
+        broadcast_debug(f"Deprecation: next pass in {hours}h{mins}m")
         return
+    broadcast_debug("Deprecation: starting pass...")
     num_expired = _run_content_deprecation()
     game.last_deprecation_time = now
     _save_deprecation_timestamp()
 
     # Start background regen to refill expired slots (skip in debug mode — use /regen)
     is_debug = os.environ.get("DEBUG_MODE", "").lower() in ("1", "true")
-    if num_expired > 0 and not is_debug:
-        start_background_regen(num_expired)
+    if num_expired > 0:
+        if is_debug:
+            broadcast_debug(f"Regen: skipped (debug mode) — use /regen {num_expired}")
+        else:
+            start_background_regen(num_expired)
 
 
 def _run_content_deprecation():
@@ -422,6 +429,7 @@ def _run_content_deprecation():
         expired_rooms = game.room_library.expire_oldest()
         if expired_rooms:
             print(f"[DEPRECATION] Expired rooms: {expired_rooms}")
+            broadcast_debug(f"Expired {len(expired_rooms)} room(s): {', '.join(expired_rooms)}")
 
     # Expire oldest 10% of custom monsters/tiles
     expired_monsters = []
@@ -431,6 +439,11 @@ def _run_content_deprecation():
     if game.tile_library:
         expired_tiles = game.tile_library.expire_oldest()
 
+    if expired_monsters:
+        broadcast_debug(f"Expired {len(expired_monsters)} monster(s): {', '.join(expired_monsters)}")
+    if expired_tiles:
+        broadcast_debug(f"Expired {len(expired_tiles)} tile(s): {', '.join(expired_tiles)}")
+
     # Scan remaining rooms for referenced monster/tile IDs
     ref_monsters, ref_tiles = _get_referenced_ids(game.room_library)
 
@@ -439,29 +452,35 @@ def _run_content_deprecation():
         if mid in ref_monsters:
             game.deprecated_monsters.add(mid)
             print(f"[DEPRECATION] Deprecated monster '{mid}' (still referenced)")
+            broadcast_debug(f"Monster '{mid}' deprecated (still in use)")
         else:
             _cleanup_monster(mid)
             print(f"[DEPRECATION] Removed monster '{mid}'")
+            broadcast_debug(f"Monster '{mid}' removed")
 
     # Handle expired tiles: deprecate if still referenced, remove if not
     for tid in expired_tiles:
         if tid in ref_tiles:
             game.deprecated_tiles.add(tid)
             print(f"[DEPRECATION] Deprecated tile '{tid}' (still referenced)")
+            broadcast_debug(f"Tile '{tid}' deprecated (still in use)")
         else:
             _cleanup_tile(tid)
             print(f"[DEPRECATION] Removed tile '{tid}'")
+            broadcast_debug(f"Tile '{tid}' removed")
 
     # Clean up previously deprecated entries that are no longer referenced
     stale_monsters = game.deprecated_monsters - ref_monsters
     for mid in stale_monsters:
         _cleanup_monster(mid)
         print(f"[DEPRECATION] Cleaned up deprecated monster '{mid}'")
+        broadcast_debug(f"Stale monster '{mid}' cleaned up")
 
     stale_tiles = game.deprecated_tiles - ref_tiles
     for tid in stale_tiles:
         _cleanup_tile(tid)
         print(f"[DEPRECATION] Cleaned up deprecated tile '{tid}'")
+        broadcast_debug(f"Stale tile '{tid}' cleaned up")
 
     # Save libraries to disk
     _save_libraries()
@@ -472,8 +491,10 @@ def _run_content_deprecation():
         print(f"[DEPRECATION] Deprecation complete: "
               f"{len(expired_rooms)} rooms, {len(expired_monsters)} monsters, "
               f"{len(expired_tiles)} tiles expired, {stale_count} stale cleaned up")
+        broadcast_debug(f"Deprecation done: {len(expired_rooms)}R {len(expired_monsters)}M {len(expired_tiles)}T expired, {stale_count} stale")
     else:
         print("[DEPRECATION] Nothing to deprecate")
+        broadcast_debug("Deprecation: nothing to expire")
 
     return len(expired_rooms)
 
@@ -487,6 +508,7 @@ def start_background_regen(num_rooms):
     """
     if game.regen_task is not None and not game.regen_task.done():
         print("[REGEN] Already in progress, skipping")
+        broadcast_debug("Regen: already in progress")
         return
     if num_rooms <= 0:
         return
@@ -518,7 +540,12 @@ async def _background_regen(num_rooms, snapshot):
     from server import ai_generator
 
     print(f"[REGEN] Starting background generation of {num_rooms} room(s)...")
+    broadcast_debug(f"Regen: generating {num_rooms} room(s)...")
     staged = []
+
+    # Progress callback — sends each AI step to the debug panel
+    async def on_progress(step, detail=""):
+        broadcast_debug(f"  {detail}" if detail else f"  {step}")
 
     # Unpack snapshot into local working copies
     existing_monsters = snapshot["existing_monsters"]
@@ -530,6 +557,7 @@ async def _background_regen(num_rooms, snapshot):
     tile_cap = snapshot["tile_cap"]
 
     for i in range(num_rooms):
+        broadcast_debug(f"Regen: room {i+1}/{num_rooms}...")
         try:
             result = await ai_generator.generate_room(
                 theme="dungeon",
@@ -543,14 +571,16 @@ async def _background_regen(num_rooms, snapshot):
                 monster_library_capacity=monster_cap,
                 tile_library_count=tile_count,
                 tile_library_capacity=tile_cap,
-                progress=None,
+                progress=on_progress,
             )
         except Exception as e:
             print(f"[REGEN] Room {i+1}/{num_rooms} failed: {type(e).__name__}: {e}")
+            broadcast_debug(f"Regen {i+1}/{num_rooms}: FAILED ({type(e).__name__})")
             continue
 
         if result is None:
             print(f"[REGEN] Room {i+1}/{num_rooms} returned None, skipping")
+            broadcast_debug(f"Regen {i+1}/{num_rooms}: empty result, skipped")
             continue
 
         staged.append(result)
@@ -567,12 +597,22 @@ async def _background_regen(num_rooms, snapshot):
             tile_count += 1
         existing_room_names.append(result.get("name", "Unknown"))
 
+        # Summarize what this room produced
+        new_m = [m["kind"] for m in result.get("new_monsters", [])]
+        new_t = [t["id"] for t in result.get("new_tiles", [])]
+        detail = result.get("name", "?")
+        if new_m:
+            detail += f" +{','.join(new_m)}"
+        if new_t:
+            detail += f" +{','.join(new_t)}"
         print(f"[REGEN] Room {i+1}/{num_rooms} generated: \"{result.get('name', '?')}\"")
+        broadcast_debug(f"Regen {i+1}/{num_rooms}: {detail}")
 
     if staged:
         _apply_staged_content(staged)
     else:
         print("[REGEN] No rooms generated successfully")
+        broadcast_debug("Regen: no rooms generated")
 
     game.regen_task = None
 
@@ -635,6 +675,7 @@ def _apply_staged_content(results):
     _save_libraries()
     print(f"[REGEN] Applied staged content: {total_rooms} rooms, "
           f"{total_monsters} monsters, {total_tiles} tiles")
+    broadcast_debug(f"Regen done: {total_rooms}R {total_monsters}M {total_tiles}T added")
 
 
 def is_dungeon_room(room_id: str) -> bool:

@@ -38,6 +38,16 @@ def player_info(p) -> dict:
     return info
 
 
+def broadcast_debug(text: str):
+    """Send a debug_log message to all connected players (fire-and-forget).
+
+    Safe to call from synchronous code — schedules sends on the event loop.
+    """
+    msg = {"type": "debug_log", "text": text}
+    for p in list(game.players.values()):
+        asyncio.ensure_future(send_to(p, msg))
+
+
 def log_event(kind: str, text: str):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] {kind}: {text}"

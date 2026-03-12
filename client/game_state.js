@@ -97,7 +97,7 @@ const G = {
   showDebug: false,
   dungeonDebug: null,    // {lib_monsters, lib_tiles, lib_rooms, room_source, minimap?} — from server
   debugLog: [],
-  MAX_DEBUG_LINES: 8,
+  MAX_DEBUG_LINES: 12,
 
   // Reconnect
   lastLoginName: "",

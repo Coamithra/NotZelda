@@ -8,6 +8,7 @@ Then open http://localhost:8080 in your browser.
 import asyncio
 import json
 import os
+import sys
 import time
 from http import HTTPStatus
 from pathlib import Path
@@ -45,6 +46,50 @@ from server.dungeon_content import register_precreated_types, load_precreated_co
 from server.dungeons import load_deprecation_timestamp, _run_content_deprecation, start_background_regen
 from server.content_library import ContentLibrary, MONSTER_LIBRARY_CAPACITY, TILE_LIBRARY_CAPACITY, ROOM_LIBRARY_CAPACITY
 from server.validation import register_monster_type, register_tile_type
+
+
+# ---------------------------------------------------------------------------
+# Stdout capture — tees print() output to connected debug clients
+# ---------------------------------------------------------------------------
+
+class _LogBroadcaster:
+    """Wraps sys.stdout to broadcast lines to debug-mode WebSocket clients."""
+
+    def __init__(self, original):
+        self._original = original
+        self._buf = ""
+
+    def write(self, text):
+        self._original.write(text)
+        self._buf += text
+        while "\n" in self._buf:
+            line, self._buf = self._buf.split("\n", 1)
+            if line.strip():
+                self._broadcast(line)
+
+    def _broadcast(self, line):
+        if not game.players:
+            return
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                msg = json.dumps({"type": "server_log", "text": line})
+                for p in list(game.players.values()):
+                    try:
+                        asyncio.ensure_future(p.ws.send(msg))
+                    except Exception:
+                        pass
+        except RuntimeError:
+            pass
+
+    def flush(self):
+        self._original.flush()
+
+    def __getattr__(self, name):
+        return getattr(self._original, name)
+
+if os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+    sys.stdout = _LogBroadcaster(sys.stdout)
 
 
 # ---------------------------------------------------------------------------
@@ -234,14 +279,14 @@ async def handle_chat(player, text: str):
             await handle_debug_spawn(player, parts[1] if len(parts) > 1 else "")
         elif cmd == "deprecate" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
             _run_content_deprecation()
-            await send_to(player, {"type": "info", "text": "Forced content deprecation pass — check server log"})
+            await send_to(player, {"type": "info", "text": "Forced deprecation pass — see ~ debug log"})
         elif cmd == "regen" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
             count = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else game.room_library.placeholder_count
             if count <= 0:
                 await send_to(player, {"type": "info", "text": "No room library slots to fill"})
             else:
                 start_background_regen(count)
-                await send_to(player, {"type": "info", "text": f"Background regen started: {count} room(s) — check server log"})
+                await send_to(player, {"type": "info", "text": f"Regen started: {count} room(s) — see ~ debug log"})
         else:
             await send_to(player, {"type": "info", "text": "Unknown command. Try /help"})
         return
