@@ -578,6 +578,15 @@ function renderConjuring(now) {
   const elapsed = now - G.conjuring.startTime;
   const t = elapsed / 1000; // seconds
 
+  // Fade from previous room into the conjuring screen over 500ms
+  const FADE_IN_MS = 500;
+  if (elapsed < FADE_IN_MS && G.conjuring.oldCanvas) {
+    G.ctx.drawImage(G.conjuring.oldCanvas, 0, 0);
+    G.ctx.fillStyle = `rgba(10, 10, 18, ${elapsed / FADE_IN_MS})`;
+    G.ctx.fillRect(0, 0, CW, CH);
+    return true;
+  }
+
   // Dark background
   G.ctx.fillStyle = "#0a0a12";
   G.ctx.fillRect(0, 0, CW, CH);

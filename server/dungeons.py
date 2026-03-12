@@ -290,7 +290,7 @@ def _resolve_custom_slot(instance, assignment, room_id):
 
 
 def _save_libraries():
-    """Persist all content libraries to disk."""
+    """Persist all content libraries and deprecated sets to disk."""
     from pathlib import Path
     data_dir = Path(__file__).parent.parent / "data"
     if game.monster_library:
@@ -299,6 +299,7 @@ def _save_libraries():
         game.tile_library.save(data_dir / "tile_library.json")
     if game.room_library:
         game.room_library.save(data_dir / "room_library.json")
+    _save_deprecated_sets()
     print("[DUNGEON] Libraries saved to disk")
 
 
@@ -320,6 +321,31 @@ def load_deprecation_timestamp():
         data = json.loads(path.read_text(encoding="utf-8"))
         game.last_deprecation_time = data.get("last_deprecation_time", 0.0)
         print(f"[DEPRECATION] Last deprecation: {time.strftime('%Y-%m-%d %H:%M', time.localtime(game.last_deprecation_time))}")
+
+
+def _save_deprecated_sets():
+    """Persist deprecated monster/tile IDs to disk."""
+    import json
+    from pathlib import Path
+    path = Path(__file__).parent.parent / "data" / "deprecated.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({
+        "monsters": sorted(game.deprecated_monsters),
+        "tiles": sorted(game.deprecated_tiles),
+    }), encoding="utf-8")
+
+
+def load_deprecated_sets():
+    """Load deprecated monster/tile IDs from disk (call at startup)."""
+    import json
+    from pathlib import Path
+    path = Path(__file__).parent.parent / "data" / "deprecated.json"
+    if path.exists():
+        data = json.loads(path.read_text(encoding="utf-8"))
+        game.deprecated_monsters = set(data.get("monsters", []))
+        game.deprecated_tiles = set(data.get("tiles", []))
+        if game.deprecated_monsters or game.deprecated_tiles:
+            print(f"[DEPRECATION] Loaded deprecated: {len(game.deprecated_monsters)} monsters, {len(game.deprecated_tiles)} tiles")
 
 
 def get_active_content_lists():
@@ -421,9 +447,38 @@ def _maybe_run_deprecation():
             start_background_regen(num_expired)
 
 
+def _deprecate_oldest(library, deprecated_set):
+    """Mark the oldest 10% of non-deprecated custom entries as deprecated.
+
+    Entries stay in the library and game registries — they're just excluded
+    from AI prompts via get_active_content_lists(). Returns newly deprecated IDs.
+    """
+    import math
+    if not library:
+        return []
+    candidates = [
+        (e.created_at, e.id) for e in library.real_entries
+        if not e.permanent and e.id not in deprecated_set
+    ]
+    if not candidates:
+        return []
+    candidates.sort()
+    count = max(1, math.ceil(library.capacity * 0.10))
+    count = min(count, len(candidates))
+    newly = [cid for _, cid in candidates[:count]]
+    deprecated_set.update(newly)
+    return newly
+
+
 def _run_content_deprecation():
-    """Execute one round of content deprecation. Returns count of expired rooms."""
-    # Expire oldest 10% of custom rooms — just remove, no usage check
+    """Execute one round of content deprecation. Returns count of expired rooms.
+
+    Rooms: oldest 10% are expired (removed from library).
+    Monsters/tiles: oldest 10% are deprecated (kept in library + registries,
+      but excluded from AI prompts). They're only fully removed once no room
+      in the library references them anymore.
+    """
+    # Step 1: Expire oldest 10% of custom rooms
     expired_rooms = []
     if game.room_library:
         expired_rooms = game.room_library.expire_oldest()
@@ -431,67 +486,65 @@ def _run_content_deprecation():
             print(f"[DEPRECATION] Expired rooms: {expired_rooms}")
             broadcast_debug(f"Expired {len(expired_rooms)} room(s): {', '.join(expired_rooms)}")
 
-    # Expire oldest 10% of custom monsters/tiles
-    expired_monsters = []
-    expired_tiles = []
-    if game.monster_library:
-        expired_monsters = game.monster_library.expire_oldest()
-    if game.tile_library:
-        expired_tiles = game.tile_library.expire_oldest()
+    # Step 2: Deprecate oldest 10% of custom monsters/tiles
+    #   Marked as deprecated (excluded from AI prompts) but kept in library
+    #   and registries so existing rooms still work.
+    newly_dep_m = _deprecate_oldest(game.monster_library, game.deprecated_monsters)
+    newly_dep_t = _deprecate_oldest(game.tile_library, game.deprecated_tiles)
+    for mid in newly_dep_m:
+        print(f"[DEPRECATION] Deprecated monster '{mid}'")
+        broadcast_debug(f"Monster '{mid}' deprecated")
+    for tid in newly_dep_t:
+        print(f"[DEPRECATION] Deprecated tile '{tid}'")
+        broadcast_debug(f"Tile '{tid}' deprecated")
 
-    if expired_monsters:
-        broadcast_debug(f"Expired {len(expired_monsters)} monster(s): {', '.join(expired_monsters)}")
-    if expired_tiles:
-        broadcast_debug(f"Expired {len(expired_tiles)} tile(s): {', '.join(expired_tiles)}")
-
-    # Scan remaining rooms for referenced monster/tile IDs
+    # Step 3: Scan remaining rooms for referenced monster/tile IDs
     ref_monsters, ref_tiles = _get_referenced_ids(game.room_library)
 
-    # Handle expired monsters: deprecate if still referenced, remove if not
-    for mid in expired_monsters:
-        if mid in ref_monsters:
-            game.deprecated_monsters.add(mid)
-            print(f"[DEPRECATION] Deprecated monster '{mid}' (still referenced)")
-            broadcast_debug(f"Monster '{mid}' deprecated (still in use)")
-        else:
-            _cleanup_monster(mid)
-            print(f"[DEPRECATION] Removed monster '{mid}'")
-            broadcast_debug(f"Monster '{mid}' removed")
+    # Step 4: Fully remove unreferenced custom monsters/tiles
+    #   (from both library and game registries)
+    removed_monsters = []
+    if game.monster_library:
+        for entry in list(game.monster_library.real_entries):
+            if not entry.permanent and entry.id not in ref_monsters:
+                game.monster_library.remove(entry.id)
+                _cleanup_monster(entry.id)
+                removed_monsters.append(entry.id)
+                print(f"[DEPRECATION] Removed monster '{entry.id}' (unreferenced)")
+                broadcast_debug(f"Monster '{entry.id}' removed")
 
-    # Handle expired tiles: deprecate if still referenced, remove if not
-    for tid in expired_tiles:
-        if tid in ref_tiles:
-            game.deprecated_tiles.add(tid)
-            print(f"[DEPRECATION] Deprecated tile '{tid}' (still referenced)")
-            broadcast_debug(f"Tile '{tid}' deprecated (still in use)")
-        else:
-            _cleanup_tile(tid)
-            print(f"[DEPRECATION] Removed tile '{tid}'")
-            broadcast_debug(f"Tile '{tid}' removed")
+    removed_tiles = []
+    if game.tile_library:
+        for entry in list(game.tile_library.real_entries):
+            if not entry.permanent and entry.id not in ref_tiles:
+                game.tile_library.remove(entry.id)
+                _cleanup_tile(entry.id)
+                removed_tiles.append(entry.id)
+                print(f"[DEPRECATION] Removed tile '{entry.id}' (unreferenced)")
+                broadcast_debug(f"Tile '{entry.id}' removed")
 
-    # Clean up previously deprecated entries that are no longer referenced
-    stale_monsters = game.deprecated_monsters - ref_monsters
-    for mid in stale_monsters:
+    # Also clean up deprecated IDs that aren't in the library at all
+    # (edge case: entry was in deprecated set but already removed from library)
+    stale_m = {mid for mid in game.deprecated_monsters if mid not in ref_monsters}
+    for mid in stale_m:
         _cleanup_monster(mid)
-        print(f"[DEPRECATION] Cleaned up deprecated monster '{mid}'")
-        broadcast_debug(f"Stale monster '{mid}' cleaned up")
-
-    stale_tiles = game.deprecated_tiles - ref_tiles
-    for tid in stale_tiles:
+    stale_t = {tid for tid in game.deprecated_tiles if tid not in ref_tiles}
+    for tid in stale_t:
         _cleanup_tile(tid)
-        print(f"[DEPRECATION] Cleaned up deprecated tile '{tid}'")
-        broadcast_debug(f"Stale tile '{tid}' cleaned up")
 
     # Save libraries to disk
     _save_libraries()
 
-    total = len(expired_rooms) + len(expired_monsters) + len(expired_tiles)
-    stale_count = len(stale_monsters) + len(stale_tiles)
-    if total > 0 or stale_count > 0:
-        print(f"[DEPRECATION] Deprecation complete: "
-              f"{len(expired_rooms)} rooms, {len(expired_monsters)} monsters, "
-              f"{len(expired_tiles)} tiles expired, {stale_count} stale cleaned up")
-        broadcast_debug(f"Deprecation done: {len(expired_rooms)}R {len(expired_monsters)}M {len(expired_tiles)}T expired, {stale_count} stale")
+    # Summary
+    removed_count = len(removed_monsters) + len(removed_tiles) + len(stale_m) + len(stale_t)
+    dep_count = len(newly_dep_m) + len(newly_dep_t)
+    if expired_rooms or dep_count > 0 or removed_count > 0:
+        print(f"[DEPRECATION] Complete: {len(expired_rooms)} rooms expired, "
+              f"{len(newly_dep_m)}M {len(newly_dep_t)}T deprecated, "
+              f"{removed_count} removed")
+        broadcast_debug(f"Deprecation done: {len(expired_rooms)}R expired, "
+                        f"{len(newly_dep_m)}M {len(newly_dep_t)}T deprecated, "
+                        f"{removed_count} removed")
     else:
         print("[DEPRECATION] Nothing to deprecate")
         broadcast_debug("Deprecation: nothing to expire")

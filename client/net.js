@@ -88,10 +88,21 @@ function handleMessage(msg) {
       }
       break;
 
-    case "room_generating":
-      // Server is generating a dungeon room — show conjuring animation
-      G.conjuring = { startTime: Date.now(), pendingRoomEnter: null, progressSteps: [] };
+    case "room_generating": {
+      // Entering dungeon — capture current frame for fade-out, then show conjuring
+      const conjureCanvas = document.createElement("canvas");
+      conjureCanvas.width = CW;
+      conjureCanvas.height = CH;
+      const conjureCtx = conjureCanvas.getContext("2d");
+      const savedCtx2 = G.ctx;
+      G.ctx = conjureCtx;
+      renderRoom();
+      renderPlayers();
+      renderUI();
+      G.ctx = savedCtx2;
+      G.conjuring = { startTime: Date.now(), pendingRoomEnter: null, progressSteps: [], oldCanvas: conjureCanvas };
       break;
+    }
 
     case "room_generating_progress":
       // Debug mode: AI generation progress update
@@ -106,15 +117,17 @@ function handleMessage(msg) {
 
     case "room_enter": {
       // If conjuring animation is active, check minimum duration
+      let cameFromConjuring = !!msg._fromConjuring;
       if (G.conjuring) {
         const elapsed = Date.now() - G.conjuring.startTime;
-        const MIN_CONJURE_MS = 1500;
+        const MIN_CONJURE_MS = 2500;
         if (elapsed < MIN_CONJURE_MS) {
           // Queue this message until minimum time passes
           G.conjuring.pendingRoomEnter = msg;
           setTimeout(() => {
             if (G.conjuring && G.conjuring.pendingRoomEnter) {
               const pending = G.conjuring.pendingRoomEnter;
+              pending._fromConjuring = true;
               G.conjuring = null;
               handleMessage(pending);
             }
@@ -122,11 +135,13 @@ function handleMessage(msg) {
           break;
         }
         G.conjuring = null;
+        cameFromConjuring = true;
       }
 
       // Store dungeon debug info if present
       G.dungeonDebug = msg.dungeon_debug || null;
 
+      const isFirstRoom = !G.currentRoom;
       let oldCanvas = null;
       const prevRoom = G.currentRoom;
       if (prevRoom) {
@@ -223,7 +238,21 @@ function handleMessage(msg) {
       G.displayX = G.myPlayer.x;
       G.displayY = G.myPlayer.y;
 
-      if (oldCanvas && prevRoom) {
+      if (cameFromConjuring || isFirstRoom) {
+        // Fade in from black on first login
+        G.transition = {
+          type: "fade",
+          direction: "north",
+          oldCanvas: (() => {
+            const c = document.createElement("canvas");
+            c.width = CW; c.height = CH;
+            c.getContext("2d").fillRect(0, 0, CW, CH);
+            return c;
+          })(),
+          startTime: Date.now(),
+          duration: 500,
+        };
+      } else if (oldCanvas && prevRoom) {
         const transDir = guessTransitionDir(prevRoom.room_id, msg.room_id, msg.exit_direction, prevExits);
         const isFade = transDir === "up" || transDir === "down";
         G.transition = {

@@ -259,6 +259,8 @@ async def do_room_transition(player, exit_direction: str):
                 await send_to(player, {"type": "info", "text": "The dungeon entrance is sealed."})
                 return
         new_room_id = game.active_dungeon.entrance_room_id
+        # Show conjuring animation when first entering the dungeon
+        await send_to(player, {"type": "room_generating"})
 
     # Lazy resolution — if this is an unresolved dungeon room, resolve it now
     if game.active_dungeon and new_room_id in game.active_dungeon.active_rooms:
@@ -267,9 +269,6 @@ async def do_room_transition(player, exit_direction: str):
             for cell, assignment in game.active_dungeon.cell_assignments.items():
                 room_id_check = f"d1_{cell[0]}_{cell[1]}"
                 if room_id_check == new_room_id and not assignment["resolved"]:
-                    # Send conjuring animation for custom rooms
-                    if assignment["source"] == "custom":
-                        await send_to(player, {"type": "room_generating"})
                     resolved = resolve_dungeon_room(game.active_dungeon, cell)
                     if not resolved:
                         await send_to(player, {"type": "info", "text": "The way is blocked."})

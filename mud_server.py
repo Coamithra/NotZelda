@@ -43,7 +43,7 @@ from server.combat import damage_player, handle_attack, monster_tick, projectile
 from server.quests import handle_quest_npc
 from server.debug_monsters import handle_debug_spawn, auto_register_debug_monsters
 from server.dungeon_content import register_precreated_types, load_precreated_content
-from server.dungeons import load_deprecation_timestamp, _run_content_deprecation, start_background_regen
+from server.dungeons import load_deprecation_timestamp, load_deprecated_sets, _run_content_deprecation, start_background_regen
 from server.content_library import ContentLibrary, MONSTER_LIBRARY_CAPACITY, TILE_LIBRARY_CAPACITY, ROOM_LIBRARY_CAPACITY
 from server.validation import register_monster_type, register_tile_type
 
@@ -491,6 +491,7 @@ async def main():
     asyncio.create_task(monster_tick())
     asyncio.create_task(projectile_tick())
     load_deprecation_timestamp()
+    load_deprecated_sets()
     print("MUD server running!")
     print(f"Local:  http://localhost:{port}")
 

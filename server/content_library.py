@@ -36,8 +36,7 @@ ROOM_LIBRARY_CAPACITY = 79      # 64 permanent + 15 custom
 MONSTER_LIBRARY_CAPACITY = 8    # 4 permanent + 4 custom
 TILE_LIBRARY_CAPACITY = 14      # 7 permanent + 7 custom
 
-EXPIRY_RATE = 0.10          # expire 10% of library per teardown
-EXPIRY_MIN_AGE = 86400      # 24 hours
+EXPIRY_RATE = 0.10          # expire 10% of library per deprecation pass
 
 # ---------------------------------------------------------------------------
 # Library entry
@@ -164,14 +163,13 @@ class ContentLibrary:
                 return True
         return False
 
-    def expire_oldest(self, rate: float = EXPIRY_RATE, min_age: float = EXPIRY_MIN_AGE) -> list[str]:
-        """Expire the oldest N% of entries that exceed min_age. Returns IDs of expired entries.
+    def expire_oldest(self, rate: float = EXPIRY_RATE) -> list[str]:
+        """Expire the oldest N% of custom entries. Returns IDs of expired entries.
         Permanent entries are never expired."""
-        now = time.time()
         # Collect eligible entries with their indices (skip permanent)
         eligible = []
         for i, e in enumerate(self._entries):
-            if not e.is_placeholder and not e.permanent and (now - e.created_at) >= min_age:
+            if not e.is_placeholder and not e.permanent:
                 eligible.append((i, e))
 
         if not eligible:
@@ -180,8 +178,9 @@ class ContentLibrary:
         # Sort by created_at ascending (oldest first)
         eligible.sort(key=lambda x: x[1].created_at)
 
-        # Expire up to rate * capacity entries
-        count = max(1, int(self.capacity * rate))
+        # Expire up to rate * capacity entries (round up, minimum 1)
+        import math
+        count = max(1, math.ceil(self.capacity * rate))
         count = min(count, len(eligible))
 
         expired_ids = []

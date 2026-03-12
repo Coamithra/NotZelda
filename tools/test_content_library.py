@@ -128,23 +128,11 @@ def test_expire_oldest():
         ))
     assert lib.is_full
 
-    expired = lib.expire_oldest(rate=0.3, min_age=1.0)
+    expired = lib.expire_oldest(rate=0.3)
     assert len(expired) == 3
     assert expired == ["m0", "m1", "m2"]
     assert lib.real_count == 7
     assert lib.placeholder_count == 3
-
-def test_expire_respects_min_age():
-    lib = ContentLibrary("monster", 10)
-    now = time.time()
-    for i in range(10):
-        lib.add(LibraryEntry(
-            id=f"m{i}", content_type="monster",
-            created_at=now,
-        ))
-    expired = lib.expire_oldest(rate=0.5, min_age=86400)
-    assert len(expired) == 0
-    assert lib.real_count == 10
 
 def test_expire_empty_library():
     lib = ContentLibrary("monster", 10)
@@ -156,8 +144,21 @@ def test_expire_at_least_one():
     lib = ContentLibrary("monster", 5)
     now = time.time()
     lib.add(LibraryEntry(id="old", content_type="monster", created_at=now - 100000))
-    expired = lib.expire_oldest(rate=0.01, min_age=1.0)
+    expired = lib.expire_oldest(rate=0.01)
     assert len(expired) == 1
+
+def test_expire_ignores_age():
+    """Entries are expired regardless of age — the 24h check is external."""
+    lib = ContentLibrary("monster", 10)
+    now = time.time()
+    for i in range(10):
+        lib.add(LibraryEntry(
+            id=f"m{i}", content_type="monster",
+            created_at=now,  # just created
+        ))
+    expired = lib.expire_oldest(rate=0.5)
+    assert len(expired) == 5
+    assert lib.real_count == 5
 
 
 
