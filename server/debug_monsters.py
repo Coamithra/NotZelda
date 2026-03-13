@@ -7,6 +7,7 @@ from server.constants import ROOM_COLS, ROOM_ROWS
 from server.models import Monster
 from server.net import send_to, broadcast_to_room
 from server.validation import register_monster_type
+from server.variants import create_variant, get_monster_data, VARIANT_TIERS
 
 # A few built-in test monster definitions for /debug_spawn
 DEBUG_MONSTERS = {
@@ -481,24 +482,68 @@ DEBUG_MONSTERS = {
 }
 
 
+def _find_base_monster(kind: str) -> dict | None:
+    """Find full monster data for a given kind, checking all sources."""
+    # Check debug monsters first (always available)
+    if kind in DEBUG_MONSTERS:
+        return DEBUG_MONSTERS[kind]
+    # Check monster library (precreated + AI-generated)
+    data = get_monster_data(kind)
+    if data:
+        return data
+    return None
+
+
 async def handle_debug_spawn(player, args: str):
-    """Handle /debug_spawn <kind> — register and spawn a test monster near the player."""
+    """Handle /debug_spawn <kind> — register and spawn a test monster near the player.
+
+    Also supports variant:<base_kind> and variant:<base_kind>:<tier> to create
+    programmatic variants (recolored + stat-boosted).
+    """
     args = args.strip()
     if not args:
-        available = list(DEBUG_MONSTERS.keys()) + [k for k in game.custom_sprites if k not in DEBUG_MONSTERS]
         existing_custom = [k for k in game.monster_stats if k not in ("slime", "bat", "scorpion", "skeleton", "swamp_blob")]
         msg = "Usage: /debug_spawn <kind>\n"
         msg += f"Built-in test monsters: {', '.join(DEBUG_MONSTERS.keys())}\n"
         if existing_custom:
             msg += f"Registered custom: {', '.join(existing_custom)}\n"
-        msg += "Also works with any built-in kind: slime, bat, scorpion, skeleton, swamp_blob"
+        msg += "Also works with: slime, bat, scorpion, skeleton, swamp_blob\n"
+        msg += f"Variant syntax: variant:<kind> or variant:<kind>:<tier 0-{len(VARIANT_TIERS)-1}>"
         await send_to(player, {"type": "info", "text": msg})
         return
 
     kind = args.split()[0].lower()
 
+    # --- Variant creation: variant:base_kind or variant:base_kind:tier ---
+    if kind.startswith("variant:"):
+        parts = kind.split(":")
+        base_kind = parts[1] if len(parts) > 1 else ""
+        tier = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else None
+
+        if not base_kind:
+            await send_to(player, {"type": "info", "text": "Usage: variant:<kind> or variant:<kind>:<tier>"})
+            return
+
+        # Find the base monster's full data
+        base_data = _find_base_monster(base_kind)
+        if not base_data:
+            await send_to(player, {"type": "info", "text": f"Unknown base monster: {base_kind}"})
+            return
+
+        variant = create_variant(base_data, tier)
+        ok, errors = register_monster_type(variant)
+        if not ok:
+            await send_to(player, {"type": "info", "text": f"Variant registration failed: {'; '.join(errors)}"})
+            return
+
+        kind = variant["kind"]
+        tier_used = tier if tier is not None else "random"
+        print(f"[VARIANT] Created {kind} (tier {tier_used}) from {base_kind}: "
+              f"HP {variant['stats']['hp']}, DMG {variant['stats']['damage']}, "
+              f"tick {variant['stats']['tick_rate']}")
+
     # If it's a debug monster that isn't registered yet, register it
-    if kind in DEBUG_MONSTERS and kind not in game.monster_stats:
+    elif kind in DEBUG_MONSTERS and kind not in game.monster_stats:
         ok, errors = register_monster_type(DEBUG_MONSTERS[kind])
         if not ok:
             await send_to(player, {"type": "info", "text": f"Registration failed: {'; '.join(errors)}"})
