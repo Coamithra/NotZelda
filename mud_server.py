@@ -214,18 +214,20 @@ async def handle_move(player, direction: str):
                 await damage_player(player, monster.damage, player.room)
                 break
 
-    # Heart pickup
-    hearts = game.room_hearts.get(player.room, [])
-    for heart in hearts:
-        if heart["x"] == player.x and heart["y"] == player.y and player.hp < player.max_hp:
-            player.hp = min(player.max_hp, player.hp + HEART_RESTORE_HP)
-            hearts.remove(heart)
-            await send_to(player, {"type": "hp_update", "hp": player.hp, "max_hp": player.max_hp})
-            await broadcast_to_room(player.room, {"type": "heart_collected", "id": heart["id"]})
-            break
+    # Heart pickup (skip if dead — respawn is a background task)
+    if player.hp > 0:
+        hearts = game.room_hearts.get(player.room, [])
+        for heart in hearts:
+            if heart["x"] == player.x and heart["y"] == player.y and player.hp < player.max_hp:
+                player.hp = min(player.max_hp, player.hp + HEART_RESTORE_HP)
+                hearts.remove(heart)
+                await send_to(player, {"type": "hp_update", "hp": player.hp, "max_hp": player.max_hp})
+                await broadcast_to_room(player.room, {"type": "heart_collected", "id": heart["id"]})
+                break
 
     # Guard proximity chat
-    await check_guard_proximity(player)
+    if player.hp > 0:
+        await check_guard_proximity(player)
 
 
 # ---------------------------------------------------------------------------

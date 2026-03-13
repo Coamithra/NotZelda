@@ -191,7 +191,7 @@ Tag-based replacement examples:
 
 ## Staged Implementation Plan
 
-**Current status: Stages 1–7 complete. Async `generate_room()` wired into `resolve_dungeon_room()` for placeholder cells. Remaining polish: late-binding of monster/tile refs, refactor monster_tick to remove awaits.**
+**Current status: Stages 1–7 complete. monster_tick/projectile_tick refactored to synchronous inner loops with message batching. Remaining polish: late-binding of monster/tile refs.**
 
 ### Stage 1: Tag & Metadata System ✅
 **Goal:** Define the data structures that everything else builds on.
