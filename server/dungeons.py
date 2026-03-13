@@ -142,10 +142,11 @@ def _get_cell_exits(cell, connections, entrance_col, entrance_row):
     return exits
 
 
-def _resolve_room_from_entry(room_id, entry_data, exits, cell, music_track, is_entrance):
+def _resolve_room_from_entry(room_id, entry_data, exits, cell, music_track, is_entrance, music_override=None):
     """Materialize a library entry's data into a live game.rooms[] entry.
 
     entry_data: dict with 'name', 'tilemap' (list[list[str]]), 'monster_placements'
+    music_override: if set, use this music instead of the dungeon's track.
     """
     # Deep-copy tilemap (string tile codes)
     tilemap = [list(r) for r in entry_data["tilemap"]]
@@ -187,7 +188,7 @@ def _resolve_room_from_entry(room_id, entry_data, exits, cell, music_track, is_e
         "tilemap": tilemap,
         "spawn_points": spawn_points,
         "biome": "dungeon",
-        "music": music_track,
+        "music": music_override or music_track,
     }
 
     # Register monster templates from placements
@@ -359,7 +360,12 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
         if entry_data is None:
             return False
 
-    _resolve_room_from_entry(room_id, entry_data, exits, cell, instance.music_track, is_entrance)
+    # Boss room uses boss music instead of the dungeon's random track
+    music_override = None
+    if cell == instance.boss_cell:
+        music_override = "boss1"
+
+    _resolve_room_from_entry(room_id, entry_data, exits, cell, instance.music_track, is_entrance, music_override=music_override)
 
     assignment["resolved"] = True
     instance.resolved_rooms.add(room_id)

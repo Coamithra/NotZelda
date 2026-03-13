@@ -163,6 +163,104 @@ PRECREATED_MONSTERS = [
 ]
 
 # ---------------------------------------------------------------------------
+# Boss monster — 2x2 tile dungeon boss (not in library; spawned via d1_boss.room)
+# ---------------------------------------------------------------------------
+
+BOSS_MONSTER = {
+    "kind": "dungeon_warden",
+    "tags": ["boss", "dungeon", "undead"],
+    "stats": {"hp": 20, "tick_rate": 1.5, "damage": 3, "width": 2, "height": 2},
+    "behavior": {"rules": [
+        # Phase 2 (low HP): rapid projectile barrage
+        {"if": "hp_below", "value": 10, "do": "projectile",
+         "direction": "player", "damage": 2, "sprite_color": "#cc33ff",
+         "warmup": 1, "cooldown": 2},
+        # Ground slam when player is close
+        {"if": "player_within", "range": 3, "do": "area",
+         "range": 2, "damage": 3, "warmup": 1, "cooldown": 4},
+        # Charge if player is in line of sight
+        {"if": "player_in_range_line", "range": 8, "los": True, "do": "charge",
+         "direction": "player", "range": 6, "damage": 4, "warmup": 1, "cooldown": 5},
+        # Chase player aggressively
+        {"if": "player_within", "range": 10, "do": "move", "direction": "player", "speed": 2},
+        # Idle patrol
+        {"if": "always", "do": "move", "direction": "random"},
+    ]},
+    "sprite": {
+        "colors": {
+            "armor": "#2a1a3a", "plate": "#3a2a4a", "visor": "#ff2200",
+            "glow": "#cc4400", "trim": "#8a6a2a", "cape": "#1a0a2a",
+            "dark": "#150a20", "shoulder": "#4a3a5a", "highlight": "#5a4a6a",
+        },
+        "yOff": [0, -1],
+        "frames": [
+            [
+                # Cape behind
+                ["cape", 3, 8, 10, 7], ["dark", 4, 14, 8, 2],
+                # Body/torso
+                ["armor", 4, 4, 8, 8], ["plate", 5, 5, 6, 6],
+                # Shoulder pads
+                ["shoulder", 2, 4, 3, 3], ["shoulder", 11, 4, 3, 3],
+                ["highlight", 2, 4, 3, 1], ["highlight", 11, 4, 3, 1],
+                # Helm
+                ["armor", 5, 1, 6, 4], ["plate", 6, 2, 4, 2],
+                ["dark", 6, 0, 4, 1],
+                # Visor
+                ["visor", 6, 3, 2, 1], ["visor", 9, 3, 2, 1],
+                ["glow", 5, 2, 1, 1], ["glow", 10, 2, 1, 1],
+                # Gold trim
+                ["trim", 4, 8, 8, 1], ["trim", 7, 4, 2, 1],
+                # Arms
+                ["armor", 2, 7, 2, 4], ["armor", 12, 7, 2, 4],
+                ["plate", 1, 10, 2, 1], ["plate", 13, 10, 2, 1],
+                # Legs
+                ["armor", 5, 12, 3, 3], ["armor", 9, 12, 3, 3],
+                ["dark", 5, 15, 3, 1], ["dark", 9, 15, 3, 1],
+            ],
+            [
+                # Cape behind
+                ["cape", 3, 7, 10, 7], ["dark", 4, 13, 8, 2],
+                # Body/torso
+                ["armor", 4, 3, 8, 8], ["plate", 5, 4, 6, 6],
+                # Shoulder pads
+                ["shoulder", 2, 3, 3, 3], ["shoulder", 11, 3, 3, 3],
+                ["highlight", 2, 3, 3, 1], ["highlight", 11, 3, 3, 1],
+                # Helm
+                ["armor", 5, 0, 6, 4], ["plate", 6, 1, 4, 2],
+                # Visor (brighter in hop frame)
+                ["visor", 6, 2, 2, 1], ["visor", 9, 2, 2, 1],
+                ["glow", 5, 1, 1, 1], ["glow", 10, 1, 1, 1],
+                # Gold trim
+                ["trim", 4, 7, 8, 1], ["trim", 7, 3, 2, 1],
+                # Arms
+                ["armor", 2, 6, 2, 4], ["armor", 12, 6, 2, 4],
+                ["plate", 1, 9, 2, 1], ["plate", 13, 9, 2, 1],
+                # Legs
+                ["armor", 5, 11, 3, 3], ["armor", 9, 11, 3, 3],
+                ["dark", 5, 14, 3, 1], ["dark", 9, 14, 3, 1],
+            ],
+        ],
+    },
+    "death_sprite": {
+        "colors": {"armor": "#2a1a3a", "glow": "#cc4400", "trim": "#8a6a2a"},
+        "frames": [
+            # Crumble frame 1 — armor collapses
+            [["armor", 2, 10, 12, 4], ["armor", 4, 8, 8, 2], ["trim", 5, 9, 6, 1],
+             ["glow", 6, 10, 2, 1], ["glow", 9, 10, 2, 1]],
+            # Crumble frame 2 — pieces scatter
+            [["armor", 1, 12, 4, 2], ["armor", 6, 11, 4, 2], ["armor", 11, 12, 4, 2],
+             ["trim", 3, 13, 2, 1], ["glow", 8, 12, 1, 1]],
+            # Crumble frame 3 — fading remnants
+            {"alpha": 0.4, "layers": [
+                ["armor", 0, 13, 3, 1], ["armor", 6, 14, 3, 1], ["armor", 12, 13, 3, 1],
+                ["glow", 7, 13, 2, 1],
+            ]},
+        ],
+    },
+}
+
+
+# ---------------------------------------------------------------------------
 # Precreated tiles (7) — server-side tile recipes for custom registry
 # ---------------------------------------------------------------------------
 
@@ -326,6 +424,13 @@ def register_precreated_types() -> None:
             print(f"[CONTENT] WARNING: Failed to register {kind}: {errors}")
         else:
             print(f"[CONTENT] Registered monster type: {kind}")
+
+    # Register boss monster (not in library — spawned via d1_boss.room template)
+    ok, errors = register_monster_type(BOSS_MONSTER)
+    if not ok:
+        print(f"[CONTENT] WARNING: Failed to register boss: {errors}")
+    else:
+        print(f"[CONTENT] Registered boss type: {BOSS_MONSTER['kind']}")
 
     for tdata in PRECREATED_TILES:
         tile_id = tdata["id"]

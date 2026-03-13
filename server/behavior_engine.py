@@ -50,14 +50,23 @@ DEFAULT_BEHAVIOR = {"rules": [{"if": "always", "do": "move", "direction": "rando
 # ---------------------------------------------------------------------------
 
 def _nearest_player(monster, room_id):
-    """Find the nearest living player (Manhattan distance). Returns (player, dist) or (None, inf)."""
+    """Find the nearest living player (Manhattan distance from closest tile).
+
+    For multi-tile monsters, distance is measured from the closest occupied tile.
+    Returns (player, dist) or (None, inf).
+    """
     players = _players_in_room(room_id)
     best = None
     best_dist = float("inf")
+    w = getattr(monster, "width", 1)
+    h = getattr(monster, "height", 1)
     for p in players:
         if p.hp <= 0:
             continue
-        dist = abs(p.x - monster.x) + abs(p.y - monster.y)
+        # Clamp player position to the monster's footprint for distance calc
+        cx = max(monster.x, min(p.x, monster.x + w - 1))
+        cy = max(monster.y, min(p.y, monster.y + h - 1))
+        dist = abs(p.x - cx) + abs(p.y - cy)
         if dist < best_dist:
             best_dist = dist
             best = p
@@ -74,6 +83,15 @@ def _is_walkable(x, y, room_id):
     guards = _GUARDS.get(room_id, [])
     if any(g["x"] == x and g["y"] == y for g in guards):
         return False
+    return True
+
+
+def _is_walkable_multi(x, y, w, h, room_id):
+    """Check if all tiles in a w x h footprint at (x, y) are walkable."""
+    for dy in range(h):
+        for dx in range(w):
+            if not _is_walkable(x + dx, y + dy, room_id):
+                return False
     return True
 
 
@@ -111,23 +129,35 @@ def cond_player_beyond(monster, room_id, rule):
 def cond_player_in_range_line(monster, room_id, rule):
     """True if a player is on the same row or column within `range` tiles.
 
-    If `los` is true, obstacles between monster and player block the check.
+    For multi-tile monsters, checks if the player shares a row/column with
+    any tile of the monster's footprint. If `los` is true, obstacles between
+    monster and player block the check.
     """
     max_range = rule.get("range", 3)
     check_los = rule.get("los", False)
-    player, _ = _nearest_player(monster, room_id)
-    if player is None:
+    player, dist = _nearest_player(monster, room_id)
+    if player is None or dist > max_range:
         return False
-    dx = abs(player.x - monster.x)
-    dy = abs(player.y - monster.y)
-    if player.x == monster.x and dy <= max_range:
-        if check_los and not _has_los(monster.x, monster.y, player.x, player.y, room_id):
-            return False
-        return True
-    if player.y == monster.y and dx <= max_range:
-        if check_los and not _has_los(monster.x, monster.y, player.x, player.y, room_id):
-            return False
-        return True
+
+    w = getattr(monster, "width", 1)
+    h = getattr(monster, "height", 1)
+
+    # Check if player shares a column with any tile in monster's width
+    for dx in range(w):
+        mx = monster.x + dx
+        if player.x == mx:
+            if check_los and not _has_los(mx, monster.y, player.x, player.y, room_id):
+                continue
+            return True
+
+    # Check if player shares a row with any tile in monster's height
+    for dy in range(h):
+        my = monster.y + dy
+        if player.y == my:
+            if check_los and not _has_los(monster.x, my, player.x, player.y, room_id):
+                continue
+            return True
+
     return False
 
 
@@ -222,6 +252,15 @@ def _resolve_direction(direction, monster, room_id):
 # Action resolution — build action dicts with locked-in parameters
 # ---------------------------------------------------------------------------
 
+def _can_move_to(monster, x, y, room_id):
+    """Check if a monster (possibly multi-tile) can move to position (x, y)."""
+    w = getattr(monster, "width", 1)
+    h = getattr(monster, "height", 1)
+    if w == 1 and h == 1:
+        return _is_walkable(x, y, room_id)
+    return _is_walkable_multi(x, y, w, h, room_id)
+
+
 def _resolve_move(rule, monster, room_id):
     """Resolve a move action. Returns {"action": "move", "x", "y"} or None.
 
@@ -249,7 +288,7 @@ def _resolve_move(rule, monster, room_id):
             nx, ny = monster.x, monster.y
             for _ in range(speed):
                 tx, ty = nx + dx, ny + dy
-                if not _is_walkable(tx, ty, room_id):
+                if not _can_move_to(monster, tx, ty, room_id):
                     break
                 nx, ny = tx, ty
             if (nx, ny) != (monster.x, monster.y):
@@ -271,7 +310,7 @@ def _resolve_move(rule, monster, room_id):
                 random.shuffle(dirs)
                 for dx, dy in dirs:
                     nx, ny = cx + dx, cy + dy
-                    if not _is_walkable(nx, ny, room_id):
+                    if not _can_move_to(monster, nx, ny, room_id):
                         continue
                     dist = abs(target.x - nx) + abs(target.y - ny)
                     if dist < best_dist:
@@ -290,7 +329,7 @@ def _resolve_move(rule, monster, room_id):
             random.shuffle(dirs)
             for dx, dy in dirs:
                 nx, ny = monster.x + dx, monster.y + dy
-                if not _is_walkable(nx, ny, room_id):
+                if not _can_move_to(monster, nx, ny, room_id):
                     continue
                 dist = abs(target.x - nx) + abs(target.y - ny)
                 if dist < best_dist:
@@ -300,7 +339,7 @@ def _resolve_move(rule, monster, room_id):
                 cx, cy = monster.x, monster.y
                 for _ in range(speed):
                     tx, ty = cx + best_dir[0], cy + best_dir[1]
-                    if not _is_walkable(tx, ty, room_id):
+                    if not _can_move_to(monster, tx, ty, room_id):
                         break
                     cx, cy = tx, ty
                 if (cx, cy) != (monster.x, monster.y):
@@ -322,7 +361,7 @@ def _resolve_move(rule, monster, room_id):
                 random.shuffle(dirs)
                 for dx, dy in dirs:
                     nx, ny = cx + dx, cy + dy
-                    if not _is_walkable(nx, ny, room_id):
+                    if not _can_move_to(monster, nx, ny, room_id):
                         continue
                     dist = abs(target.x - nx) + abs(target.y - ny)
                     if dist > best_dist:
@@ -341,7 +380,7 @@ def _resolve_move(rule, monster, room_id):
             random.shuffle(dirs)
             for dx, dy in dirs:
                 nx, ny = monster.x + dx, monster.y + dy
-                if not _is_walkable(nx, ny, room_id):
+                if not _can_move_to(monster, nx, ny, room_id):
                     continue
                 dist = abs(target.x - nx) + abs(target.y - ny)
                 if dist > best_dist:
@@ -351,7 +390,7 @@ def _resolve_move(rule, monster, room_id):
                 cx, cy = monster.x, monster.y
                 for _ in range(speed):
                     tx, ty = cx + best_dir[0], cy + best_dir[1]
-                    if not _is_walkable(tx, ty, room_id):
+                    if not _can_move_to(monster, tx, ty, room_id):
                         break
                     cx, cy = tx, ty
                 if (cx, cy) != (monster.x, monster.y):
@@ -364,7 +403,7 @@ def _resolve_move(rule, monster, room_id):
         nx, ny = monster.x, monster.y
         for _ in range(speed):
             tx, ty = nx + d[0], ny + d[1]
-            if not _is_walkable(tx, ty, room_id):
+            if not _can_move_to(monster, tx, ty, room_id):
                 break
             nx, ny = tx, ty
         if (nx, ny) != (monster.x, monster.y):
@@ -393,7 +432,7 @@ def _resolve_patrol_move(rule, monster, room_id, speed=1):
             break
         tx, ty = nx + d[0], ny + d[1]
         idx = (idx + 1) % len(route)
-        if not _is_walkable(tx, ty, room_id):
+        if not _can_move_to(monster, tx, ty, room_id):
             break
         nx, ny = tx, ty
     monster._patrol_index = idx
@@ -468,7 +507,7 @@ def _resolve_teleport(rule, monster, room_id):
         cx = random.randint(0, _ROOM_COLS - 1)
         cy = random.randint(0, _ROOM_ROWS - 1)
 
-    # Find a walkable tile within drift of the center point
+    # Find a walkable position within drift of the center point
     candidates = []
     for ddx in range(-drift, drift + 1):
         for ddy in range(-drift, drift + 1):
@@ -478,7 +517,7 @@ def _resolve_teleport(rule, monster, room_id):
                 continue
             if dist_from_monster == 0:
                 continue  # don't teleport to self
-            if _is_walkable(tx, ty, room_id):
+            if _can_move_to(monster, tx, ty, room_id):
                 candidates.append((tx, ty))
     if not candidates:
         return None
@@ -495,10 +534,15 @@ def _resolve_teleport(rule, monster, room_id):
 
 def _resolve_area(rule, monster, room_id):
     """Resolve area attack action. Returns action dict."""
+    # Center on middle of footprint for multi-tile monsters
+    w = getattr(monster, "width", 1)
+    h = getattr(monster, "height", 1)
+    cx = monster.x + (w - 1) // 2
+    cy = monster.y + (h - 1) // 2
     return {
         "action": "area",
-        "x": monster.x,
-        "y": monster.y,
+        "x": cx,
+        "y": cy,
         "range": rule.get("range", 2),
         "damage": rule.get("damage", monster.damage),
     }

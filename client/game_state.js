@@ -87,6 +87,9 @@ const G = {
   dyingPlayerSelf: null,
   dyingOtherPlayers: {},
 
+  // Boss death effect
+  bossDeathEffect: null, // {startTime, duration} — dramatic screen flash/shake on boss kill
+
   // Transition
   transition: null,      // {direction, oldCanvas, startTime, duration}
   conjuring: null,       // {startTime, pendingRoomEnter, progressSteps[]} — dungeon room generating animation

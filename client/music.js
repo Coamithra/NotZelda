@@ -23,6 +23,7 @@ const MusicPlayer = (function () {
     "dungeon5":   "music_dungeon5.mp3",
     "dungeon6":   "music_dungeon6.mp3",
     "dungeon7":   "music_dungeon7.mp3",
+    "boss1":      "music_boss1.mp3",
   };
 
   // Fallback: map biome names to music tracks (for rooms without explicit music field)
@@ -42,6 +43,7 @@ const MusicPlayer = (function () {
   };
 
   let currentBiome = null;
+  let silencedBiome = null;  // biome in which silence() was called — stays silent until biome changes
 
   function getOrCreateAudio(url) {
     if (!tracks[url]) {
@@ -117,7 +119,14 @@ const MusicPlayer = (function () {
     } else {
       url = "music_overworld.mp3";
     }
-    currentBiome = biome || null;
+    const newBiome = biome || null;
+    // Clear silence when leaving the biome where silence was triggered
+    if (silencedBiome && newBiome !== silencedBiome) {
+      silencedBiome = null;
+    }
+    currentBiome = newBiome;
+    // Stay silent while in the silenced biome
+    if (silencedBiome) return;
     if (url === currentTrack) return;
 
     if (!playing) {
@@ -172,5 +181,15 @@ const MusicPlayer = (function () {
     return playing;
   }
 
-  return { start, stop, toggle, isPlaying, setRoom };
+  function silence() {
+    // Fade out and stay silent until the player leaves the current biome
+    if (!playing) return;
+    if (currentTrack) {
+      fadeOut(currentTrack, FADE_MS);
+    }
+    currentTrack = null;
+    silencedBiome = currentBiome;
+  }
+
+  return { start, stop, toggle, isPlaying, setRoom, silence };
 })();

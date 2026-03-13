@@ -162,13 +162,13 @@ async def handle_attack(player):
         "direction": player.direction,
     }, None))
 
-    # Hit detection — check if sword hits a monster
+    # Hit detection — check if sword hits a monster (supports multi-tile monsters)
     from server.lifecycle import get_room_monsters
     dx, dy = DIRECTIONS.get(player.direction, (0, 0))
     hit_x = player.x + dx
     hit_y = player.y + dy
     for i, monster in enumerate(get_room_monsters(player.room)):
-        if monster.alive and not monster.intangible and monster.x == hit_x and monster.y == hit_y:
+        if monster.alive and not monster.intangible and monster.occupies(hit_x, hit_y):
             monster.hp -= 1
             if monster.hp <= 0:
                 monster.alive = False
@@ -196,6 +196,11 @@ async def handle_attack(player):
                     alive = [m for m in game.room_monsters[player.room] if m.alive]
                     if not alive:
                         game.active_dungeon.cleared_rooms.add(player.room)
+                        # Boss defeated — silence music in the dungeon
+                        if monster.kind == "dungeon_warden":
+                            msgs.append(("broadcast", player.room, {
+                                "type": "music_change", "music": None,
+                            }, None))
             else:
                 msgs.append(("broadcast", player.room, {
                     "type": "monster_hit",
@@ -224,9 +229,9 @@ def exec_move(monster, room_id, monster_idx, action, msgs):
         "x": nx,
         "y": ny,
     }, None))
-    # Contact damage — monster landed on a player
+    # Contact damage — monster landed on a player (supports multi-tile monsters)
     for p in players_in_room(room_id):
-        if p.x == nx and p.y == ny and p.hp > 0:
+        if p.hp > 0 and monster.occupies(p.x, p.y):
             _apply_damage(p, monster.damage, room_id, msgs)
 
 
@@ -238,8 +243,22 @@ def exec_projectile(monster, room_id, monster_idx, action, msgs):
     speed = action.get("speed", 1)
     piercing = action.get("piercing", False)
 
-    start_x = monster.x + dx
-    start_y = monster.y + dy
+    # For multi-tile monsters, spawn from the edge tile closest to the direction
+    w, h = monster.width, monster.height
+    if dx > 0:
+        spawn_col = monster.x + w - 1  # rightmost column
+    elif dx < 0:
+        spawn_col = monster.x           # leftmost column
+    else:
+        spawn_col = monster.x + w // 2  # center
+    if dy > 0:
+        spawn_row = monster.y + h - 1   # bottom row
+    elif dy < 0:
+        spawn_row = monster.y            # top row
+    else:
+        spawn_row = monster.y + h // 2   # center
+    start_x = spawn_col + dx
+    start_y = spawn_row + dy
     if start_x < 0 or start_x >= ROOM_COLS or start_y < 0 or start_y >= ROOM_ROWS:
         return
     room = game.rooms.get(room_id)
@@ -288,7 +307,7 @@ def warmup_charge(monster, room_id, monster_idx, action, msgs):
     for _ in range(max_range):
         nx += dx
         ny += dy
-        if not behavior_engine._is_walkable(nx, ny, room_id):
+        if not behavior_engine._can_move_to(monster, nx, ny, room_id):
             break
         lane.append([nx, ny])
 
@@ -312,7 +331,7 @@ def exec_charge(monster, room_id, monster_idx, action, msgs):
     for _ in range(max_range):
         nx += dx
         ny += dy
-        if not behavior_engine._is_walkable(nx, ny, room_id):
+        if not behavior_engine._can_move_to(monster, nx, ny, room_id):
             break
         path.append([nx, ny])
 
@@ -331,8 +350,14 @@ def exec_charge(monster, room_id, monster_idx, action, msgs):
         "y": end_y,
     }, None))
 
+    # Check if player was hit — for multi-tile monsters, expand each path
+    # position to the monster's full footprint
+    w, h = monster.width, monster.height
     for p in players_in_room(room_id):
-        if p.hp > 0 and any(p.x == px and p.y == py for px, py in path):
+        if p.hp > 0 and any(
+            px <= p.x < px + w and py <= p.y < py + h
+            for px, py in path
+        ):
             _apply_damage(p, damage, room_id, msgs)
 
 

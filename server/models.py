@@ -53,6 +53,10 @@ class Monster:
         self.max_hp = stats["hp"]
         self.tick_rate = stats["tick_rate"]  # ticks per second (higher = faster)
         self.damage = stats.get("damage", 1)
+        # Size in tiles (default 1x1). Boss monsters can be 2x2.
+        # Position (x, y) is the top-left tile of the footprint.
+        self.width = stats.get("width", 1)
+        self.height = stats.get("height", 1)
         # Behavior engine data (None = use default wander)
         self.behavior = game.monster_behaviors.get(kind)
         # Rule cooldown tracking: rule_index -> ticks remaining
@@ -72,6 +76,10 @@ class Monster:
         """True when monster can't be hit or deal contact damage (e.g. mid-teleport)."""
         pw = self._pending_warmup
         return pw is not None and pw["action"].get("action") == "teleport"
+
+    def occupies(self, tx, ty):
+        """True if tile (tx, ty) is within this monster's footprint."""
+        return self.x <= tx < self.x + self.width and self.y <= ty < self.y + self.height
 
 
 class Projectile:

@@ -207,10 +207,10 @@ async def handle_move(player, direction: str):
         "direction": player.direction,
     })
 
-    # Monster contact damage — check if player walked onto a monster
+    # Monster contact damage — check if player walked onto a monster (supports multi-tile)
     if player.hp > 0:
         for monster in get_room_monsters(player.room):
-            if monster.alive and not monster.intangible and monster.x == new_x and monster.y == new_y:
+            if monster.alive and not monster.intangible and monster.occupies(new_x, new_y):
                 await damage_player(player, monster.damage, player.room)
                 break
 
@@ -436,6 +436,7 @@ STATIC_FILES = {
     "/music_dungeon5.mp3": ("music/dungeon_e.mp3", "audio/mpeg"),
     "/music_dungeon6.mp3": ("music/dungeon_f.mp3", "audio/mpeg"),
     "/music_dungeon7.mp3": ("music/dungeon_g.mp3", "audio/mpeg"),
+    "/music_boss1.mp3":    ("music/boss1.mp3", "audio/mpeg"),
 }
 
 

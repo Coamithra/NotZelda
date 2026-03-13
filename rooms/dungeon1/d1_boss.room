@@ -1,6 +1,6 @@
 name: Boss Arena
 biome: dungeon
-music: dungeon
+music: boss1
 ---
 DW DW DW DW DW DW DF DF DF DW DW DW DW DW DW
 DW BZ DF DF DF DF DF MF DF DF DF DF DF BZ DW
@@ -14,3 +14,4 @@ DW DF DF MF MF MF MF MF MF MF MF MF DF DF DW
 DW BZ DF DF DF DF DF MF DF DF DF DF DF BZ DW
 DW DW DW DW DW DW DF DF DF DW DW DW DW DW DW
 ---
+monster dungeon_warden 6 4

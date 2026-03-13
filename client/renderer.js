@@ -50,7 +50,9 @@ function updateDyingMonsters() {
   G.dyingMonsters = G.dyingMonsters.filter(dm => {
     if (now >= dm.nextTime) {
       dm.frame++;
-      dm.nextTime = now + DYING_MONSTER_FRAME_MS;
+      // Boss monsters have a slower, more dramatic death
+      const isBoss = (dm.width || 1) > 1 || (dm.height || 1) > 1;
+      dm.nextTime = now + (isBoss ? 400 : DYING_MONSTER_FRAME_MS);
     }
     return dm.frame < 3;
   });
@@ -281,20 +283,24 @@ function renderPlayers() {
   }
 
   for (const m of G.monsters) {
-    all.push({ x: m.displayX, y: m.displayY, isMonster: true, kind: m.kind, hitFlash: m.hitFlash, teleportAlpha: m.teleportAlpha, chargePrep: m.chargePrep });
+    all.push({ x: m.displayX, y: m.displayY, isMonster: true, kind: m.kind, hitFlash: m.hitFlash, teleportAlpha: m.teleportAlpha, chargePrep: m.chargePrep, width: m.width || 1, height: m.height || 1 });
   }
 
   all.sort((a, b) => a.y - b.y);
 
   for (const dm of G.dyingMonsters) {
     const dx = dm.x * TS, dy = dm.y * TS;
-    drawMonsterDeath(G.ctx, dx, dy, dm.kind, dm.frame, SCALE);
+    const dmScale = SCALE * Math.max(dm.width || 1, dm.height || 1);
+    drawMonsterDeath(G.ctx, dx, dy, dm.kind, dm.frame, dmScale);
   }
 
   for (const p of all) {
     const px = p.x * TS;
     const py = p.y * TS;
     if (p.isMonster) {
+      const mw = p.width || 1;
+      const mh = p.height || 1;
+      const mScale = SCALE * Math.max(mw, mh);
       let shakeX = 0;
       if (p.chargePrep) {
         shakeX = Math.round(Math.sin(Date.now() / 30) * 2) * SCALE;
@@ -302,12 +308,12 @@ function renderPlayers() {
       if (p.teleportAlpha !== undefined && p.teleportAlpha < 1) {
         G.ctx.globalAlpha = Math.max(0, p.teleportAlpha);
       }
-      drawMonsterSprite(G.ctx, px + shakeX, py, p.kind, G.monsterHopFrame, SCALE);
+      drawMonsterSprite(G.ctx, px + shakeX, py, p.kind, G.monsterHopFrame, mScale);
       G.ctx.globalAlpha = 1;
       if (p.hitFlash && Date.now() < p.hitFlash) {
         G.ctx.globalAlpha = 0.5;
         G.ctx.fillStyle = "#ffffff";
-        G.ctx.fillRect(px, py, TS, TS);
+        G.ctx.fillRect(px, py, TS * mw, TS * mh);
         G.ctx.globalAlpha = 1;
       }
       continue;
@@ -764,6 +770,51 @@ function renderDungeonDebug() {
         G.ctx.fillRect(ix, iy, iconS, iconS);
       }
     });
+  }
+}
+
+function renderBossDeathEffect() {
+  if (!G.bossDeathEffect) return;
+  const elapsed = Date.now() - G.bossDeathEffect.startTime;
+  if (elapsed > G.bossDeathEffect.duration) {
+    G.bossDeathEffect = null;
+    return;
+  }
+
+  // Phase 1 (0-400ms): bright white flash
+  if (elapsed < 400) {
+    const flashAlpha = Math.max(0, 0.7 * (1 - elapsed / 400));
+    G.ctx.fillStyle = `rgba(255, 255, 255, ${flashAlpha})`;
+    G.ctx.fillRect(0, 0, CW, CH);
+  }
+
+  // Phase 2 (200-1200ms): screen shake via CSS transform on canvas element
+  if (elapsed > 200 && elapsed < 1200) {
+    const intensity = 4 * (1 - (elapsed - 200) / 1000);
+    const shakeX = Math.round(Math.sin(elapsed * 0.05) * intensity) * SCALE;
+    const shakeY = Math.round(Math.cos(elapsed * 0.07) * intensity) * SCALE;
+    G.canvas.style.transform = `translate(${shakeX}px, ${shakeY}px)`;
+  } else {
+    G.canvas.style.transform = "";
+  }
+
+  // Phase 3 (400-2000ms): particle explosion from center
+  if (elapsed > 400) {
+    const t = (elapsed - 400) / 1600;
+    const numParticles = 20;
+    for (let i = 0; i < numParticles; i++) {
+      const angle = (i / numParticles) * Math.PI * 2 + elapsed * 0.001;
+      const dist = t * 200 * (0.5 + (i % 3) * 0.3);
+      const px = CW / 2 + Math.cos(angle) * dist;
+      const py = CH / 2 + Math.sin(angle) * dist;
+      const alpha = Math.max(0, 1 - t);
+      const size = (3 - (i % 3)) * SCALE;
+      const colors = ["#ff6644", "#cc33ff", "#ffcc33", "#ff2200"];
+      G.ctx.fillStyle = colors[i % colors.length];
+      G.ctx.globalAlpha = alpha * 0.8;
+      G.ctx.fillRect(px - size / 2, py - size / 2, size, size);
+    }
+    G.ctx.globalAlpha = 1;
   }
 }
 

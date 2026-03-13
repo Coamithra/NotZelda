@@ -231,6 +231,8 @@ function handleMessage(msg) {
       G.heartPickups = [];
       G.dyingPlayerSelf = null;
       G.dyingOtherPlayers = {};
+      G.bossDeathEffect = null;
+      G.canvas.style.transform = "";
       G.projectiles = [];
       G.areaWarnings = [];
       G.chargeTrails = [];
@@ -238,6 +240,7 @@ function handleMessage(msg) {
       G.monsterAttackFlashes = [];
       G.monsters = (msg.monsters || []).map(m => ({
         id: m.id, kind: m.kind, x: m.x, y: m.y, displayX: m.x, displayY: m.y,
+        width: m.width || 1, height: m.height || 1,
       }));
       for (const p of msg.players) {
         G.otherPlayers[p.name] = {
@@ -393,8 +396,13 @@ function handleMessage(msg) {
       const idx = G.monsters.findIndex(m => m.id === msg.id);
       if (idx !== -1) {
         const mon = G.monsters[idx];
-        G.dyingMonsters.push({ kind: mon.kind, x: msg.x, y: msg.y, frame: 0, nextTime: Date.now() + DYING_MONSTER_FRAME_MS });
+        const isBoss = (mon.width || 1) > 1 || (mon.height || 1) > 1;
+        G.dyingMonsters.push({ kind: mon.kind, x: msg.x, y: msg.y, frame: 0, nextTime: Date.now() + (isBoss ? 400 : DYING_MONSTER_FRAME_MS), width: mon.width || 1, height: mon.height || 1 });
         G.monsters.splice(idx, 1);
+        // Boss death: dramatic screen flash + shake
+        if (isBoss) {
+          G.bossDeathEffect = { startTime: Date.now(), duration: 2000 };
+        }
       }
       break;
     }
@@ -422,7 +430,7 @@ function handleMessage(msg) {
           }
         }
       }
-      G.monsters.push({ id: msg.id, kind: msg.kind, x: msg.x, y: msg.y, displayX: msg.x, displayY: msg.y });
+      G.monsters.push({ id: msg.id, kind: msg.kind, x: msg.x, y: msg.y, displayX: msg.x, displayY: msg.y, width: msg.width || 1, height: msg.height || 1 });
       break;
 
     // --- Stage 5: Monster attack messages ---
@@ -524,6 +532,14 @@ function handleMessage(msg) {
 
     case "area_attack":
       G.monsterAttackFlashes.push({ x: msg.x, y: msg.y, startTime: Date.now() });
+      break;
+
+    case "music_change":
+      if (msg.music === null || msg.music === "silence") {
+        MusicPlayer.silence();
+      } else {
+        MusicPlayer.setRoom(G.currentRoom ? G.currentRoom.room_id : "", G.currentRoom ? G.currentRoom.biome : "", msg.music);
+      }
       break;
 
     case "quest_update":

@@ -92,11 +92,15 @@ async def send_room_enter(player, exit_direction: str = None):
     room = game.rooms[player.room]
     others = [player_info(p) for p in players_in_room(player.room, exclude=player.ws)]
     guards = game.guards.get(player.room, [])
-    monsters = [
-        {"id": i, "kind": m.kind, "x": m.x, "y": m.y}
-        for i, m in enumerate(get_room_monsters(player.room))
-        if m.alive
-    ]
+    monsters = []
+    for i, m in enumerate(get_room_monsters(player.room)):
+        if m.alive:
+            mdata = {"id": i, "kind": m.kind, "x": m.x, "y": m.y}
+            if m.width > 1:
+                mdata["width"] = m.width
+            if m.height > 1:
+                mdata["height"] = m.height
+            monsters.append(mdata)
     exits = room["exits"]
     msg = {
         "type": "room_enter",
