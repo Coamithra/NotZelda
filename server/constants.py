@@ -115,5 +115,5 @@ PROJECTILE_TICK_RATE = 0.15
 
 DUNGEON_MUSIC_TRACKS = [
     "dungeon1", "dungeon2", "dungeon3", "dungeon4",
-    "dungeon5", "dungeon6", "dungeon7",
+    "dungeon5", "dungeon6",
 ]

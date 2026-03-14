@@ -435,7 +435,6 @@ STATIC_FILES = {
     "/music_dungeon4.mp3": ("music/dungeon_d.mp3", "audio/mpeg"),
     "/music_dungeon5.mp3": ("music/dungeon_e.mp3", "audio/mpeg"),
     "/music_dungeon6.mp3": ("music/dungeon_f.mp3", "audio/mpeg"),
-    "/music_dungeon7.mp3": ("music/dungeon_g.mp3", "audio/mpeg"),
     "/music_boss1.mp3":    ("music/boss1.mp3", "audio/mpeg"),
 }
 
