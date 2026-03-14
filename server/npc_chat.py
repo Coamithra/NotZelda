@@ -211,7 +211,13 @@ async def handle_npc_chat(player, guard: dict, text: str):
     system = _build_system_prompt(guard, player.room)
 
     # Call LLM
+    t0 = time.monotonic()
     response = await _call_npc_llm(system, _conversations[conv_key])
+
+    # NPCs should pause before responding (feels more natural)
+    elapsed = time.monotonic() - t0
+    if elapsed < 1.5:
+        await asyncio.sleep(1.5 - elapsed)
 
     if not response:
         # Fallback to static dialog
