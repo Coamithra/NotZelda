@@ -54,7 +54,7 @@ Players are adventurers who explore this world, fight monsters with swords, and 
 seek to lift the curse on Princess Amara."""
 
 
-def _build_system_prompt(guard: dict, room_id: str) -> str:
+def _build_system_prompt(guard: dict, room_id: str, player_name: str, player_desc: str) -> str:
     """Build a system prompt for an NPC conversation."""
     room = game.rooms.get(room_id, {})
     room_name = room.get("name", room_id)
@@ -68,6 +68,7 @@ def _build_system_prompt(guard: dict, room_id: str) -> str:
     return f"""\
 You are {guard['name']}, an NPC in a fantasy adventure game.
 You are in {room_name} ({biome} area).
+You are speaking with an adventurer named {player_name}. They look like: {player_desc}
 
 Your personality: {personality}
 
@@ -83,7 +84,8 @@ Rules:
 - Never use quotation marks around your response.
 - Never use em dashes. Use commas or periods instead.
 - If asked about game mechanics, answer in-character (e.g. "swing your sword" not "press space").
-- Match your speech style to your character (a farmer talks differently than a ghost)."""
+- Match your speech style to your character (a farmer talks differently than a ghost).
+- You may use the adventurer's name when addressing them."""
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +210,7 @@ async def handle_npc_chat(player, guard: dict, text: str):
         _conversations[conv_key] = _conversations[conv_key][-MAX_HISTORY * 2:]
 
     # Build system prompt
-    system = _build_system_prompt(guard, player.room)
+    system = _build_system_prompt(guard, player.room, player.name, player.description or "a wandering adventurer")
 
     # Call LLM
     t0 = time.monotonic()
