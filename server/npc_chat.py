@@ -157,7 +157,7 @@ async def _call_api(system_prompt: str, messages: list[dict]) -> str:
             None,
             lambda: client.messages.create(
                 model=NPC_MODEL,
-                max_tokens=60,  # very short responses
+                max_tokens=100,
                 system=system_prompt,
                 messages=messages,
                 metadata={"user_id": "notzelda-npc-chat"},
@@ -221,8 +221,8 @@ async def handle_npc_chat(player, guard: dict, text: str):
 
     # Clean up response — remove quotes, truncate
     response = response.strip('"\'')
-    if len(response) > 100:
-        response = response[:97] + "..."
+    if len(response) > 200:
+        response = response[:197] + "..."
 
     # Add NPC response to history
     _conversations[conv_key].append({"role": "assistant", "content": response})
