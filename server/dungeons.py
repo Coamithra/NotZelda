@@ -542,6 +542,17 @@ def destroy_dungeon():
     # Run daily content deprecation if enough time has passed
     _maybe_run_deprecation()
 
+    # Seed custom content on first teardown if libraries have no custom rooms
+    is_debug = os.environ.get("DEBUG_MODE", "").lower() in ("1", "true")
+    if not is_debug and game.room_library:
+        has_custom = any(not e.permanent for e in game.room_library.real_entries)
+        if not has_custom:
+            num_to_seed = game.room_library.placeholder_count
+            if num_to_seed > 0:
+                print(f"[REGEN] Seeding {num_to_seed} custom rooms (first run)")
+                broadcast_debug(f"Regen: seeding {num_to_seed} custom rooms")
+                start_background_regen(num_to_seed)
+
 
 DEPRECATION_INTERVAL = 86400  # 24 hours between deprecation passes
 
