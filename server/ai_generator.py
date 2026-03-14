@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 # ---------------------------------------------------------------------------
 
 _debug = os.environ.get("DEBUG_MODE", "").lower() in ("1", "true")
-ANTHROPIC_MODEL = "claude-haiku-4-5-20251001" if _debug else "claude-sonnet-4-6"
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
 GENERATION_TIMEOUT = 15.0       # seconds before giving up on API call
 CLI_TIMEOUT = 600.0             # CLI is much slower than API
 MAX_API_CALLS_PER_MINUTE = 15   # higher limit: one room = multiple calls

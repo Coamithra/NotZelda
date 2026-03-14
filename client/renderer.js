@@ -819,12 +819,12 @@ function renderBossDeathEffect() {
 }
 
 function renderDungeonMinimap() {
-  if (!G.showDebug) return;
   const mm = G.dungeonDebug && G.dungeonDebug.minimap;
   if (!mm || !mm.cells || mm.cells.length === 0) return;
 
   const cells = mm.cells;
   const pc = mm.player; // [col, row] of player's current cell
+  const isDebug = G.showDebug;
   const conns = mm.connections || [];
 
   // Find grid bounds
@@ -859,51 +859,58 @@ function renderDungeonMinimap() {
     y: mapY + pad + (r - minR) * step + cellSize / 2,
   });
 
-  // Draw connections between cells
-  G.ctx.strokeStyle = "rgba(160, 160, 160, 0.5)";
-  G.ctx.lineWidth = 2;
-  for (const conn of conns) {
-    const a = cellCenter(conn[0], conn[1]);
-    const b = cellCenter(conn[2], conn[3]);
-    G.ctx.beginPath();
-    G.ctx.moveTo(a.x, a.y);
-    G.ctx.lineTo(b.x, b.y);
-    G.ctx.stroke();
+  // Draw connections between cells (debug only)
+  if (isDebug) {
+    G.ctx.strokeStyle = "rgba(160, 160, 160, 0.5)";
+    G.ctx.lineWidth = 2;
+    for (const conn of conns) {
+      const a = cellCenter(conn[0], conn[1]);
+      const b = cellCenter(conn[2], conn[3]);
+      G.ctx.beginPath();
+      G.ctx.moveTo(a.x, a.y);
+      G.ctx.lineTo(b.x, b.y);
+      G.ctx.stroke();
+    }
+    G.ctx.lineWidth = 1;
   }
-  G.ctx.lineWidth = 1;
 
   // Draw each cell
   for (const cell of cells) {
     const cx = mapX + pad + (cell.c - minC) * step;
     const cy = mapY + pad + (cell.r - minR) * step;
 
-    // Color based on state
-    if (cell.boss) {
-      // Boss room — red
-      G.ctx.fillStyle = cell.res ? "rgba(220, 60, 60, 0.8)" : "rgba(220, 60, 60, 0.3)";
-      G.ctx.fillRect(cx, cy, cellSize, cellSize);
-    } else if (cell.treasure) {
-      // Treasure room — gold
-      G.ctx.fillStyle = cell.res ? "rgba(255, 200, 40, 0.8)" : "rgba(255, 200, 40, 0.3)";
-      G.ctx.fillRect(cx, cy, cellSize, cellSize);
-    } else if (!cell.res && !cell.gen) {
-      // Unresolved placeholder — dashed outline, no fill
-      G.ctx.strokeStyle = "rgba(100, 100, 100, 0.6)";
-      G.ctx.setLineDash([2, 2]);
-      G.ctx.strokeRect(cx + 0.5, cy + 0.5, cellSize - 1, cellSize - 1);
-      G.ctx.setLineDash([]);
-    } else if (!cell.res) {
-      // Unresolved but has content — dim outline
-      G.ctx.strokeStyle = "rgba(140, 140, 100, 0.7)";
-      G.ctx.strokeRect(cx + 0.5, cy + 0.5, cellSize - 1, cellSize - 1);
-    } else if (cell.src === "precreated") {
-      // Resolved precreated — blue
-      G.ctx.fillStyle = "rgba(80, 140, 220, 0.7)";
-      G.ctx.fillRect(cx, cy, cellSize, cellSize);
+    if (isDebug) {
+      // Debug mode — color by room type and state
+      if (cell.boss) {
+        G.ctx.fillStyle = cell.res ? "rgba(220, 60, 60, 0.8)" : "rgba(220, 60, 60, 0.3)";
+        G.ctx.fillRect(cx, cy, cellSize, cellSize);
+      } else if (cell.treasure) {
+        G.ctx.fillStyle = cell.res ? "rgba(255, 200, 40, 0.8)" : "rgba(255, 200, 40, 0.3)";
+        G.ctx.fillRect(cx, cy, cellSize, cellSize);
+      } else if (!cell.res && !cell.gen) {
+        G.ctx.strokeStyle = "rgba(100, 100, 100, 0.6)";
+        G.ctx.setLineDash([2, 2]);
+        G.ctx.strokeRect(cx + 0.5, cy + 0.5, cellSize - 1, cellSize - 1);
+        G.ctx.setLineDash([]);
+      } else if (!cell.res) {
+        G.ctx.strokeStyle = "rgba(140, 140, 100, 0.7)";
+        G.ctx.strokeRect(cx + 0.5, cy + 0.5, cellSize - 1, cellSize - 1);
+      } else if (cell.src === "precreated") {
+        G.ctx.fillStyle = "rgba(80, 140, 220, 0.7)";
+        G.ctx.fillRect(cx, cy, cellSize, cellSize);
+      } else {
+        G.ctx.fillStyle = "rgba(80, 200, 120, 0.7)";
+        G.ctx.fillRect(cx, cy, cellSize, cellSize);
+      }
     } else {
-      // Resolved custom — green
-      G.ctx.fillStyle = "rgba(80, 200, 120, 0.7)";
-      G.ctx.fillRect(cx, cy, cellSize, cellSize);
+      // Normal mode — uniform style, visited vs unvisited
+      if (cell.res) {
+        G.ctx.fillStyle = "rgba(160, 160, 170, 0.6)";
+        G.ctx.fillRect(cx, cy, cellSize, cellSize);
+      } else {
+        G.ctx.strokeStyle = "rgba(100, 100, 110, 0.4)";
+        G.ctx.strokeRect(cx + 0.5, cy + 0.5, cellSize - 1, cellSize - 1);
+      }
     }
 
     // Entrance marker — small diamond
@@ -931,8 +938,10 @@ function renderDungeonMinimap() {
     G.ctx.lineWidth = 1;
   }
 
-  // Legend — tiny text below the map
-  G.ctx.font = "7px monospace";
-  G.ctx.fillStyle = "rgba(180, 180, 180, 0.6)";
-  G.ctx.fillText(mm.layout, mapX + pad, mapY + mapH + 8);
+  // Layout name (debug only)
+  if (isDebug && mm.layout) {
+    G.ctx.font = "7px monospace";
+    G.ctx.fillStyle = "rgba(180, 180, 180, 0.6)";
+    G.ctx.fillText(mm.layout, mapX + pad, mapY + mapH + 8);
+  }
 }
