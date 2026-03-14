@@ -397,7 +397,18 @@ function renderSpeechBubbles() {
       }
     }
     if (line) lines.push(line);
-    if (lines.length > maxLines) lines.length = maxLines;
+    if (lines.length > maxLines) {
+      lines.length = maxLines;
+      const last = lines[maxLines - 1];
+      if (G.ctx.measureText(last + "...").width > maxWidth) {
+        // Trim words until "..." fits
+        const words2 = last.split(" ");
+        while (words2.length > 1 && G.ctx.measureText(words2.join(" ") + "...").width > maxWidth) words2.pop();
+        lines[maxLines - 1] = words2.join(" ") + "...";
+      } else {
+        lines[maxLines - 1] = last + "...";
+      }
+    }
 
     const lineHeight = 14;
     const pad = 6;
