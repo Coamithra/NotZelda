@@ -328,10 +328,10 @@ async def handle_npc_chat(player, guard: dict, text: str):
 
     # Spawn guards if the NPC called for them
     if summon_guards:
-        await _spawn_summoned_guards(player.room, guard["x"], guard["y"], npc_name)
+        await _spawn_summoned_guards(player.room, guard["x"], guard["y"], npc_name, player.name)
 
 
-async def _spawn_summoned_guards(room_id: str, npc_x: int, npc_y: int, npc_name: str):
+async def _spawn_summoned_guards(room_id: str, npc_x: int, npc_y: int, npc_name: str, target_player: str):
     """Spawn 3-5 town guard monsters near an NPC who called for help."""
     from server.constants import ROOM_COLS, ROOM_ROWS
     from server.models import Monster
@@ -386,6 +386,8 @@ async def _spawn_summoned_guards(room_id: str, npc_x: int, npc_y: int, npc_name:
     for sx, sy in spawn_points:
         monster = Monster(sx, sy, "town_guard")
         monster.last_tick_time = time.monotonic()
+        monster._guard_spawn_time = time.monotonic()
+        monster._guard_target = target_player
         monster_id = len(monster_list)
         monster_list.append(monster)
 

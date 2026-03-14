@@ -524,6 +524,64 @@ async def projectile_tick():
         await _flush_messages(msgs)
 
 
+GUARD_DESPAWN_TIMEOUT = 30.0   # seconds before summoned guards vanish
+GUARD_DESPAWN_DISTANCE = 4     # Manhattan tiles — target escapes if beyond this
+GUARD_DESPAWN_GRACE = 3.0      # seconds before distance check kicks in
+
+
+def _check_guard_despawn(room_id, monster_list, now, msgs):
+    """Despawn summoned town guards if timed out or target player escaped."""
+    guards = [(i, m) for i, m in enumerate(monster_list)
+              if m.kind == "town_guard" and m.alive]
+    if not guards:
+        return
+
+    first = guards[0][1]
+    spawn_time = getattr(first, '_guard_spawn_time', now)
+    age = now - spawn_time
+
+    # 30s hard timeout
+    if age >= GUARD_DESPAWN_TIMEOUT:
+        for i, m in guards:
+            m.alive = False
+            msgs.append(("broadcast", room_id, {
+                "type": "monster_killed", "id": i, "x": m.x, "y": m.y,
+            }, None))
+        return
+
+    # After grace period, check if target player escaped
+    if age < GUARD_DESPAWN_GRACE:
+        return
+    target_name = getattr(first, '_guard_target', None)
+    if not target_name:
+        return
+
+    # Find target in room
+    target = None
+    for p in players_in_room(room_id):
+        if p.name == target_name:
+            target = p
+            break
+
+    if target is None:
+        # Target left the room — despawn
+        for i, m in guards:
+            m.alive = False
+            msgs.append(("broadcast", room_id, {
+                "type": "monster_killed", "id": i, "x": m.x, "y": m.y,
+            }, None))
+        return
+
+    # Despawn if target is beyond distance from ALL guards
+    nearest = min(abs(target.x - m.x) + abs(target.y - m.y) for _, m in guards)
+    if nearest > GUARD_DESPAWN_DISTANCE:
+        for i, m in guards:
+            m.alive = False
+            msgs.append(("broadcast", room_id, {
+                "type": "monster_killed", "id": i, "x": m.x, "y": m.y,
+            }, None))
+
+
 async def monster_tick():
     """Background loop — ticks alive monsters in rooms that have players."""
     while True:
@@ -535,6 +593,8 @@ async def monster_tick():
                 continue
             if not players_in_room(room_id):
                 continue
+            # Despawn summoned town guards after timeout or when target escapes
+            _check_guard_despawn(room_id, monster_list, now, msgs)
             for i, monster in enumerate(monster_list):
                 try:
                     if not monster.alive:
