@@ -42,7 +42,7 @@ from server.lifecycle import (
 from server.combat import damage_player, handle_attack, monster_tick, projectile_tick
 from server.quests import handle_quest_npc
 from server.debug_monsters import handle_debug_spawn, auto_register_debug_monsters
-from server.npc_chat import find_adjacent_npc, handle_npc_chat, clear_player_history
+from server.npc_chat import find_adjacent_npc, handle_npc_chat, clear_player_history, register_town_guard
 from server.dungeon_content import register_precreated_types, load_precreated_content
 from server.dungeons import load_deprecation_timestamp, load_deprecated_sets, _run_content_deprecation, start_background_regen
 from server.content_library import ContentLibrary, MONSTER_LIBRARY_CAPACITY, TILE_LIBRARY_CAPACITY, ROOM_LIBRARY_CAPACITY
@@ -464,6 +464,7 @@ async def main():
     load_room_files()
     load_dungeon_templates()
     register_precreated_types()
+    register_town_guard()
     auto_register_debug_monsters()
 
     # Initialize content libraries (Stage 7)

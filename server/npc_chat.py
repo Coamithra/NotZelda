@@ -8,12 +8,13 @@ Conversation history is kept per (player, npc) pair in memory.
 import asyncio
 import json
 import os
+import random
 import subprocess
 import time
 from collections import defaultdict
 
 from server.state import game
-from server.net import broadcast_to_room, log_event
+from server.net import broadcast_to_room, players_in_room, log_event
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -26,6 +27,7 @@ NPC_TIMEOUT = 30.0          # seconds — shorter than content gen
 NPC_API_TIMEOUT = 10.0      # API is faster
 MAX_HISTORY = 10            # conversation turns to remember per player-NPC pair
 NPC_CHAT_COOLDOWN = 3.0     # seconds between NPC chat messages per player
+GUARD_SUMMON_COOLDOWN = 60.0  # seconds between guard summons per room
 
 # ---------------------------------------------------------------------------
 # Conversation history — maps (player_name, npc_name) -> list of messages
@@ -33,6 +35,77 @@ NPC_CHAT_COOLDOWN = 3.0     # seconds between NPC chat messages per player
 
 _conversations: dict[tuple[str, str], list[dict]] = defaultdict(list)
 _last_chat_time: dict[str, float] = {}  # player_name -> last npc chat time
+_last_guard_summon: dict[str, float] = {}  # room_id -> last summon time
+
+# ---------------------------------------------------------------------------
+# Town guard monster — spawned when NPCs call for help
+# ---------------------------------------------------------------------------
+
+TOWN_GUARD_MONSTER = {
+    "kind": "town_guard",
+    "stats": {"hp": 3, "tick_rate": 0.6, "damage": 2},
+    "behavior": {"rules": [
+        {"if": "player_within", "range": 6, "do": "move", "direction": "player"},
+        {"if": "always", "do": "move", "direction": "random"},
+    ]},
+    "sprite": {
+        "colors": {
+            "helmet": "#8090a0", "helmet_dark": "#606e7a", "armor": "#9aa8b8",
+            "skin": "#e8c898", "eyes": "#222222", "pants": "#3a4a8a", "boots": "#3a2a1a",
+        },
+        "yOff": [0, -1],
+        "frames": [
+            [
+                ["helmet",      4, 0, 8, 2],
+                ["helmet_dark", 4, 2, 8, 1],
+                ["skin",        5, 3, 6, 3],
+                ["eyes",        6, 3, 1, 1],
+                ["eyes",        9, 3, 1, 1],
+                ["armor",       4, 6, 8, 5],
+                ["armor",       3, 6, 1, 4],
+                ["armor",      12, 6, 1, 4],
+                ["skin",        3,10, 1, 1],
+                ["skin",       12,10, 1, 1],
+                ["pants",       5,11, 6, 2],
+                ["boots",       5,13, 2, 2],
+                ["boots",       9,13, 2, 2],
+            ],
+            [
+                ["helmet",      4, 0, 8, 2],
+                ["helmet_dark", 4, 2, 8, 1],
+                ["skin",        5, 2, 6, 3],
+                ["eyes",        6, 2, 1, 1],
+                ["eyes",        9, 2, 1, 1],
+                ["armor",       4, 5, 8, 5],
+                ["armor",       3, 5, 1, 4],
+                ["armor",      12, 5, 1, 4],
+                ["skin",        3, 9, 1, 1],
+                ["skin",       12, 9, 1, 1],
+                ["pants",       5,10, 6, 2],
+                ["boots",       5,12, 2, 2],
+                ["boots",       9,12, 2, 2],
+            ],
+        ],
+    },
+    "death_sprite": {
+        "colors": {"clr": "#9aa8b8"},
+        "frames": [
+            [["clr", 3, 11, 10, 3], ["clr", 5, 10, 6, 1]],
+            [["clr", 1, 12, 3, 2], ["clr", 5, 13, 2, 1], ["clr", 8, 11, 3, 2], ["clr", 12, 13, 3, 1]],
+            {"alpha": 0.4, "layers": [["clr", 0, 13, 2, 1], ["clr", 6, 14, 2, 1], ["clr", 13, 13, 2, 1]]},
+        ],
+    },
+}
+
+
+def register_town_guard():
+    """Register the town_guard monster type at startup."""
+    from server.validation import register_monster_type
+    ok, errors = register_monster_type(TOWN_GUARD_MONSTER)
+    if ok:
+        print("[CONTENT] Registered monster type: town_guard")
+    else:
+        print(f"[CONTENT] WARNING: Failed to register town_guard: {errors}")
 
 # ---------------------------------------------------------------------------
 # World context (shared across all NPCs)
@@ -85,7 +158,10 @@ Rules:
 - Never use em dashes. Use commas or periods instead.
 - If asked about game mechanics, answer in-character (e.g. "swing your sword" not "press space").
 - Match your speech style to your character (a farmer talks differently than a ghost).
-- You may use the adventurer's name when addressing them."""
+- You may use the adventurer's name when addressing them.
+- If the adventurer is being rude, threatening, hostile, or insulting toward you, you can call \
+for armed guards by including [CALL_GUARDS] at the end of your response. Only do this when \
+genuinely provoked, not for playful banter. Example: Guards! Seize this scoundrel! [CALL_GUARDS]"""
 
 
 # ---------------------------------------------------------------------------
@@ -229,10 +305,16 @@ async def handle_npc_chat(player, guard: dict, text: str):
 
     # Clean up response — remove quotes, truncate
     response = response.strip('"\'')
+
+    # Check for guard summon tag before truncating
+    summon_guards = "[CALL_GUARDS]" in response
+    if summon_guards:
+        response = response.replace("[CALL_GUARDS]", "").strip()
+
     if len(response) > 200:
         response = response[:197] + "..."
 
-    # Add NPC response to history
+    # Add NPC response to history (without the tag)
     _conversations[conv_key].append({"role": "assistant", "content": response})
 
     # Log and broadcast NPC response
@@ -243,6 +325,83 @@ async def handle_npc_chat(player, guard: dict, text: str):
         "from": npc_name,
         "text": response,
     })
+
+    # Spawn guards if the NPC called for them
+    if summon_guards:
+        await _spawn_summoned_guards(player.room, guard["x"], guard["y"], npc_name)
+
+
+async def _spawn_summoned_guards(room_id: str, npc_x: int, npc_y: int, npc_name: str):
+    """Spawn 3-5 town guard monsters near an NPC who called for help."""
+    from server.constants import ROOM_COLS, ROOM_ROWS
+    from server.models import Monster
+
+    # Cooldown — don't spam guards
+    now = time.monotonic()
+    last = _last_guard_summon.get(room_id, 0)
+    if now - last < GUARD_SUMMON_COOLDOWN:
+        return
+    _last_guard_summon[room_id] = now
+
+    # Don't spawn if there are already summoned guards in this room
+    existing = game.room_monsters.get(room_id, [])
+    if any(m.kind == "town_guard" and m.alive for m in existing):
+        return
+
+    room = game.rooms.get(room_id)
+    if not room:
+        return
+    tilemap = room["tilemap"]
+    guards = game.guards.get(room_id, [])
+    player_positions = {(p.x, p.y) for p in players_in_room(room_id)}
+
+    # Find walkable tiles near the NPC (expanding Manhattan distance rings)
+    candidates = []
+    for dist in range(1, 6):
+        for dx in range(-dist, dist + 1):
+            for dy in range(-dist, dist + 1):
+                if abs(dx) + abs(dy) != dist:
+                    continue
+                nx, ny = npc_x + dx, npc_y + dy
+                if 0 <= nx < ROOM_COLS and 0 <= ny < ROOM_ROWS:
+                    if game.is_walkable_tile(tilemap[ny][nx]):
+                        if not any(g["x"] == nx and g["y"] == ny for g in guards):
+                            if (nx, ny) not in player_positions:
+                                candidates.append((nx, ny))
+
+    if not candidates:
+        return
+
+    count = random.randint(3, 5)
+    random.shuffle(candidates)
+    spawn_points = candidates[:count]
+
+    if room_id not in game.room_monsters:
+        game.room_monsters[room_id] = []
+    monster_list = game.room_monsters[room_id]
+
+    log_event("GUARD_SUMMON", f"{npc_name} called {len(spawn_points)} guards in {room_id}")
+    print(f"[GUARDS] {npc_name} summoned {len(spawn_points)} town guards in {room_id}")
+
+    for sx, sy in spawn_points:
+        monster = Monster(sx, sy, "town_guard")
+        monster.last_tick_time = time.monotonic()
+        monster_id = len(monster_list)
+        monster_list.append(monster)
+
+        spawn_msg = {
+            "type": "monster_spawned",
+            "id": monster_id,
+            "kind": "town_guard",
+            "x": sx,
+            "y": sy,
+        }
+        if "town_guard" in game.custom_sprites:
+            spawn_msg["custom_sprites"] = {"town_guard": game.custom_sprites["town_guard"]}
+        if "town_guard" in game.custom_death_sprites:
+            spawn_msg["custom_death_sprites"] = {"town_guard": game.custom_death_sprites["town_guard"]}
+
+        await broadcast_to_room(room_id, spawn_msg)
 
 
 def clear_player_history(player_name: str):
