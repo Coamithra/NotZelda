@@ -115,6 +115,16 @@ async def _death_respawn(player, old_room_id):
         # Import here to avoid circular dependency (lifecycle -> combat -> lifecycle)
         from server.lifecycle import on_player_enter_room, on_player_leave_room, send_room_enter
 
+        # Despawn summoned town guards — their job is done
+        if old_room_id in game.room_monsters:
+            for i, m in enumerate(game.room_monsters[old_room_id]):
+                if m.kind == "town_guard" and m.alive:
+                    m.alive = False
+                    await broadcast_to_room(old_room_id, {
+                        "type": "monster_killed",
+                        "id": i, "x": m.x, "y": m.y,
+                    })
+
         await broadcast_to_room(old_room_id, {
             "type": "player_left", "name": player.name,
         })
