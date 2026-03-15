@@ -9,7 +9,9 @@ const COLS = 15;
 const ROWS = 11;
 const CW = COLS * TS; // 720
 const CH = ROWS * TS; // 528
-const MOVE_LERP = 0.3;
+const MOVE_LERP = 0.3;          // lerp factor for other players & monsters
+const MOVE_SPEED = 1/15;        // tiles per frame (~250ms per tile at 60fps)
+const COMMIT_THRESHOLD = 0.35;  // fraction of tile before move commits
 
 // Shared mutable game state
 const G = {
@@ -48,6 +50,12 @@ const G = {
   // Input
   keysDown: {},
   lastMoveTime: 0,
+
+  // Movement prediction
+  moveState: null,         // {fromX, fromY, toX, toY, dir, progress, committed}
+  inputBuffer: null,       // queued next direction
+  pendingMoves: [],        // [{x, y}] committed moves awaiting server confirmation
+  lastServerMoveTime: 0,   // rate limit non-predicted server messages
 
   // Animation
   animFrame: 0,

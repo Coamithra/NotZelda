@@ -41,6 +41,18 @@ document.addEventListener("keydown", (e) => {
       G.infoMessages.push({ text: "You don't have a weapon.", expires: Date.now() + 2000 });
       return;
     }
+    // Cancel any in-progress predicted move
+    if (G.moveState) {
+      if (G.moveState.committed) {
+        G.displayX = G.moveState.toX;
+        G.displayY = G.moveState.toY;
+      } else {
+        G.displayX = G.moveState.fromX;
+        G.displayY = G.moveState.fromY;
+      }
+      G.moveState = null;
+      G.inputBuffer = null;
+    }
     if (G.ws && G.ws.readyState === WebSocket.OPEN) {
       G.ws.send(JSON.stringify({ type: "attack" }));
     }
@@ -131,28 +143,20 @@ document.addEventListener("visibilitychange", () => {
 // Mobile D-pad controls
 // ---------------------------------------------------------------------------
 if (G.isMobile) {
-  let dpadInterval = null;
   let activeDir = null;
+  const DPAD_KEY_MAP = { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" };
 
   function startDpad(dir) {
     if (activeDir === dir) return;
     stopDpad();
     stopDance(G.myName);
     activeDir = dir;
-    if (G.ws && G.ws.readyState === WebSocket.OPEN) {
-      G.ws.send(JSON.stringify({ type: "move", direction: dir }));
-    }
-    dpadInterval = setInterval(() => {
-      if (G.ws && G.ws.readyState === WebSocket.OPEN) {
-        G.ws.send(JSON.stringify({ type: "move", direction: dir }));
-      }
-    }, 150);
+    G.keysDown[DPAD_KEY_MAP[dir]] = true;
   }
 
   function stopDpad() {
-    if (dpadInterval) {
-      clearInterval(dpadInterval);
-      dpadInterval = null;
+    if (activeDir) {
+      delete G.keysDown[DPAD_KEY_MAP[activeDir]];
     }
     activeDir = null;
     document.querySelectorAll(".dpad-btn").forEach(b => b.classList.remove("active"));

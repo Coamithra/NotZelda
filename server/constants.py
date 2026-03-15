@@ -99,7 +99,7 @@ ROOM_ROWS = 11
 # ---------------------------------------------------------------------------
 
 STARTING_ROOM = "town_square"
-MOVE_COOLDOWN = 0.125
+MOVE_COOLDOWN = 0.150
 ATTACK_COOLDOWN = 0.4
 HEART_RESTORE_HP = 2
 PLAYER_MAX_HP = 6

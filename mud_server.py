@@ -372,6 +372,16 @@ async def handle_connection(websocket):
                 msg_type = data.get("type")
                 if msg_type == "move":
                     await handle_move(player, data.get("direction", ""))
+                elif msg_type == "face":
+                    direction = data.get("direction", "")
+                    if direction in DIRECTIONS:
+                        player.direction = direction
+                        player.dancing = False
+                        await broadcast_to_room(player.room, {
+                            "type": "player_faced",
+                            "name": player.name,
+                            "direction": direction,
+                        }, exclude=player.ws)
                 elif msg_type == "attack":
                     await handle_attack(player)
                 elif msg_type == "chat":

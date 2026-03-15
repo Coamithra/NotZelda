@@ -276,13 +276,13 @@
 <button id="debug-btn">&pi;</button>
 
 <!-- Game scripts — load order matters -->
-<script src="game_state.js?v=2"></script>
+<script src="game_state.js?v=3"></script>
 <script src="tiles.js?v=3"></script>
 <script src="sprite_data.js?v=3"></script>
 <script src="sprites.js?v=3"></script>
 <script src="music.js?v=9"></script>
 <script src="renderer.js?v=2"></script>
-<script src="net.js?v=2"></script>
+<script src="net.js?v=3"></script>
 <script>
 // ---------------------------------------------------------------------------
 // Init — bind DOM refs and start game loop
@@ -331,19 +331,152 @@ G.serverLog   = document.getElementById("server-log");
 // ---------------------------------------------------------------------------
 // Game loop
 // ---------------------------------------------------------------------------
-function processMovement(timestamp) {
-  if (timestamp - G.lastMoveTime < 125) return;
+// ---------------------------------------------------------------------------
+// Client-side prediction helpers
+// ---------------------------------------------------------------------------
+const DIR_DX = { up: 0, down: 0, left: -1, right: 1 };
+const DIR_DY = { up: -1, down: 1, left: 0, right: 0 };
 
-  let dir = null;
-  if (G.keysDown["ArrowUp"] || G.keysDown["KeyW"]) dir = "up";
-  else if (G.keysDown["ArrowDown"] || G.keysDown["KeyS"]) dir = "down";
-  else if (G.keysDown["ArrowLeft"] || G.keysDown["KeyA"]) dir = "left";
-  else if (G.keysDown["ArrowRight"] || G.keysDown["KeyD"]) dir = "right";
+function getActiveDirection() {
+  if (G.keysDown["ArrowUp"] || G.keysDown["KeyW"]) return "up";
+  if (G.keysDown["ArrowDown"] || G.keysDown["KeyS"]) return "down";
+  if (G.keysDown["ArrowLeft"] || G.keysDown["KeyA"]) return "left";
+  if (G.keysDown["ArrowRight"] || G.keysDown["KeyD"]) return "right";
+  return null;
+}
 
-  if (dir && G.ws && G.ws.readyState === WebSocket.OPEN) {
-    stopDance(G.myName);
-    G.ws.send(JSON.stringify({ type: "move", direction: dir }));
-    G.lastMoveTime = timestamp;
+function sendToServer(msg) {
+  if (G.ws && G.ws.readyState === WebSocket.OPEN) {
+    G.ws.send(JSON.stringify(msg));
+  }
+}
+
+function isTransitionTile(x, y) {
+  if (!G.currentRoom) return false;
+  const tile = G.currentRoom.tilemap[y][x];
+  const exits = G.currentRoom.exits;
+  if ((tile === "SU" || tile === 9) && exits.up) return true;
+  if ((tile === "SD" || tile === 10) && exits.down) return true;
+  return false;
+}
+
+function canPredictWalk(x, y) {
+  if (!G.currentRoom) return false;
+  if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return false;
+  if (isTransitionTile(x, y)) return false;
+  const tile = G.currentRoom.tilemap[y][x];
+  if (!WALKABLE.has(tile)) return false;
+  for (const guard of G.guards) {
+    if (guard.x === x && guard.y === y) return false;
+  }
+  return true;
+}
+
+function tryStartMove(dir) {
+  if (!G.myPlayer || !G.currentRoom) return;
+  const nx = G.myPlayer.x + DIR_DX[dir];
+  const ny = G.myPlayer.y + DIR_DY[dir];
+
+  const wasAlreadyFacing = (G.myPlayer.direction === dir);
+  G.myPlayer.direction = dir;
+
+  // Walkable and predictable — start client-side predicted move
+  if (canPredictWalk(nx, ny)) {
+    G.moveState = {
+      fromX: G.myPlayer.x, fromY: G.myPlayer.y,
+      toX: nx, toY: ny,
+      dir: dir,
+      progress: 0,
+      committed: false,
+    };
+    return;
+  }
+
+  // Off-grid or transition tile — delegate to server (room transitions)
+  const offGrid = (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS);
+  const transition = !offGrid && isTransitionTile(nx, ny);
+  if (offGrid || transition) {
+    const now = performance.now();
+    if (now - G.lastServerMoveTime < 200) return;
+    G.lastServerMoveTime = now;
+    sendToServer({ type: "move", direction: dir });
+    return;
+  }
+
+  // Not walkable (wall, guard, etc.) — face only, send once on direction change
+  if (!wasAlreadyFacing) {
+    sendToServer({ type: "face", direction: dir });
+  }
+}
+
+function processMovement() {
+  const dir = getActiveDirection();
+
+  if (G.moveState) {
+    const ms = G.moveState;
+    ms.progress += MOVE_SPEED;
+
+    // Commit logic
+    if (!ms.committed) {
+      if (ms.progress >= COMMIT_THRESHOLD) {
+        // Past threshold — commit regardless of key state
+        ms.committed = true;
+        G.myPlayer.x = ms.toX;
+        G.myPlayer.y = ms.toY;
+        sendToServer({ type: "move", direction: ms.dir });
+        G.pendingMoves.push({ x: ms.toX, y: ms.toY });
+      } else if (!dir) {
+        // TAP — no direction held, cancel and snap back
+        sendToServer({ type: "face", direction: ms.dir });
+        G.displayX = ms.fromX;
+        G.displayY = ms.fromY;
+        G.moveState = null;
+        G.isMoving = false;
+        return;
+      }
+    }
+
+    // Buffer different direction input
+    if (dir && dir !== ms.dir) {
+      G.inputBuffer = dir;
+    }
+
+    if (ms.progress >= 1.0) {
+      // Move complete
+      G.displayX = ms.toX;
+      G.displayY = ms.toY;
+      G.moveState = null;
+
+      // Chain next move from buffer or held key
+      const nextDir = G.inputBuffer || dir;
+      G.inputBuffer = null;
+      if (nextDir) {
+        stopDance(G.myName);
+        tryStartMove(nextDir);
+      }
+      G.isMoving = !!G.moveState;
+    } else {
+      // Interpolate display position at constant speed
+      G.displayX = ms.fromX + (ms.toX - ms.fromX) * ms.progress;
+      G.displayY = ms.fromY + (ms.toY - ms.fromY) * ms.progress;
+      G.isMoving = true;
+    }
+
+    // Safety: clear stale predictions
+    if (G.pendingMoves.length > 10) {
+      G.pendingMoves = [];
+      G.moveState = null;
+      G.inputBuffer = null;
+    }
+  } else {
+    // Not moving — try to start
+    if (dir) {
+      stopDance(G.myName);
+      tryStartMove(dir);
+      G.isMoving = !!G.moveState;
+    } else {
+      G.isMoving = false;
+    }
   }
 }
 
@@ -358,7 +491,7 @@ function gameLoop(timestamp) {
 
   // Process movement (freeze while attacking or dying)
   if (!G.chatFocused && !G.transition && !G.attackingPlayers[G.myName] && !G.dyingPlayerSelf) {
-    processMovement(timestamp);
+    processMovement();
   }
 
   // Update animations
@@ -376,13 +509,14 @@ function gameLoop(timestamp) {
     G.monsterHopFrame = (G.monsterHopFrame + 1) % 2;
   }
 
-  // Interpolate positions
-  if (G.myPlayer) {
-    G.displayX += (G.myPlayer.x - G.displayX) * MOVE_LERP;
-    G.displayY += (G.myPlayer.y - G.displayY) * MOVE_LERP;
-    if (Math.abs(G.myPlayer.x - G.displayX) < 0.05) G.displayX = G.myPlayer.x;
-    if (Math.abs(G.myPlayer.y - G.displayY) < 0.05) G.displayY = G.myPlayer.y;
-    G.isMoving = (G.displayX !== G.myPlayer.x || G.displayY !== G.myPlayer.y);
+  // Interpolate positions — player uses prediction (processMovement), lerp as fallback
+  if (G.myPlayer && !G.moveState) {
+    if (G.displayX !== G.myPlayer.x || G.displayY !== G.myPlayer.y) {
+      G.displayX += (G.myPlayer.x - G.displayX) * MOVE_LERP;
+      G.displayY += (G.myPlayer.y - G.displayY) * MOVE_LERP;
+      if (Math.abs(G.myPlayer.x - G.displayX) < 0.05) G.displayX = G.myPlayer.x;
+      if (Math.abs(G.myPlayer.y - G.displayY) < 0.05) G.displayY = G.myPlayer.y;
+    }
   }
 
   for (const p of Object.values(G.otherPlayers)) {
@@ -428,6 +562,6 @@ function gameLoop(timestamp) {
 }
 </script>
 <!-- Input must load after DOM refs are bound and functions defined -->
-<script src="input.js?v=2"></script>
+<script src="input.js?v=3"></script>
 </body>
 </html>

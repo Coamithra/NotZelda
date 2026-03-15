@@ -255,6 +255,9 @@ function handleMessage(msg) {
 
       G.displayX = G.myPlayer.x;
       G.displayY = G.myPlayer.y;
+      G.moveState = null;
+      G.inputBuffer = null;
+      G.pendingMoves = [];
 
       if (cameFromConjuring || isFirstRoom) {
         // Fade in from black on first login
@@ -288,12 +291,31 @@ function handleMessage(msg) {
       stopDance(msg.name);
       delete G.attackingPlayers[msg.name];
       if (msg.name === G.myName) {
-        G.myPlayer.x = msg.x;
-        G.myPlayer.y = msg.y;
         G.myPlayer.direction = msg.direction;
+        // Check if server confirms a predicted move
+        if (G.pendingMoves.length > 0 &&
+            msg.x === G.pendingMoves[0].x && msg.y === G.pendingMoves[0].y) {
+          G.pendingMoves.shift();
+        } else {
+          // Server position differs from prediction — snap to server
+          G.myPlayer.x = msg.x;
+          G.myPlayer.y = msg.y;
+          G.displayX = msg.x;
+          G.displayY = msg.y;
+          G.moveState = null;
+          G.inputBuffer = null;
+          G.pendingMoves = [];
+        }
       } else if (G.otherPlayers[msg.name]) {
         G.otherPlayers[msg.name].x = msg.x;
         G.otherPlayers[msg.name].y = msg.y;
+        G.otherPlayers[msg.name].direction = msg.direction;
+      }
+      break;
+
+    case "player_faced":
+      if (msg.name !== G.myName && G.otherPlayers[msg.name]) {
+        stopDance(msg.name);
         G.otherPlayers[msg.name].direction = msg.direction;
       }
       break;
@@ -345,6 +367,11 @@ function handleMessage(msg) {
         G.myHp = msg.hp;
         G.myPlayer.x = msg.x;
         G.myPlayer.y = msg.y;
+        G.displayX = msg.x;
+        G.displayY = msg.y;
+        G.moveState = null;
+        G.inputBuffer = null;
+        G.pendingMoves = [];
         G.hurtFlash = Date.now() + 300;
         G.invincibleUntil = Date.now() + 1500;
       } else if (G.otherPlayers[msg.name]) {
@@ -358,6 +385,11 @@ function handleMessage(msg) {
     case "you_died":
       G.dyingPlayerSelf = { x: msg.x, y: msg.y, frame: 0, startTime: Date.now() };
       G.myHp = 0;
+      G.moveState = null;
+      G.inputBuffer = null;
+      G.pendingMoves = [];
+      G.displayX = msg.x;
+      G.displayY = msg.y;
       appendChatLog(`<span class="chat-system">You died!</span>`);
       break;
 
