@@ -338,11 +338,8 @@ const DIR_DX = { up: 0, down: 0, left: -1, right: 1 };
 const DIR_DY = { up: -1, down: 1, left: 0, right: 0 };
 
 function getActiveDirection() {
-  if (G.keysDown["ArrowUp"] || G.keysDown["KeyW"]) return "up";
-  if (G.keysDown["ArrowDown"] || G.keysDown["KeyS"]) return "down";
-  if (G.keysDown["ArrowLeft"] || G.keysDown["KeyA"]) return "left";
-  if (G.keysDown["ArrowRight"] || G.keysDown["KeyD"]) return "right";
-  return null;
+  // Most recently pressed direction key wins (via dirStack)
+  return G.dirStack.length > 0 ? G.dirStack[G.dirStack.length - 1] : null;
 }
 
 function sendToServer(msg) {
@@ -433,10 +430,20 @@ function processMovement() {
         G.moveState = null;
         G.isMoving = false;
         return;
+      } else if (dir !== ms.dir) {
+        // Different direction pressed before commit — cancel and restart
+        sendToServer({ type: "face", direction: ms.dir });
+        G.displayX = ms.fromX;
+        G.displayY = ms.fromY;
+        G.moveState = null;
+        G.inputBuffer = null;
+        tryStartMove(dir);
+        G.isMoving = !!G.moveState;
+        return;
       }
     }
 
-    // Buffer different direction input
+    // Buffer different direction input (after commit)
     if (dir && dir !== ms.dir) {
       G.inputBuffer = dir;
     }

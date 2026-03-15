@@ -49,6 +49,7 @@ const G = {
 
   // Input
   keysDown: {},
+  dirStack: [],            // direction key press order — last entry = active direction
   lastMoveTime: 0,
 
   // Movement prediction

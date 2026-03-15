@@ -1,5 +1,12 @@
 /* Input handling — keyboard, chat, login, mobile d-pad. */
 
+const DIR_KEY_MAP = {
+  ArrowUp: "up", KeyW: "up",
+  ArrowDown: "down", KeyS: "down",
+  ArrowLeft: "left", KeyA: "left",
+  ArrowRight: "right", KeyD: "right",
+};
+
 // ---------------------------------------------------------------------------
 // Keyboard
 // ---------------------------------------------------------------------------
@@ -7,6 +14,13 @@ document.addEventListener("keydown", (e) => {
   if (e.target === G.nameInput || e.target === G.descInput) return;
 
   G.keysDown[e.code] = true;
+
+  // Track direction key press order so most-recent direction wins
+  const dir = DIR_KEY_MAP[e.code];
+  if (dir && !G.chatFocused && !e.repeat) {
+    G.dirStack = G.dirStack.filter(d => d !== dir);
+    G.dirStack.push(dir);
+  }
 
   if (e.key === "Enter" && !G.chatFocused) {
     e.preventDefault();
@@ -66,6 +80,17 @@ document.addEventListener("keydown", (e) => {
 
 document.addEventListener("keyup", (e) => {
   delete G.keysDown[e.code];
+
+  // Remove direction from stack if no other key for the same direction is held
+  const dir = DIR_KEY_MAP[e.code];
+  if (dir) {
+    const stillHeld = Object.entries(DIR_KEY_MAP).some(
+      ([k, d]) => d === dir && k !== e.code && G.keysDown[k]
+    );
+    if (!stillHeld) {
+      G.dirStack = G.dirStack.filter(d => d !== dir);
+    }
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -130,6 +155,7 @@ G.connectBtn.addEventListener("click", () => {
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && G.loginScreen.classList.contains("hidden")) {
     G.keysDown = {};
+    G.dirStack = [];
     dbg(`Tab visible, ws.readyState=${G.ws ? G.ws.readyState : 'null'}`);
     if (!G.ws || G.ws.readyState !== WebSocket.OPEN) {
       dbg(`Connection dead on resume, reconnecting`);
@@ -152,11 +178,13 @@ if (G.isMobile) {
     stopDance(G.myName);
     activeDir = dir;
     G.keysDown[DPAD_KEY_MAP[dir]] = true;
+    G.dirStack = [dir];
   }
 
   function stopDpad() {
     if (activeDir) {
       delete G.keysDown[DPAD_KEY_MAP[activeDir]];
+      G.dirStack = [];
     }
     activeDir = null;
     document.querySelectorAll(".dpad-btn").forEach(b => b.classList.remove("active"));
