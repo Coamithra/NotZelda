@@ -8,7 +8,10 @@ from server.state import game
 from server.constants import ROOM_RESET_COOLDOWN, ENTRY_DIR, EDGE_SPAWN_POINTS, DEFAULT_SPAWN
 from server.models import Monster
 from server.net import send_to, broadcast_to_room, players_in_room, player_info
-from server.dungeons import create_dungeon, destroy_dungeon, dungeon_player_count, resolve_dungeon_room, is_dungeon_room
+from server.dungeons import (
+    create_dungeon, destroy_dungeon, dungeon_player_count, resolve_dungeon_room,
+    is_dungeon_room, get_boss_distances,
+)
 
 
 def spawn_monsters(room_id: str) -> list[Monster]:
@@ -79,6 +82,17 @@ async def on_player_leave_room(room_id: str, skip_dungeon_teardown: bool = False
             game.room_cooldowns[room_id] = time.monotonic()
         elif empty_list and room_id in game.room_cooldowns:
             game.room_cooldowns[room_id] = time.monotonic()
+
+    # Boss disengagement — if boss room emptied and boss was engaged (not killed), reset
+    if (game.active_dungeon and game.active_dungeon.boss_engaged
+            and room_id in game.active_dungeon.active_rooms):
+        inst = game.active_dungeon
+        boss_room = f"d1_{inst.boss_cell[0]}_{inst.boss_cell[1]}"
+        if room_id == boss_room and room_id not in inst.cleared_rooms:
+            inst.boss_engaged = False
+            for p in list(game.players.values()):
+                if p.room in inst.active_rooms:
+                    await send_to(p, {"type": "boss_choir_stop"})
 
     # Dungeon cleanup — destroy instance when all players have left
     if not skip_dungeon_teardown:
@@ -214,6 +228,10 @@ async def send_room_enter(player, exit_direction: str = None):
 
     await send_to(player, msg)
 
+    # Choir overlay — always update after sending room data so any code path
+    # that calls send_room_enter() automatically gets correct choir state.
+    await _send_choir_update(player)
+
 
 def _build_library_icons():
     """Build compact library summary for the conjuring screen debug overlay."""
@@ -255,6 +273,23 @@ def _build_library_icons():
 
     return {"monsters": monsters, "tiles": tiles,
             "monster_empty": monster_empty, "tile_empty": tile_empty}
+
+
+async def _send_choir_update(player):
+    """If boss is engaged, send choir start/stop based on player's current room."""
+    inst = game.active_dungeon
+    if not inst or not inst.boss_engaged:
+        # Dungeon gone or boss not engaged — stop any active choir
+        # (handles case where dungeon was destroyed before this runs)
+        await send_to(player, {"type": "boss_choir_stop"})
+        return
+    boss_room = f"d1_{inst.boss_cell[0]}_{inst.boss_cell[1]}"
+    if player.room not in inst.active_rooms or player.room == boss_room:
+        await send_to(player, {"type": "boss_choir_stop"})
+    else:
+        distances = get_boss_distances(inst)
+        dist = distances.get(player.room, 5)
+        await send_to(player, {"type": "boss_choir_start", "distance": dist})
 
 
 async def do_room_transition(player, exit_direction: str):

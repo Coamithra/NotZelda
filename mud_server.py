@@ -294,6 +294,21 @@ async def handle_chat(player, text: str):
             else:
                 start_background_regen(count)
                 await send_to(player, {"type": "info", "text": f"Regen started: {count} room(s) — see ~ debug log"})
+        elif cmd == "choir" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+            debug_on = getattr(player, '_debug_choir', False)
+            if debug_on:
+                player._debug_choir = False
+                if game.active_dungeon:
+                    game.active_dungeon.boss_engaged = False
+                await send_to(player, {"type": "boss_choir_stop"})
+                await send_to(player, {"type": "info", "text": "Choir overlay OFF"})
+            else:
+                dist = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 2
+                player._debug_choir = True
+                if game.active_dungeon:
+                    game.active_dungeon.boss_engaged = True
+                await send_to(player, {"type": "boss_choir_start", "distance": dist})
+                await send_to(player, {"type": "info", "text": f"Choir overlay ON (distance={dist})"})
         else:
             await send_to(player, {"type": "info", "text": "Unknown command. Try /help"})
         return
@@ -446,6 +461,7 @@ STATIC_FILES = {
     "/music_dungeon5.mp3": ("music/dungeon_e.mp3", "audio/mpeg"),
     "/music_dungeon6.mp3": ("music/dungeon_f.mp3", "audio/mpeg"),
     "/music_boss1.mp3":    ("music/boss1.mp3", "audio/mpeg"),
+    "/music_boss1_choir.mp3": ("music/boss1_choir.mp3", "audio/mpeg"),
 }
 
 

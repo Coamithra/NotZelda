@@ -44,6 +44,15 @@ const MusicPlayer = (function () {
   let currentBiome = null;
   let silencedBiome = null;  // biome in which silence() was called — stays silent until biome changes
 
+  // --- Boss choir overlay ---
+  const CHOIR_URL = "music_boss1_choir.mp3";
+  const CHOIR_MAX_VOL = 0.70;
+  const CHOIR_MIN_VOL = 0.10;
+  let choirAudio = null;
+  let choirFadeId = null;
+  let choirActive = false;
+  let choirDistance = 1;
+
   function getOrCreateAudio(url) {
     if (!tracks[url]) {
       const a = new Audio(url);
@@ -161,6 +170,13 @@ const MusicPlayer = (function () {
     if (currentTrack) {
       fadeIn(currentTrack, FADE_MS);
     }
+    // Resume choir if it was active
+    if (choirActive && choirAudio) {
+      var vol = choirVolumeForDistance(choirDistance);
+      var p = choirAudio.play();
+      if (p) p.catch(function () {});
+      _fadeChoir(vol, FADE_MS);
+    }
   }
 
   function stop() {
@@ -168,6 +184,10 @@ const MusicPlayer = (function () {
     playing = false;
     for (const url of Object.keys(tracks)) {
       fadeOut(url, FADE_MS);
+    }
+    // Pause choir audio (but keep choirActive so it resumes with start())
+    if (choirAudio && !choirAudio.paused) {
+      _fadeChoir(0, FADE_MS, function () { choirAudio.pause(); });
     }
   }
 
@@ -190,5 +210,56 @@ const MusicPlayer = (function () {
     silencedBiome = currentBiome;
   }
 
-  return { start, stop, toggle, isPlaying, setRoom, silence };
+  // --- Choir overlay methods ---
+
+  function choirVolumeForDistance(dist) {
+    if (dist <= 1) return CHOIR_MAX_VOL;
+    return Math.max(CHOIR_MIN_VOL, CHOIR_MAX_VOL / dist);
+  }
+
+  function _fadeChoir(targetVol, duration, onDone) {
+    if (choirFadeId != null) {
+      cancelAnimationFrame(choirFadeId);
+      choirFadeId = null;
+    }
+    if (!choirAudio) { if (onDone) onDone(); return; }
+    var startVol = choirAudio.volume;
+    var startTime = performance.now();
+    function step(now) {
+      var t = Math.min(1, (now - startTime) / duration);
+      choirAudio.volume = startVol + (targetVol - startVol) * t;
+      if (t < 1) {
+        choirFadeId = requestAnimationFrame(step);
+      } else {
+        choirFadeId = null;
+        if (onDone) onDone();
+      }
+    }
+    choirFadeId = requestAnimationFrame(step);
+  }
+
+  function startChoir(distance) {
+    choirActive = true;
+    choirDistance = distance;
+    if (!playing) return;
+    if (!choirAudio) {
+      choirAudio = new Audio(CHOIR_URL);
+      choirAudio.loop = true;
+      choirAudio.volume = 0;
+    }
+    var vol = choirVolumeForDistance(distance);
+    if (choirAudio.paused) {
+      var p = choirAudio.play();
+      if (p) p.catch(function () {});
+    }
+    _fadeChoir(vol, FADE_MS);
+  }
+
+  function stopChoir() {
+    choirActive = false;
+    if (!choirAudio) return;
+    _fadeChoir(0, FADE_MS, function () { choirAudio.pause(); });
+  }
+
+  return { start, stop, toggle, isPlaying, setRoom, silence, startChoir, stopChoir };
 })();

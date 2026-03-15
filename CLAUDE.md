@@ -49,6 +49,8 @@ When pushing to git make sure to update CLAUDE.md first!
 - **AI generation uses Claude CLI by default** (`AI_BACKEND=cli`), not the API. The `.env` must NOT set `AI_BACKEND=api`.
 - **AI prompt templates** are in `server/prompts/*.txt` — edit the text files directly, no Python changes needed.
 - **Sprites/tiles use `[colorKey, x, y, w, h]` rect layer format** everywhere (client + server validation + AI prompts).
+- **Custom tile properties** (walkable, etc.) live in `custom_tile_recipes[tile_id]` — no separate sets. `is_walkable_tile()` reads from the recipe dict. Client receives walkable flag via `custom_tiles` in `room_enter` and adds to its `WALKABLE` set.
+- **Boss choir overlay**: when a player hits the dungeon warden, an ethereal choir track plays for all other dungeon players, volume scaled by BFS distance from boss room. Managed via `boss_engaged` on `DungeonInstance`, choir updates sent automatically by `send_room_enter()`.
 - **`websockets` must stay at 12.0** — v16+ breaks the `process_request` API.
 
 ## Running

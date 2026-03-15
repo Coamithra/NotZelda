@@ -38,6 +38,7 @@ class DungeonInstance:
         self.connections = set()
         self.boss_cell = None       # (col, row)
         self.treasure_cell = None   # (col, row)
+        self.boss_engaged = False   # True once boss takes first non-lethal hit
 
 
 def _build_dungeon_path(active_cells, entrance):
@@ -516,7 +517,6 @@ def _cleanup_monster(mid):
 def _cleanup_tile(tid):
     """Fully remove a tile from game registries."""
     game.custom_tile_recipes.pop(tid, None)
-    game.custom_walkable_tiles.discard(tid)
     game.deprecated_tiles.discard(tid)
 
 
@@ -864,6 +864,28 @@ def _apply_staged_content(results):
     print(f"[REGEN] Applied staged content: {total_rooms} rooms, "
           f"{total_monsters} monsters, {total_tiles} tiles")
     broadcast_debug(f"Regen done: {total_rooms}R {total_monsters}M {total_tiles}T added")
+
+
+def get_boss_distances(instance: DungeonInstance) -> dict:
+    """BFS distance from boss cell to all other cells. Returns {room_id: int}."""
+    if not instance or not instance.boss_cell:
+        return {}
+    boss = instance.boss_cell
+    adj = {}
+    for conn in instance.connections:
+        cells = list(conn)
+        if len(cells) == 2:
+            adj.setdefault(cells[0], []).append(cells[1])
+            adj.setdefault(cells[1], []).append(cells[0])
+    dist = {boss: 0}
+    queue = deque([boss])
+    while queue:
+        cell = queue.popleft()
+        for n in adj.get(cell, []):
+            if n not in dist:
+                dist[n] = dist[cell] + 1
+                queue.append(n)
+    return {f"d1_{c}_{r}": d for (c, r), d in dist.items()}
 
 
 def is_dungeon_room(room_id: str) -> bool:

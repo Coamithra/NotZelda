@@ -217,6 +217,8 @@ function handleMessage(msg) {
             customTiles[tileId] = recipe;
             delete tileCanvases[tileId];
           }
+          // Register walkable custom tiles so client-side prediction works
+          if (recipe.walkable) WALKABLE.add(tileId);
         }
       }
 
@@ -572,6 +574,14 @@ function handleMessage(msg) {
       } else {
         MusicPlayer.setRoom(G.currentRoom ? G.currentRoom.room_id : "", G.currentRoom ? G.currentRoom.biome : "", msg.music);
       }
+      break;
+
+    case "boss_choir_start":
+      MusicPlayer.startChoir(msg.distance);
+      break;
+
+    case "boss_choir_stop":
+      MusicPlayer.stopChoir();
       break;
 
     case "quest_update":

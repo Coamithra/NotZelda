@@ -25,8 +25,7 @@ class GameState:
         # Custom content registries (AI-generated, Stage 2+)
         self.custom_sprites = {}         # kind -> sprite data dict
         self.custom_death_sprites = {}   # kind -> death sprite data dict
-        self.custom_tile_recipes = {}    # tile_id -> recipe dict
-        self.custom_walkable_tiles = set()
+        self.custom_tile_recipes = {}    # tile_id -> recipe dict {colors, layers, walkable}
         self.monster_behaviors = {}      # kind -> behavior dict
 
         # Content libraries (Stage 7 — tag-based content management)
@@ -64,7 +63,10 @@ class GameState:
 
     def is_walkable_tile(self, tile) -> bool:
         """Check if a tile ID (numeric or string) is walkable."""
-        return tile in WALKABLE_TILES or tile in self.custom_walkable_tiles
+        if tile in WALKABLE_TILES:
+            return True
+        recipe = self.custom_tile_recipes.get(tile)
+        return recipe is not None and recipe.get("walkable", False)
 
 
 game = GameState()
