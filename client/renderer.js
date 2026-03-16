@@ -502,18 +502,6 @@ function renderUI() {
     G.ctx.globalAlpha = 1;
   }
 
-  if (G.showDebug && G.debugLog.length > 0) {
-    G.ctx.font = "9px monospace";
-    const lineH = 12;
-    const padding = 4;
-    const boxH = G.debugLog.length * lineH + padding * 2;
-    G.ctx.fillStyle = "rgba(0,0,0,0.75)";
-    G.ctx.fillRect(4, CH - boxH - 4, CW - 8, boxH);
-    G.ctx.fillStyle = "#0f0";
-    for (let i = 0; i < G.debugLog.length; i++) {
-      G.ctx.fillText(G.debugLog[i], 8, CH - boxH + padding + (i + 1) * lineH - 2);
-    }
-  }
 }
 
 function renderHeartsHUD() {
@@ -688,32 +676,51 @@ function renderConjuring(now) {
 }
 
 function renderDungeonDebug() {
-  if (!G.showDebug || !G.dungeonDebug) return;
+  if (!G.showDebug) return;
   const d = G.dungeonDebug;
+  const hasLog = G.debugLog.length > 0;
   const lines = [];
-  if (d.room_source) lines.push("src: " + d.room_source);
-  if (d.lib_rooms) lines.push("rooms: " + d.lib_rooms);
-  if (d.lib_monsters) lines.push("monsters: " + d.lib_monsters);
-  if (d.lib_tiles) lines.push("tiles: " + d.lib_tiles);
-  if (lines.length === 0) return;
+  if (d) {
+    if (d.room_source) lines.push("src: " + d.room_source);
+    if (d.lib_rooms) lines.push("rooms: " + d.lib_rooms);
+    if (d.lib_monsters) lines.push("monsters: " + d.lib_monsters);
+    if (d.lib_tiles) lines.push("tiles: " + d.lib_tiles);
+  }
+  if (lines.length === 0 && !hasLog) return;
 
   G.ctx.font = "9px monospace";
   const lineH = 12;
   const padding = 4;
   const boxW = 200;
-  const boxH = lines.length * lineH + padding * 2;
+
+  // Dungeon info lines + separator + debugLog lines
+  const logLines = hasLog ? G.debugLog : [];
+  const totalLines = lines.length + (lines.length > 0 && hasLog ? 1 : 0) + logLines.length;
+  const boxH = totalLines * lineH + padding * 2;
   const boxX = CW - boxW - 4;
   const boxY = 24;
 
   G.ctx.fillStyle = "rgba(0,0,0,0.75)";
   G.ctx.fillRect(boxX, boxY, boxW, boxH);
   G.ctx.fillStyle = "#8af";
-  for (let i = 0; i < lines.length; i++) {
-    G.ctx.fillText(lines[i], boxX + padding, boxY + padding + (i + 1) * lineH - 2);
+  let row = 0;
+  for (let i = 0; i < lines.length; i++, row++) {
+    G.ctx.fillText(lines[i], boxX + padding, boxY + padding + (row + 1) * lineH - 2);
+  }
+  if (lines.length > 0 && hasLog) {
+    // Dim separator line
+    G.ctx.fillStyle = "rgba(255,255,255,0.15)";
+    const sepY = boxY + padding + row * lineH + 2;
+    G.ctx.fillRect(boxX + padding, sepY, boxW - padding * 2, 1);
+    row++;
+  }
+  G.ctx.fillStyle = "#0f0";
+  for (let i = 0; i < logLines.length; i++, row++) {
+    G.ctx.fillText(logLines[i], boxX + padding, boxY + padding + (row + 1) * lineH - 2);
   }
 
   // Library icons with actual sprites/tiles (just below the room name)
-  const libs = d.libraries;
+  const libs = d && d.libraries;
   if (libs) {
     const iconS = 16;   // icon size (matches 16x16 sprite grid at S=1)
     const iconG = 2;    // gap between icons
