@@ -51,6 +51,9 @@ When pushing to git make sure to update CLAUDE.md first!
 - **Sprites/tiles use `[colorKey, x, y, w, h]` rect layer format** everywhere (client + server validation + AI prompts).
 - **Custom tile properties** (walkable, etc.) live in `custom_tile_recipes[tile_id]` — no separate sets. `is_walkable_tile()` reads from the recipe dict. Client receives walkable flag via `custom_tiles` in `room_enter` and adds to its `WALKABLE` set.
 - **Boss choir overlay**: when a player hits the dungeon warden, an ethereal choir track plays for all other dungeon players, volume scaled by BFS distance from boss room. Managed via `boss_engaged` on `DungeonInstance`, choir updates sent automatically by `send_room_enter()`.
+- **Movement uses server-side walk state**: walks are continuous (250ms per tile), not instant teleports. Server tracks `Player.walk` dict with origin, target, start_time, committed flag. A 33ms tick loop (`player_walk_tick`) handles midway commit (position + collision) and walk completion. Client sends `walk` (with origin), `cancel_walk`, and `face` messages. Server responds with `reconcile` (full state snapshot) on any disagreement. Cancel window is 90ms; `LATENCY_COMP=66ms` is the leeway constant. See `docs/PLAN_WALK_SYSTEM.md` for the full design.
+- **Client input events are buffered**: direction key presses/releases are pushed to `G.inputEvents` with real timestamps and drained at the start of each game tick. This ensures inter-frame key releases (e.g., rapid tapping) are detected even if the frame arrives after the cancel window.
+- **Attack buffering**: pressing space during a walk past the cancel window sets `G.pendingAttack`; the attack fires when the walk completes. Space during the cancel window cancels the walk and attacks immediately.
 - **`websockets` must stay at 12.0** — v16+ breaks the `process_request` API.
 
 ## Running
