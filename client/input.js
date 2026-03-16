@@ -50,31 +50,26 @@ document.addEventListener("keydown", (e) => {
     return;
   }
 
-  if (e.code === "Space" && !e.repeat && !G.chatFocused && !G.attackingPlayers[G.myName]) {
+  if (e.code === "Space" && !e.repeat && !G.chatFocused && G.state !== "attacking" && G.state !== "dying") {
     e.preventDefault();
     if (!G.playerFlags.has("has_sword")) {
       G.infoMessages.push({ text: "You don't have a weapon.", expires: Date.now() + 2000 });
       return;
     }
-    if (G.walkState && !G.walkState.cancelSent) {
-      const elapsed = performance.now() - G.walkState.startTime;
+    if (G.state === "walking") {
+      const elapsed = performance.now() - G.stateData.startTime;
       if (elapsed < CANCEL_TIME_MS) {
         // Within cancel window — cancel walk, attack immediately
-        sendToServer({ type: "cancel_walk" });
-        G.walkState.cancelSent = true;
-        G.myPlayer.x = G.walkState.fromX;
-        G.myPlayer.y = G.walkState.fromY;
-        G.displayX = G.walkState.fromX;
-        G.displayY = G.walkState.fromY;
-        G.walkState = null;
-        G.walkQueue = null;
+        cancelWalk();
         sendToServer({ type: "attack" });
-      } else {
-        // Past cancel window — buffer attack for when walk completes
-        G.pendingAttack = true;
+        startAttack(G.myName, G.myPlayer.direction);
+        setState("attacking", { startTime: performance.now() });
       }
-    } else if (!G.walkState) {
+      // Past cancel window — space is held, playerTick checks on walk completion
+    } else if (G.state === "idle") {
       sendToServer({ type: "attack" });
+      startAttack(G.myName, G.myPlayer.direction);
+      setState("attacking", { startTime: performance.now() });
     }
     return;
   }

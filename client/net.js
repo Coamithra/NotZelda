@@ -269,9 +269,8 @@ function handleMessage(msg) {
 
       G.displayX = G.myPlayer.x;
       G.displayY = G.myPlayer.y;
-      G.walkState = null;
+      setState("idle", {});
       G.walkQueue = null;
-      G.pendingAttack = false;
 
       if (cameFromConjuring || isFirstRoom) {
         // Fade in from black on first login
@@ -306,9 +305,8 @@ function handleMessage(msg) {
       delete G.attackingPlayers[msg.name];
       if (G.networkLog && msg.name === G.myName) {
         const t = performance.now().toFixed(1);
-        const ws = G.walkState;
-        const wsInfo = ws ? `ws={dir:${ws.dir},from:(${ws.fromX},${ws.fromY}),to:(${ws.toX},${ws.toY}),elapsed:${(performance.now()-ws.startTime).toFixed(0)}}` : "ws=null";
-        console.log(`[NET IN  t=${t}] player_moved SELF pos=(${msg.x},${msg.y}) ${wsInfo}`);
+        const sInfo = G.state === "walking" ? `walking{(${G.stateData.fromX},${G.stateData.fromY})->(${G.stateData.toX},${G.stateData.toY})}` : G.state;
+        console.log(`[NET IN  t=${t}] player_moved SELF pos=(${msg.x},${msg.y}) [${sInfo}]`);
       }
       // player_moved is now only for OTHER players (self uses reconcile)
       if (msg.name !== G.myName && G.otherPlayers[msg.name]) {
@@ -321,32 +319,29 @@ function handleMessage(msg) {
     case "reconcile": {
       if (G.networkLog) {
         const t = performance.now().toFixed(1);
-        const ws = G.walkState;
-        const wsInfo = ws ? `ws={dir:${ws.dir},from:(${ws.fromX},${ws.fromY}),to:(${ws.toX},${ws.toY}),elapsed:${(performance.now()-ws.startTime).toFixed(0)}}` : "ws=null";
-        console.log(`[NET IN  t=${t}] reconcile walking=${msg.walking} pos=(${msg.x},${msg.y}) ${wsInfo}`, msg);
+        const sInfo = G.state === "walking" ? `walking{(${G.stateData.fromX},${G.stateData.fromY})->(${G.stateData.toX},${G.stateData.toY})}` : G.state;
+        console.log(`[NET IN  t=${t}] reconcile walking=${msg.walking} pos=(${msg.x},${msg.y}) [${sInfo}]`, msg);
       }
-      // Full state snapshot from server — snap to authoritative state
       if (!msg.walking) {
         G.myPlayer.x = msg.x;
         G.myPlayer.y = msg.y;
         G.myPlayer.direction = msg.direction;
         G.displayX = msg.x;
         G.displayY = msg.y;
-        G.walkState = null;
+        // Hard reset — clear any animation state
+        delete G.attackingPlayers[G.myName];
+        setState("idle", {});
         G.walkQueue = null;
-      G.pendingAttack = false;
       } else {
-        // Server says we're mid-walk — sync to server's walk state
         G.myPlayer.direction = msg.direction;
         G.myPlayer.x = msg.x;
         G.myPlayer.y = msg.y;
-        G.walkState = {
+        setState("walking", {
           fromX: msg.walk_from.x, fromY: msg.walk_from.y,
           toX: msg.walk_to.x, toY: msg.walk_to.y,
           dir: msg.direction,
           startTime: performance.now() - (msg.walk_progress * WALK_TIME_MS),
-          cancelSent: true, // don't allow cancel since server already advanced
-        };
+        });
       }
       break;
     }
@@ -427,7 +422,9 @@ function handleMessage(msg) {
       break;
 
     case "attack":
-      startAttack(msg.name, msg.direction);
+      if (msg.name !== G.myName) {
+        startAttack(msg.name, msg.direction);
+      }
       break;
 
     case "dance":
@@ -455,9 +452,8 @@ function handleMessage(msg) {
         G.myPlayer.y = msg.y;
         G.displayX = msg.x;
         G.displayY = msg.y;
-        G.walkState = null;
+        setState("idle", {});
         G.walkQueue = null;
-      G.pendingAttack = false;
         G.hurtFlash = Date.now() + 300;
         G.invincibleUntil = Date.now() + 1500;
       } else if (G.otherPlayers[msg.name]) {
@@ -471,9 +467,8 @@ function handleMessage(msg) {
     case "you_died":
       G.dyingPlayerSelf = { x: msg.x, y: msg.y, frame: 0, startTime: Date.now() };
       G.myHp = 0;
-      G.walkState = null;
+      setState("dying", {});
       G.walkQueue = null;
-      G.pendingAttack = false;
       G.displayX = msg.x;
       G.displayY = msg.y;
       appendChatLog(`<span class="chat-system">You died!</span>`);

@@ -53,10 +53,10 @@ const G = {
   inputEvents: [],         // buffered direction events: [{type: "dirDown"|"dirUp", dir, time}]
   lastMoveTime: 0,
 
-  // Walk state (client-side prediction)
-  walkState: null,         // {fromX, fromY, toX, toY, dir, startTime, cancelSent}
+  // Player state machine
+  state: "idle",           // "idle" | "walking" | "attacking" | "dying"
+  stateData: {},           // state-scoped data, replaced on every transition
   walkQueue: null,         // queued next direction for chaining
-  pendingAttack: false,    // buffered attack — fires when current walk completes
 
   // Animation
   animFrame: 0,
