@@ -43,7 +43,7 @@ _last_guard_summon: dict[str, float] = {}  # room_id -> last summon time
 
 TOWN_GUARD_MONSTER = {
     "kind": "town_guard",
-    "stats": {"hp": 3, "tick_rate": 0.6, "damage": 2},
+    "stats": {"hp": 3, "walk_time": 0.25, "decision_time": 1.67, "damage": 2},
     "behavior": {"rules": [
         {"if": "player_within", "range": 6, "do": "move", "direction": "player"},
         {"if": "always", "do": "move", "direction": "random"},
@@ -385,7 +385,7 @@ async def _spawn_summoned_guards(room_id: str, npc_x: int, npc_y: int, npc_name:
 
     for sx, sy in spawn_points:
         monster = Monster(sx, sy, "town_guard")
-        monster.last_tick_time = time.monotonic()
+        monster.last_action_time = time.monotonic()
         monster._guard_spawn_time = time.monotonic()
         monster._guard_target = target_player
         monster_id = len(monster_list)

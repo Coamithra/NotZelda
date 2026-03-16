@@ -643,7 +643,8 @@ function showMonsterDetails(entry) {
   html += `<div class="detail-section"><h4>Stats</h4>`;
   html += `<div class="stat-row"><span class="stat-label">HP</span><span class="stat-val">${stats.hp || '?'}</span></div>`;
   html += `<div class="stat-row"><span class="stat-label">Damage</span><span class="stat-val">${stats.damage || '?'}</span></div>`;
-  html += `<div class="stat-row"><span class="stat-label">Tick Rate</span><span class="stat-val">${stats.tick_rate || '?'}/s</span></div>`;
+  html += `<div class="stat-row"><span class="stat-label">Walk Time</span><span class="stat-val">${stats.walk_time || '?'}s</span></div>`;
+  html += `<div class="stat-row"><span class="stat-label">Decision Time</span><span class="stat-val">${stats.decision_time || '?'}s</span></div>`;
   html += `</div>`;
 
   // Behavior rules (attacks are inline)

@@ -217,7 +217,8 @@ async def handle_attack(player):
                 _broadcast_choir_start(player.room, msgs)
             if monster.hp <= 0:
                 monster.alive = False
-                monster._pending_warmup = None
+                monster.state = "idle"
+                monster.state_data = {}
                 msgs.append(("broadcast", player.room, {
                     "type": "monster_killed",
                     "id": i,
@@ -264,21 +265,28 @@ async def handle_attack(player):
 # All sync — append messages to the batch instead of awaiting sends.
 # ---------------------------------------------------------------------------
 
-def exec_move(monster, room_id, monster_idx, action, msgs):
-    """Move the monster and check for contact damage."""
+def start_walk(monster, room_id, monster_idx, action, msgs, now):
+    """Start a smooth walk — set monster state and broadcast walk_started."""
     nx, ny = action["x"], action["y"]
-    monster.x = nx
-    monster.y = ny
+    remaining = action.get("distance", 1) - 1  # distance includes this step
+    monster.state = "walking"
+    monster.state_data = {
+        "from_x": monster.x, "from_y": monster.y,
+        "to_x": nx, "to_y": ny,
+        "start_time": now,
+        "committed": False,
+        "room_id": room_id,
+        "monster_idx": monster_idx,
+        "remaining_distance": remaining,
+        "direction": action.get("direction", "random"),
+    }
     msgs.append(("broadcast", room_id, {
-        "type": "monster_moved",
+        "type": "monster_walk_started",
         "id": monster_idx,
-        "x": nx,
-        "y": ny,
+        "from_x": monster.x, "from_y": monster.y,
+        "to_x": nx, "to_y": ny,
+        "walk_time": monster.walk_time,
     }, None))
-    # Contact damage — monster landed on a player (supports multi-tile monsters)
-    for p in players_in_room(room_id):
-        if p.hp > 0 and monster.occupies(p.x, p.y):
-            _apply_damage(p, monster.damage, room_id, msgs)
 
 
 def exec_projectile(monster, room_id, monster_idx, action, msgs):
@@ -414,7 +422,7 @@ def warmup_teleport(monster, room_id, monster_idx, action, msgs):
         "id": monster_idx,
         "target_x": action["target_x"],
         "target_y": action["target_y"],
-        "delay": action.get("ticks", 1) * monster.tick_interval,
+        "delay": action.get("ticks", 1) * monster.decision_time,
         "damage_radius": action.get("damage_radius", 1),
     }, None))
 
@@ -451,7 +459,7 @@ def warmup_area(monster, room_id, monster_idx, action, msgs):
         "x": action["x"],
         "y": action["y"],
         "range": action["range"],
-        "duration": action.get("ticks", 1) * monster.tick_interval,
+        "duration": action.get("ticks", 1) * monster.decision_time,
     }, None))
 
 
@@ -486,7 +494,6 @@ WARMUP_HANDLERS = {
 }
 
 EXEC_HANDLERS = {
-    "move": exec_move,
     "projectile": exec_projectile,
     "charge": exec_charge,
     "teleport": exec_teleport,
@@ -588,14 +595,67 @@ async def _flush_walk_messages(msgs: list):
     msgs.clear()
 
 
+
+def _tick_all_monsters(now, msgs):
+    """Tick all monsters — walks, state machine, guard despawns. Runs at 33ms."""
+    for room_id, monster_list in list(game.room_monsters.items()):
+        if room_id not in game.rooms:
+            continue
+        if not players_in_room(room_id):
+            continue
+        _check_guard_despawn(room_id, monster_list, now, msgs)
+        for i, monster in enumerate(monster_list):
+            try:
+                if not monster.alive:
+                    if monster.state != "idle":
+                        monster.state = "idle"
+                        monster.state_data = {}
+                    continue
+                # Walk progression (midway commit, completion)
+                if monster.state == "walking":
+                    sd = monster.state_data
+                    elapsed = now - sd["start_time"]
+                    progress = min(elapsed / monster.walk_time, 1.0)
+                    if progress >= 0.5 and not sd["committed"]:
+                        sd["committed"] = True
+                        monster.x = sd["to_x"]
+                        monster.y = sd["to_y"]
+                        if not monster.intangible:
+                            for p in players_in_room(room_id):
+                                if p.hp > 0 and monster.occupies(p.x, p.y):
+                                    _apply_damage(p, monster.damage, room_id, msgs)
+                    if progress >= 1.0:
+                        remaining = sd.get("remaining_distance", 0)
+                        walk_dir = sd.get("direction", "random")
+                        monster.state = "idle"
+                        monster.state_data = {}
+                        msgs.append(("broadcast", room_id, {
+                            "type": "monster_walk_complete",
+                            "id": i,
+                        }, None))
+                        # Chain next walk if distance remains
+                        if remaining > 0 and monster.alive:
+                            next_move = behavior_engine._resolve_move(
+                                {"direction": walk_dir}, monster, room_id)
+                            if next_move:
+                                next_move["distance"] = remaining
+                                next_move["direction"] = walk_dir
+                                start_walk(monster, room_id, i, next_move, msgs, now)
+                # State machine (behavior eval, warmup countdown)
+                _tick_monster_state(monster, room_id, i, now, msgs)
+            except Exception:
+                traceback.print_exc()
+
+
 async def player_walk_tick():
-    """Background loop — ticks player walks at 33ms (~30Hz) for midway commit accuracy."""
+    """Background loop — ticks players and monsters at 33ms (~30Hz)."""
     while True:
         await asyncio.sleep(0.033)
         now = time.monotonic()
         msgs = []
         try:
             _tick_player_walks(now, msgs)
+            _tick_all_monsters(now, msgs)
         except Exception:
             traceback.print_exc()
         await _flush_walk_messages(msgs)
@@ -721,49 +781,80 @@ def _check_guard_despawn(room_id, monster_list, now, msgs):
             }, None))
 
 
+def _tick_monster_state(monster, room_id, i, now, msgs):
+    """Process one monster's state machine tick (called from 33ms loop)."""
+    state = monster.state
+
+    if state == "walking":
+        # Walk progression handled by _tick_monster_walks
+        return
+
+    if state in ("charging", "teleporting", "area"):
+        # Warmup — time-based end
+        sd = monster.state_data
+        if now >= sd["end_time"]:
+            action_name = sd["action_name"]
+            action = sd["action"]
+            handler = EXEC_HANDLERS.get(action_name)
+            if handler:
+                handler(monster, room_id, i, action, msgs)
+            monster.state = "idle"
+            monster.state_data = {}
+        return
+
+    # state == "idle" — decision timer runs continuously (even during other states)
+    # so if walk/warmup took longer than decision_time, we evaluate immediately
+    if now - monster.last_action_time < monster.decision_time:
+        return  # not time to decide yet
+
+    # Decision point — reset timer regardless of outcome
+    monster.last_action_time = now
+
+    result = behavior_engine.monster_tick(monster, room_id)
+    if result is None:
+        return
+
+    action_name = result.get("action")
+    warmup = result.get("warmup", 0)
+
+    if action_name == "move":
+        start_walk(monster, room_id, i, result, msgs, now)
+        return
+
+    if action_name == "hold":
+        return
+
+    # Projectile — instant, no state change
+    if action_name == "projectile":
+        handler = EXEC_HANDLERS.get("projectile")
+        if handler:
+            handler(monster, room_id, i, result, msgs)
+        return
+
+    # Warmup actions: charge, teleport, area
+    if warmup > 0 and action_name in WARMUP_HANDLERS:
+        state_name = {"charge": "charging", "teleport": "teleporting", "area": "area"}
+        monster.state = state_name.get(action_name, "idle")
+        monster.state_data = {
+            "end_time": now + warmup * monster.decision_time,
+            "action_name": action_name,
+            "action": result,
+        }
+        handler = WARMUP_HANDLERS.get(action_name)
+        if handler:
+            handler(monster, room_id, i, result, msgs)
+        return
+
+    # No warmup — execute immediately
+    handler = EXEC_HANDLERS.get(action_name)
+    if handler:
+        handler(monster, room_id, i, result, msgs)
+
+
 async def monster_tick():
-    """Background loop — ticks alive monsters in rooms that have players."""
+    """Legacy entry point — monster ticking is now handled by player_walk_tick at 33ms.
+
+    This loop is kept as a no-op so mud_server.py doesn't need changes.
+    """
     while True:
-        await asyncio.sleep(0.25)
-        now = time.monotonic()
-        msgs = []
-        for room_id, monster_list in list(game.room_monsters.items()):
-            if room_id not in game.rooms:
-                continue
-            if not players_in_room(room_id):
-                continue
-            # Despawn summoned town guards after timeout or when target escapes
-            _check_guard_despawn(room_id, monster_list, now, msgs)
-            for i, monster in enumerate(monster_list):
-                try:
-                    if not monster.alive:
-                        monster._pending_warmup = None
-                        continue
-                    # Intangible monsters (mid-teleport) still tick for warmup countdown
-                    # but non-warmup ticks are skipped
-                    if monster.intangible and monster._pending_warmup is None:
-                        continue
-                    if now - monster.last_tick_time < monster.tick_interval:
-                        continue
-                    monster.last_tick_time = now
-
-                    result = behavior_engine.monster_tick(monster, room_id)
-                    if result is None:
-                        continue
-
-                    phase = result.get("phase")
-                    action_name = result.get("action")
-
-                    if phase == "warmup":
-                        handler = WARMUP_HANDLERS.get(action_name)
-                        if handler:
-                            handler(monster, room_id, i, result, msgs)
-
-                    elif phase == "execute":
-                        handler = EXEC_HANDLERS.get(action_name)
-                        if handler:
-                            handler(monster, room_id, i, result, msgs)
-                except Exception:
-                    traceback.print_exc()
-
-        await _flush_messages(msgs)
+        await asyncio.sleep(3600)  # sleep forever

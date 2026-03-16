@@ -599,10 +599,27 @@ function gameLoop(timestamp) {
   }
 
   for (const m of G.monsters) {
-    m.displayX += (m.x - m.displayX) * MOVE_LERP;
-    m.displayY += (m.y - m.displayY) * MOVE_LERP;
-    if (Math.abs(m.x - m.displayX) < 0.05) m.displayX = m.x;
-    if (Math.abs(m.y - m.displayY) < 0.05) m.displayY = m.y;
+    if (m.walkState) {
+      const ws = m.walkState;
+      const elapsed = performance.now() - ws.startTime;
+      const progress = Math.min(elapsed / ws.walkTime, 1.0);
+      m.displayX = ws.fromX + (ws.toX - ws.fromX) * progress;
+      m.displayY = ws.fromY + (ws.toY - ws.fromY) * progress;
+      // Use walk-paced hop frame: toggle at 50% progress
+      m.walkHop = progress >= 0.5 ? 1 : 0;
+      if (progress >= 1.0) {
+        m.displayX = ws.toX;
+        m.displayY = ws.toY;
+        m.walkState = null;
+      }
+    } else {
+      // Lerp fallback for instant moves (charges, teleports, reconciliation)
+      m.displayX += (m.x - m.displayX) * MOVE_LERP;
+      m.displayY += (m.y - m.displayY) * MOVE_LERP;
+      if (Math.abs(m.x - m.displayX) < 0.05) m.displayX = m.x;
+      if (Math.abs(m.y - m.displayY) < 0.05) m.displayY = m.y;
+      m.walkHop = undefined;
+    }
   }
 
   // Render

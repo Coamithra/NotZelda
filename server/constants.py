@@ -111,7 +111,6 @@ HEART_DROP_CHANCE = 0.1
 INVINCIBILITY_DURATION = 1.5
 
 # Monsters
-MONSTER_TICK_RATE = 0.5  # ticks per second (default for unknown monsters)
 ROOM_RESET_COOLDOWN = 10.0
 PROJECTILE_TICK_RATE = 0.15
 

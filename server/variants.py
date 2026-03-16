@@ -1,7 +1,7 @@
 """Programmatic monster variant system — creates stronger recolored versions of existing monsters.
 
 Takes a base monster's full data dict and produces a new monster with:
-  - Scaled stats (HP, damage, tick_rate)
+  - Scaled stats (HP, damage, walk_time)
   - Hue-shifted sprite colors (all sprite + death sprite + projectile colors)
   - Scaled behavior (attack damage up, cooldowns down)
   - A prefix name (e.g. "elder_flame_wyrm") and `based_on` lineage field
@@ -18,11 +18,11 @@ import random
 # ---------------------------------------------------------------------------
 
 VARIANT_TIERS = [
-    {"prefixes": ["swift", "keen"],       "hp_mult": 1.0,  "dmg_add": 0, "tick_mult": 1.3, "cd_mult": 0.85},
-    {"prefixes": ["tough", "hardened"],   "hp_mult": 1.5,  "dmg_add": 1, "tick_mult": 1.05, "cd_mult": 1.0},
-    {"prefixes": ["elder", "greater"],    "hp_mult": 1.75, "dmg_add": 1, "tick_mult": 1.15, "cd_mult": 0.8},
-    {"prefixes": ["ancient", "dire"],     "hp_mult": 2.0,  "dmg_add": 2, "tick_mult": 1.2,  "cd_mult": 0.7},
-    {"prefixes": ["frenzied", "void"],    "hp_mult": 2.5,  "dmg_add": 3, "tick_mult": 1.4,  "cd_mult": 0.6},
+    {"prefixes": ["swift", "keen"],       "hp_mult": 1.0,  "dmg_add": 0, "speed_mult": 1.3, "cd_mult": 0.85},
+    {"prefixes": ["tough", "hardened"],   "hp_mult": 1.5,  "dmg_add": 1, "speed_mult": 1.05, "cd_mult": 1.0},
+    {"prefixes": ["elder", "greater"],    "hp_mult": 1.75, "dmg_add": 1, "speed_mult": 1.15, "cd_mult": 0.8},
+    {"prefixes": ["ancient", "dire"],     "hp_mult": 2.0,  "dmg_add": 2, "speed_mult": 1.2,  "cd_mult": 0.7},
+    {"prefixes": ["frenzied", "void"],    "hp_mult": 2.5,  "dmg_add": 3, "speed_mult": 1.4,  "cd_mult": 0.6},
 ]
 
 
@@ -126,7 +126,8 @@ def create_variant(base_monster: dict, tier: int | None = None) -> dict:
     new_stats = {
         "hp": min(100, max(1, math.ceil(base_stats.get("hp", 2) * t["hp_mult"]))),
         "damage": min(20, max(1, base_stats.get("damage", 1) + t["dmg_add"])),
-        "tick_rate": min(5.0, round(base_stats.get("tick_rate", 0.5) * t["tick_mult"], 2)),
+        "walk_time": max(0.1, round(base_stats.get("walk_time", 0.25) / t["speed_mult"], 2)),
+        "decision_time": max(0.2, round(base_stats.get("decision_time", 2.0) / t["speed_mult"], 2)),
     }
 
     # --- Random hue shift (avoid shifts too small to notice) ---

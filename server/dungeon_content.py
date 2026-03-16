@@ -27,7 +27,7 @@ PRECREATED_MONSTERS = [
     {
         "kind": "skeleton",
         "tags": ["undead", "melee", "dungeon"],
-        "stats": {"hp": 2, "tick_rate": 0.5, "damage": 3},
+        "stats": {"hp": 2, "walk_time": 0.25, "decision_time": 2.0, "damage": 3},
         "behavior": {"rules": [
             {"if": "player_within", "range": 5, "do": "move", "direction": "player"},
             {"if": "always", "do": "move", "direction": "random"},
@@ -64,7 +64,7 @@ PRECREATED_MONSTERS = [
     {
         "kind": "bat",
         "tags": ["cave", "flying", "dungeon"],
-        "stats": {"hp": 1, "tick_rate": 1.0, "damage": 1},
+        "stats": {"hp": 1, "walk_time": 0.2, "decision_time": 1.0, "damage": 1},
         "behavior": {"rules": [
             {"if": "always", "do": "move", "direction": "random"},
         ]},
@@ -95,10 +95,10 @@ PRECREATED_MONSTERS = [
     {
         "kind": "dungeon_slime",
         "tags": ["dungeon", "melee", "tank"],
-        "stats": {"hp": 3, "tick_rate": 0.4, "damage": 1},
+        "stats": {"hp": 3, "walk_time": 0.35, "decision_time": 2.5, "damage": 1},
         "behavior": {"rules": [
-            {"if": "player_within", "range": 4, "do": "move", "direction": "player", "speed": 2},
-            {"if": "always", "do": "move", "direction": "random", "speed": 2},
+            {"if": "player_within", "range": 4, "do": "move", "direction": "player"},
+            {"if": "always", "do": "move", "direction": "random"},
         ]},
         "sprite": {
             "colors": {"body": "#5a4a6a", "dark": "#3a2a4a", "eyes": "#cc4444", "highlight": "#8a7a9a"},
@@ -126,7 +126,7 @@ PRECREATED_MONSTERS = [
     {
         "kind": "phantom",
         "tags": ["undead", "magic", "dungeon", "flying"],
-        "stats": {"hp": 2, "tick_rate": 0.4, "damage": 2},
+        "stats": {"hp": 2, "walk_time": 0.25, "decision_time": 2.5, "damage": 2},
         "behavior": {"rules": [
             {"if": "player_within", "range": 6, "do": "teleport",
              "target": "player", "drift": 2, "range": 6, "damage": 2,
@@ -169,7 +169,7 @@ PRECREATED_MONSTERS = [
 BOSS_MONSTER = {
     "kind": "dungeon_warden",
     "tags": ["boss", "dungeon", "undead"],
-    "stats": {"hp": 20, "tick_rate": 1.5, "damage": 3, "width": 2, "height": 2},
+    "stats": {"hp": 20, "walk_time": 0.25, "decision_time": 0.67, "damage": 3, "width": 2, "height": 2},
     "behavior": {"rules": [
         # Phase 2 (low HP): rapid projectile barrage
         {"if": "hp_below", "value": 10, "do": "projectile",
@@ -182,7 +182,7 @@ BOSS_MONSTER = {
         {"if": "player_in_range_line", "range": 8, "los": True, "do": "charge",
          "direction": "player", "range": 6, "damage": 4, "warmup": 1, "cooldown": 5},
         # Chase player aggressively
-        {"if": "player_within", "range": 10, "do": "move", "direction": "player", "speed": 2},
+        {"if": "player_within", "range": 10, "do": "move", "direction": "player"},
         # Idle patrol
         {"if": "always", "do": "move", "direction": "random"},
     ]},

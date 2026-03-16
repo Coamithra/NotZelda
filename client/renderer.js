@@ -283,7 +283,7 @@ function renderPlayers() {
   }
 
   for (const m of G.monsters) {
-    all.push({ x: m.displayX, y: m.displayY, isMonster: true, kind: m.kind, hitFlash: m.hitFlash, teleportAlpha: m.teleportAlpha, chargePrep: m.chargePrep, width: m.width || 1, height: m.height || 1 });
+    all.push({ x: m.displayX, y: m.displayY, isMonster: true, kind: m.kind, hitFlash: m.hitFlash, teleportAlpha: m.teleportAlpha, chargePrep: m.chargePrep, width: m.width || 1, height: m.height || 1, walkHop: m.walkHop });
   }
 
   all.sort((a, b) => a.y - b.y);
@@ -308,7 +308,8 @@ function renderPlayers() {
       if (p.teleportAlpha !== undefined && p.teleportAlpha < 1) {
         G.ctx.globalAlpha = Math.max(0, p.teleportAlpha);
       }
-      drawMonsterSprite(G.ctx, px + shakeX, py, p.kind, G.monsterHopFrame, mScale);
+      const hopFrame = p.walkHop !== undefined ? p.walkHop : G.monsterHopFrame;
+      drawMonsterSprite(G.ctx, px + shakeX, py, p.kind, hopFrame, mScale);
       G.ctx.globalAlpha = 1;
       if (p.hitFlash && Date.now() < p.hitFlash) {
         G.ctx.globalAlpha = 0.5;

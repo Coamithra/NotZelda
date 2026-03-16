@@ -47,11 +47,11 @@ class Monster:
         self.spawn_y = y
         self.kind = kind
         self.alive = True
-        self.last_tick_time = time.monotonic()
-        stats = game.monster_stats.get(kind, {"hp": 1, "tick_rate": 0.5, "damage": 1})
+        stats = game.monster_stats.get(kind, {"hp": 1, "walk_time": 0.25, "decision_time": 2.0, "damage": 1})
         self.hp = stats["hp"]
         self.max_hp = stats["hp"]
-        self.tick_rate = stats["tick_rate"]  # ticks per second (higher = faster)
+        self.walk_time = stats.get("walk_time", 0.25)    # seconds — walk animation duration
+        self.decision_time = stats.get("decision_time", 2.0)  # seconds — behavior eval interval
         self.damage = stats.get("damage", 1)
         # Size in tiles (default 1x1). Boss monsters can be 2x2.
         # Position (x, y) is the top-left tile of the footprint.
@@ -61,21 +61,22 @@ class Monster:
         self.behavior = game.monster_behaviors.get(kind)
         # Rule cooldown tracking: rule_index -> ticks remaining
         self._rule_cooldowns = {}
-        # Pending warmup: {rule_index, ticks, action} or None
-        self._pending_warmup = None
         # Patrol state (index into route string, shared across patrol rules)
         self._patrol_index = 0
+        # State machine: mirrors player's G.state pattern
+        self.state = "idle"       # "idle" | "walking" | "charging" | "teleporting" | "area"
+        self.state_data = {}      # state-scoped variables, replaced on state transition
+        self.last_action_time = time.monotonic()  # when the last action completed (for idle timing)
 
     @property
     def tick_interval(self):
-        """Seconds between ticks (1.0 / tick_rate)."""
-        return 1.0 / self.tick_rate if self.tick_rate > 0 else 2.0
+        """Seconds between behavior evaluations (= decision_time)."""
+        return self.decision_time
 
     @property
     def intangible(self):
         """True when monster can't be hit or deal contact damage (e.g. mid-teleport)."""
-        pw = self._pending_warmup
-        return pw is not None and pw["action"].get("action") == "teleport"
+        return self.state == "teleporting"
 
     def occupies(self, tx, ty):
         """True if tile (tx, ty) is within this monster's footprint."""

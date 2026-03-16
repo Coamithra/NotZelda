@@ -262,151 +262,70 @@ def _can_move_to(monster, x, y, room_id):
 
 
 def _resolve_move(rule, monster, room_id):
-    """Resolve a move action. Returns {"action": "move", "x", "y"} or None.
+    """Resolve a move action. Returns {"action": "move", "x", "y", "distance", "direction"} or None.
 
-    The `speed` parameter (default 1) controls how many tiles the monster
-    moves in a single action. The monster takes up to `speed` steps, stopping
-    early if blocked by a wall or NPC.
-
-    The `diagonal` parameter (default false) controls whether multi-step
-    movement can change direction between steps. When false, the monster picks
-    one direction and continues straight. When true, direction is re-evaluated
-    each step, allowing diagonal paths (only matters for player/away with speed > 1).
+    Resolves 1 tile per call. The `distance` param (default 1) is passed through
+    so the caller can chain multiple walks back-to-back.
     """
     direction = rule.get("direction", "random")
-    speed = max(1, int(rule.get("speed", 1)))
-    diagonal = rule.get("diagonal", False)
 
     if direction == "patrol":
-        return _resolve_patrol_move(rule, monster, room_id, speed)
+        return _resolve_patrol_move(rule, monster, room_id)
 
     if direction == "random":
-        # Wander: pick a random direction, move up to `speed` tiles
         dirs = [(0, -1), (0, 1), (-1, 0), (1, 0)]
         random.shuffle(dirs)
         for dx, dy in dirs:
-            nx, ny = monster.x, monster.y
-            for _ in range(speed):
-                tx, ty = nx + dx, ny + dy
-                if not _can_move_to(monster, tx, ty, room_id):
-                    break
-                nx, ny = tx, ty
-            if (nx, ny) != (monster.x, monster.y):
+            nx, ny = monster.x + dx, monster.y + dy
+            if _can_move_to(monster, nx, ny, room_id):
                 return {"action": "move", "x": nx, "y": ny}
         return None
 
     if direction == "player":
-        # Chase: move toward nearest player
         target, _ = _nearest_player(monster, room_id)
         if target is None:
-            return _resolve_move({"direction": "random", "speed": speed}, monster, room_id)
-        if diagonal:
-            # Re-evaluate direction each step — allows diagonal paths
-            cx, cy = monster.x, monster.y
-            for _ in range(speed):
-                best = None
-                best_dist = float("inf")
-                dirs = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-                random.shuffle(dirs)
-                for dx, dy in dirs:
-                    nx, ny = cx + dx, cy + dy
-                    if not _can_move_to(monster, nx, ny, room_id):
-                        continue
-                    dist = abs(target.x - nx) + abs(target.y - ny)
-                    if dist < best_dist:
-                        best_dist = dist
-                        best = (nx, ny)
-                if best is None:
-                    break
-                cx, cy = best
-            if (cx, cy) != (monster.x, monster.y):
-                return {"action": "move", "x": cx, "y": cy}
-        else:
-            # Pick best direction once, continue straight
-            best_dir = None
-            best_dist = float("inf")
-            dirs = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-            random.shuffle(dirs)
-            for dx, dy in dirs:
-                nx, ny = monster.x + dx, monster.y + dy
-                if not _can_move_to(monster, nx, ny, room_id):
-                    continue
-                dist = abs(target.x - nx) + abs(target.y - ny)
-                if dist < best_dist:
-                    best_dist = dist
-                    best_dir = (dx, dy)
-            if best_dir:
-                cx, cy = monster.x, monster.y
-                for _ in range(speed):
-                    tx, ty = cx + best_dir[0], cy + best_dir[1]
-                    if not _can_move_to(monster, tx, ty, room_id):
-                        break
-                    cx, cy = tx, ty
-                if (cx, cy) != (monster.x, monster.y):
-                    return {"action": "move", "x": cx, "y": cy}
+            return _resolve_move({"direction": "random"}, monster, room_id)
+        best_dir = None
+        best_dist = float("inf")
+        dirs = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+        random.shuffle(dirs)
+        for dx, dy in dirs:
+            nx, ny = monster.x + dx, monster.y + dy
+            if not _can_move_to(monster, nx, ny, room_id):
+                continue
+            dist = abs(target.x - nx) + abs(target.y - ny)
+            if dist < best_dist:
+                best_dist = dist
+                best_dir = (dx, dy)
+        if best_dir:
+            return {"action": "move", "x": monster.x + best_dir[0], "y": monster.y + best_dir[1]}
         return None
 
     if direction == "away":
-        # Flee: move away from nearest player
         target, _ = _nearest_player(monster, room_id)
         if target is None:
-            return _resolve_move({"direction": "random", "speed": speed}, monster, room_id)
-        if diagonal:
-            # Re-evaluate direction each step — allows diagonal paths
-            cx, cy = monster.x, monster.y
-            for _ in range(speed):
-                best = None
-                best_dist = -1
-                dirs = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-                random.shuffle(dirs)
-                for dx, dy in dirs:
-                    nx, ny = cx + dx, cy + dy
-                    if not _can_move_to(monster, nx, ny, room_id):
-                        continue
-                    dist = abs(target.x - nx) + abs(target.y - ny)
-                    if dist > best_dist:
-                        best_dist = dist
-                        best = (nx, ny)
-                if best is None:
-                    break
-                cx, cy = best
-            if (cx, cy) != (monster.x, monster.y):
-                return {"action": "move", "x": cx, "y": cy}
-        else:
-            # Pick best direction once, continue straight
-            best_dir = None
-            best_dist = -1
-            dirs = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-            random.shuffle(dirs)
-            for dx, dy in dirs:
-                nx, ny = monster.x + dx, monster.y + dy
-                if not _can_move_to(monster, nx, ny, room_id):
-                    continue
-                dist = abs(target.x - nx) + abs(target.y - ny)
-                if dist > best_dist:
-                    best_dist = dist
-                    best_dir = (dx, dy)
-            if best_dir:
-                cx, cy = monster.x, monster.y
-                for _ in range(speed):
-                    tx, ty = cx + best_dir[0], cy + best_dir[1]
-                    if not _can_move_to(monster, tx, ty, room_id):
-                        break
-                    cx, cy = tx, ty
-                if (cx, cy) != (monster.x, monster.y):
-                    return {"action": "move", "x": cx, "y": cy}
+            return _resolve_move({"direction": "random"}, monster, room_id)
+        best_dir = None
+        best_dist = -1
+        dirs = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+        random.shuffle(dirs)
+        for dx, dy in dirs:
+            nx, ny = monster.x + dx, monster.y + dy
+            if not _can_move_to(monster, nx, ny, room_id):
+                continue
+            dist = abs(target.x - nx) + abs(target.y - ny)
+            if dist > best_dist:
+                best_dist = dist
+                best_dir = (dx, dy)
+        if best_dir:
+            return {"action": "move", "x": monster.x + best_dir[0], "y": monster.y + best_dir[1]}
         return None
 
-    # Cardinal direction — move up to `speed` tiles
+    # Cardinal direction — 1 tile
     d = CARDINAL_DIRS.get(direction)
     if d:
-        nx, ny = monster.x, monster.y
-        for _ in range(speed):
-            tx, ty = nx + d[0], ny + d[1]
-            if not _can_move_to(monster, tx, ty, room_id):
-                break
-            nx, ny = tx, ty
-        if (nx, ny) != (monster.x, monster.y):
+        nx, ny = monster.x + d[0], monster.y + d[1]
+        if _can_move_to(monster, nx, ny, room_id):
             return {"action": "move", "x": nx, "y": ny}
     return None
 
@@ -414,29 +333,21 @@ def _resolve_move(rule, monster, room_id):
 _PATROL_DIRS = {"U": (0, -1), "D": (0, 1), "L": (-1, 0), "R": (1, 0)}
 
 
-def _resolve_patrol_move(rule, monster, room_id, speed=1):
-    """Move along a patrol route string (e.g. 'RRDDLLUU'). Falls back to random wander.
-
-    With speed > 1, consumes multiple steps from the route per tick.
-    """
+def _resolve_patrol_move(rule, monster, room_id):
+    """Move 1 step along a patrol route string (e.g. 'RRDDLLUU'). Falls back to random wander."""
     route = rule.get("patrol_route", "")
     if not route:
-        return _resolve_move({"direction": "random", "speed": speed}, monster, room_id)
+        return _resolve_move({"direction": "random"}, monster, room_id)
 
-    nx, ny = monster.x, monster.y
     idx = getattr(monster, "_patrol_index", 0) % len(route)
-    for _ in range(speed):
-        step = route[idx].upper()
-        d = _PATROL_DIRS.get(step)
-        if not d:
-            break
-        tx, ty = nx + d[0], ny + d[1]
-        idx = (idx + 1) % len(route)
-        if not _can_move_to(monster, tx, ty, room_id):
-            break
-        nx, ny = tx, ty
-    monster._patrol_index = idx
-    if (nx, ny) != (monster.x, monster.y):
+    step = route[idx].upper()
+    d = _PATROL_DIRS.get(step)
+    if not d:
+        monster._patrol_index = (idx + 1) % len(route)
+        return None
+    nx, ny = monster.x + d[0], monster.y + d[1]
+    monster._patrol_index = (idx + 1) % len(route)
+    if _can_move_to(monster, nx, ny, room_id):
         return {"action": "move", "x": nx, "y": ny}
     return None
 
@@ -548,8 +459,17 @@ def _resolve_area(rule, monster, room_id):
     }
 
 
+def _resolve_move_with_distance(rule, monster, room_id):
+    """Wrapper that attaches distance and direction to the resolved move."""
+    result = _resolve_move(rule, monster, room_id)
+    if result is not None:
+        result["distance"] = max(1, int(rule.get("distance", 1)))
+        result["direction"] = rule.get("direction", "random")
+    return result
+
+
 ACTION_RESOLVERS = {
-    "move": _resolve_move,
+    "move": _resolve_move_with_distance,
     "hold": lambda rule, monster, room_id: {"action": "hold"},
     "projectile": _resolve_projectile,
     "charge": _resolve_charge,
@@ -563,27 +483,12 @@ ACTION_RESOLVERS = {
 # ---------------------------------------------------------------------------
 
 def monster_tick(monster, room_id):
-    """Process one behavior tick for a monster.
+    """Evaluate behavior rules for a monster. Called only when state == "idle".
 
     Returns:
-        {"phase": "execute", "action": ..., ...params}  — execute this action now
-        {"phase": "warmup", "action": ..., ...params}   — warmup just started (send visuals)
-        None — nothing to do (mid-warmup or no matching rule)
+        {"action": ..., "warmup": int, "cooldown": int, ...params} — matched rule
+        None — no matching rule
     """
-    # --- Handle pending warmup ---
-    if monster._pending_warmup is not None:
-        monster._pending_warmup["ticks"] -= 1
-        if monster._pending_warmup["ticks"] <= 0:
-            action = monster._pending_warmup["action"]
-            rule_idx = monster._pending_warmup["rule_index"]
-            cooldown = monster._pending_warmup.get("cooldown", 0)
-            if cooldown > 0:
-                monster._rule_cooldowns[rule_idx] = cooldown
-            monster._pending_warmup = None
-            return {"phase": "execute", **action}
-        return None  # still warming up
-
-    # --- Evaluate rules (cooldowns are checked then decremented after) ---
     behavior = getattr(monster, "behavior", None) or DEFAULT_BEHAVIOR
     rules = behavior.get("rules", [])
 
@@ -617,21 +522,11 @@ def monster_tick(monster, room_id):
         warmup = rule.get("warmup", 0)
         cooldown = rule.get("cooldown", 0)
 
-        if warmup > 0:
-            # Start warmup — lock in params, pause evaluation
-            monster._pending_warmup = {
-                "rule_index": i,
-                "ticks": warmup,
-                "cooldown": cooldown,
-                "action": action,
-            }
-            return {"phase": "warmup", **action, "ticks": warmup}
-
-        # No warmup — execute immediately
         if cooldown > 0:
             monster._rule_cooldowns[i] = cooldown
+
         _decrement_cooldowns(monster)
-        return {"phase": "execute", **action}
+        return {**action, "warmup": warmup, "cooldown": cooldown}
 
     _decrement_cooldowns(monster)
     return None  # no matching rule

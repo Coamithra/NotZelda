@@ -254,9 +254,19 @@ def validate_monster_design(monster: dict, index: int = 0) -> list[str]:
         hp = stats.get("hp")
         if not isinstance(hp, (int, float)) or hp < 1 or hp > 100:
             errors.append(f"{prefix}.stats.hp must be 1-100")
-        tick = stats.get("tick_rate")
-        if not isinstance(tick, (int, float)) or tick < 0.1 or tick > 5.0:
-            errors.append(f"{prefix}.stats.tick_rate must be 0.1-5.0")
+        # Migrate old tick_rate → decision_time + default walk_time
+        if "tick_rate" in stats and "decision_time" not in stats:
+            tr = stats.pop("tick_rate")
+            if isinstance(tr, (int, float)) and tr > 0:
+                stats["decision_time"] = max(0.2, min(10.0, round(1.0 / tr, 2)))
+            if "walk_time" not in stats:
+                stats["walk_time"] = 0.25
+        wt = stats.get("walk_time")
+        if not isinstance(wt, (int, float)) or wt < 0.1 or wt > 5.0:
+            errors.append(f"{prefix}.stats.walk_time must be 0.1-5.0")
+        dt = stats.get("decision_time")
+        if not isinstance(dt, (int, float)) or dt < 0.2 or dt > 10.0:
+            errors.append(f"{prefix}.stats.decision_time must be 0.2-10.0")
         dmg = stats.get("damage")
         if not isinstance(dmg, (int, float)) or dmg < 1 or dmg > 20:
             errors.append(f"{prefix}.stats.damage must be 1-20")

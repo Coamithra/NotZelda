@@ -15,18 +15,22 @@ class GameState:
 
         # Monster type registry (built-in + AI-generated)
         self.monster_stats = {
-            "slime":      {"hp": 1, "tick_rate": 0.5, "damage": 1},
-            "bat":        {"hp": 1, "tick_rate": 1.0, "damage": 1},
-            "scorpion":   {"hp": 2, "tick_rate": 0.5, "damage": 2},
-            "skeleton":   {"hp": 2, "tick_rate": 0.5, "damage": 3},
-            "swamp_blob": {"hp": 1, "tick_rate": 0.5, "damage": 1},
+            "slime":      {"hp": 1, "walk_time": 0.25, "decision_time": 2.0, "damage": 1},
+            "bat":        {"hp": 1, "walk_time": 0.2,  "decision_time": 1.0, "damage": 1},
+            "scorpion":   {"hp": 2, "walk_time": 0.25, "decision_time": 2.0, "damage": 2},
+            "skeleton":   {"hp": 2, "walk_time": 0.25, "decision_time": 2.0, "damage": 3},
+            "swamp_blob": {"hp": 1, "walk_time": 0.35, "decision_time": 2.0, "damage": 1},
         }
 
         # Custom content registries (AI-generated, Stage 2+)
         self.custom_sprites = {}         # kind -> sprite data dict
         self.custom_death_sprites = {}   # kind -> death sprite data dict
         self.custom_tile_recipes = {}    # tile_id -> recipe dict {colors, layers, walkable}
-        self.monster_behaviors = {}      # kind -> behavior dict
+        self.monster_behaviors = {       # kind -> behavior dict
+            "slime": {"rules": [
+                {"if": "always", "do": "move", "direction": "random", "distance": 2},
+            ]},
+        }
 
         # Content libraries (Stage 7 — tag-based content management)
         self.monster_library = None  # ContentLibrary | None

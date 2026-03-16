@@ -13,7 +13,7 @@ from server.variants import create_variant, get_monster_data, VARIANT_TIERS
 DEBUG_MONSTERS = {
     "fire_slime": {
         "kind": "fire_slime",
-        "stats": {"hp": 2, "tick_rate": 0.7, "damage": 2},
+        "stats": {"hp": 2, "walk_time": 0.25, "decision_time": 1.43, "damage": 2},
         "behavior": {
             "rules": [
                 {"if": "hp_below", "value": 2, "do": "move", "direction": "away"},
@@ -47,7 +47,7 @@ DEBUG_MONSTERS = {
     },
     "ice_bat": {
         "kind": "ice_bat",
-        "stats": {"hp": 1, "tick_rate": 1.25, "damage": 1},
+        "stats": {"hp": 1, "walk_time": 0.2, "decision_time": 0.8, "damage": 1},
         "behavior": {
             "rules": [
                 {"if": "player_within", "range": 3, "do": "move", "direction": "away"},
@@ -81,7 +81,7 @@ DEBUG_MONSTERS = {
     },
     "shadow_skull": {
         "kind": "shadow_skull",
-        "stats": {"hp": 3, "tick_rate": 0.5, "damage": 3},
+        "stats": {"hp": 3, "walk_time": 0.3, "decision_time": 2.0, "damage": 3},
         "behavior": {
             "rules": [
                 {"if": "hp_below", "value": 2, "do": "move", "direction": "away"},
@@ -118,7 +118,7 @@ DEBUG_MONSTERS = {
     },
     "skeleton_archer": {
         "kind": "skeleton_archer",
-        "stats": {"hp": 2, "tick_rate": 0.5, "damage": 1},
+        "stats": {"hp": 2, "walk_time": 0.25, "decision_time": 2.0, "damage": 1},
         "behavior": {
             "rules": [
                 {"if": "hp_below", "value": 2, "do": "move", "direction": "away"},
@@ -160,7 +160,7 @@ DEBUG_MONSTERS = {
     },
     "ghost_teleporter": {
         "kind": "ghost_teleporter",
-        "stats": {"hp": 2, "tick_rate": 0.4, "damage": 2},
+        "stats": {"hp": 2, "walk_time": 0.25, "decision_time": 2.5, "damage": 2},
         "behavior": {
             "rules": [
                 {"if": "player_within", "range": 8,
@@ -196,7 +196,7 @@ DEBUG_MONSTERS = {
     },
     "war_boar": {
         "kind": "war_boar",
-        "stats": {"hp": 4, "tick_rate": 0.7, "damage": 2},
+        "stats": {"hp": 4, "walk_time": 0.25, "decision_time": 1.43, "damage": 2},
         "behavior": {
             "rules": [
                 {"if": "player_in_range_line", "range": 4, "los": True,
@@ -236,7 +236,7 @@ DEBUG_MONSTERS = {
     },
     "flame_mage": {
         "kind": "flame_mage",
-        "stats": {"hp": 3, "tick_rate": 0.4, "damage": 2},
+        "stats": {"hp": 3, "walk_time": 0.25, "decision_time": 2.5, "damage": 2},
         "behavior": {
             "rules": [
                 {"if": "hp_below", "value": 2, "do": "move", "direction": "away"},
@@ -279,11 +279,11 @@ DEBUG_MONSTERS = {
     },
     "swift_wolf": {
         "kind": "swift_wolf",
-        "stats": {"hp": 2, "tick_rate": 1.0, "damage": 1},
+        "stats": {"hp": 2, "walk_time": 0.2, "decision_time": 1.0, "damage": 1},
         "behavior": {
             "rules": [
-                {"if": "player_within", "range": 5, "do": "move", "direction": "player", "speed": 2, "diagonal": True},
-                {"if": "always", "do": "move", "direction": "random", "speed": 2},
+                {"if": "player_within", "range": 5, "do": "move", "direction": "player"},
+                {"if": "always", "do": "move", "direction": "random"},
             ],
         },
         "sprite": {
@@ -317,7 +317,7 @@ DEBUG_MONSTERS = {
     # --- Coverage gap monsters ---
     "sentinel_golem": {
         "kind": "sentinel_golem",
-        "stats": {"hp": 5, "tick_rate": 0.5, "damage": 2},
+        "stats": {"hp": 5, "walk_time": 0.35, "decision_time": 2.0, "damage": 2},
         "behavior": {
             "rules": [
                 {"if": "player_within", "range": 2,
@@ -354,7 +354,7 @@ DEBUG_MONSTERS = {
     },
     "storm_archer": {
         "kind": "storm_archer",
-        "stats": {"hp": 2, "tick_rate": 0.7, "damage": 1},
+        "stats": {"hp": 2, "walk_time": 0.25, "decision_time": 1.43, "damage": 1},
         "behavior": {
             "rules": [
                 {"if": "player_in_range_line", "range": 8, "los": False,
@@ -394,7 +394,7 @@ DEBUG_MONSTERS = {
     },
     "phase_fox": {
         "kind": "phase_fox",
-        "stats": {"hp": 3, "tick_rate": 0.5, "damage": 1},
+        "stats": {"hp": 3, "walk_time": 0.25, "decision_time": 2.0, "damage": 1},
         "behavior": {
             "rules": [
                 {"if": "hp_below", "value": 2,
@@ -440,7 +440,7 @@ DEBUG_MONSTERS = {
     },
     "magma_wyrm": {
         "kind": "magma_wyrm",
-        "stats": {"hp": 6, "tick_rate": 0.8, "damage": 3},
+        "stats": {"hp": 6, "walk_time": 0.25, "decision_time": 1.25, "damage": 3},
         "behavior": {
             "rules": [
                 {"if": "player_in_range_line", "range": 5, "los": True,
@@ -540,7 +540,7 @@ async def handle_debug_spawn(player, args: str):
         tier_used = tier if tier is not None else "random"
         print(f"[VARIANT] Created {kind} (tier {tier_used}) from {base_kind}: "
               f"HP {variant['stats']['hp']}, DMG {variant['stats']['damage']}, "
-              f"tick {variant['stats']['tick_rate']}")
+              f"walk_time {variant['stats']['walk_time']}")
 
     # If it's a debug monster that isn't registered yet, register it
     elif kind in DEBUG_MONSTERS and kind not in game.monster_stats:
@@ -573,7 +573,7 @@ async def handle_debug_spawn(player, args: str):
 
     # Create and add the monster
     monster = Monster(spawn_x, spawn_y, kind)
-    monster.last_tick_time = time.monotonic()
+    monster.last_action_time = time.monotonic()
     if player.room not in game.room_monsters:
         game.room_monsters[player.room] = []
     monster_list = game.room_monsters[player.room]

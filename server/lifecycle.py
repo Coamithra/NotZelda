@@ -22,7 +22,7 @@ def spawn_monsters(room_id: str) -> list[Monster]:
     for t in templates:
         m = Monster(t["x"], t["y"], t["kind"])
         # Stagger first tick by 0-4 intervals so monsters don't move in sync
-        m.last_tick_time = now + random.randint(0, 4) * 0.25
+        m.last_action_time = now + random.randint(0, 4) * 0.25
         monsters.append(m)
     return monsters
 
@@ -107,13 +107,24 @@ async def send_room_enter(player, exit_direction: str = None):
     others = [player_info(p) for p in players_in_room(player.room, exclude=player.ws)]
     guards = game.guards.get(player.room, [])
     monsters = []
+    now = time.monotonic()
     for i, m in enumerate(get_room_monsters(player.room)):
         if m.alive:
-            mdata = {"id": i, "kind": m.kind, "x": m.x, "y": m.y}
+            mdata = {"id": i, "kind": m.kind, "x": m.x, "y": m.y,
+                     "walk_time": m.walk_time}
             if m.width > 1:
                 mdata["width"] = m.width
             if m.height > 1:
                 mdata["height"] = m.height
+            # Include walk state if mid-walk so client can interpolate
+            if m.state == "walking":
+                sd = m.state_data
+                elapsed = now - sd["start_time"]
+                progress = min(elapsed / m.walk_time, 1.0)
+                mdata["walking"] = True
+                mdata["walk_from"] = {"x": sd["from_x"], "y": sd["from_y"]}
+                mdata["walk_to"] = {"x": sd["to_x"], "y": sd["to_y"]}
+                mdata["walk_progress"] = progress
             monsters.append(mdata)
     exits = room["exits"]
     msg = {
