@@ -20,6 +20,7 @@ document.addEventListener("keydown", (e) => {
   if (dir && !G.chatFocused && !e.repeat) {
     G.dirStack = G.dirStack.filter(d => d !== dir);
     G.dirStack.push(dir);
+    G.inputEvents.push({ type: "dirDown", dir, time: performance.now() });
   }
 
   if (e.key === "Enter" && !G.chatFocused) {
@@ -55,20 +56,25 @@ document.addEventListener("keydown", (e) => {
       G.infoMessages.push({ text: "You don't have a weapon.", expires: Date.now() + 2000 });
       return;
     }
-    // Cancel any in-progress predicted move
-    if (G.moveState) {
-      if (G.moveState.committed) {
-        G.displayX = G.moveState.toX;
-        G.displayY = G.moveState.toY;
+    if (G.walkState && !G.walkState.cancelSent) {
+      const elapsed = performance.now() - G.walkState.startTime;
+      if (elapsed < CANCEL_TIME_MS) {
+        // Within cancel window — cancel walk, attack immediately
+        sendToServer({ type: "cancel_walk" });
+        G.walkState.cancelSent = true;
+        G.myPlayer.x = G.walkState.fromX;
+        G.myPlayer.y = G.walkState.fromY;
+        G.displayX = G.walkState.fromX;
+        G.displayY = G.walkState.fromY;
+        G.walkState = null;
+        G.walkQueue = null;
+        sendToServer({ type: "attack" });
       } else {
-        G.displayX = G.moveState.fromX;
-        G.displayY = G.moveState.fromY;
+        // Past cancel window — buffer attack for when walk completes
+        G.pendingAttack = true;
       }
-      G.moveState = null;
-      G.inputBuffer = null;
-    }
-    if (G.ws && G.ws.readyState === WebSocket.OPEN) {
-      G.ws.send(JSON.stringify({ type: "attack" }));
+    } else if (!G.walkState) {
+      sendToServer({ type: "attack" });
     }
     return;
   }
@@ -89,6 +95,7 @@ document.addEventListener("keyup", (e) => {
     );
     if (!stillHeld) {
       G.dirStack = G.dirStack.filter(d => d !== dir);
+      G.inputEvents.push({ type: "dirUp", dir, time: performance.now() });
     }
   }
 });
@@ -109,6 +116,18 @@ G.chatInput.addEventListener("blur", () => {
 G.chatInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     const text = G.chatInput.value.trim();
+    // Client-side commands
+    if (text === "/networklog") {
+      G.networkLog = !G.networkLog;
+      G.infoMessages.push({ text: `Network log: ${G.networkLog ? "ON" : "OFF"}`, expires: Date.now() + 2000 });
+      G.chatInput.value = "";
+      G.chatInput.blur();
+      G.chatFocused = false;
+      G.chatBar.classList.remove("focused");
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     if (text && G.ws && G.ws.readyState === WebSocket.OPEN) {
       G.ws.send(JSON.stringify({ type: "chat", text }));
     }

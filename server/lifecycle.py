@@ -294,6 +294,7 @@ async def _send_choir_update(player):
 
 async def do_room_transition(player, exit_direction: str):
     """Move a player from their current room to an adjacent room via an exit."""
+    player.walk = None
     old_room = player.room
     new_room_id = game.rooms[old_room]["exits"][exit_direction]
 

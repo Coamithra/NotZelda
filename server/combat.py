@@ -11,6 +11,8 @@ from server.constants import (
     ROOM_COLS, ROOM_ROWS, DIRECTIONS, DIRECTION_OPPOSITES,
     INVINCIBILITY_DURATION, PLAYER_RESPAWN_DELAY, STARTING_ROOM,
     HEART_DROP_CHANCE, ATTACK_COOLDOWN, PROJECTILE_TICK_RATE,
+    WALK_TIME, CANCEL_TIME, LATENCY_COMP, GUARD_COOLDOWN,
+    HEART_RESTORE_HP,
 )
 from server.models import Projectile
 from server.net import send_to, broadcast_to_room, players_in_room, player_info
@@ -36,6 +38,8 @@ def _apply_damage(player, damage: int, room_id: str, msgs: list):
         return
     player.hp = max(0, player.hp - damage)
     player.last_damage_time = now
+    # Cancel any active walk so knockback computes from committed position
+    player.walk = None
 
     if player.hp > 0:
         # Calculate knockback — push player away from facing direction
@@ -111,6 +115,7 @@ async def _death_respawn(player, old_room_id):
         player.x, player.y = spawn
         player.direction = "down"
         player.dancing = False
+        player.walk = None
 
         # Import here to avoid circular dependency (lifecycle -> combat -> lifecycle)
         from server.lifecycle import on_player_enter_room, on_player_leave_room, send_room_enter
@@ -186,6 +191,7 @@ async def handle_attack(player):
         return
     player.last_attack_time = now
     player.dancing = False
+    player.walk = None
 
     msgs = []
     msgs.append(("broadcast", player.room, {
@@ -491,6 +497,109 @@ EXEC_HANDLERS = {
 # ---------------------------------------------------------------------------
 # Background tick loops
 # ---------------------------------------------------------------------------
+
+def _check_guard_proximity_sync(player, msgs):
+    """If adjacent to a guard and cooldown has passed, queue guard dialog."""
+    now = time.monotonic()
+    for guard in game.guards.get(player.room, []):
+        dx = abs(player.x - guard["x"])
+        dy = abs(player.y - guard["y"])
+        if dx + dy == 1:
+            key = f"{player.room}:{guard['name']}:{guard['x']},{guard['y']}"
+            last = player.guard_cooldowns.get(key, 0)
+            if now - last >= GUARD_COOLDOWN:
+                player.guard_cooldowns[key] = now
+                msgs.append(("guard_chat", player, guard))
+
+
+def _tick_player_walks(now, msgs):
+    """Advance all active player walks, commit at midway, complete at 100%."""
+    from server.lifecycle import get_room_monsters
+    for player in list(game.players.values()):
+        walk = player.walk
+        if walk is None:
+            continue
+
+        elapsed = now - walk["start_time"]
+        progress = min(elapsed / WALK_TIME, 1.0)
+
+        # Midway commit — set position and check collisions
+        if progress >= 0.5 and not walk["committed"]:
+            walk["committed"] = True
+            player.x = walk["to_x"]
+            player.y = walk["to_y"]
+
+            msgs.append(("broadcast", player.room, {
+                "type": "player_moved",
+                "name": player.name,
+                "x": player.x,
+                "y": player.y,
+                "direction": player.direction,
+            }, None))
+
+            # Monster contact damage at new position
+            if player.hp > 0:
+                for monster in get_room_monsters(player.room):
+                    if monster.alive and not monster.intangible and monster.occupies(player.x, player.y):
+                        _apply_damage(player, monster.damage, player.room, msgs)
+                        break
+
+            # Heart pickup
+            if player.hp > 0:
+                hearts = game.room_hearts.get(player.room, [])
+                for heart in hearts:
+                    if heart["x"] == player.x and heart["y"] == player.y and player.hp < player.max_hp:
+                        player.hp = min(player.max_hp, player.hp + HEART_RESTORE_HP)
+                        hearts.remove(heart)
+                        msgs.append(("send", player, {"type": "hp_update", "hp": player.hp, "max_hp": player.max_hp}))
+                        msgs.append(("broadcast", player.room, {"type": "heart_collected", "id": heart["id"]}, None))
+                        break
+
+            # Guard proximity chat
+            if player.hp > 0:
+                _check_guard_proximity_sync(player, msgs)
+
+        # Walk complete
+        if progress >= 1.0:
+            player.walk = None
+            msgs.append(("broadcast", player.room, {
+                "type": "walk_complete",
+                "name": player.name,
+            }, None))
+
+
+async def _flush_walk_messages(msgs: list):
+    """Flush walk tick messages — same as _flush_messages but also handles guard_chat."""
+    from server.quests import handle_quest_npc
+    for entry in msgs:
+        kind = entry[0]
+        if kind == "broadcast":
+            _, room_id, msg, exclude = entry
+            await broadcast_to_room(room_id, msg, exclude=exclude)
+        elif kind == "send":
+            _, player, msg = entry
+            await send_to(player, msg)
+        elif kind == "death":
+            _, player, old_room_id = entry
+            asyncio.ensure_future(_death_respawn(player, old_room_id))
+        elif kind == "guard_chat":
+            _, player, guard = entry
+            asyncio.ensure_future(handle_quest_npc(player, guard))
+    msgs.clear()
+
+
+async def player_walk_tick():
+    """Background loop — ticks player walks at 33ms (~30Hz) for midway commit accuracy."""
+    while True:
+        await asyncio.sleep(0.033)
+        now = time.monotonic()
+        msgs = []
+        try:
+            _tick_player_walks(now, msgs)
+        except Exception:
+            traceback.print_exc()
+        await _flush_walk_messages(msgs)
+
 
 async def projectile_tick():
     """Background loop — moves projectiles and checks collisions."""

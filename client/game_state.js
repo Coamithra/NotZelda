@@ -9,9 +9,9 @@ const COLS = 15;
 const ROWS = 11;
 const CW = COLS * TS; // 720
 const CH = ROWS * TS; // 528
-const MOVE_LERP = 0.3;          // lerp factor for other players & monsters
-const MOVE_SPEED = 1/15;        // tiles per frame (~250ms per tile at 60fps)
-const COMMIT_THRESHOLD = 0.35;  // fraction of tile before move commits
+const MOVE_LERP = 0.3;            // lerp factor for other players & monsters (fallback)
+const WALK_TIME_MS = 250;         // ms — full tile-to-tile walk duration
+const CANCEL_TIME_MS = 90;        // ms — window to cancel a walk by releasing the key
 
 // Shared mutable game state
 const G = {
@@ -50,13 +50,13 @@ const G = {
   // Input
   keysDown: {},
   dirStack: [],            // direction key press order — last entry = active direction
+  inputEvents: [],         // buffered direction events: [{type: "dirDown"|"dirUp", dir, time}]
   lastMoveTime: 0,
 
-  // Movement prediction
-  moveState: null,         // {fromX, fromY, toX, toY, dir, progress, committed}
-  inputBuffer: null,       // queued next direction
-  pendingMoves: [],        // [{x, y}] committed moves awaiting server confirmation
-  lastServerMoveTime: 0,   // rate limit non-predicted server messages
+  // Walk state (client-side prediction)
+  walkState: null,         // {fromX, fromY, toX, toY, dir, startTime, cancelSent}
+  walkQueue: null,         // queued next direction for chaining
+  pendingAttack: false,    // buffered attack — fires when current walk completes
 
   // Animation
   animFrame: 0,
@@ -107,6 +107,7 @@ const G = {
   // Debug
   debugMode: false,      // server-controlled via DEBUG_MODE env var
   showDebug: false,
+  networkLog: true,      // log sent/received walk messages to console
   dungeonDebug: null,    // {lib_monsters, lib_tiles, lib_rooms, room_source, minimap?} — from server
   debugLog: [],
   MAX_DEBUG_LINES: 12,

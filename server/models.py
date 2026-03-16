@@ -19,8 +19,8 @@ class Player:
         self.hp = PLAYER_MAX_HP
         self.max_hp = PLAYER_MAX_HP
         self.last_damage_time = 0.0
-        self.last_move_time = 0.0
         self.last_attack_time = 0.0
+        self.walk = None  # None or {"from_x", "from_y", "to_x", "to_y", "dir", "start_time", "committed"}
         self.dancing = False
         self.guard_cooldowns = {}  # guard_key -> last_trigger_time
         self.quests = {}   # quest_id (str) -> stage (int)

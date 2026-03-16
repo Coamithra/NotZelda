@@ -245,21 +245,33 @@ function handleMessage(msg) {
         width: m.width || 1, height: m.height || 1,
       }));
       for (const p of msg.players) {
-        G.otherPlayers[p.name] = {
+        const op = {
           x: p.x, y: p.y,
           displayX: p.x, displayY: p.y,
           direction: p.direction,
           color_index: p.color_index,
           moving: false,
+          walkState: null,
         };
+        if (p.walking) {
+          op.walkState = {
+            fromX: p.walk_from.x, fromY: p.walk_from.y,
+            toX: p.walk_to.x, toY: p.walk_to.y,
+            startTime: performance.now() - (p.walk_progress * WALK_TIME_MS),
+          };
+          op.x = p.walk_to.x;
+          op.y = p.walk_to.y;
+          op.direction = p.walk_dir || p.direction;
+        }
+        G.otherPlayers[p.name] = op;
         if (p.dancing) startDance(p.name);
       }
 
       G.displayX = G.myPlayer.x;
       G.displayY = G.myPlayer.y;
-      G.moveState = null;
-      G.inputBuffer = null;
-      G.pendingMoves = [];
+      G.walkState = null;
+      G.walkQueue = null;
+      G.pendingAttack = false;
 
       if (cameFromConjuring || isFirstRoom) {
         // Fade in from black on first login
@@ -292,26 +304,86 @@ function handleMessage(msg) {
     case "player_moved":
       stopDance(msg.name);
       delete G.attackingPlayers[msg.name];
-      if (msg.name === G.myName) {
-        G.myPlayer.direction = msg.direction;
-        // Check if server confirms a predicted move
-        if (G.pendingMoves.length > 0 &&
-            msg.x === G.pendingMoves[0].x && msg.y === G.pendingMoves[0].y) {
-          G.pendingMoves.shift();
-        } else {
-          // Server position differs from prediction — snap to server
-          G.myPlayer.x = msg.x;
-          G.myPlayer.y = msg.y;
-          G.displayX = msg.x;
-          G.displayY = msg.y;
-          G.moveState = null;
-          G.inputBuffer = null;
-          G.pendingMoves = [];
-        }
-      } else if (G.otherPlayers[msg.name]) {
+      if (G.networkLog && msg.name === G.myName) {
+        const t = performance.now().toFixed(1);
+        const ws = G.walkState;
+        const wsInfo = ws ? `ws={dir:${ws.dir},from:(${ws.fromX},${ws.fromY}),to:(${ws.toX},${ws.toY}),elapsed:${(performance.now()-ws.startTime).toFixed(0)}}` : "ws=null";
+        console.log(`[NET IN  t=${t}] player_moved SELF pos=(${msg.x},${msg.y}) ${wsInfo}`);
+      }
+      // player_moved is now only for OTHER players (self uses reconcile)
+      if (msg.name !== G.myName && G.otherPlayers[msg.name]) {
         G.otherPlayers[msg.name].x = msg.x;
         G.otherPlayers[msg.name].y = msg.y;
         G.otherPlayers[msg.name].direction = msg.direction;
+      }
+      break;
+
+    case "reconcile": {
+      if (G.networkLog) {
+        const t = performance.now().toFixed(1);
+        const ws = G.walkState;
+        const wsInfo = ws ? `ws={dir:${ws.dir},from:(${ws.fromX},${ws.fromY}),to:(${ws.toX},${ws.toY}),elapsed:${(performance.now()-ws.startTime).toFixed(0)}}` : "ws=null";
+        console.log(`[NET IN  t=${t}] reconcile walking=${msg.walking} pos=(${msg.x},${msg.y}) ${wsInfo}`, msg);
+      }
+      // Full state snapshot from server — snap to authoritative state
+      if (!msg.walking) {
+        G.myPlayer.x = msg.x;
+        G.myPlayer.y = msg.y;
+        G.myPlayer.direction = msg.direction;
+        G.displayX = msg.x;
+        G.displayY = msg.y;
+        G.walkState = null;
+        G.walkQueue = null;
+      G.pendingAttack = false;
+      } else {
+        // Server says we're mid-walk — sync to server's walk state
+        G.myPlayer.direction = msg.direction;
+        G.myPlayer.x = msg.x;
+        G.myPlayer.y = msg.y;
+        G.walkState = {
+          fromX: msg.walk_from.x, fromY: msg.walk_from.y,
+          toX: msg.walk_to.x, toY: msg.walk_to.y,
+          dir: msg.direction,
+          startTime: performance.now() - (msg.walk_progress * WALK_TIME_MS),
+          cancelSent: true, // don't allow cancel since server already advanced
+        };
+      }
+      break;
+    }
+
+    case "walk_started":
+      // Another player started walking — set up time-based interpolation
+      if (msg.name !== G.myName && G.otherPlayers[msg.name]) {
+        const wp = G.otherPlayers[msg.name];
+        stopDance(msg.name);
+        delete G.attackingPlayers[msg.name];
+        wp.direction = msg.dir;
+        wp.x = msg.to_x;
+        wp.y = msg.to_y;
+        wp.walkState = {
+          fromX: msg.from_x, fromY: msg.from_y,
+          toX: msg.to_x, toY: msg.to_y,
+          startTime: performance.now() - (msg.progress * WALK_TIME_MS),
+        };
+      }
+      break;
+
+    case "walk_cancelled":
+      // Another player cancelled their walk — snap back
+      if (msg.name !== G.myName && G.otherPlayers[msg.name]) {
+        const wcp = G.otherPlayers[msg.name];
+        wcp.walkState = null;
+        wcp.x = msg.x;
+        wcp.y = msg.y;
+        wcp.displayX = msg.x;
+        wcp.displayY = msg.y;
+      }
+      break;
+
+    case "walk_complete":
+      // Another player finished walking — clear walk interpolation
+      if (msg.name !== G.myName && G.otherPlayers[msg.name]) {
+        G.otherPlayers[msg.name].walkState = null;
       }
       break;
 
@@ -324,13 +396,25 @@ function handleMessage(msg) {
 
     case "player_entered":
       if (msg.name !== G.myName) {
-        G.otherPlayers[msg.name] = {
+        const ep = {
           x: msg.x, y: msg.y,
           displayX: msg.x, displayY: msg.y,
           direction: msg.direction,
           color_index: msg.color_index,
           moving: false,
+          walkState: null,
         };
+        if (msg.walking) {
+          ep.walkState = {
+            fromX: msg.walk_from.x, fromY: msg.walk_from.y,
+            toX: msg.walk_to.x, toY: msg.walk_to.y,
+            startTime: performance.now() - (msg.walk_progress * WALK_TIME_MS),
+          };
+          ep.x = msg.walk_to.x;
+          ep.y = msg.walk_to.y;
+          ep.direction = msg.walk_dir || msg.direction;
+        }
+        G.otherPlayers[msg.name] = ep;
         if (msg.dancing) startDance(msg.name);
         appendChatLog(`<span class="chat-system">${escHtml(msg.name)} entered the room</span>`);
       }
@@ -371,9 +455,9 @@ function handleMessage(msg) {
         G.myPlayer.y = msg.y;
         G.displayX = msg.x;
         G.displayY = msg.y;
-        G.moveState = null;
-        G.inputBuffer = null;
-        G.pendingMoves = [];
+        G.walkState = null;
+        G.walkQueue = null;
+      G.pendingAttack = false;
         G.hurtFlash = Date.now() + 300;
         G.invincibleUntil = Date.now() + 1500;
       } else if (G.otherPlayers[msg.name]) {
@@ -387,9 +471,9 @@ function handleMessage(msg) {
     case "you_died":
       G.dyingPlayerSelf = { x: msg.x, y: msg.y, frame: 0, startTime: Date.now() };
       G.myHp = 0;
-      G.moveState = null;
-      G.inputBuffer = null;
-      G.pendingMoves = [];
+      G.walkState = null;
+      G.walkQueue = null;
+      G.pendingAttack = false;
       G.displayX = msg.x;
       G.displayY = msg.y;
       appendChatLog(`<span class="chat-system">You died!</span>`);

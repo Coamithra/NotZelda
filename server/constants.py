@@ -99,7 +99,9 @@ ROOM_ROWS = 11
 # ---------------------------------------------------------------------------
 
 STARTING_ROOM = "town_square"
-MOVE_COOLDOWN = 0.150
+WALK_TIME = 0.250          # seconds — full tile-to-tile walk duration
+CANCEL_TIME = 0.090        # seconds — window to cancel a walk by releasing the key
+LATENCY_COMP = 0.066       # seconds — dead reckoning offset; also used as leeway for all timing checks
 ATTACK_COOLDOWN = 0.4
 HEART_RESTORE_HP = 2
 PLAYER_MAX_HP = 6
