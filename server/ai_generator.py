@@ -79,11 +79,15 @@ class RateLimiter:
 # ---------------------------------------------------------------------------
 
 MODEL_PRICING = {
+    # (input $/MTok, output $/MTok)
     "claude-haiku-4-5":          (1.00, 5.00),
     "claude-haiku-4-5-20251001": (1.00, 5.00),
     "claude-sonnet-4-6":        (3.00, 15.00),
     "claude-opus-4-6":          (15.00, 75.00),
 }
+# Prompt caching price multipliers (relative to base input price)
+CACHE_WRITE_MULTIPLIER = 1.25   # 25% more expensive than base input
+CACHE_READ_MULTIPLIER = 0.10    # 90% cheaper than base input
 
 
 @dataclass
@@ -91,37 +95,53 @@ class UsageTracker:
     """Tracks API token usage and cost (all-time persisted + per-session)."""
     total_input_tokens: int = 0
     total_output_tokens: int = 0
+    total_cache_write_tokens: int = 0
+    total_cache_read_tokens: int = 0
     total_calls: int = 0
     session_input_tokens: int = 0
     session_output_tokens: int = 0
+    session_cache_write_tokens: int = 0
+    session_cache_read_tokens: int = 0
     session_calls: int = 0
     _file: Path = field(default_factory=lambda: DATA_DIR / "api_usage.json")
 
-    def record(self, input_tokens: int, output_tokens: int):
+    def record(self, input_tokens: int, output_tokens: int,
+               cache_write_tokens: int = 0, cache_read_tokens: int = 0):
         self.total_input_tokens += input_tokens
         self.total_output_tokens += output_tokens
+        self.total_cache_write_tokens += cache_write_tokens
+        self.total_cache_read_tokens += cache_read_tokens
         self.total_calls += 1
         self.session_input_tokens += input_tokens
         self.session_output_tokens += output_tokens
+        self.session_cache_write_tokens += cache_write_tokens
+        self.session_cache_read_tokens += cache_read_tokens
         self.session_calls += 1
         self._save()
 
-    def _cost(self, input_tokens: int, output_tokens: int) -> float:
+    def _cost(self, input_tokens: int, output_tokens: int,
+              cache_write_tokens: int = 0, cache_read_tokens: int = 0) -> float:
         price_in, price_out = MODEL_PRICING.get(ANTHROPIC_MODEL, (1.00, 5.00))
         return (input_tokens * price_in / 1_000_000 +
-                output_tokens * price_out / 1_000_000)
+                output_tokens * price_out / 1_000_000 +
+                cache_write_tokens * price_in * CACHE_WRITE_MULTIPLIER / 1_000_000 +
+                cache_read_tokens * price_in * CACHE_READ_MULTIPLIER / 1_000_000)
 
     def estimated_cost(self) -> float:
-        return self._cost(self.total_input_tokens, self.total_output_tokens)
+        return self._cost(self.total_input_tokens, self.total_output_tokens,
+                          self.total_cache_write_tokens, self.total_cache_read_tokens)
 
     def session_cost(self) -> float:
-        return self._cost(self.session_input_tokens, self.session_output_tokens)
+        return self._cost(self.session_input_tokens, self.session_output_tokens,
+                          self.session_cache_write_tokens, self.session_cache_read_tokens)
 
     def _save(self):
         self._file.parent.mkdir(parents=True, exist_ok=True)
         self._file.write_text(json.dumps({
             "input_tokens": self.total_input_tokens,
             "output_tokens": self.total_output_tokens,
+            "cache_write_tokens": self.total_cache_write_tokens,
+            "cache_read_tokens": self.total_cache_read_tokens,
             "calls": self.total_calls,
             "estimated_cost_usd": round(self.estimated_cost(), 4),
         }, indent=2))
@@ -131,6 +151,8 @@ class UsageTracker:
             data = json.loads(self._file.read_text())
             self.total_input_tokens = data.get("input_tokens", 0)
             self.total_output_tokens = data.get("output_tokens", 0)
+            self.total_cache_write_tokens = data.get("cache_write_tokens", 0)
+            self.total_cache_read_tokens = data.get("cache_read_tokens", 0)
             self.total_calls = data.get("calls", 0)
 
 
@@ -872,8 +894,12 @@ async def _call_cli(system_prompt: str, user_prompt: str) -> tuple[str, int, int
     return text, input_tokens, output_tokens
 
 
-async def _call_api(system_prompt: str, user_prompt: str) -> tuple[str, int, int]:
-    """Call the Anthropic API. Returns (response_text, input_tokens, output_tokens)."""
+async def _call_api(system_prompt: str, user_prompt: str) -> tuple[str, int, int, int, int]:
+    """Call the Anthropic API with prompt caching.
+
+    Returns (response_text, input_tokens, output_tokens,
+             cache_creation_input_tokens, cache_read_input_tokens).
+    """
     client = _get_client()
     response = await asyncio.wait_for(
         asyncio.get_running_loop().run_in_executor(
@@ -881,16 +907,29 @@ async def _call_api(system_prompt: str, user_prompt: str) -> tuple[str, int, int
             lambda: client.messages.create(
                 model=ANTHROPIC_MODEL,
                 max_tokens=4096,
-                system=system_prompt,
+                system=[{
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }],
                 messages=[{"role": "user", "content": user_prompt}],
                 metadata={"user_id": "notzelda-content-gen"},
             )
         ),
         timeout=GENERATION_TIMEOUT,
     )
+    usage = response.usage
+    cache_write = getattr(usage, "cache_creation_input_tokens", 0) or 0
+    cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
+    if cache_read:
+        print(f"[GEN] Cache hit: {cache_read} tokens read from cache")
+    elif cache_write:
+        print(f"[GEN] Cache miss: {cache_write} tokens written to cache")
     return (response.content[0].text.strip(),
-            response.usage.input_tokens,
-            response.usage.output_tokens)
+            usage.input_tokens,
+            usage.output_tokens,
+            cache_write,
+            cache_read)
 
 
 # ---------------------------------------------------------------------------
@@ -938,13 +977,15 @@ async def _call_ai(
             rate_limiter.record_call()
             start_time = time.time()
 
+            cache_write_tokens = cache_read_tokens = 0
             if AI_BACKEND == "cli":
                 raw_text, input_tokens, output_tokens = await _call_cli(system_prompt, prompt)
             else:
-                raw_text, input_tokens, output_tokens = await _call_api(system_prompt, prompt)
+                raw_text, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens = await _call_api(system_prompt, prompt)
 
             if input_tokens or output_tokens:
-                usage_tracker.record(input_tokens, output_tokens)
+                usage_tracker.record(input_tokens, output_tokens,
+                                     cache_write_tokens, cache_read_tokens)
 
             elapsed = time.time() - start_time
             raw_text = raw_text.strip()
@@ -1515,6 +1556,8 @@ async def _test_standalone():
     print(f"  Total calls: {usage_tracker.total_calls}")
     print(f"  Input tokens: {usage_tracker.total_input_tokens}")
     print(f"  Output tokens: {usage_tracker.total_output_tokens}")
+    print(f"  Cache write tokens: {usage_tracker.total_cache_write_tokens}")
+    print(f"  Cache read tokens: {usage_tracker.total_cache_read_tokens}")
     print(f"  Estimated cost: ${usage_tracker.estimated_cost():.4f}")
 
 

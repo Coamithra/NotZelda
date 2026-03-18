@@ -47,6 +47,7 @@ When pushing to git make sure to update CLAUDE.md first!
 - **Dungeon tilemaps use string tile codes** (`"DW"`, `"DF"`, etc.) not numeric IDs.
 - **All rooms loaded from `.room` files** — no hardcoded room definitions in Python.
 - **AI generation uses Claude CLI by default** (`AI_BACKEND=cli`), not the API. The `.env` must NOT set `AI_BACKEND=api`.
+- **API path uses prompt caching** — system prompts are marked with `cache_control: {"type": "ephemeral"}` for 5-minute caching. `UsageTracker` tracks cache write/read tokens separately with accurate cost multipliers (1.25x write, 0.10x read).
 - **AI prompt templates** are in `server/prompts/*.txt` — edit the text files directly, no Python changes needed.
 - **Sprites/tiles use `[colorKey, x, y, w, h]` rect layer format** everywhere (client + server validation + AI prompts).
 - **Custom tile properties** (walkable, etc.) live in `custom_tile_recipes[tile_id]` — no separate sets. `is_walkable_tile()` reads from the recipe dict. Client receives walkable flag via `custom_tiles` in `room_enter` and adds to its `WALKABLE` set.
