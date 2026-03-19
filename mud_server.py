@@ -38,7 +38,7 @@ from server.lifecycle import (
     on_player_enter_room, on_player_leave_room,
     send_room_enter, do_room_transition,
 )
-from server.combat import handle_attack, monster_tick, projectile_tick, player_walk_tick
+from server.combat import handle_attack, game_tick
 from server.debug_monsters import handle_debug_spawn, auto_register_debug_monsters
 from server.npc_chat import find_adjacent_npc, handle_npc_chat, clear_player_history, register_town_guard
 from server.dungeon_content import register_precreated_types, load_precreated_content
@@ -617,9 +617,7 @@ async def main():
         ping_interval=30,
         ping_timeout=60,
     )
-    asyncio.create_task(monster_tick())
-    asyncio.create_task(projectile_tick())
-    asyncio.create_task(player_walk_tick())
+    asyncio.create_task(game_tick())
     load_deprecation_timestamp()
     load_deprecated_sets()
     print("MUD server running!")

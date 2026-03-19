@@ -12,7 +12,7 @@ from server.constants import (
     INVINCIBILITY_DURATION, PLAYER_RESPAWN_DELAY, STARTING_ROOM,
     HEART_DROP_CHANCE, ATTACK_COOLDOWN, PROJECTILE_TICK_RATE,
     WALK_TIME, CANCEL_TIME, LATENCY_COMP, GUARD_COOLDOWN,
-    HEART_RESTORE_HP,
+    HEART_RESTORE_HP, TICK_INTERVAL,
 )
 from server.models import Projectile
 from server.net import send_to, broadcast_to_room, players_in_room, player_info
@@ -83,7 +83,8 @@ def _apply_damage(player, damage: int, room_id: str, msgs: list):
 
 
 async def _flush_messages(msgs: list):
-    """Send all batched messages and schedule death respawns."""
+    """Send all batched messages and schedule death respawns / guard chats."""
+    from server.quests import handle_quest_npc
     for entry in msgs:
         kind = entry[0]
         if kind == "broadcast":
@@ -95,6 +96,9 @@ async def _flush_messages(msgs: list):
         elif kind == "death":
             _, player, old_room_id = entry
             asyncio.ensure_future(_death_respawn(player, old_room_id))
+        elif kind == "guard_chat":
+            _, player, guard = entry
+            asyncio.ensure_future(handle_quest_npc(player, guard))
     msgs.clear()
 
 
@@ -144,17 +148,6 @@ async def _death_respawn(player, old_room_id):
         # Only re-add if player didn't disconnect during respawn
         if player.ws not in game.players:
             game.players[player.ws] = player
-
-
-async def damage_player(player, damage: int, room_id: str):
-    """Apply contact damage to a player from a monster.
-
-    Async wrapper around _apply_damage for callers outside the tick loop
-    (e.g. handle_move contact damage).
-    """
-    msgs = []
-    _apply_damage(player, damage, room_id, msgs)
-    await _flush_messages(msgs)
 
 
 def _broadcast_choir_start(boss_room, msgs):
@@ -524,7 +517,7 @@ def _check_guard_proximity_sync(player, msgs):
                 msgs.append(("guard_chat", player, guard))
 
 
-def _tick_player_walks(now, msgs):
+def _tick_players(now, msgs):
     """Advance all active player walks, commit at midway, complete at 100%."""
     from server.lifecycle import get_room_monsters
     for player in list(game.players.values()):
@@ -580,29 +573,8 @@ def _tick_player_walks(now, msgs):
             }, None))
 
 
-async def _flush_walk_messages(msgs: list):
-    """Flush walk tick messages — same as _flush_messages but also handles guard_chat."""
-    from server.quests import handle_quest_npc
-    for entry in msgs:
-        kind = entry[0]
-        if kind == "broadcast":
-            _, room_id, msg, exclude = entry
-            await broadcast_to_room(room_id, msg, exclude=exclude)
-        elif kind == "send":
-            _, player, msg = entry
-            await send_to(player, msg)
-        elif kind == "death":
-            _, player, old_room_id = entry
-            asyncio.ensure_future(_death_respawn(player, old_room_id))
-        elif kind == "guard_chat":
-            _, player, guard = entry
-            asyncio.ensure_future(handle_quest_npc(player, guard))
-    msgs.clear()
-
-
-
 def _tick_all_monsters(now, msgs):
-    """Tick all monsters — walks, state machine, guard despawns. Runs at 33ms."""
+    """Tick all monsters — walks, state machine, guard despawns."""
     for room_id, monster_list in list(game.room_monsters.items()):
         if room_id not in game.rooms:
             continue
@@ -652,79 +624,78 @@ def _tick_all_monsters(now, msgs):
                 traceback.print_exc()
 
 
-async def player_walk_tick():
-    """Background loop — ticks players and monsters at 33ms (~30Hz)."""
+def _tick_projectiles(msgs):
+    """Move projectiles and check collisions (sync — appends to msgs batch)."""
+    for room_id in list(game.room_projectiles.keys()):
+        if room_id not in game.rooms:
+            del game.room_projectiles[room_id]
+            continue
+        projs = game.room_projectiles[room_id]
+        to_remove = []
+        for proj_id, proj in list(projs.items()):
+            try:
+                # Move by speed tiles per tick
+                for _ in range(proj.speed):
+                    proj.x += proj.dx
+                    proj.y += proj.dy
+
+                    # Out of bounds or hit a wall
+                    if (proj.x < 0 or proj.x >= ROOM_COLS or
+                            proj.y < 0 or proj.y >= ROOM_ROWS or
+                            not game.is_walkable_tile(game.rooms[room_id]["tilemap"][proj.y][proj.x])):
+                        to_remove.append(proj_id)
+                        msgs.append(("broadcast", room_id, {
+                            "type": "projectile_gone", "id": proj_id,
+                        }, None))
+                        break
+
+                    # Check player collision
+                    hit_player = False
+                    for p in players_in_room(room_id):
+                        if p.hp > 0 and p.x == proj.x and p.y == proj.y:
+                            msgs.append(("broadcast", room_id, {
+                                "type": "projectile_hit", "id": proj_id,
+                                "x": proj.x, "y": proj.y,
+                            }, None))
+                            _apply_damage(p, proj.damage, room_id, msgs)
+                            hit_player = True
+                            if not proj.piercing:
+                                to_remove.append(proj_id)
+                                break
+                    if hit_player and not proj.piercing:
+                        break
+                else:
+                    # No wall hit during multi-step move — send position update
+                    if proj_id not in to_remove:
+                        msgs.append(("broadcast", room_id, {
+                            "type": "projectile_moved", "id": proj_id,
+                            "x": proj.x, "y": proj.y,
+                        }, None))
+            except Exception:
+                traceback.print_exc()
+                to_remove.append(proj_id)
+
+        for pid in to_remove:
+            projs.pop(pid, None)
+        if not projs:
+            game.room_projectiles.pop(room_id, None)
+
+
+async def game_tick():
+    """Unified game loop — ticks players, monsters, and projectiles at ~30Hz."""
+    last_projectile_tick = time.monotonic()
     while True:
-        await asyncio.sleep(0.033)
+        await asyncio.sleep(TICK_INTERVAL)
         now = time.monotonic()
         msgs = []
         try:
-            _tick_player_walks(now, msgs)
+            _tick_players(now, msgs)
             _tick_all_monsters(now, msgs)
+            if now - last_projectile_tick >= PROJECTILE_TICK_RATE:
+                last_projectile_tick = now
+                _tick_projectiles(msgs)
         except Exception:
             traceback.print_exc()
-        await _flush_walk_messages(msgs)
-
-
-async def projectile_tick():
-    """Background loop — moves projectiles and checks collisions."""
-    while True:
-        await asyncio.sleep(PROJECTILE_TICK_RATE)
-        msgs = []
-        for room_id in list(game.room_projectiles.keys()):
-            if room_id not in game.rooms:
-                del game.room_projectiles[room_id]
-                continue
-            projs = game.room_projectiles[room_id]
-            to_remove = []
-            for proj_id, proj in list(projs.items()):
-                try:
-                    # Move by speed tiles per tick
-                    for _ in range(proj.speed):
-                        proj.x += proj.dx
-                        proj.y += proj.dy
-
-                        # Out of bounds or hit a wall
-                        if (proj.x < 0 or proj.x >= ROOM_COLS or
-                                proj.y < 0 or proj.y >= ROOM_ROWS or
-                                not game.is_walkable_tile(game.rooms[room_id]["tilemap"][proj.y][proj.x])):
-                            to_remove.append(proj_id)
-                            msgs.append(("broadcast", room_id, {
-                                "type": "projectile_gone", "id": proj_id,
-                            }, None))
-                            break
-
-                        # Check player collision
-                        hit_player = False
-                        for p in players_in_room(room_id):
-                            if p.hp > 0 and p.x == proj.x and p.y == proj.y:
-                                msgs.append(("broadcast", room_id, {
-                                    "type": "projectile_hit", "id": proj_id,
-                                    "x": proj.x, "y": proj.y,
-                                }, None))
-                                _apply_damage(p, proj.damage, room_id, msgs)
-                                hit_player = True
-                                if not proj.piercing:
-                                    to_remove.append(proj_id)
-                                    break
-                        if hit_player and not proj.piercing:
-                            break
-                    else:
-                        # No wall hit during multi-step move — send position update
-                        if proj_id not in to_remove:
-                            msgs.append(("broadcast", room_id, {
-                                "type": "projectile_moved", "id": proj_id,
-                                "x": proj.x, "y": proj.y,
-                            }, None))
-                except Exception:
-                    traceback.print_exc()
-                    to_remove.append(proj_id)
-
-            for pid in to_remove:
-                projs.pop(pid, None)
-            if not projs:
-                game.room_projectiles.pop(room_id, None)
-
         await _flush_messages(msgs)
 
 
@@ -856,10 +827,3 @@ def _tick_monster_state(monster, room_id, i, now, msgs):
         handler(monster, room_id, i, result, msgs)
 
 
-async def monster_tick():
-    """Legacy entry point — monster ticking is now handled by player_walk_tick at 33ms.
-
-    This loop is kept as a no-op so mud_server.py doesn't need changes.
-    """
-    while True:
-        await asyncio.sleep(3600)  # sleep forever

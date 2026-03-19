@@ -382,7 +382,7 @@ async def do_room_transition(player, exit_direction: str):
         await on_player_enter_room(new_room_id)
 
         # Send new room data and broadcast arrival while still removed,
-        # so monster_tick can't target us before the client has loaded.
+        # so game_tick can't target us before the client has loaded.
         await send_room_enter(player, exit_direction=exit_direction)
         await broadcast_to_room(
             new_room_id,
