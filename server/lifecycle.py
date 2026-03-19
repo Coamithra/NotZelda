@@ -300,7 +300,8 @@ async def _send_choir_update(player):
     else:
         distances = get_boss_distances(inst)
         dist = distances.get(player.room, 5)
-        await send_to(player, {"type": "boss_choir_start", "distance": dist})
+        choir_track = f"music_{inst.boss_track}_choir.mp3"
+        await send_to(player, {"type": "boss_choir_start", "distance": dist, "choir_track": choir_track})
 
 
 async def do_room_transition(player, exit_direction: str):

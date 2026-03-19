@@ -163,10 +163,11 @@ def _broadcast_choir_start(boss_room, msgs):
     if not instance:
         return
     distances = get_boss_distances(instance)
+    choir_track = f"music_{instance.boss_track}_choir.mp3"
     for p in list(game.players.values()):
         if p.room in instance.active_rooms and p.room != boss_room:
             dist = distances.get(p.room, 5)
-            msgs.append(("send", p, {"type": "boss_choir_start", "distance": dist}))
+            msgs.append(("send", p, {"type": "boss_choir_start", "distance": dist, "choir_track": choir_track}))
 
 
 def _broadcast_choir_stop(msgs):

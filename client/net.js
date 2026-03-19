@@ -704,7 +704,7 @@ function handleMessage(msg) {
       break;
 
     case "boss_choir_start":
-      MusicPlayer.startChoir(msg.distance);
+      MusicPlayer.startChoir(msg.distance, msg.choir_track);
       break;
 
     case "boss_choir_stop":

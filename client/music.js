@@ -23,6 +23,11 @@ const MusicPlayer = (function () {
     "dungeon5":   "music_dungeon5.mp3",
     "dungeon6":   "music_dungeon6.mp3",
     "boss1":      "music_boss1.mp3",
+    "boss2":      "music_boss2.mp3",
+    "boss3":      "music_boss3.mp3",
+    "watertemple1": "music_watertemple1.mp3",
+    "watertemple2": "music_watertemple2.mp3",
+    "watertemple_boss1": "music_watertemple_boss1.mp3",
   };
 
   // Fallback: map biome names to music tracks (for rooms without explicit music field)
@@ -45,13 +50,14 @@ const MusicPlayer = (function () {
   let silencedBiome = null;  // biome in which silence() was called — stays silent until biome changes
 
   // --- Boss choir overlay ---
-  const CHOIR_URL = "music_boss1_choir.mp3";
+  const CHOIR_DEFAULT_URL = "music_boss1_choir.mp3";
   const CHOIR_MAX_VOL = 0.70;
   const CHOIR_MIN_VOL = 0.10;
   let choirAudio = null;
   let choirFadeId = null;
   let choirActive = false;
   let choirDistance = 1;
+  let choirUrl = CHOIR_DEFAULT_URL;
 
   function getOrCreateAudio(url) {
     if (!tracks[url]) {
@@ -238,12 +244,19 @@ const MusicPlayer = (function () {
     choirFadeId = requestAnimationFrame(step);
   }
 
-  function startChoir(distance) {
+  function startChoir(distance, track) {
     choirActive = true;
     choirDistance = distance;
+    var url = track || CHOIR_DEFAULT_URL;
+    // If choir track changed, recreate the audio element
+    if (url !== choirUrl && choirAudio) {
+      choirAudio.pause();
+      choirAudio = null;
+    }
+    choirUrl = url;
     if (!playing) return;
     if (!choirAudio) {
-      choirAudio = new Audio(CHOIR_URL);
+      choirAudio = new Audio(choirUrl);
       choirAudio.loop = true;
       choirAudio.volume = 0;
     }

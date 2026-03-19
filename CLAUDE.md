@@ -26,7 +26,10 @@ When pushing to git make sure to update CLAUDE.md first!
 ├── client/                # Browser-served HTML + JS
 ├── server/                # Python modules imported by mud_server
 │   └── prompts/           # AI prompt templates ({{placeholder}} syntax)
-├── music/                 # MP3 tracks (village.mp3, dungeon_a.mp3, etc.)
+├── music/                 # MP3 tracks, organized by area
+│   ├── overworld/         # Village, tavern, chapel, overworld tracks
+│   ├── dungeon1/          # Dungeon ambient (a-f), boss1/2/3 + choir variants
+│   └── dungeon2/          # Water temple ambient + boss tracks
 ├── rooms/                 # .room data files + dungeon1/ templates
 ├── data/                  # Runtime data (libraries, API usage) — gitignored
 ├── tools/                 # Dev utilities (renderers, content viewer, tests)
@@ -51,7 +54,8 @@ When pushing to git make sure to update CLAUDE.md first!
 - **AI prompt templates** are in `server/prompts/*.txt` — edit the text files directly, no Python changes needed.
 - **Sprites/tiles use `[colorKey, x, y, w, h]` rect layer format** everywhere (client + server validation + AI prompts).
 - **Custom tile properties** (walkable, etc.) live in `custom_tile_recipes[tile_id]` — no separate sets. `is_walkable_tile()` reads from the recipe dict. Client receives walkable flag via `custom_tiles` in `room_enter` and adds to its `WALKABLE` set.
-- **Boss choir overlay**: when a player hits the dungeon warden, an ethereal choir track plays for all other dungeon players, volume scaled by BFS distance from boss room. Managed via `boss_engaged` on `DungeonInstance`, choir updates sent automatically by `send_room_enter()`.
+- **Boss choir overlay**: when a player hits the dungeon warden, an ethereal choir track plays for all other dungeon players, volume scaled by BFS distance from boss room. Managed via `boss_engaged` on `DungeonInstance`, choir updates sent automatically by `send_room_enter()`. Choir track is dynamic — matched to the randomized boss music track (e.g. boss2 → music_boss2_choir.mp3), sent via `choir_track` field in `boss_choir_start` messages.
+- **Boss music is randomized**: `DUNGEON_BOSS_TRACKS` in constants.py (boss1/2/3). A random boss track is picked at dungeon creation and stored as `DungeonInstance.boss_track`, same pattern as ambient `music_track`.
 - **Movement uses server-side walk state**: walks are continuous (250ms per tile for players), not instant teleports. Server tracks `Player.walk` dict with origin, target, start_time, committed flag. A 33ms tick loop (`player_walk_tick`) handles midway commit (position + collision) and walk completion for both players and monsters. Client sends `walk` (with origin), `cancel_walk`, and `face` messages. Server responds with `reconcile` (full state snapshot) on any disagreement. Cancel window is 90ms; `LATENCY_COMP=66ms` is the leeway constant. See `docs/PLAN_WALK_SYSTEM.md` for the full design.
 - **Monster state machine**: mirrors the player pattern. `monster.state` (`"idle"`, `"walking"`, `"charging"`, `"teleporting"`, `"area"`) + `monster.state_data`. Two timing knobs: `walk_time` (seconds per tile animation, default 0.25) and `decision_time` (seconds between behavior evaluations, default 2.0). Decision timer runs continuously — if `decision_time <= walk_time`, monsters move continuously with no pause. Multi-tile walks via `distance` param on move actions. Everything runs in a single 33ms loop (`player_walk_tick`) — walk progression, behavior evaluation, warmup countdowns. Wire protocol: `monster_walk_started`/`monster_walk_complete` for smooth walks; existing `monster_moved` for instant position changes (charges/teleports).
 - **Client input events are buffered**: direction key presses/releases are pushed to `G.inputEvents` with real timestamps and drained at the start of each game tick. This ensures inter-frame key releases (e.g., rapid tapping) are detected even if the frame arrives after the cancel window.

@@ -9,13 +9,14 @@ from collections import deque
 from server.state import game
 from server.constants import (
     STAIRS_UP, EDGE_SPAWN_POINTS, DEFAULT_SPAWN, DUNGEON_MUSIC_TRACKS,
+    DUNGEON_BOSS_TRACKS,
 )
 from server.dungeon_layouts import DUNGEON_LAYOUTS
 from server.net import players_in_room, broadcast_debug
 
 
 class DungeonInstance:
-    def __init__(self, dungeon_id, layout, room_map, active_rooms, entrance_room_id, music_track):
+    def __init__(self, dungeon_id, layout, room_map, active_rooms, entrance_room_id, music_track, boss_track):
         self.dungeon_id = dungeon_id
         self.layout = layout
         self.room_map = room_map           # (col, row) -> template_id
@@ -23,6 +24,7 @@ class DungeonInstance:
         self.cleared_rooms = set()         # room_ids where all monsters killed
         self.entrance_room_id = entrance_room_id
         self.music_track = music_track
+        self.boss_track = boss_track
 
         # Stage 7: Library-managed cell tracking
         # (col, row) -> {"source": "precreated"|"custom"|"special", "entry": LibraryEntry|None, "resolved": bool}
@@ -210,6 +212,7 @@ async def create_dungeon() -> DungeonInstance | None:
     """
     layout = random.choice(DUNGEON_LAYOUTS)
     music_track = random.choice(DUNGEON_MUSIC_TRACKS)
+    boss_track = random.choice(DUNGEON_BOSS_TRACKS)
 
     # Find all active cells in layout
     active_cells = []
@@ -301,6 +304,7 @@ async def create_dungeon() -> DungeonInstance | None:
         active_rooms=active_rooms,
         entrance_room_id=entrance_room_id,
         music_track=music_track,
+        boss_track=boss_track,
     )
     instance.cell_assignments = cell_assignments
     instance.custom_slots = custom_slots
@@ -322,7 +326,7 @@ async def create_dungeon() -> DungeonInstance | None:
           f"rooms={len(active_rooms)} ({precreated_count}p/{custom_count}c/{special_count}s), "
           f"slots={num_slots} ({filled_slots}filled/{empty_slots}empty), "
           f"entrance={entrance_room_id}, boss={boss_id}, treasure={treasure_id}, "
-          f"music={music_track}, connections={len(connections)}")
+          f"music={music_track}, boss_music={boss_track}, connections={len(connections)}")
     broadcast_debug(f"Dungeon created: {layout['name']} ({len(active_rooms)} rooms, "
                     f"boss={boss_id}, treasure={treasure_id})")
 
@@ -364,7 +368,7 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
     # Boss room uses boss music instead of the dungeon's random track
     music_override = None
     if cell == instance.boss_cell:
-        music_override = "boss1"
+        music_override = instance.boss_track
 
     _resolve_room_from_entry(room_id, entry_data, exits, cell, instance.music_track, is_entrance, music_override=music_override)
 

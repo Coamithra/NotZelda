@@ -118,3 +118,5 @@ DUNGEON_MUSIC_TRACKS = [
     "dungeon1", "dungeon2", "dungeon3", "dungeon4",
     "dungeon5", "dungeon6",
 ]
+
+DUNGEON_BOSS_TRACKS = ["boss1", "boss2", "boss3"]
