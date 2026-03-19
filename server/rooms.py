@@ -108,21 +108,35 @@ def load_room_files(directory: str = "rooms"):
                     npc_y = int(tokens[3])
                     npc_sprite = tokens[4]
                     npc_rest = " ".join(tokens[5:]) if len(tokens) > 5 else ""
-                    # Split on | to separate static dialog from personality
-                    if "|" in npc_rest:
-                        npc_dialog, npc_personality = npc_rest.split("|", 1)
-                        npc_dialog = npc_dialog.strip()
-                        npc_personality = npc_personality.strip()
-                    else:
-                        npc_dialog = npc_rest
-                        npc_personality = ""
+                    # Split on | to separate: dialog | personality | gift
+                    pipe_parts = npc_rest.split("|")
+                    npc_dialog = pipe_parts[0].strip() if len(pipe_parts) > 0 else ""
+                    npc_personality = pipe_parts[1].strip() if len(pipe_parts) > 1 else ""
+                    npc_gift = None
+                    if len(pipe_parts) > 2:
+                        gift_str = pipe_parts[2].strip()
+                        # Format: Display Name:condition text
+                        gift_parts = gift_str.split(":", 1)
+                        if len(gift_parts) == 2:
+                            display_name = gift_parts[0].strip()
+                            # Auto-generate flag: gift_{room}_{npc}_{item}
+                            norm = lambda s: s.lower().replace(" ", "_")
+                            flag = f"gift_{norm(room_id)}_{norm(npc_name)}_{norm(display_name)}"
+                            npc_gift = {
+                                "flag": flag,
+                                "display_name": display_name,
+                                "condition": gift_parts[1].strip(),
+                            }
                     if room_id not in game.guards:
                         game.guards[room_id] = []
-                    game.guards[room_id].append({
+                    guard_data = {
                         "name": npc_name, "x": npc_x, "y": npc_y,
                         "sprite": npc_sprite, "dialog": npc_dialog,
                         "personality": npc_personality,
-                    })
+                    }
+                    if npc_gift:
+                        guard_data["gift"] = npc_gift
+                    game.guards[room_id].append(guard_data)
                 elif tokens[0] == "monster" and len(tokens) >= 4:
                     kind = tokens[1]
                     mx = int(tokens[2])

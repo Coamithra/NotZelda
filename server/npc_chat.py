@@ -14,7 +14,7 @@ import time
 from collections import defaultdict
 
 from server.state import game
-from server.net import broadcast_to_room, players_in_room, log_event
+from server.net import broadcast_to_room, players_in_room, log_event, send_to
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -28,6 +28,19 @@ NPC_API_TIMEOUT = 10.0      # API is faster
 MAX_HISTORY = 10            # conversation turns to remember per player-NPC pair
 NPC_CHAT_COOLDOWN = 3.0     # seconds between NPC chat messages per player
 GUARD_SUMMON_COOLDOWN = 60.0  # seconds between guard summons per room
+
+# ---------------------------------------------------------------------------
+# NPC gift item effects — server-side logic keyed by display name.
+# Gift definitions (display_name, condition) are data-driven from .room files.
+# The gift tracking flag is auto-generated as gift_{room}_{npc}_{item}.
+# "flag" below is the *gameplay* flag (checked by combat, input, etc).
+# ---------------------------------------------------------------------------
+
+GIFT_EFFECTS = {
+    "Sword": {"effect": "sword", "flag": "has_sword"},
+    "Heart Container": {"effect": "heart"},
+    # Items without an entry here get a generic "You obtained X!" message.
+}
 
 # ---------------------------------------------------------------------------
 # Conversation history — maps (player_name, npc_name) -> list of messages
@@ -127,7 +140,8 @@ Players are adventurers who explore this world, fight monsters with swords, and 
 seek to lift the curse on Princess Amara."""
 
 
-def _build_system_prompt(guard: dict, room_id: str, player_name: str, player_desc: str) -> str:
+def _build_system_prompt(guard: dict, room_id: str, player_name: str, player_desc: str,
+                         player_flags: set | None = None) -> str:
     """Build a system prompt for an NPC conversation."""
     room = game.rooms.get(room_id, {})
     room_name = room.get("name", room_id)
@@ -137,6 +151,32 @@ def _build_system_prompt(guard: dict, room_id: str, player_name: str, player_des
     if not personality:
         # Generic fallback based on sprite type
         personality = f"A {guard['sprite']} who lives in this area."
+
+    # Gift section — if NPC has an item to give (defined in .room file)
+    gift_section = ""
+    gift = guard.get("gift")
+    if gift:
+        prompt_name = "a " + gift["display_name"].lower()
+        # Check both the gift tracking flag and any gameplay flag
+        already_has = bool(player_flags and gift["flag"] in player_flags)
+        if not already_has and player_flags:
+            effect_info = GIFT_EFFECTS.get(gift["display_name"], {})
+            gameplay_flag = effect_info.get("flag") if isinstance(effect_info, dict) else None
+            if gameplay_flag and gameplay_flag in player_flags:
+                already_has = True
+        if already_has:
+            gift_section = f"""
+
+SPECIAL ITEM: This adventurer already carries {prompt_name} you gave them. \
+You have nothing left to give."""
+        else:
+            gift_section = f"""
+
+SPECIAL ITEM: You have {prompt_name} you can give to a deserving adventurer.
+Condition: {gift['condition']}
+To give it, include [GIVE_ITEM] at the END of your response after your dialog.
+Do NOT give it too easily. The adventurer must genuinely earn it through conversation.
+Do NOT mention the tag in your speech. Example: Take this, you've earned it! [GIVE_ITEM]"""
 
     return f"""\
 You are {guard['name']}, an NPC in a fantasy adventure game.
@@ -161,7 +201,8 @@ Rules:
 - You may use the adventurer's name when addressing them.
 - If the adventurer is being rude, threatening, hostile, or insulting toward you, you can call \
 for armed guards by including [CALL_GUARDS] at the end of your response. Only do this when \
-genuinely provoked, not for playful banter. Example: Guards! Seize this scoundrel! [CALL_GUARDS]"""
+genuinely provoked, not for playful banter. Example: Guards! Seize this scoundrel! [CALL_GUARDS]\
+{gift_section}"""
 
 
 # ---------------------------------------------------------------------------
@@ -285,8 +326,10 @@ async def handle_npc_chat(player, guard: dict, text: str):
     if len(_conversations[conv_key]) > MAX_HISTORY * 2:
         _conversations[conv_key] = _conversations[conv_key][-MAX_HISTORY * 2:]
 
-    # Build system prompt
-    system = _build_system_prompt(guard, player.room, player.name, player.description or "a wandering adventurer")
+    # Build system prompt (pass player flags so gift prompts can check inventory)
+    system = _build_system_prompt(guard, player.room, player.name,
+                                  player.description or "a wandering adventurer",
+                                  player.flags)
 
     # Call LLM
     t0 = time.monotonic()
@@ -306,15 +349,19 @@ async def handle_npc_chat(player, guard: dict, text: str):
     # Clean up response — remove quotes, truncate
     response = response.strip('"\'')
 
-    # Check for guard summon tag before truncating
+    # Check for special tags before truncating
     summon_guards = "[CALL_GUARDS]" in response
     if summon_guards:
         response = response.replace("[CALL_GUARDS]", "").strip()
 
+    give_item = "[GIVE_ITEM]" in response
+    if give_item:
+        response = response.replace("[GIVE_ITEM]", "").strip()
+
     if len(response) > 200:
         response = response[:197] + "..."
 
-    # Add NPC response to history (without the tag)
+    # Add NPC response to history (without tags)
     _conversations[conv_key].append({"role": "assistant", "content": response})
 
     # Log and broadcast NPC response
@@ -329,6 +376,60 @@ async def handle_npc_chat(player, guard: dict, text: str):
     # Spawn guards if the NPC called for them
     if summon_guards:
         await _spawn_summoned_guards(player.room, guard["x"], guard["y"], npc_name, player.name)
+
+    # Grant item if the NPC decided to give one
+    if give_item:
+        await _grant_npc_gift(player, guard)
+
+
+async def _grant_npc_gift(player, guard: dict):
+    """Grant an NPC's special item to the player (gift defined in .room file)."""
+    gift = guard.get("gift")
+    if not gift:
+        return
+    flag = gift["flag"]  # auto-generated gift tracking flag
+    if player.has_flag(flag):
+        return  # Already received this NPC's gift
+
+    display_name = gift["display_name"]
+    effect_info = GIFT_EFFECTS.get(display_name, {})
+    effect = effect_info.get("effect") if isinstance(effect_info, dict) else None
+    gameplay_flag = effect_info.get("flag") if isinstance(effect_info, dict) else None
+
+    # Check gameplay flag too (player may have gotten the item another way)
+    if gameplay_flag and player.has_flag(gameplay_flag):
+        player.grant_flag(flag)  # Mark gift as given so NPC won't try again
+        return
+
+    player.grant_flag(flag)
+    if gameplay_flag:
+        player.grant_flag(gameplay_flag)
+    log_event("NPC_GIFT", f"{guard['name']} gave {display_name} to {player.name}")
+
+    if effect == "sword":
+        # Reuse existing sword pickup animation
+        await send_to(player, {"type": "sword_obtained"})
+        await broadcast_to_room(player.room, {
+            "type": "sword_effect", "name": player.name,
+        }, exclude=player.ws)
+    else:
+        # Generic item obtained message
+        item_key = display_name.lower().replace(" ", "_")
+        await send_to(player, {
+            "type": "item_obtained",
+            "item": item_key,
+            "name": display_name,
+        })
+
+    if effect == "heart":
+        # +1 heart (2 HP), heal to new max
+        player.max_hp += 2
+        player.hp = player.max_hp
+        await send_to(player, {
+            "type": "hp_update",
+            "hp": player.hp,
+            "max_hp": player.max_hp,
+        })
 
 
 async def _spawn_summoned_guards(room_id: str, npc_x: int, npc_y: int, npc_name: str, target_player: str):

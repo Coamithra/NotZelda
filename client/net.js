@@ -732,6 +732,12 @@ function handleMessage(msg) {
       break;
     }
 
+    case "item_obtained": {
+      G.playerFlags.add("has_" + msg.item);
+      G.infoMessages.push({ text: "You obtained: " + msg.name + "!", expires: Date.now() + 5000 });
+      break;
+    }
+
     case "debug_log":
       dbg(msg.text);
       break;

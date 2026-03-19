@@ -46,17 +46,22 @@ async def smith_interact(player, guard):
     if stage == 0:
         dialog = "Well met!"
     elif stage == 1:
-        dialog = "It's dangerous to go alone \u2014 take this!"
-        player.grant_flag("has_sword")
-        player.set_quest("amara", 2)
-        await broadcast_to_room(player.room, {
-            "type": "chat", "from": guard["name"], "text": dialog,
-        })
-        await send_to(player, {"type": "sword_obtained"})
-        await broadcast_to_room(player.room, {
-            "type": "sword_effect", "name": player.name,
-        }, exclude=player.ws)
-        return
+        if player.has_flag("has_sword"):
+            # Player already got sword through dialog — just advance quest
+            dialog = "I see you already carry a fine blade. Good, you'll need it!"
+            player.set_quest("amara", 2)
+        else:
+            dialog = "It's dangerous to go alone \u2014 take this!"
+            player.grant_flag("has_sword")
+            player.set_quest("amara", 2)
+            await broadcast_to_room(player.room, {
+                "type": "chat", "from": guard["name"], "text": dialog,
+            })
+            await send_to(player, {"type": "sword_obtained"})
+            await broadcast_to_room(player.room, {
+                "type": "sword_effect", "name": player.name,
+            }, exclude=player.ws)
+            return
     else:
         dialog = "Give those monsters what they deserve!"
     await broadcast_to_room(player.room, {

@@ -507,8 +507,9 @@ function renderUI() {
 function renderHeartsHUD() {
   const heartScale = SCALE * 0.45;
   const heartW = 12 * heartScale + 2;
-  const heartStartX = CW - 3 * heartW - 14;
-  for (let i = 0; i < 3; i++) {
+  const totalHearts = Math.ceil(G.myMaxHp / 2);
+  const heartStartX = CW - totalHearts * heartW - 14;
+  for (let i = 0; i < totalHearts; i++) {
     const hpForHeart = G.myHp - i * 2;
     let state = "empty";
     if (hpForHeart >= 2) state = "full";
