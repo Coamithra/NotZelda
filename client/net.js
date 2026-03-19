@@ -196,18 +196,25 @@ function handleMessage(msg) {
 
       MusicPlayer.setRoom(msg.room_id, msg.biome, msg.music);
 
-      // Register any custom sprites/tiles sent with this room
+      // Register any custom sprites/tiles/NPC data sent with this room
       if (msg.custom_sprites) {
         for (const [kind, spriteData] of Object.entries(msg.custom_sprites)) {
-          if (!MONSTER_SPRITE_DATA[kind] && !customMonsterSprites[kind]) {
+          if (!customMonsterSprites[kind]) {
             customMonsterSprites[kind] = spriteData;
           }
         }
       }
       if (msg.custom_death_sprites) {
         for (const [kind, spriteData] of Object.entries(msg.custom_death_sprites)) {
-          if (!DEATH_SPRITE_DATA[kind] && !customDeathSprites[kind]) {
+          if (!customDeathSprites[kind]) {
             customDeathSprites[kind] = spriteData;
+          }
+        }
+      }
+      if (msg.npc_sprites) {
+        for (const [key, spriteData] of Object.entries(msg.npc_sprites)) {
+          if (!customNPCSprites[key]) {
+            customNPCSprites[key] = spriteData;
           }
         }
       }
@@ -577,14 +584,14 @@ function handleMessage(msg) {
     case "monster_spawned":
       if (msg.custom_sprites) {
         for (const [kind, spriteData] of Object.entries(msg.custom_sprites)) {
-          if (!MONSTER_SPRITE_DATA[kind] && !customMonsterSprites[kind]) {
+          if (!customMonsterSprites[kind]) {
             customMonsterSprites[kind] = spriteData;
           }
         }
       }
       if (msg.custom_death_sprites) {
         for (const [kind, spriteData] of Object.entries(msg.custom_death_sprites)) {
-          if (!DEATH_SPRITE_DATA[kind] && !customDeathSprites[kind]) {
+          if (!customDeathSprites[kind]) {
             customDeathSprites[kind] = spriteData;
           }
         }

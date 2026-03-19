@@ -8,16 +8,7 @@ The AI prompt sees these entries alongside custom (AI-generated) entries
 with no distinction.
 """
 
-from pathlib import Path
-
 from server.content_library import LibraryEntry, ContentLibrary
-from server.constants import TILE_CODES, WALKABLE_TILES, ROOM_COLS, ROOM_ROWS
-
-# ---------------------------------------------------------------------------
-# Reverse map: numeric tile ID -> 2-char string code (for room conversion)
-# ---------------------------------------------------------------------------
-
-_TILE_ID_TO_CODE = {v: k for k, v in TILE_CODES.items()}
 
 # ---------------------------------------------------------------------------
 # Precreated monsters (4)
@@ -655,33 +646,19 @@ def register_precreated_types() -> None:
                 print(f"[CONTENT] Registered tile type: {tile_id}")
 
 
-# ---------------------------------------------------------------------------
-# Room conversion: .room file -> library entry data
-# ---------------------------------------------------------------------------
+def _template_to_room_data(template: dict) -> dict:
+    """Convert a parsed dungeon template to library-compatible room data.
 
-def _convert_room_template(template: dict) -> dict:
-    """Convert a parsed dungeon template (numeric tilemap) to library-compatible data.
-
-    Input: {"name", "tilemap" (list[list[int]]), "monsters" (list[dict]), "guards"}
+    Input: {"name", "tilemap" (list[list[str]]), "monsters" (list[dict]), "guards"}
     Output: {"name", "tilemap" (list[list[str]]), "monster_placements" (list[dict])}
     """
-    # Convert numeric tilemap to string tile codes
-    str_tilemap = []
-    for row in template["tilemap"]:
-        str_row = []
-        for tile_id in row:
-            code = _TILE_ID_TO_CODE.get(tile_id, "DF")
-            str_row.append(code)
-        str_tilemap.append(str_row)
-
-    # Convert monster templates to placements
     placements = []
     for m in template.get("monsters", []):
         placements.append({"kind": m["kind"], "x": m["x"], "y": m["y"]})
 
     return {
         "name": template.get("name", "Dungeon Room"),
-        "tilemap": str_tilemap,
+        "tilemap": [list(row) for row in template["tilemap"]],
         "monster_placements": placements,
     }
 
@@ -754,7 +731,7 @@ def load_precreated_content(
         if template_id in special_rooms:
             continue
         template = dungeon_templates[template_id]
-        room_data = _convert_room_template(template)
+        room_data = _template_to_room_data(template)
 
         # Determine tags based on content
         tags = ["dungeon"]

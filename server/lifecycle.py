@@ -167,7 +167,7 @@ async def send_room_enter(player, exit_direction: str = None):
         tilemap = room["tilemap"]
         for row in tilemap:
             for tid in row:
-                if isinstance(tid, str) and tid in game.custom_tile_recipes:
+                if tid in game.custom_tile_recipes:
                     custom_tiles[tid] = game.custom_tile_recipes[tid]
 
     if custom_sprites:
@@ -176,6 +176,15 @@ async def send_room_enter(player, exit_direction: str = None):
         msg["custom_death_sprites"] = custom_death_sprites
     if custom_tiles:
         msg["custom_tiles"] = custom_tiles
+
+    # Send NPC sprites for guards in this room
+    npc_sprites = {}
+    for g in guards:
+        sprite_key = g.get("sprite", "guard")
+        if sprite_key in game.npc_sprites and sprite_key not in npc_sprites:
+            npc_sprites[sprite_key] = game.npc_sprites[sprite_key]
+    if npc_sprites:
+        msg["npc_sprites"] = npc_sprites
 
     # Attach dungeon debug info for dungeon rooms
     inst = get_dungeon_for_room(player.room) if is_dungeon else None

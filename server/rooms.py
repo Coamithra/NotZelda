@@ -3,10 +3,7 @@
 from pathlib import Path
 
 from server.state import game
-from server.constants import (
-    TILE_CODES, GRASS, STAIRS_UP, STAIRS_DOWN, DUNGEON_FLOOR,
-    EDGE_SPAWN_POINTS, DEFAULT_SPAWN,
-)
+from server.constants import EDGE_SPAWN_POINTS, DEFAULT_SPAWN
 
 
 def load_room_files(directory: str = "rooms"):
@@ -54,15 +51,15 @@ def load_room_files(directory: str = "rooms"):
             if not row_line:
                 continue
             codes = row_line.split()
-            row = [TILE_CODES.get(code, GRASS) for code in codes]
+            row = list(codes)
             # Pad or trim to 15 columns
             while len(row) < 15:
-                row.append(GRASS)
+                row.append("GR")
             row = row[:15]
             tilemap.append(row)
         # Pad or trim to 11 rows
         while len(tilemap) < 11:
-            tilemap.append([GRASS] * 15)
+            tilemap.append(["GR"] * 15)
         tilemap = tilemap[:11]
 
         # Build spawn points from exits
@@ -75,9 +72,9 @@ def load_room_files(directory: str = "rooms"):
         sd_pos = None
         for ry, row in enumerate(tilemap):
             for rx, tile in enumerate(row):
-                if tile == STAIRS_UP and su_pos is None:
+                if tile == "SU" and su_pos is None:
                     su_pos = (rx, ry)
-                elif tile == STAIRS_DOWN and sd_pos is None:
+                elif tile == "SD" and sd_pos is None:
                     sd_pos = (rx, ry)
         if su_pos:
             spawn_points["down"] = su_pos   # entering from above -> land at stairs up
@@ -188,13 +185,13 @@ def load_dungeon_templates(directory: str = "rooms/dungeon1", type_id: str = "d1
             if not row_line:
                 continue
             codes = row_line.split()
-            row = [TILE_CODES.get(code, DUNGEON_FLOOR) for code in codes]
+            row = list(codes)
             while len(row) < 15:
-                row.append(DUNGEON_FLOOR)
+                row.append("DF")
             row = row[:15]
             tilemap.append(row)
         while len(tilemap) < 11:
-            tilemap.append([DUNGEON_FLOOR] * 15)
+            tilemap.append(["DF"] * 15)
         tilemap = tilemap[:11]
 
         guards = []

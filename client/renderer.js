@@ -8,9 +8,8 @@ const ATTACK_FRAME_MS = 150;
 const ATTACK_FRAMES = 2;
 const DYING_PLAYER_FRAME_MS = 200;
 
-// matches server WALKABLE_TILES (numeric IDs + string tile codes)
-const WALKABLE = new Set([0, 1, 2, 7, 8, 9, 10, 15, 16, 19, 20, 22, 26, 27, 28, 30, 33,
-  "GR", "ST", "WD", "FL", "DT", "SU", "SD", "DR", "SW", "DF", "MF", "CF", 37, 38]);
+// Walkable set — populated from server tile data on room enter
+const WALKABLE = new Set();
 
 function renderRoom() {
   if (!G.currentRoom) return;

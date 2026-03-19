@@ -1,8 +1,7 @@
 """Centralized mutable game state — single GameState instance shared by all modules."""
 
+import json
 from pathlib import Path
-
-from server.constants import WALKABLE_TILES
 
 
 class GameState:
@@ -14,23 +13,16 @@ class GameState:
         self.dungeon_templates = {}  # type_id -> {template_id: {name, tilemap, guards, monsters}}
 
         # Monster type registry (built-in + AI-generated)
-        self.monster_stats = {
-            "slime":      {"hp": 1, "walk_time": 0.25, "decision_time": 2.0, "damage": 1},
-            "bat":        {"hp": 1, "walk_time": 0.2,  "decision_time": 1.0, "damage": 1},
-            "scorpion":   {"hp": 2, "walk_time": 0.25, "decision_time": 2.0, "damage": 2},
-            "skeleton":   {"hp": 2, "walk_time": 0.25, "decision_time": 2.0, "damage": 3},
-            "swamp_blob": {"hp": 1, "walk_time": 0.35, "decision_time": 2.0, "damage": 1},
-        }
+        self.monster_stats = {}
+        self.monster_behaviors = {}
 
         # Custom content registries (AI-generated, Stage 2+)
         self.custom_sprites = {}         # kind -> sprite data dict
         self.custom_death_sprites = {}   # kind -> death sprite data dict
         self.custom_tile_recipes = {}    # tile_id -> recipe dict {colors, layers, walkable}
-        self.monster_behaviors = {       # kind -> behavior dict
-            "slime": {"rules": [
-                {"if": "always", "do": "move", "direction": "random", "distance": 2},
-            ]},
-        }
+
+        # NPC sprite data (loaded from data/npc_sprites.json)
+        self.npc_sprites = {}
 
         # Content libraries (per dungeon type)
         # type_id -> {"rooms": ContentLibrary, "monsters": ContentLibrary, "tiles": ContentLibrary}
@@ -64,11 +56,46 @@ class GameState:
         self.log_file = Path(__file__).parent.parent / "event_log.txt"
 
     def is_walkable_tile(self, tile) -> bool:
-        """Check if a tile ID (numeric or string) is walkable."""
-        if tile in WALKABLE_TILES:
-            return True
+        """Check if a tile code (string) is walkable."""
         recipe = self.custom_tile_recipes.get(tile)
         return recipe is not None and recipe.get("walkable", False)
+
+    def load_builtin_tiles(self):
+        """Load built-in tile definitions from data/builtin_tiles.json."""
+        path = Path(__file__).parent.parent / "data" / "builtin_tiles.json"
+        if not path.exists():
+            print("[STATE] WARNING: data/builtin_tiles.json not found")
+            return
+        tiles = json.loads(path.read_text(encoding="utf-8"))
+        for tile_id, recipe in tiles.items():
+            self.custom_tile_recipes[tile_id] = recipe
+        print(f"[STATE] Loaded {len(tiles)} built-in tile recipes")
+
+    def load_builtin_monsters(self):
+        """Load built-in monster definitions from data/builtin_monsters.json."""
+        from server.validation import register_monster_type
+        path = Path(__file__).parent.parent / "data" / "builtin_monsters.json"
+        if not path.exists():
+            print("[STATE] WARNING: data/builtin_monsters.json not found")
+            return
+        monsters = json.loads(path.read_text(encoding="utf-8"))
+        for mdata in monsters:
+            kind = mdata["kind"]
+            ok, errors = register_monster_type(mdata)
+            if ok:
+                print(f"[STATE] Registered built-in monster: {kind}")
+            else:
+                print(f"[STATE] WARNING: Failed to register {kind}: {errors}")
+        print(f"[STATE] Loaded {len(monsters)} built-in monsters")
+
+    def load_npc_sprites(self):
+        """Load NPC sprite definitions from data/npc_sprites.json."""
+        path = Path(__file__).parent.parent / "data" / "npc_sprites.json"
+        if not path.exists():
+            print("[STATE] WARNING: data/npc_sprites.json not found")
+            return
+        self.npc_sprites = json.loads(path.read_text(encoding="utf-8"))
+        print(f"[STATE] Loaded {len(self.npc_sprites)} NPC sprites")
 
 
 game = GameState()

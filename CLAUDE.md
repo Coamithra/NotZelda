@@ -33,7 +33,10 @@ When pushing to git make sure to update CLAUDE.md first!
 ├── rooms/                 # .room data files + dungeon template subdirs
 │   ├── dungeon1/          # d1 (Dark Dungeon) room templates (64 + boss + treasure)
 │   └── dungeon2/          # d2 (Water Temple) room templates (7 + boss + treasure)
-├── data/                  # Runtime data (libraries, API usage) — gitignored
+├── data/                  # Game data files + runtime libraries
+│   ├── builtin_tiles.json     # All 42 tile definitions (loaded at startup)
+│   ├── builtin_monsters.json  # 5 overworld monster definitions (loaded at startup)
+│   └── npc_sprites.json       # 14 NPC sprite definitions (loaded at startup)
 ├── tools/                 # Dev utilities (renderers, content viewer, tests)
 ├── docs/                  # Architecture docs, generated images, planning docs
 ├── deploy/                # Nginx config, redirect page
@@ -49,13 +52,14 @@ When pushing to git make sure to update CLAUDE.md first!
 - **Tick loops are synchronous** with message batching — no `await` mid-tick. Messages collected as tuples, flushed after the full tick. This prevents dungeon teardown crashes.
 - **Room transitions**: player is temporarily removed from `game.players` during `do_room_transition()` so tick loops can't target them mid-swap. Re-added in `finally` block.
 - **Dungeon room resolution is synchronous** — no JIT AI generation. Custom rooms resolve from the library pool or fall back to precreated.
-- **Dungeon tilemaps use string tile codes** (`"DW"`, `"DF"`, etc.) not numeric IDs.
+- **All content is data-driven**: Tiles, monsters, and NPC sprites are loaded from JSON files in `data/` at startup (`builtin_tiles.json`, `builtin_monsters.json`, `npc_sprites.json`). No hardcoded tile IDs, sprite data, or monster stats in code. All tilemaps use 2-char string codes (`"GR"`, `"DW"`, etc.). Server sends tile recipes, monster sprites, and NPC sprites to client via `room_enter` messages. Client registries: `customTiles`, `customMonsterSprites`, `customDeathSprites`, `customNPCSprites`. The `WALKABLE` set on the client starts empty and is populated from server data on each room enter.
+- **Tile system**: `server/constants.py` has no tile constants — all tile definitions live in `data/builtin_tiles.json`. `game.custom_tile_recipes` holds ALL tile recipes (built-in + AI-generated). `is_walkable_tile()` checks only `custom_tile_recipes`. Room files store 2-char string codes directly.
 - **All rooms loaded from `.room` files** — no hardcoded room definitions in Python.
 - **AI generation uses Claude CLI by default** (`AI_BACKEND=cli`), not the API. The `.env` must NOT set `AI_BACKEND=api`.
 - **API path uses prompt caching** — system prompts are marked with `cache_control: {"type": "ephemeral"}` for 5-minute caching. `UsageTracker` tracks cache write/read tokens separately with accurate cost multipliers (1.25x write, 0.10x read).
 - **AI prompt templates** are in `server/prompts/*.txt` — edit the text files directly, no Python changes needed.
 - **Sprites/tiles use `[colorKey, x, y, w, h]` rect layer format** everywhere (client + server validation + AI prompts).
-- **Custom tile properties** (walkable, etc.) live in `custom_tile_recipes[tile_id]` — no separate sets. `is_walkable_tile()` reads from the recipe dict. Client receives walkable flag via `custom_tiles` in `room_enter` and adds to its `WALKABLE` set.
+- **Tile properties** (walkable, etc.) live in `custom_tile_recipes[tile_id]` — no separate sets. `is_walkable_tile()` reads from the recipe dict. Client receives walkable flag via `custom_tiles` in `room_enter` and adds to its `WALKABLE` set. NPC sprites are sent via `npc_sprites` field in `room_enter`.
 - **Boss choir overlay**: when a player hits any boss monster (`is_boss` flag in stats), an ethereal choir track plays for all other dungeon players, volume scaled by BFS distance from boss room. Managed via `boss_engaged` on `DungeonInstance` (reset to `False` on boss death), choir updates sent automatically by `send_room_enter()`. Choir track is dynamic — matched to the randomized boss music track (e.g. boss2 → music_boss2_choir.mp3), sent via `choir_track` field in `boss_choir_start` messages.
 - **Multi-dungeon architecture**: Multiple dungeon types supported via `server/dungeon_types.py` `DUNGEON_TYPES` dict. Each type config has: layouts, music/boss tracks, biome, theme (for AI generation), exit room, wall tile, entrance exit, boss/treasure template IDs, and optional per-type library capacities (`room_capacity`, `monster_capacity`, `tile_capacity`). State: `game.active_dungeons` (type_id → DungeonInstance), `game.room_to_dungeon` (room_id → type_id for O(1) lookup), `game.content_libraries` (type_id → {rooms, monsters, tiles}), `game.deprecated_content` (type_id → {monsters, tiles}). Use `get_dungeon_for_room(room_id)` to find the instance for any room. Room IDs are `{type_id}_{col}_{row}` (e.g. `d1_3_3`, `d2_0_1`). Dungeon entrance exits in `.room` files map to types via `ENTRANCE_TO_TYPE`. Content libraries are per-type with files at `data/{type_id}_*_library.json`. Precreated content is per-type via `PRECREATED_CONTENT` dict in `dungeon_content.py`.
 - **Dungeon types**: d1 = Dark Dungeon (8x8 layouts, 64 rooms, DW/DF tiles, entrance in `clearing`), d2 = Water Temple (3x3 layouts, 7 rooms, TW/TF/CR tiles, entrance in `forest_path`). Wall tile for unused exits is configurable per type (`wall_tile` in config).

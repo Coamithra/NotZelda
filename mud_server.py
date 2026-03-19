@@ -27,7 +27,6 @@ import websockets
 from server import behavior_engine
 from server.state import game
 from server.constants import (
-    STAIRS_UP, STAIRS_DOWN,
     DIRECTIONS, ROOM_COLS, ROOM_ROWS,
     WALK_TIME, CANCEL_TIME, LATENCY_COMP,
     STARTING_ROOM, PLAYER_MAX_HP,
@@ -187,11 +186,11 @@ async def handle_walk(player, direction: str, origin_x: int, origin_y: int):
     tile = tilemap[to_y][to_x]
 
     # Stairs
-    if tile == STAIRS_UP and "up" in room["exits"]:
+    if tile == "SU" and "up" in room["exits"]:
         player.walk = None
         await do_room_transition(player, "up")
         return
-    if tile == STAIRS_DOWN and "down" in room["exits"]:
+    if tile == "SD" and "down" in room["exits"]:
         player.walk = None
         await do_room_transition(player, "down")
         return
@@ -535,6 +534,9 @@ async def process_request(path, request_headers):
 # ---------------------------------------------------------------------------
 
 async def main():
+    game.load_builtin_tiles()
+    game.load_builtin_monsters()
+    game.load_npc_sprites()
     load_room_files()
     register_precreated_types()
     register_town_guard()

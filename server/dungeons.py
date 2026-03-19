@@ -7,7 +7,7 @@ import time
 from collections import deque
 
 from server.state import game
-from server.constants import STAIRS_UP, EDGE_SPAWN_POINTS, DEFAULT_SPAWN
+from server.constants import EDGE_SPAWN_POINTS, DEFAULT_SPAWN
 from server.net import players_in_room, broadcast_debug
 
 
@@ -193,9 +193,9 @@ def _resolve_room_from_entry(room_id, entry_data, exits, cell, music_track, is_e
         for r in (4, 5, 6):
             tilemap[r][14] = wall_tile
 
-    # Entrance gets stairs up (use numeric constant — client knows how to render it)
+    # Entrance gets stairs up
     if is_entrance:
-        tilemap[9][7] = STAIRS_UP
+        tilemap[9][7] = "SU"
 
     # Build spawn points
     spawn_points = {"default": DEFAULT_SPAWN}
@@ -205,7 +205,7 @@ def _resolve_room_from_entry(room_id, entry_data, exits, cell, music_track, is_e
     # Scan for stairs (numeric or string)
     for ry, trow in enumerate(tilemap):
         for rx, tile in enumerate(trow):
-            if tile == STAIRS_UP or tile == "SU":
+            if tile == "SU":
                 spawn_points["down"] = (rx, ry)
 
     game.rooms[room_id] = {
@@ -316,7 +316,7 @@ async def create_dungeon(type_id) -> DungeonInstance | None:
     connections, boss_cell, treasure_cell = _build_dungeon_path(active_cells, entrance)
 
     # Override boss/treasure cells with special templates
-    from server.dungeon_content import _convert_room_template
+    from server.dungeon_content import _template_to_room_data
     from server.content_library import LibraryEntry
 
     type_templates = game.dungeon_templates.get(type_id, {})
@@ -326,7 +326,7 @@ async def create_dungeon(type_id) -> DungeonInstance | None:
     for special_id, special_cell in [(boss_template_id, boss_cell), (treasure_template_id, treasure_cell)]:
         template = type_templates.get(special_id)
         if template:
-            room_data = _convert_room_template(template)
+            room_data = _template_to_room_data(template)
             entry = LibraryEntry(
                 id=special_id, content_type="room",
                 tags=["dungeon", "special"], created_at=time.time(),

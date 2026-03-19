@@ -6,6 +6,9 @@ local_ignore/
 event_log.txt
 .env
 server.env
-data/
+data/*
+!data/builtin_tiles.json
+!data/builtin_monsters.json
+!data/npc_sprites.json
 tmp_prompts/
 desktop.ini

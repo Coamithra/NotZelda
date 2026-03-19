@@ -17,11 +17,11 @@ function drawLayers(ctx, px, py, layers, S, colorMap) {
 }
 
 // ---------------------------------------------------------------------------
-// NPC sprites — data-driven
+// NPC sprites — data-driven from server
 // ---------------------------------------------------------------------------
 function drawNPCSprite(ctx, px, py, spriteKey, S) {
-  const sprite = NPC_SPRITE_DATA[spriteKey];
-  if (!sprite) { drawNPCSprite(ctx, px, py, "guard", S); return; }
+  const sprite = customNPCSprites[spriteKey];
+  if (!sprite) { if (spriteKey !== "guard") drawNPCSprite(ctx, px, py, "guard", S); return; }
 
   const effects = sprite.effects || {};
   let drawY = py;
@@ -52,38 +52,15 @@ function drawNPCSprite(ctx, px, py, spriteKey, S) {
   }
 }
 
-const NPC_SPRITES = {
-  guard: "guard", smith: "smith", priest: "priest", barmaid: "barmaid",
-  amara: "amara", witch: "witch", ghost: "ghost", ghost_knight: "ghost_knight",
-  ranger: "ranger", farmer: "farmer", nomad: "nomad", merchant: "merchant",
-  elder: "elder", fisher: "fisher",
-};
-
 function drawNPC(ctx, px, py, sprite, S) {
-  drawNPCSprite(ctx, px, py, NPC_SPRITES[sprite] || "guard", S);
+  drawNPCSprite(ctx, px, py, sprite || "guard", S);
 }
 
-// Backward-compatible named exports for direct calls
-function drawGuard(ctx, px, py, S)       { drawNPCSprite(ctx, px, py, "guard", S); }
-function drawSmith(ctx, px, py, S)       { drawNPCSprite(ctx, px, py, "smith", S); }
-function drawPriest(ctx, px, py, S)      { drawNPCSprite(ctx, px, py, "priest", S); }
-function drawBarmaid(ctx, px, py, S)     { drawNPCSprite(ctx, px, py, "barmaid", S); }
-function drawWitch(ctx, px, py, S)       { drawNPCSprite(ctx, px, py, "witch", S); }
-function drawGhost(ctx, px, py, S)       { drawNPCSprite(ctx, px, py, "ghost", S); }
-function drawGhostKnight(ctx, px, py, S) { drawNPCSprite(ctx, px, py, "ghost_knight", S); }
-function drawRanger(ctx, px, py, S)      { drawNPCSprite(ctx, px, py, "ranger", S); }
-function drawFarmer(ctx, px, py, S)      { drawNPCSprite(ctx, px, py, "farmer", S); }
-function drawNomad(ctx, px, py, S)       { drawNPCSprite(ctx, px, py, "nomad", S); }
-function drawMerchant(ctx, px, py, S)    { drawNPCSprite(ctx, px, py, "merchant", S); }
-function drawElder(ctx, px, py, S)       { drawNPCSprite(ctx, px, py, "elder", S); }
-function drawFisher(ctx, px, py, S)      { drawNPCSprite(ctx, px, py, "fisher", S); }
-function drawAmara(ctx, px, py, S)       { drawNPCSprite(ctx, px, py, "amara", S); }
-
 // ---------------------------------------------------------------------------
-// Monster sprites — data-driven
+// Monster sprites — data-driven from server
 // ---------------------------------------------------------------------------
 function drawMonsterSprite(ctx, px, py, kind, hopFrame, S) {
-  const sprite = MONSTER_SPRITE_DATA[kind] || customMonsterSprites[kind];
+  const sprite = customMonsterSprites[kind];
   if (!sprite) return;
   const frame = hopFrame % sprite.frames.length;
   const yOffset = sprite.yOff ? sprite.yOff[frame] * S : 0;
@@ -91,10 +68,10 @@ function drawMonsterSprite(ctx, px, py, kind, hopFrame, S) {
 }
 
 function drawMonsterDeath(ctx, px, py, kind, deathFrame, S) {
-  const sprite = DEATH_SPRITE_DATA[kind] || customDeathSprites[kind];
+  const sprite = customDeathSprites[kind];
   if (!sprite) {
     // Generate a generic splat from the monster's primary color
-    const monsterSprite = MONSTER_SPRITE_DATA[kind] || customMonsterSprites[kind];
+    const monsterSprite = customMonsterSprites[kind];
     if (!monsterSprite) return;
     const clr = monsterSprite.colors[Object.keys(monsterSprite.colors)[0]] || "#888";
     const genericFrames = [
@@ -123,18 +100,6 @@ function drawMonsterDeath(ctx, px, py, kind, deathFrame, S) {
   }
 }
 
-// Named exports for backward compatibility
-function drawSlime(ctx, px, py, hopFrame, S)      { drawMonsterSprite(ctx, px, py, "slime", hopFrame, S); }
-function drawBat(ctx, px, py, hopFrame, S)        { drawMonsterSprite(ctx, px, py, "bat", hopFrame, S); }
-function drawScorpion(ctx, px, py, hopFrame, S)   { drawMonsterSprite(ctx, px, py, "scorpion", hopFrame, S); }
-function drawSkeleton(ctx, px, py, hopFrame, S)   { drawMonsterSprite(ctx, px, py, "skeleton", hopFrame, S); }
-function drawSwampBlob(ctx, px, py, hopFrame, S)  { drawMonsterSprite(ctx, px, py, "swamp_blob", hopFrame, S); }
-
-function drawSlimeDeath(ctx, px, py, deathFrame, S)      { drawMonsterDeath(ctx, px, py, "slime", deathFrame, S); }
-function drawBatDeath(ctx, px, py, deathFrame, S)        { drawMonsterDeath(ctx, px, py, "bat", deathFrame, S); }
-function drawScorpionDeath(ctx, px, py, deathFrame, S)   { drawMonsterDeath(ctx, px, py, "scorpion", deathFrame, S); }
-function drawSkeletonDeath(ctx, px, py, deathFrame, S)   { drawMonsterDeath(ctx, px, py, "skeleton", deathFrame, S); }
-function drawSwampBlobDeath(ctx, px, py, deathFrame, S)  { drawMonsterDeath(ctx, px, py, "swamp_blob", deathFrame, S); }
 
 // ---------------------------------------------------------------------------
 // Player sprites — data-driven with dynamic shirt color
