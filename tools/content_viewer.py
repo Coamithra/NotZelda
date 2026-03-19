@@ -94,12 +94,26 @@ TILE_CAPACITY = TILE_LIBRARY_CAPACITY
 ROOM_CAPACITY = ROOM_LIBRARY_CAPACITY
 
 # ---------------------------------------------------------------------------
-# Libraries — aliases to game.monster_library / tile_library / room_library
+# Libraries — stored in game.content_libraries["d1"] (multi-dungeon structure)
 # ---------------------------------------------------------------------------
 
 from server.state import game
 
+# Dungeon type this viewer operates on
+DUNGEON_TYPE = "d1"
+
 generate_lock = asyncio.Lock()
+
+
+def _get_libs():
+    """Return (monster_lib, tile_lib, room_lib) for the active dungeon type."""
+    libs = game.content_libraries[DUNGEON_TYPE]
+    return libs["monsters"], libs["tiles"], libs["rooms"]
+
+
+def _get_deprecated():
+    """Return the deprecated content dict for the active dungeon type."""
+    return game.deprecated_content.setdefault(DUNGEON_TYPE, {"monsters": set(), "tiles": set()})
 
 
 def load_libraries():
@@ -107,26 +121,45 @@ def load_libraries():
     from server.rooms import load_dungeon_templates
 
     # Initialize libraries on the shared GameState singleton
-    game.monster_library = ContentLibrary("monster", MONSTER_CAPACITY)
-    game.tile_library = ContentLibrary("tile", TILE_CAPACITY)
-    game.room_library = ContentLibrary("room", ROOM_CAPACITY)
+    monster_lib = ContentLibrary("monster", MONSTER_CAPACITY)
+    tile_lib = ContentLibrary("tile", TILE_CAPACITY)
+    room_lib = ContentLibrary("room", ROOM_CAPACITY)
+    game.content_libraries[DUNGEON_TYPE] = {
+        "monsters": monster_lib,
+        "tiles": tile_lib,
+        "rooms": room_lib,
+    }
+
+    # Initialize deprecated content tracking
+    game.deprecated_content.setdefault(DUNGEON_TYPE, {"monsters": set(), "tiles": set()})
 
     # Load dungeon templates (needed for room library entries)
-    load_dungeon_templates()
+    load_dungeon_templates("rooms/dungeon1", DUNGEON_TYPE)
 
     # Add permanent precreated content first
-    load_precreated_content(game.monster_library, game.tile_library, game.room_library, game.dungeon_templates)
+    load_precreated_content(
+        monster_lib, tile_lib, room_lib,
+        game.dungeon_templates.get(DUNGEON_TYPE, {}),
+        special_rooms={"d1_boss", "d1_treasure"},
+    )
 
     # Then load custom entries from JSON into remaining slots
-    game.monster_library.load_custom(DATA_DIR / "monster_library.json")
-    game.tile_library.load_custom(DATA_DIR / "tile_library.json")
-    game.room_library.load_custom(DATA_DIR / "room_library.json")
+    # Try d1-prefixed paths first, fall back to legacy paths
+    for lib, d1_name, legacy_name in [
+        (monster_lib, "d1_monster_library.json", "monster_library.json"),
+        (tile_lib, "d1_tile_library.json", "tile_library.json"),
+        (room_lib, "d1_room_library.json", "room_library.json"),
+    ]:
+        d1_path = DATA_DIR / d1_name
+        legacy_path = DATA_DIR / legacy_name
+        lib.load_custom(d1_path if d1_path.exists() else legacy_path)
 
 
 def save_libraries():
-    game.monster_library.save(DATA_DIR / "monster_library.json")
-    game.tile_library.save(DATA_DIR / "tile_library.json")
-    game.room_library.save(DATA_DIR / "room_library.json")
+    monster_lib, tile_lib, room_lib = _get_libs()
+    monster_lib.save(DATA_DIR / "d1_monster_library.json")
+    tile_lib.save(DATA_DIR / "d1_tile_library.json")
+    room_lib.save(DATA_DIR / "d1_room_library.json")
 
 
 # ---------------------------------------------------------------------------
@@ -135,6 +168,9 @@ def save_libraries():
 
 def handle_libraries():
     """Return JSON with stats + all real entries per library."""
+    monster_lib, tile_lib, room_lib = _get_libs()
+    deprecated = _get_deprecated()
+
     def lib_json(lib):
         return {
             "capacity": lib.capacity,
@@ -155,7 +191,7 @@ def handle_libraries():
 
     # Build deprecated entries with ref counts
     dep_monsters = []
-    for mid in game.deprecated_monsters:
+    for mid in deprecated["monsters"]:
         dep_monsters.append({
             "id": mid,
             "deprecated": True,
@@ -163,7 +199,7 @@ def handle_libraries():
         })
 
     dep_tiles = []
-    for tid in game.deprecated_tiles:
+    for tid in deprecated["tiles"]:
         dep_tiles.append({
             "id": tid,
             "deprecated": True,
@@ -171,9 +207,9 @@ def handle_libraries():
         })
 
     result = {
-        "monsters": lib_json(game.monster_library),
-        "tiles": lib_json(game.tile_library),
-        "rooms": lib_json(game.room_library),
+        "monsters": lib_json(monster_lib),
+        "tiles": lib_json(tile_lib),
+        "rooms": lib_json(room_lib),
     }
     result["deprecated_monsters"] = dep_monsters
     result["deprecated_tiles"] = dep_tiles
@@ -185,6 +221,8 @@ async def handle_generate(body: bytes) -> tuple[str, int]:
     """Generate a new room via AI and register results into libraries."""
     try:
         async with generate_lock:
+            monster_lib, tile_lib, room_lib = _get_libs()
+            deprecated = _get_deprecated()
             params = json.loads(body)
             theme = params.get("theme", "dungeon")
             difficulty = int(params.get("difficulty", 5))
@@ -192,17 +230,17 @@ async def handle_generate(body: bytes) -> tuple[str, int]:
             # Build existing content summaries (exclude deprecated)
             existing_monsters = [
                 {"kind": e.id, "tags": e.tags}
-                for e in game.monster_library.real_entries
-                if e.id not in game.deprecated_monsters
+                for e in monster_lib.real_entries
+                if e.id not in deprecated["monsters"]
             ]
             existing_tiles = [
                 {"id": e.id, "walkable": e.data.get("walkable", False), "tags": e.tags}
-                for e in game.tile_library.real_entries
-                if e.id not in game.deprecated_tiles
+                for e in tile_lib.real_entries
+                if e.id not in deprecated["tiles"]
             ]
 
             existing_room_names = [
-                e.data.get("name", e.id) for e in game.room_library.real_entries
+                e.data.get("name", e.id) for e in room_lib.real_entries
             ]
 
             try:
@@ -211,13 +249,13 @@ async def handle_generate(body: bytes) -> tuple[str, int]:
                     difficulty=difficulty,
                     existing_monsters=existing_monsters,
                     existing_tiles=existing_tiles,
-                    monster_library_full=game.monster_library.is_full,
-                    tile_library_full=game.tile_library.is_full,
+                    monster_library_full=monster_lib.is_full,
+                    tile_library_full=tile_lib.is_full,
                     existing_room_names=existing_room_names,
-                    monster_library_count=game.monster_library.real_count,
-                    monster_library_capacity=game.monster_library.capacity,
-                    tile_library_count=game.tile_library.real_count,
-                    tile_library_capacity=game.tile_library.capacity,
+                    monster_library_count=monster_lib.real_count,
+                    monster_library_capacity=monster_lib.capacity,
+                    tile_library_count=tile_lib.real_count,
+                    tile_library_capacity=tile_lib.capacity,
                 )
             except Exception as e:
                 tb = _traceback.format_exc()
@@ -238,7 +276,7 @@ async def handle_generate(body: bytes) -> tuple[str, int]:
                     created_at=time.time(),
                     data=m,
                 )
-                game.monster_library.add(entry)
+                monster_lib.add(entry)
 
             # Register new tiles
             for t in result.get("new_tiles", []):
@@ -249,7 +287,7 @@ async def handle_generate(body: bytes) -> tuple[str, int]:
                     created_at=time.time(),
                     data=t,
                 )
-                game.tile_library.add(entry)
+                tile_lib.add(entry)
 
             # Register the room itself
             room_name = result.get("name", "Unknown Room")
@@ -257,7 +295,7 @@ async def handle_generate(body: bytes) -> tuple[str, int]:
             # Deduplicate room ID
             base_id = room_id
             counter = 1
-            while game.room_library.get_by_id(room_id):
+            while room_lib.get_by_id(room_id):
                 counter += 1
                 room_id = f"{base_id}_{counter}"
 
@@ -268,7 +306,7 @@ async def handle_generate(body: bytes) -> tuple[str, int]:
                 created_at=time.time(),
                 data=result,
             )
-            game.room_library.add(room_entry)
+            room_lib.add(room_entry)
 
             save_libraries()
             return json.dumps(result), 200
@@ -282,14 +320,16 @@ async def handle_generate_monster(body: bytes) -> tuple[str, int]:
     """Generate a single monster (sprite + behavior) and register it."""
     try:
         async with generate_lock:
+            monster_lib, _, _ = _get_libs()
+            deprecated = _get_deprecated()
             params = json.loads(body)
             theme = params.get("theme", "dungeon")
             difficulty = int(params.get("difficulty", 5))
 
             existing_monsters = [
                 {"kind": e.id, "tags": e.tags}
-                for e in game.monster_library.real_entries
-                if e.id not in game.deprecated_monsters
+                for e in monster_lib.real_entries
+                if e.id not in deprecated["monsters"]
             ]
 
             # Step 1: Generate design (kind, tags, stats, behavior)
@@ -320,7 +360,7 @@ async def handle_generate_monster(body: bytes) -> tuple[str, int]:
                 created_at=time.time(),
                 data=design,
             )
-            game.monster_library.add(entry)
+            monster_lib.add(entry)
             save_libraries()
             return json.dumps(design), 200
     except Exception as e:
@@ -333,22 +373,24 @@ async def handle_generate_layout(body: bytes) -> tuple[str, int]:
     """Generate just a layout using existing library content."""
     try:
         async with generate_lock:
+            monster_lib, tile_lib, room_lib = _get_libs()
+            deprecated = _get_deprecated()
             params = json.loads(body)
             theme = params.get("theme", "dungeon")
             difficulty = int(params.get("difficulty", 5))
 
             available_monsters = [
                 {"kind": e.id, "tags": e.tags}
-                for e in game.monster_library.real_entries
-                if e.id not in game.deprecated_monsters
+                for e in monster_lib.real_entries
+                if e.id not in deprecated["monsters"]
             ]
             available_tiles = [
                 {"id": e.id, "walkable": e.data.get("walkable", False), "tags": e.tags}
-                for e in game.tile_library.real_entries
-                if e.id not in game.deprecated_tiles
+                for e in tile_lib.real_entries
+                if e.id not in deprecated["tiles"]
             ]
             existing_room_names = [
-                e.data.get("name", e.id) for e in game.room_library.real_entries
+                e.data.get("name", e.id) for e in room_lib.real_entries
             ]
 
             layout = await ai_generator.generate_layout(
@@ -376,7 +418,7 @@ async def handle_generate_layout(body: bytes) -> tuple[str, int]:
             room_id = room_name.lower().replace(" ", "_")
             base_id = room_id
             counter = 1
-            while game.room_library.get_by_id(room_id):
+            while room_lib.get_by_id(room_id):
                 counter += 1
                 room_id = f"{base_id}_{counter}"
 
@@ -387,7 +429,7 @@ async def handle_generate_layout(body: bytes) -> tuple[str, int]:
                 created_at=time.time(),
                 data=result,
             )
-            game.room_library.add(room_entry)
+            room_lib.add(room_entry)
             save_libraries()
             return json.dumps(result), 200
     except Exception as e:
@@ -400,6 +442,8 @@ async def handle_generate_tiles(body: bytes) -> tuple[str, int]:
     """Generate custom tiles and register them."""
     try:
         async with generate_lock:
+            _, tile_lib, _ = _get_libs()
+            deprecated = _get_deprecated()
             params = json.loads(body)
             theme = params.get("theme", "dungeon")
             difficulty = int(params.get("difficulty", 5))
@@ -407,8 +451,8 @@ async def handle_generate_tiles(body: bytes) -> tuple[str, int]:
 
             existing_tiles = [
                 {"id": e.id, "walkable": e.data.get("walkable", False), "tags": e.tags}
-                for e in game.tile_library.real_entries
-                if e.id not in game.deprecated_tiles
+                for e in tile_lib.real_entries
+                if e.id not in deprecated["tiles"]
             ]
 
             tiles = await ai_generator.generate_tiles(
@@ -425,7 +469,7 @@ async def handle_generate_tiles(body: bytes) -> tuple[str, int]:
                     created_at=time.time(),
                     data=t,
                 )
-                game.tile_library.add(entry)
+                tile_lib.add(entry)
             save_libraries()
             return json.dumps({"tiles": tiles}), 200
     except Exception as e:
@@ -436,8 +480,9 @@ async def handle_generate_tiles(body: bytes) -> tuple[str, int]:
 
 def _count_room_references(item_id: str, item_type: str) -> int:
     """Count how many rooms in the library reference a monster kind or tile ID."""
+    _, _, room_lib = _get_libs()
     count = 0
-    for entry in game.room_library.real_entries:
+    for entry in room_lib.real_entries:
         data = entry.data
         if item_type == "monster":
             for p in data.get("monster_placements", []):
@@ -454,13 +499,14 @@ def _count_room_references(item_id: str, item_type: str) -> int:
 
 def _cleanup_deprecated():
     """Remove any deprecated monsters/tiles that are no longer referenced."""
-    for mid in list(game.deprecated_monsters):
+    deprecated = _get_deprecated()
+    for mid in list(deprecated["monsters"]):
         if _count_room_references(mid, "monster") == 0:
-            game.deprecated_monsters.discard(mid)
+            deprecated["monsters"].discard(mid)
             server_log(f"[VIEWER] Cleaned up deprecated monster '{mid}'")
-    for tid in list(game.deprecated_tiles):
+    for tid in list(deprecated["tiles"]):
         if _count_room_references(tid, "tile") == 0:
-            game.deprecated_tiles.discard(tid)
+            deprecated["tiles"].discard(tid)
             server_log(f"[VIEWER] Cleaned up deprecated tile '{tid}'")
 
 
@@ -471,7 +517,9 @@ def handle_delete(lib_type: str, item_id: str):
     Rooms: deleted immediately, then deprecated monsters/tiles are cleaned up.
     Permanent items cannot be deleted.
     """
-    lib_map = {"monster": game.monster_library, "tile": game.tile_library, "room": game.room_library}
+    monster_lib, tile_lib, room_lib = _get_libs()
+    deprecated = _get_deprecated()
+    lib_map = {"monster": monster_lib, "tile": tile_lib, "room": room_lib}
     lib = lib_map.get(lib_type)
     if not lib:
         return json.dumps({"error": f"Unknown library type: {lib_type}"}), 404
@@ -484,7 +532,7 @@ def handle_delete(lib_type: str, item_id: str):
 
     if lib_type in ("monster", "tile"):
         ref_count = _count_room_references(item_id, lib_type)
-        deprecated_set = game.deprecated_monsters if lib_type == "monster" else game.deprecated_tiles
+        deprecated_set = deprecated["monsters"] if lib_type == "monster" else deprecated["tiles"]
         lib.remove(item_id)
         if ref_count > 0:
             deprecated_set.add(item_id)
@@ -743,10 +791,11 @@ async def main():
     load_libraries()
     ai_generator.init()
 
+    monster_lib, tile_lib, room_lib = _get_libs()
     print(f"Content Viewer starting on http://localhost:{PORT}")
-    print(f"  Monster library: {game.monster_library.real_count}/{game.monster_library.capacity}")
-    print(f"  Tile library:    {game.tile_library.real_count}/{game.tile_library.capacity}")
-    print(f"  Room library:    {game.room_library.real_count}/{game.room_library.capacity}")
+    print(f"  Monster library: {monster_lib.real_count}/{monster_lib.capacity}")
+    print(f"  Tile library:    {tile_lib.real_count}/{tile_lib.capacity}")
+    print(f"  Room library:    {room_lib.real_count}/{room_lib.capacity}")
 
     backend = ai_generator.AI_BACKEND
     if backend == "cli":

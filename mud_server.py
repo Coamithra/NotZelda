@@ -43,7 +43,8 @@ from server.combat import handle_attack, monster_tick, projectile_tick, player_w
 from server.debug_monsters import handle_debug_spawn, auto_register_debug_monsters
 from server.npc_chat import find_adjacent_npc, handle_npc_chat, clear_player_history, register_town_guard
 from server.dungeon_content import register_precreated_types, load_precreated_content
-from server.dungeons import load_deprecation_timestamp, load_deprecated_sets, _run_content_deprecation, start_background_regen
+from server.dungeons import load_deprecation_timestamp, load_deprecated_sets, _run_content_deprecation, start_background_regen, get_dungeon_for_room
+from server.dungeon_types import DUNGEON_TYPES
 from server.content_library import ContentLibrary, MONSTER_LIBRARY_CAPACITY, TILE_LIBRARY_CAPACITY, ROOM_LIBRARY_CAPACITY
 from server.validation import register_monster_type, register_tile_type
 
@@ -310,28 +311,34 @@ async def handle_chat(player, text: str):
         elif cmd == "debug_spawn" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
             await handle_debug_spawn(player, parts[1] if len(parts) > 1 else "")
         elif cmd == "deprecate" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
-            _run_content_deprecation()
+            for _tid in list(game.content_libraries.keys()):
+                _run_content_deprecation(_tid)
             await send_to(player, {"type": "info", "text": "Forced deprecation pass — see ~ debug log"})
         elif cmd == "regen" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
-            count = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else game.room_library.placeholder_count
+            regen_inst = get_dungeon_for_room(player.room)
+            regen_type = regen_inst.dungeon_id if regen_inst else "d1"
+            regen_libs = game.content_libraries.get(regen_type, {})
+            regen_room_lib = regen_libs.get("rooms")
+            count = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else (regen_room_lib.placeholder_count if regen_room_lib else 0)
             if count <= 0:
-                await send_to(player, {"type": "info", "text": "No room library slots to fill"})
+                await send_to(player, {"type": "info", "text": f"No {regen_type} room library slots to fill"})
             else:
-                start_background_regen(count)
-                await send_to(player, {"type": "info", "text": f"Regen started: {count} room(s) — see ~ debug log"})
+                start_background_regen(count, regen_type)
+                await send_to(player, {"type": "info", "text": f"Regen started: {count} {regen_type} room(s) — see ~ debug log"})
         elif cmd == "choir" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
             debug_on = getattr(player, '_debug_choir', False)
+            choir_inst = get_dungeon_for_room(player.room)
             if debug_on:
                 player._debug_choir = False
-                if game.active_dungeon:
-                    game.active_dungeon.boss_engaged = False
+                if choir_inst:
+                    choir_inst.boss_engaged = False
                 await send_to(player, {"type": "boss_choir_stop"})
                 await send_to(player, {"type": "info", "text": "Choir overlay OFF"})
             else:
                 dist = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 2
                 player._debug_choir = True
-                if game.active_dungeon:
-                    game.active_dungeon.boss_engaged = True
+                if choir_inst:
+                    choir_inst.boss_engaged = True
                 await send_to(player, {"type": "boss_choir_start", "distance": dist})
                 await send_to(player, {"type": "info", "text": f"Choir overlay ON (distance={dist})"})
         else:
@@ -529,37 +536,76 @@ async def process_request(path, request_headers):
 
 async def main():
     load_room_files()
-    load_dungeon_templates()
     register_precreated_types()
     register_town_guard()
     auto_register_debug_monsters()
 
-    # Initialize content libraries (Stage 7)
+    # Initialize per-type dungeon templates and content libraries
     data_dir = ROOT_DIR / "data"
-    game.monster_library = ContentLibrary("monster", MONSTER_LIBRARY_CAPACITY)
-    game.tile_library = ContentLibrary("tile", TILE_LIBRARY_CAPACITY)
-    game.room_library = ContentLibrary("room", ROOM_LIBRARY_CAPACITY)
-    load_precreated_content(game.monster_library, game.tile_library, game.room_library, game.dungeon_templates)
-    game.monster_library.load_custom(data_dir / "monster_library.json")
-    game.tile_library.load_custom(data_dir / "tile_library.json")
-    game.room_library.load_custom(data_dir / "room_library.json")
+
+    for type_id, type_config in DUNGEON_TYPES.items():
+        # Load dungeon room templates for this type
+        load_dungeon_templates(type_config["template_dir"], type_id)
+
+        # Create content libraries (use per-type capacities if defined)
+        m_cap = type_config.get("monster_capacity", MONSTER_LIBRARY_CAPACITY)
+        t_cap = type_config.get("tile_capacity", TILE_LIBRARY_CAPACITY)
+        r_cap = type_config.get("room_capacity", ROOM_LIBRARY_CAPACITY)
+        monster_lib = ContentLibrary("monster", m_cap)
+        tile_lib = ContentLibrary("tile", t_cap)
+        room_lib = ContentLibrary("room", r_cap)
+
+        # Load precreated content into libraries
+        templates = game.dungeon_templates.get(type_id, {})
+        special_rooms = {type_config["boss_template"], type_config["treasure_template"]}
+        load_precreated_content(monster_lib, tile_lib, room_lib, templates,
+                                special_rooms=special_rooms, type_id=type_id)
+
+        # Load custom (AI-generated) entries from disk
+        # Try new per-type path first, fall back to old path for d1 backward compat
+        for lib_name, lib, old_name in [
+            ("monster", monster_lib, "monster_library.json"),
+            ("tile", tile_lib, "tile_library.json"),
+            ("room", room_lib, "room_library.json"),
+        ]:
+            new_path = data_dir / f"{type_id}_{old_name}"
+            old_path = data_dir / old_name
+            if new_path.exists():
+                lib.load_custom(new_path)
+            elif old_path.exists() and type_id == "d1":
+                lib.load_custom(old_path)
+
+        game.content_libraries[type_id] = {
+            "rooms": room_lib,
+            "monsters": monster_lib,
+            "tiles": tile_lib,
+        }
+        game.deprecated_content.setdefault(type_id, {"monsters": set(), "tiles": set()})
 
     # Register custom library entries into game registries so send_room_enter()
     # can send sprites/tile recipes and monsters can spawn correctly
-    for entry in game.monster_library.real_entries:
-        if not entry.permanent and entry.id not in game.custom_sprites:
-            ok, errors = register_monster_type(entry.data)
-            if not ok:
-                print(f"[LIBS] WARNING: Failed to register monster {entry.id}: {errors}")
-    for entry in game.tile_library.real_entries:
-        if not entry.permanent and entry.id not in game.custom_tile_recipes:
-            ok, errors = register_tile_type(entry.data)
-            if not ok:
-                print(f"[LIBS] WARNING: Failed to register tile {entry.id}: {errors}")
+    for type_id, libs in game.content_libraries.items():
+        monster_lib = libs.get("monsters")
+        tile_lib = libs.get("tiles")
+        if monster_lib:
+            for entry in monster_lib.real_entries:
+                if not entry.permanent and entry.id not in game.custom_sprites:
+                    ok, errors = register_monster_type(entry.data)
+                    if not ok:
+                        print(f"[LIBS] WARNING: Failed to register monster {entry.id}: {errors}")
+        if tile_lib:
+            for entry in tile_lib.real_entries:
+                if not entry.permanent and entry.id not in game.custom_tile_recipes:
+                    ok, errors = register_tile_type(entry.data)
+                    if not ok:
+                        print(f"[LIBS] WARNING: Failed to register tile {entry.id}: {errors}")
 
-    print(f"[LIBS] monster {game.monster_library.real_count}/{game.monster_library.capacity}, "
-          f"tile {game.tile_library.real_count}/{game.tile_library.capacity}, "
-          f"room {game.room_library.real_count}/{game.room_library.capacity}")
+    for type_id, libs in game.content_libraries.items():
+        m = libs.get("monsters")
+        t = libs.get("tiles")
+        r = libs.get("rooms")
+        print(f"[LIBS] {type_id}: monster {m.real_count}/{m.capacity}, "
+              f"tile {t.real_count}/{t.capacity}, room {r.real_count}/{r.capacity}")
 
     behavior_engine.init(players_in_room, ROOM_COLS, ROOM_ROWS, game.is_walkable_tile, game.guards, game.rooms)
     port = 8080

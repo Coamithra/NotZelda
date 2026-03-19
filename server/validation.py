@@ -286,6 +286,8 @@ def register_monster_type(data: dict) -> tuple[bool, list[str]]:
         stat_entry["width"] = int(stats["width"])
     if stats.get("height"):
         stat_entry["height"] = int(stats["height"])
+    if stats.get("boss"):
+        stat_entry["boss"] = True
     game.monster_stats[kind] = stat_entry
 
     game.custom_sprites[kind] = sprite

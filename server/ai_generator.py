@@ -194,8 +194,8 @@ SYSTEM_PROMPT_LAYOUT = _load_prompt("layout_system.txt")
 # Validation constants
 # ---------------------------------------------------------------------------
 
-BUILTIN_TILES = {"DW", "DF", "PL", "SC", "BZ", "MF", "CF"}
-NON_WALKABLE = {"DW", "PL", "SC", "BZ"}
+BUILTIN_TILES = {"DW", "DF", "PL", "SC", "BZ", "MF", "CF", "TW", "TF", "CR"}
+NON_WALKABLE = {"DW", "PL", "SC", "BZ", "TW", "CR"}
 
 VALID_BEHAVIOR_CONDITIONS = {
     "player_within", "player_beyond", "player_in_range_line",
@@ -205,7 +205,7 @@ VALID_BEHAVIOR_ACTIONS = {"move", "hold", "projectile", "charge", "teleport", "a
 VALID_DIRECTIONS = {"up", "down", "left", "right", "player", "away", "random", "patrol"}
 VALID_TELEPORT_TARGETS = {"player", "random", "away"}
 _BUILTIN_KINDS = {"slime", "bat", "scorpion", "skeleton", "swamp_blob",
-                   "dungeon_slime", "phantom"}
+                   "dungeon_slime", "phantom", "water_serpent", "drowned_one"}
 
 
 def _is_hex_color(v: str) -> bool:

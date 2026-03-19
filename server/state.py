@@ -11,7 +11,7 @@ class GameState:
         self.rooms = {}              # room_id -> room dict
         self.guards = {}             # room_id -> [guard dicts]
         self.monster_templates = {}  # room_id -> [template dicts]
-        self.dungeon_templates = {}  # template_id -> {name, tilemap, guards, monsters}
+        self.dungeon_templates = {}  # type_id -> {template_id: {name, tilemap, guards, monsters}}
 
         # Monster type registry (built-in + AI-generated)
         self.monster_stats = {
@@ -32,16 +32,13 @@ class GameState:
             ]},
         }
 
-        # Content libraries (Stage 7 — tag-based content management)
-        self.monster_library = None  # ContentLibrary | None
-        self.tile_library = None     # ContentLibrary | None
-        self.room_library = None     # ContentLibrary | None
+        # Content libraries (per dungeon type)
+        # type_id -> {"rooms": ContentLibrary, "monsters": ContentLibrary, "tiles": ContentLibrary}
+        self.content_libraries = {}
 
-        # Deprecated content — removed from libraries but kept in game
-        # registries because existing rooms still reference them.
-        # Cleaned up when no room references them anymore.
-        self.deprecated_monsters = set()  # kind IDs
-        self.deprecated_tiles = set()     # tile IDs
+        # Deprecated content (per dungeon type)
+        # type_id -> {"monsters": set(), "tiles": set()}
+        self.deprecated_content = {}
 
         # Live game state
         self.players = {}            # websocket -> Player
@@ -50,8 +47,9 @@ class GameState:
         self.room_hearts = {}        # room_id -> [heart dicts]
         self.room_projectiles = {}   # room_id -> {proj_id: Projectile}
 
-        # Dungeon
-        self.active_dungeon = None   # DungeonInstance | None
+        # Dungeons
+        self.active_dungeons = {}    # type_id -> DungeonInstance
+        self.room_to_dungeon = {}    # room_id -> type_id (reverse lookup)
 
         # Counters
         self.next_heart_id = 0
@@ -60,7 +58,7 @@ class GameState:
 
         # Content deprecation & background regen
         self.last_deprecation_time = 0.0  # timestamp of last deprecation pass
-        self.regen_task = None             # asyncio.Task for background content generation
+        self.regen_tasks = {}              # type_id -> asyncio.Task
 
         # Activity log path
         self.log_file = Path(__file__).parent.parent / "event_log.txt"

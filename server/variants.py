@@ -89,12 +89,14 @@ def _scale_behavior(behavior: dict, dmg_add: int, cd_mult: float,
 # ---------------------------------------------------------------------------
 
 def get_monster_data(kind: str) -> dict | None:
-    """Look up full monster data from the monster library."""
+    """Look up full monster data from any dungeon type's monster library."""
     from server.state import game
-    if game.monster_library:
-        for entry in game.monster_library.real_entries:
-            if entry.id == kind:
-                return entry.data
+    for libs in game.content_libraries.values():
+        monster_lib = libs.get("monsters")
+        if monster_lib:
+            for entry in monster_lib.real_entries:
+                if entry.id == kind:
+                    return entry.data
     return None
 
 

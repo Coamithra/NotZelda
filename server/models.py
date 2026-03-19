@@ -57,6 +57,7 @@ class Monster:
         # Position (x, y) is the top-left tile of the footprint.
         self.width = stats.get("width", 1)
         self.height = stats.get("height", 1)
+        self.is_boss = stats.get("boss", False)
         # Behavior engine data (None = use default wander)
         self.behavior = game.monster_behaviors.get(kind)
         # Rule cooldown tracking: rule_index -> ticks remaining

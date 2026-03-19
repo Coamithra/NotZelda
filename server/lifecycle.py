@@ -10,7 +10,7 @@ from server.models import Monster
 from server.net import send_to, broadcast_to_room, players_in_room, player_info
 from server.dungeons import (
     create_dungeon, destroy_dungeon, dungeon_player_count, resolve_dungeon_room,
-    is_dungeon_room, get_boss_distances,
+    is_dungeon_room, get_boss_distances, get_dungeon_for_room,
 )
 
 
@@ -35,7 +35,8 @@ def get_room_monsters(room_id: str) -> list[Monster]:
 async def on_player_enter_room(room_id: str):
     """Called when a player enters a room. Spawns monsters if needed."""
     # Dungeon cleared rooms stay empty (no respawn)
-    if game.active_dungeon and room_id in game.active_dungeon.cleared_rooms:
+    inst = get_dungeon_for_room(room_id)
+    if inst and room_id in inst.cleared_rooms:
         game.room_monsters[room_id] = []
         return
     if room_id not in game.monster_templates:
@@ -84,10 +85,9 @@ async def on_player_leave_room(room_id: str, skip_dungeon_teardown: bool = False
             game.room_cooldowns[room_id] = time.monotonic()
 
     # Boss disengagement — if boss room emptied and boss was engaged (not killed), reset
-    if (game.active_dungeon and game.active_dungeon.boss_engaged
-            and room_id in game.active_dungeon.active_rooms):
-        inst = game.active_dungeon
-        boss_room = f"d1_{inst.boss_cell[0]}_{inst.boss_cell[1]}"
+    inst = get_dungeon_for_room(room_id)
+    if inst and inst.boss_engaged:
+        boss_room = f"{inst.dungeon_id}_{inst.boss_cell[0]}_{inst.boss_cell[1]}"
         if room_id == boss_room and room_id not in inst.cleared_rooms:
             inst.boss_engaged = False
             for p in list(game.players.values()):
@@ -95,10 +95,9 @@ async def on_player_leave_room(room_id: str, skip_dungeon_teardown: bool = False
                     await send_to(p, {"type": "boss_choir_stop"})
 
     # Dungeon cleanup — destroy instance when all players have left
-    if not skip_dungeon_teardown:
-        if game.active_dungeon and room_id in game.active_dungeon.active_rooms:
-            if dungeon_player_count() == 0:
-                destroy_dungeon()
+    if not skip_dungeon_teardown and inst:
+        if dungeon_player_count(inst) == 0:
+            destroy_dungeon(inst)
 
 
 async def send_room_enter(player, exit_direction: str = None):
@@ -179,18 +178,20 @@ async def send_room_enter(player, exit_direction: str = None):
         msg["custom_tiles"] = custom_tiles
 
     # Attach dungeon debug info for dungeon rooms
-    if is_dungeon_room(player.room) and game.active_dungeon:
-        inst = game.active_dungeon
+    inst = get_dungeon_for_room(player.room) if is_dungeon else None
+    if inst:
+        dungeon_id = inst.dungeon_id
+        libs = game.content_libraries.get(dungeon_id, {})
         debug = {}
-        if game.monster_library:
-            debug["lib_monsters"] = f"{game.monster_library.real_count}/{game.monster_library.capacity}"
-        if game.tile_library:
-            debug["lib_tiles"] = f"{game.tile_library.real_count}/{game.tile_library.capacity}"
-        if game.room_library:
-            debug["lib_rooms"] = f"{game.room_library.real_count}/{game.room_library.capacity}"
+        if libs.get("monsters"):
+            debug["lib_monsters"] = f"{libs['monsters'].real_count}/{libs['monsters'].capacity}"
+        if libs.get("tiles"):
+            debug["lib_tiles"] = f"{libs['tiles'].real_count}/{libs['tiles'].capacity}"
+        if libs.get("rooms"):
+            debug["lib_rooms"] = f"{libs['rooms'].real_count}/{libs['rooms'].capacity}"
         # Find source for this room
         for cell, assignment in inst.cell_assignments.items():
-            room_id_check = f"d1_{cell[0]}_{cell[1]}"
+            room_id_check = f"{dungeon_id}_{cell[0]}_{cell[1]}"
             if room_id_check == player.room:
                 source = assignment["source"]
                 entry = assignment.get("entry")
@@ -218,7 +219,7 @@ async def send_room_enter(player, exit_direction: str = None):
         # Find which cell the player is in
         player_cell = None
         for (c, r) in inst.cell_assignments:
-            if f"d1_{c}_{r}" == player.room:
+            if f"{dungeon_id}_{c}_{r}" == player.room:
                 player_cell = [c, r]
                 break
         debug["minimap"] = {
@@ -233,7 +234,7 @@ async def send_room_enter(player, exit_direction: str = None):
                 conn_list.append([a[0], a[1], b[0], b[1]])
             debug["minimap"]["layout"] = inst.layout["name"]
             debug["minimap"]["connections"] = conn_list
-            debug["libraries"] = _build_library_icons()
+            debug["libraries"] = _build_library_icons(dungeon_id)
 
         msg["dungeon_debug"] = debug
 
@@ -244,8 +245,13 @@ async def send_room_enter(player, exit_direction: str = None):
     await _send_choir_update(player)
 
 
-def _build_library_icons():
+def _build_library_icons(type_id):
     """Build compact library summary for the conjuring screen debug overlay."""
+    libs = game.content_libraries.get(type_id, {})
+    dep = game.deprecated_content.get(type_id, {})
+    dep_monsters = dep.get("monsters", set())
+    dep_tiles = dep.get("tiles", set())
+
     def _primary_color(colors_dict):
         """Extract the first color value from a colors dict."""
         if isinstance(colors_dict, dict):
@@ -256,31 +262,33 @@ def _build_library_icons():
 
     monsters = []
     monster_empty = 0
-    if game.monster_library:
-        for e in game.monster_library.real_entries:
+    monster_lib = libs.get("monsters")
+    if monster_lib:
+        for e in monster_lib.real_entries:
             color = _primary_color(game.custom_sprites.get(e.id, {}).get("colors", {}))
-            if e.id in game.deprecated_monsters:
+            if e.id in dep_monsters:
                 status = "dep"
             elif e.permanent:
                 status = "pre"
             else:
                 status = "cus"
             monsters.append({"id": e.id, "s": status, "color": color})
-        monster_empty = game.monster_library.placeholder_count
+        monster_empty = monster_lib.placeholder_count
 
     tiles = []
     tile_empty = 0
-    if game.tile_library:
-        for e in game.tile_library.real_entries:
+    tile_lib = libs.get("tiles")
+    if tile_lib:
+        for e in tile_lib.real_entries:
             color = _primary_color(game.custom_tile_recipes.get(e.id, {}).get("colors", {}))
-            if e.id in game.deprecated_tiles:
+            if e.id in dep_tiles:
                 status = "dep"
             elif e.permanent:
                 status = "pre"
             else:
                 status = "cus"
             tiles.append({"id": e.id, "s": status, "color": color})
-        tile_empty = game.tile_library.placeholder_count
+        tile_empty = tile_lib.placeholder_count
 
     return {"monsters": monsters, "tiles": tiles,
             "monster_empty": monster_empty, "tile_empty": tile_empty}
@@ -288,13 +296,12 @@ def _build_library_icons():
 
 async def _send_choir_update(player):
     """If boss is engaged, send choir start/stop based on player's current room."""
-    inst = game.active_dungeon
+    inst = get_dungeon_for_room(player.room)
     if not inst or not inst.boss_engaged:
-        # Dungeon gone or boss not engaged — stop any active choir
-        # (handles case where dungeon was destroyed before this runs)
+        # Not in a dungeon or boss not engaged — stop any active choir
         await send_to(player, {"type": "boss_choir_stop"})
         return
-    boss_room = f"d1_{inst.boss_cell[0]}_{inst.boss_cell[1]}"
+    boss_room = f"{inst.dungeon_id}_{inst.boss_cell[0]}_{inst.boss_cell[1]}"
     if player.room not in inst.active_rooms or player.room == boss_room:
         await send_to(player, {"type": "boss_choir_stop"})
     else:
@@ -311,27 +318,31 @@ async def do_room_transition(player, exit_direction: str):
     new_room_id = game.rooms[old_room]["exits"][exit_direction]
 
     # Dungeon entrance — create instance on demand
-    if new_room_id == "d1_entrance":
-        if game.active_dungeon is None:
-            if await create_dungeon() is None:
+    from server.dungeon_types import ENTRANCE_TO_TYPE
+    entrance_type = ENTRANCE_TO_TYPE.get(new_room_id)
+    if entrance_type is not None:
+        if entrance_type not in game.active_dungeons:
+            instance = await create_dungeon(entrance_type)
+            if instance is None:
                 await send_to(player, {"type": "info", "text": "The dungeon entrance is sealed."})
                 return
-        new_room_id = game.active_dungeon.entrance_room_id
+        new_room_id = game.active_dungeons[entrance_type].entrance_room_id
         # Show conjuring animation when first entering the dungeon
         await send_to(player, {"type": "room_generating"})
 
     # Lazy resolution — if this is an unresolved dungeon room, resolve it now
-    if game.active_dungeon and new_room_id in game.active_dungeon.active_rooms:
-        if new_room_id not in game.rooms:
-            # Find the cell for this room_id
-            for cell, assignment in game.active_dungeon.cell_assignments.items():
-                room_id_check = f"d1_{cell[0]}_{cell[1]}"
-                if room_id_check == new_room_id and not assignment["resolved"]:
-                    resolved = resolve_dungeon_room(game.active_dungeon, cell)
-                    if not resolved:
-                        await send_to(player, {"type": "info", "text": "The way is blocked."})
-                        return
-                    break
+    dungeon_inst = get_dungeon_for_room(new_room_id)
+    if dungeon_inst and new_room_id not in game.rooms:
+        # Find the cell for this room_id
+        did = dungeon_inst.dungeon_id
+        for cell, assignment in dungeon_inst.cell_assignments.items():
+            room_id_check = f"{did}_{cell[0]}_{cell[1]}"
+            if room_id_check == new_room_id and not assignment["resolved"]:
+                resolved = resolve_dungeon_room(dungeon_inst, cell)
+                if not resolved:
+                    await send_to(player, {"type": "info", "text": "The way is blocked."})
+                    return
+                break
 
     new_room = game.rooms[new_room_id]
 

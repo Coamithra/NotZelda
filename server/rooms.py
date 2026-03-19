@@ -151,12 +151,15 @@ def load_room_files(directory: str = "rooms"):
     print(f"[ROOMS] Total rooms: {len(game.rooms)}")
 
 
-def load_dungeon_templates(directory: str = "rooms/dungeon1"):
-    """Load dungeon room templates from .room files (no exits parsed)."""
+def load_dungeon_templates(directory: str = "rooms/dungeon1", type_id: str = "d1"):
+    """Load dungeon room templates from .room files for a dungeon type (no exits parsed)."""
     rooms_dir = Path(__file__).parent.parent / directory
     if not rooms_dir.exists():
         print(f"[DUNGEON] No '{directory}/' directory found, skipping")
         return
+
+    if type_id not in game.dungeon_templates:
+        game.dungeon_templates[type_id] = {}
 
     count = 0
     for room_file in sorted(rooms_dir.glob("*.room")):
@@ -218,7 +221,7 @@ def load_dungeon_templates(directory: str = "rooms/dungeon1"):
                 elif tokens[0] == "monster" and len(tokens) >= 4:
                     monsters.append({"kind": tokens[1], "x": int(tokens[2]), "y": int(tokens[3])})
 
-        game.dungeon_templates[template_id] = {
+        game.dungeon_templates[type_id][template_id] = {
             "name": header.get("name", template_id),
             "tilemap": tilemap,
             "guards": guards,
@@ -226,4 +229,4 @@ def load_dungeon_templates(directory: str = "rooms/dungeon1"):
         }
         count += 1
 
-    print(f"[DUNGEON] Loaded {count} dungeon templates from {directory}/")
+    print(f"[DUNGEON] Loaded {count} dungeon templates from {directory}/ for type '{type_id}'")

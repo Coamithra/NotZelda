@@ -57,8 +57,8 @@ Return ONLY valid JSON (no markdown, no explanation):
 {
   "name": "Room Name",
   "tilemap": [
-    ["DW","DW","DW","DW","DW","DW","DF","DF","DF","DW","DW","DW","DW","DW","DW"],
-    ...11 rows total, 15 columns each...
+    ["WALL","WALL","WALL","WALL","WALL","WALL","FLOOR","FLOOR","FLOOR","WALL","WALL","WALL","WALL","WALL","WALL"],
+    ...11 rows total, 15 columns each (use actual tile codes from the available tiles list)...
   ],
   "monster_placements": [
     {"kind": "monster_name", "x": 5, "y": 3}

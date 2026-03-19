@@ -16,7 +16,7 @@ from server.constants import (
 )
 from server.models import Projectile
 from server.net import send_to, broadcast_to_room, players_in_room, player_info
-from server.dungeons import is_dungeon_room, get_boss_distances
+from server.dungeons import is_dungeon_room, get_boss_distances, get_dungeon_for_room
 
 
 # ---------------------------------------------------------------------------
@@ -159,7 +159,7 @@ async def damage_player(player, damage: int, room_id: str):
 
 def _broadcast_choir_start(boss_room, msgs):
     """Send boss_choir_start to all dungeon players not in the boss room."""
-    instance = game.active_dungeon
+    instance = get_dungeon_for_room(boss_room)
     if not instance:
         return
     distances = get_boss_distances(instance)
@@ -170,9 +170,9 @@ def _broadcast_choir_start(boss_room, msgs):
             msgs.append(("send", p, {"type": "boss_choir_start", "distance": dist, "choir_track": choir_track}))
 
 
-def _broadcast_choir_stop(msgs):
+def _broadcast_choir_stop(room_id, msgs):
     """Send boss_choir_stop to all dungeon players."""
-    instance = game.active_dungeon
+    instance = get_dungeon_for_room(room_id)
     if not instance:
         return
     for p in list(game.players.values()):
@@ -210,11 +210,13 @@ async def handle_attack(player):
         if monster.alive and not monster.intangible and monster.occupies(hit_x, hit_y):
             monster.hp -= 1
             # Boss engagement — start choir overlay if boss survives this hit
+            dinst = get_dungeon_for_room(player.room)
+            is_boss = monster.is_boss and dinst is not None
             if (monster.hp > 0
-                    and monster.kind == "dungeon_warden"
-                    and game.active_dungeon
-                    and not game.active_dungeon.boss_engaged):
-                game.active_dungeon.boss_engaged = True
+                    and is_boss
+                    and dinst
+                    and not dinst.boss_engaged):
+                dinst.boss_engaged = True
                 _broadcast_choir_start(player.room, msgs)
             if monster.hp <= 0:
                 monster.alive = False
@@ -239,16 +241,18 @@ async def handle_attack(player):
                         "y": monster.y,
                     }, None))
                 # Mark dungeon room as cleared if all monsters dead
-                if is_dungeon_room(player.room):
+                if dinst:
                     alive = [m for m in game.room_monsters[player.room] if m.alive]
                     if not alive:
-                        game.active_dungeon.cleared_rooms.add(player.room)
+                        dinst.cleared_rooms.add(player.room)
                         # Boss defeated — silence music + stop choir
-                        if monster.kind == "dungeon_warden":
+                        if is_boss:
+                            print(f"[BOSS] Boss defeated in {player.room}, silencing music")
+                            dinst.boss_engaged = False
                             msgs.append(("broadcast", player.room, {
                                 "type": "music_change", "music": None,
                             }, None))
-                            _broadcast_choir_stop(msgs)
+                            _broadcast_choir_stop(player.room, msgs)
             else:
                 msgs.append(("broadcast", player.room, {
                     "type": "monster_hit",
