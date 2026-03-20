@@ -8,8 +8,7 @@ DUNGEON_TYPES = {
         "template_dir": "rooms/dungeon1",
         "layouts": DUNGEON_LAYOUTS,
         "music_tracks": [
-            "dungeon1", "dungeon2", "dungeon3",
-            "dungeon4", "dungeon5", "dungeon6",
+            "dungeon2", "dungeon4", "dungeon5", "dungeon6",
         ],
         "boss_tracks": ["boss1", "boss2", "boss3"],
         "biome": "dungeon",

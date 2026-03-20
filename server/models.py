@@ -1,6 +1,7 @@
 """Data classes for game entities — Player, Monster, Projectile."""
 
 import time
+from collections import deque
 
 from server.state import game
 from server.constants import PLAYER_MAX_HP, STARTING_ROOM
@@ -25,6 +26,7 @@ class Player:
         self.guard_cooldowns = {}  # guard_key -> last_trigger_time
         self.quests = {}   # quest_id (str) -> stage (int)
         self.flags = set() # string flags, e.g. {"has_sword"}
+        self.command_queue = deque()  # (msg_type, data) tuples — drained by game_tick
 
     def quest(self, qid: str) -> int:
         return self.quests.get(qid, 0)

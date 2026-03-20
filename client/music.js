@@ -16,9 +16,7 @@ const MusicPlayer = (function () {
     "tavern":     "music_tavern.mp3",
     "chapel":     "music_chapel.mp3",
     "overworld":  "music_overworld.mp3",
-    "dungeon1":   "music_dungeon1.mp3",
     "dungeon2":   "music_dungeon2.mp3",
-    "dungeon3":   "music_dungeon3.mp3",
     "dungeon4":   "music_dungeon4.mp3",
     "dungeon5":   "music_dungeon5.mp3",
     "dungeon6":   "music_dungeon6.mp3",
@@ -43,7 +41,7 @@ const MusicPlayer = (function () {
     "lake":       "music_overworld.mp3",
     "river":      "music_overworld.mp3",
     "town":       "music.mp3",
-    "dungeon":    "music_dungeon1.mp3",
+    "dungeon":    "music_dungeon2.mp3",
   };
 
   let currentBiome = null;

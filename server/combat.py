@@ -1,7 +1,6 @@
-"""Combat system — player attacks, monster actions, projectiles, damage, monster AI tick."""
+"""Combat system — damage, projectiles, monster AI tick, game loop."""
 
 import asyncio
-import random
 import time
 import traceback
 
@@ -10,13 +9,12 @@ from server.state import game
 from server.constants import (
     ROOM_COLS, ROOM_ROWS, DIRECTIONS, DIRECTION_OPPOSITES,
     INVINCIBILITY_DURATION, PLAYER_RESPAWN_DELAY, STARTING_ROOM,
-    HEART_DROP_CHANCE, ATTACK_COOLDOWN, PROJECTILE_TICK_RATE,
-    WALK_TIME, CANCEL_TIME, LATENCY_COMP, GUARD_COOLDOWN,
+    PROJECTILE_TICK_RATE,
+    WALK_TIME, GUARD_COOLDOWN,
     HEART_RESTORE_HP, TICK_INTERVAL,
 )
 from server.models import Projectile
 from server.net import send_to, broadcast_to_room, players_in_room, player_info
-from server.dungeons import is_dungeon_room, get_boss_distances, get_dungeon_for_room
 
 
 # ---------------------------------------------------------------------------
@@ -27,6 +25,9 @@ from server.dungeons import is_dungeon_room, get_boss_distances, get_dungeon_for
 #   ("broadcast", room_id, msg_dict, exclude_ws_or_None)
 #   ("send", player, msg_dict)
 #   ("death", player, old_room_id)
+#   ("guard_chat", player, guard)
+#   ("npc_chat", player, guard, text)
+#   ("debug_spawn", player, args)
 # ---------------------------------------------------------------------------
 
 def _apply_damage(player, damage: int, room_id: str, msgs: list):
@@ -82,8 +83,8 @@ def _apply_damage(player, damage: int, room_id: str, msgs: list):
         msgs.append(("death", player, room_id))
 
 
-async def _flush_messages(msgs: list):
-    """Send all batched messages and schedule death respawns / guard chats."""
+async def flush_messages(msgs: list):
+    """Send all batched messages and schedule background tasks."""
     from server.quests import handle_quest_npc
     for entry in msgs:
         kind = entry[0]
@@ -99,6 +100,14 @@ async def _flush_messages(msgs: list):
         elif kind == "guard_chat":
             _, player, guard = entry
             asyncio.ensure_future(handle_quest_npc(player, guard))
+        elif kind == "npc_chat":
+            from server.npc_chat import handle_npc_chat
+            _, player, guard, text = entry
+            asyncio.ensure_future(handle_npc_chat(player, guard, text))
+        elif kind == "debug_spawn":
+            from server.debug_monsters import handle_debug_spawn
+            _, player, args = entry
+            asyncio.ensure_future(handle_debug_spawn(player, args))
     msgs.clear()
 
 
@@ -121,141 +130,32 @@ async def _death_respawn(player, old_room_id):
         player.dancing = False
         player.walk = None
 
-        # Import here to avoid circular dependency (lifecycle -> combat -> lifecycle)
         from server.lifecycle import on_player_enter_room, on_player_leave_room, send_room_enter
 
         # Despawn summoned town guards — their job is done
+        msgs = []
         if old_room_id in game.room_monsters:
             for i, m in enumerate(game.room_monsters[old_room_id]):
                 if m.kind == "town_guard" and m.alive:
                     m.alive = False
-                    await broadcast_to_room(old_room_id, {
+                    msgs.append(("broadcast", old_room_id, {
                         "type": "monster_killed",
                         "id": i, "x": m.x, "y": m.y,
-                    })
+                    }, None))
 
-        await broadcast_to_room(old_room_id, {
+        msgs.append(("broadcast", old_room_id, {
             "type": "player_left", "name": player.name,
-        })
-        await on_player_leave_room(old_room_id)
-        await on_player_enter_room(STARTING_ROOM)
-        await send_room_enter(player)
-        await broadcast_to_room(
-            STARTING_ROOM,
-            {"type": "player_entered", **player_info(player)},
-        )
+        }, None))
+        on_player_leave_room(old_room_id, msgs)
+        on_player_enter_room(STARTING_ROOM)
+        send_room_enter(player, msgs)
+        msgs.append(("broadcast", STARTING_ROOM,
+                      {"type": "player_entered", **player_info(player)}, player.ws))
+        await flush_messages(msgs)
     finally:
         # Only re-add if player didn't disconnect during respawn
         if player.ws not in game.players:
             game.players[player.ws] = player
-
-
-def _broadcast_choir_start(boss_room, msgs):
-    """Send boss_choir_start to all dungeon players not in the boss room."""
-    instance = get_dungeon_for_room(boss_room)
-    if not instance:
-        return
-    distances = get_boss_distances(instance)
-    choir_track = f"music_{instance.boss_track}_choir.mp3"
-    for p in list(game.players.values()):
-        if p.room in instance.active_rooms and p.room != boss_room:
-            dist = distances.get(p.room, 5)
-            msgs.append(("send", p, {"type": "boss_choir_start", "distance": dist, "choir_track": choir_track}))
-
-
-def _broadcast_choir_stop(room_id, msgs):
-    """Send boss_choir_stop to all dungeon players."""
-    instance = get_dungeon_for_room(room_id)
-    if not instance:
-        return
-    for p in list(game.players.values()):
-        if p.room in instance.active_rooms:
-            msgs.append(("send", p, {"type": "boss_choir_stop"}))
-
-
-async def handle_attack(player):
-    """Handle a player's sword attack."""
-    if player.hp <= 0:
-        return
-    if not player.has_flag("has_sword"):
-        await send_to(player, {"type": "info", "text": "You don't have a weapon."})
-        return
-    now = time.monotonic()
-    if now - player.last_attack_time < ATTACK_COOLDOWN:
-        return
-    player.last_attack_time = now
-    player.dancing = False
-    player.walk = None
-
-    msgs = []
-    msgs.append(("broadcast", player.room, {
-        "type": "attack",
-        "name": player.name,
-        "direction": player.direction,
-    }, None))
-
-    # Hit detection — check if sword hits a monster (supports multi-tile monsters)
-    from server.lifecycle import get_room_monsters
-    dx, dy = DIRECTIONS.get(player.direction, (0, 0))
-    hit_x = player.x + dx
-    hit_y = player.y + dy
-    for i, monster in enumerate(get_room_monsters(player.room)):
-        if monster.alive and not monster.intangible and monster.occupies(hit_x, hit_y):
-            monster.hp -= 1
-            # Boss engagement — start choir overlay if boss survives this hit
-            dinst = get_dungeon_for_room(player.room)
-            is_boss = monster.is_boss and dinst is not None
-            if (monster.hp > 0
-                    and is_boss
-                    and dinst
-                    and not dinst.boss_engaged):
-                dinst.boss_engaged = True
-                _broadcast_choir_start(player.room, msgs)
-            if monster.hp <= 0:
-                monster.alive = False
-                monster.state = "idle"
-                monster.state_data = {}
-                msgs.append(("broadcast", player.room, {
-                    "type": "monster_killed",
-                    "id": i,
-                    "x": monster.x,
-                    "y": monster.y,
-                }, None))
-                # Heart drop
-                if random.random() < HEART_DROP_CHANCE:
-                    hid = game.next_heart_id
-                    game.next_heart_id += 1
-                    heart = {"x": monster.x, "y": monster.y, "id": hid}
-                    game.room_hearts.setdefault(player.room, []).append(heart)
-                    msgs.append(("broadcast", player.room, {
-                        "type": "heart_spawned",
-                        "id": hid,
-                        "x": monster.x,
-                        "y": monster.y,
-                    }, None))
-                # Mark dungeon room as cleared if all monsters dead
-                if dinst:
-                    alive = [m for m in game.room_monsters[player.room] if m.alive]
-                    if not alive:
-                        dinst.cleared_rooms.add(player.room)
-                        # Boss defeated — silence music + stop choir
-                        if is_boss:
-                            print(f"[BOSS] Boss defeated in {player.room}, silencing music")
-                            dinst.boss_engaged = False
-                            msgs.append(("broadcast", player.room, {
-                                "type": "music_change", "music": None,
-                            }, None))
-                            _broadcast_choir_stop(player.room, msgs)
-            else:
-                msgs.append(("broadcast", player.room, {
-                    "type": "monster_hit",
-                    "id": i,
-                    "x": monster.x,
-                    "y": monster.y,
-                    "hp": monster.hp,
-                }, None))
-
-    await _flush_messages(msgs)
 
 
 # ---------------------------------------------------------------------------
@@ -682,13 +582,20 @@ def _tick_projectiles(msgs):
 
 
 async def game_tick():
-    """Unified game loop — ticks players, monsters, and projectiles at ~30Hz."""
+    """Unified game loop — processes commands, ticks players/monsters/projectiles at ~30Hz."""
+    from server.commands import process_player_commands
     last_projectile_tick = time.monotonic()
     while True:
         await asyncio.sleep(TICK_INTERVAL)
         now = time.monotonic()
         msgs = []
         try:
+            # Drain queued commands from all connected players
+            for player in list(game.players.values()):
+                try:
+                    process_player_commands(player, now, msgs)
+                except Exception:
+                    traceback.print_exc()
             _tick_players(now, msgs)
             _tick_all_monsters(now, msgs)
             if now - last_projectile_tick >= PROJECTILE_TICK_RATE:
@@ -696,7 +603,7 @@ async def game_tick():
                 _tick_projectiles(msgs)
         except Exception:
             traceback.print_exc()
-        await _flush_messages(msgs)
+        await flush_messages(msgs)
 
 
 GUARD_DESPAWN_TIMEOUT = 30.0   # seconds before summoned guards vanish
@@ -825,5 +732,3 @@ def _tick_monster_state(monster, room_id, i, now, msgs):
     handler = EXEC_HANDLERS.get(action_name)
     if handler:
         handler(monster, room_id, i, result, msgs)
-
-

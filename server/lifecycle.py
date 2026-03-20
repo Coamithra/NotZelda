@@ -7,7 +7,7 @@ import time
 from server.state import game
 from server.constants import ROOM_RESET_COOLDOWN, ENTRY_DIR, EDGE_SPAWN_POINTS, DEFAULT_SPAWN
 from server.models import Monster
-from server.net import send_to, broadcast_to_room, players_in_room, player_info
+from server.net import players_in_room, player_info
 from server.dungeons import (
     create_dungeon, destroy_dungeon, dungeon_player_count, resolve_dungeon_room,
     is_dungeon_room, get_boss_distances, get_dungeon_for_room,
@@ -32,7 +32,7 @@ def get_room_monsters(room_id: str) -> list[Monster]:
     return game.room_monsters.get(room_id, [])
 
 
-async def on_player_enter_room(room_id: str):
+def on_player_enter_room(room_id: str):
     """Called when a player enters a room. Spawns monsters if needed."""
     # Dungeon cleared rooms stay empty (no respawn)
     inst = get_dungeon_for_room(room_id)
@@ -60,7 +60,7 @@ async def on_player_enter_room(room_id: str):
     game.room_monsters[room_id] = monsters
 
 
-async def on_player_leave_room(room_id: str, skip_dungeon_teardown: bool = False):
+def on_player_leave_room(room_id: str, msgs: list, skip_dungeon_teardown: bool = False):
     """Called after a player leaves a room. Cleans up if room is now empty.
 
     skip_dungeon_teardown: set True when the player is transitioning to another
@@ -92,7 +92,7 @@ async def on_player_leave_room(room_id: str, skip_dungeon_teardown: bool = False
             inst.boss_engaged = False
             for p in list(game.players.values()):
                 if p.room in inst.active_rooms:
-                    await send_to(p, {"type": "boss_choir_stop"})
+                    msgs.append(("send", p, {"type": "boss_choir_stop"}))
 
     # Dungeon cleanup — destroy instance when all players have left
     if not skip_dungeon_teardown and inst:
@@ -100,8 +100,8 @@ async def on_player_leave_room(room_id: str, skip_dungeon_teardown: bool = False
             destroy_dungeon(inst)
 
 
-async def send_room_enter(player, exit_direction: str = None):
-    """Build and send the room_enter message with all room data."""
+def send_room_enter(player, msgs: list, exit_direction: str = None):
+    """Build and append the room_enter message with all room data."""
     room = game.rooms[player.room]
     others = [player_info(p) for p in players_in_room(player.room, exclude=player.ws)]
     guards = game.guards.get(player.room, [])
@@ -247,11 +247,11 @@ async def send_room_enter(player, exit_direction: str = None):
 
         msg["dungeon_debug"] = debug
 
-    await send_to(player, msg)
+    msgs.append(("send", player, msg))
 
     # Choir overlay — always update after sending room data so any code path
     # that calls send_room_enter() automatically gets correct choir state.
-    await _send_choir_update(player)
+    _send_choir_update(player, msgs)
 
 
 def _build_library_icons(type_id):
@@ -303,24 +303,47 @@ def _build_library_icons(type_id):
             "monster_empty": monster_empty, "tile_empty": tile_empty}
 
 
-async def _send_choir_update(player):
+def _send_choir_update(player, msgs: list):
     """If boss is engaged, send choir start/stop based on player's current room."""
     inst = get_dungeon_for_room(player.room)
     if not inst or not inst.boss_engaged:
         # Not in a dungeon or boss not engaged — stop any active choir
-        await send_to(player, {"type": "boss_choir_stop"})
+        msgs.append(("send", player, {"type": "boss_choir_stop"}))
         return
     boss_room = f"{inst.dungeon_id}_{inst.boss_cell[0]}_{inst.boss_cell[1]}"
     if player.room not in inst.active_rooms or player.room == boss_room:
-        await send_to(player, {"type": "boss_choir_stop"})
+        msgs.append(("send", player, {"type": "boss_choir_stop"}))
     else:
         distances = get_boss_distances(inst)
         dist = distances.get(player.room, 5)
         choir_track = f"music_{inst.boss_track}_choir.mp3"
-        await send_to(player, {"type": "boss_choir_start", "distance": dist, "choir_track": choir_track})
+        msgs.append(("send", player, {"type": "boss_choir_start", "distance": dist, "choir_track": choir_track}))
 
 
-async def do_room_transition(player, exit_direction: str):
+def broadcast_choir_start(boss_room, msgs: list):
+    """Send boss_choir_start to all dungeon players not in the boss room."""
+    instance = get_dungeon_for_room(boss_room)
+    if not instance:
+        return
+    distances = get_boss_distances(instance)
+    choir_track = f"music_{instance.boss_track}_choir.mp3"
+    for p in list(game.players.values()):
+        if p.room in instance.active_rooms and p.room != boss_room:
+            dist = distances.get(p.room, 5)
+            msgs.append(("send", p, {"type": "boss_choir_start", "distance": dist, "choir_track": choir_track}))
+
+
+def broadcast_choir_stop(room_id, msgs: list):
+    """Send boss_choir_stop to all dungeon players."""
+    instance = get_dungeon_for_room(room_id)
+    if not instance:
+        return
+    for p in list(game.players.values()):
+        if p.room in instance.active_rooms:
+            msgs.append(("send", p, {"type": "boss_choir_stop"}))
+
+
+def do_room_transition(player, exit_direction: str, msgs: list):
     """Move a player from their current room to an adjacent room via an exit."""
     player.walk = None
     old_room = player.room
@@ -331,13 +354,13 @@ async def do_room_transition(player, exit_direction: str):
     entrance_type = ENTRANCE_TO_TYPE.get(new_room_id)
     if entrance_type is not None:
         if entrance_type not in game.active_dungeons:
-            instance = await create_dungeon(entrance_type)
+            instance = create_dungeon(entrance_type)
             if instance is None:
-                await send_to(player, {"type": "info", "text": "The dungeon entrance is sealed."})
+                msgs.append(("send", player, {"type": "info", "text": "The dungeon entrance is sealed."}))
                 return
         new_room_id = game.active_dungeons[entrance_type].entrance_room_id
         # Show conjuring animation when first entering the dungeon
-        await send_to(player, {"type": "room_generating"})
+        msgs.append(("send", player, {"type": "room_generating"}))
 
     # Lazy resolution — if this is an unresolved dungeon room, resolve it now
     dungeon_inst = get_dungeon_for_room(new_room_id)
@@ -349,7 +372,7 @@ async def do_room_transition(player, exit_direction: str):
             if room_id_check == new_room_id and not assignment["resolved"]:
                 resolved = resolve_dungeon_room(dungeon_inst, cell)
                 if not resolved:
-                    await send_to(player, {"type": "info", "text": "The way is blocked."})
+                    msgs.append(("send", player, {"type": "info", "text": "The way is blocked."}))
                     return
                 break
 
@@ -361,7 +384,7 @@ async def do_room_transition(player, exit_direction: str):
     try:
         # Broadcast departure (player already removed, so exclude isn't needed
         # but other players in old room still see the message)
-        await broadcast_to_room(old_room, {"type": "player_left", "name": player.name})
+        msgs.append(("broadcast", old_room, {"type": "player_left", "name": player.name}, None))
 
         # Move player — preserve column/row through the doorway
         old_x, old_y = player.x, player.y
@@ -378,15 +401,13 @@ async def do_room_transition(player, exit_direction: str):
         # Skip dungeon teardown if the player is moving to another dungeon room
         # (they're removed from game.players so dungeon_player_count would be wrong)
         entering_dungeon = is_dungeon_room(new_room_id)
-        await on_player_leave_room(old_room, skip_dungeon_teardown=entering_dungeon)
-        await on_player_enter_room(new_room_id)
+        on_player_leave_room(old_room, msgs, skip_dungeon_teardown=entering_dungeon)
+        on_player_enter_room(new_room_id)
 
         # Send new room data and broadcast arrival while still removed,
         # so game_tick can't target us before the client has loaded.
-        await send_room_enter(player, exit_direction=exit_direction)
-        await broadcast_to_room(
-            new_room_id,
-            {"type": "player_entered", **player_info(player)},
-        )
+        send_room_enter(player, msgs, exit_direction=exit_direction)
+        msgs.append(("broadcast", new_room_id,
+                      {"type": "player_entered", **player_info(player)}, None))
     finally:
         game.players[player.ws] = player

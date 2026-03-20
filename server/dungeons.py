@@ -226,7 +226,7 @@ def _resolve_room_from_entry(room_id, entry_data, exits, cell, music_track, is_e
         ]
 
 
-async def create_dungeon(type_id) -> DungeonInstance | None:
+def create_dungeon(type_id) -> DungeonInstance | None:
     """Create a new dungeon instance for a given type.
 
     Picks a random layout, assigns library entries to each cell (~50% precreated,

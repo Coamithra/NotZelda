@@ -9,7 +9,6 @@ import asyncio
 import json
 import os
 import sys
-import time
 from http import HTTPStatus
 from pathlib import Path
 
@@ -26,23 +25,16 @@ import websockets
 
 from server import behavior_engine
 from server.state import game
-from server.constants import (
-    DIRECTIONS, ROOM_COLS, ROOM_ROWS,
-    WALK_TIME, CANCEL_TIME, LATENCY_COMP,
-    STARTING_ROOM, PLAYER_MAX_HP,
-)
+from server.constants import STARTING_ROOM, PLAYER_MAX_HP, ROOM_COLS, ROOM_ROWS
 from server.models import Player
-from server.net import send_to, broadcast_to_room, players_in_room, player_info, log_event
+from server.net import send_to, players_in_room, player_info, log_event
 from server.rooms import load_room_files, load_dungeon_templates
-from server.lifecycle import (
-    on_player_enter_room, on_player_leave_room,
-    send_room_enter, do_room_transition,
-)
-from server.combat import handle_attack, game_tick
-from server.debug_monsters import handle_debug_spawn, auto_register_debug_monsters
-from server.npc_chat import find_adjacent_npc, handle_npc_chat, clear_player_history, register_town_guard
+from server.lifecycle import on_player_enter_room, on_player_leave_room, send_room_enter
+from server.combat import game_tick, flush_messages
+from server.debug_monsters import auto_register_debug_monsters
+from server.npc_chat import clear_player_history, register_town_guard
 from server.dungeon_content import register_precreated_types, load_precreated_content
-from server.dungeons import load_deprecation_timestamp, load_deprecated_sets, _run_content_deprecation, start_background_regen, get_dungeon_for_room
+from server.dungeons import load_deprecation_timestamp, load_deprecated_sets
 from server.dungeon_types import DUNGEON_TYPES
 from server.content_library import ContentLibrary, MONSTER_LIBRARY_CAPACITY, TILE_LIBRARY_CAPACITY, ROOM_LIBRARY_CAPACITY
 from server.validation import register_monster_type, register_tile_type
@@ -93,273 +85,6 @@ if os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
 
 
 # ---------------------------------------------------------------------------
-# Movement
-# ---------------------------------------------------------------------------
-
-def check_edge_exit(player, new_x, new_y, room):
-    """Check if walking off-edge corresponds to a room exit."""
-    exits = room["exits"]
-    if new_y < 0 and "north" in exits and 6 <= player.x <= 8:
-        return "north"
-    if new_y > 10 and "south" in exits and 6 <= player.x <= 8:
-        return "south"
-    if new_x < 0 and "west" in exits and 4 <= player.y <= 6:
-        return "west"
-    if new_x > 14 and "east" in exits and 4 <= player.y <= 6:
-        return "east"
-    return None
-
-
-async def send_reconcile(player):
-    """Send full state snapshot so client snaps to authoritative server state."""
-    msg = {
-        "type": "reconcile",
-        "x": player.x,
-        "y": player.y,
-        "direction": player.direction,
-    }
-    if player.walk:
-        elapsed = time.monotonic() - player.walk["start_time"]
-        progress = min(elapsed / WALK_TIME, 1.0)
-        msg["walking"] = True
-        msg["walk_progress"] = progress
-        msg["walk_from"] = {"x": player.walk["from_x"], "y": player.walk["from_y"]}
-        msg["walk_to"] = {"x": player.walk["to_x"], "y": player.walk["to_y"]}
-    else:
-        msg["walking"] = False
-    await send_to(player, msg)
-
-
-async def handle_walk(player, direction: str, origin_x: int, origin_y: int):
-    """Handle a walk request — validate and start a server-side walk."""
-    if player.hp <= 0:
-        return
-
-    delta = DIRECTIONS.get(direction)
-    if not delta:
-        return
-    dx, dy = delta
-    now = time.monotonic()
-
-    # If already walking, check for chained walk acceptance
-    if player.walk:
-        elapsed = now - player.walk["start_time"]
-        progress = min(elapsed / WALK_TIME, 1.0)
-        if progress >= 1.0 - LATENCY_COMP / WALK_TIME:
-            # Near completion — accept chain. Complete current walk immediately.
-            if not player.walk["committed"]:
-                player.x = player.walk["to_x"]
-                player.y = player.walk["to_y"]
-            player.walk = None
-            # Use the completed walk's target as origin for the new walk
-            origin_x = player.x
-            origin_y = player.y
-        else:
-            # Not near completion — reject, send reconcile
-            await send_reconcile(player)
-            return
-
-    # Origin validation — client and server must agree on position
-    if origin_x != player.x or origin_y != player.y:
-        await send_reconcile(player)
-        return
-
-    player.direction = direction
-    player.dancing = False
-
-    to_x = origin_x + dx
-    to_y = origin_y + dy
-
-    room = game.rooms[player.room]
-    tilemap = room["tilemap"]
-
-    # Off-grid — check room exit
-    if to_x < 0 or to_x >= ROOM_COLS or to_y < 0 or to_y >= ROOM_ROWS:
-        exit_dir = check_edge_exit(player, to_x, to_y, room)
-        if exit_dir:
-            player.walk = None
-            await do_room_transition(player, exit_dir)
-        else:
-            await send_reconcile(player)
-        return
-
-    tile = tilemap[to_y][to_x]
-
-    # Stairs
-    if tile == "SU" and "up" in room["exits"]:
-        player.walk = None
-        await do_room_transition(player, "up")
-        return
-    if tile == "SD" and "down" in room["exits"]:
-        player.walk = None
-        await do_room_transition(player, "down")
-        return
-
-    # Not walkable
-    if not game.is_walkable_tile(tile):
-        await send_reconcile(player)
-        return
-
-    # Guard collision
-    for guard in game.guards.get(player.room, []):
-        if to_x == guard["x"] and to_y == guard["y"]:
-            await send_reconcile(player)
-            return
-
-    # Start walk — use real start_time (dead reckoning offset only sent to other clients)
-    player.walk = {
-        "from_x": origin_x, "from_y": origin_y,
-        "to_x": to_x, "to_y": to_y,
-        "dir": direction,
-        "start_time": now,
-        "committed": False,
-    }
-
-    # Broadcast walk_started to other players with latency compensation offset
-    initial_progress = LATENCY_COMP / WALK_TIME
-    await broadcast_to_room(player.room, {
-        "type": "walk_started",
-        "name": player.name,
-        "from_x": origin_x, "from_y": origin_y,
-        "to_x": to_x, "to_y": to_y,
-        "dir": direction,
-        "progress": initial_progress,
-    }, exclude=player.ws)
-
-
-async def handle_cancel_walk(player):
-    """Handle a cancel_walk request — validate timing and cancel or reject."""
-    if player.walk is None:
-        return
-
-    now = time.monotonic()
-    elapsed = now - player.walk["start_time"]
-
-    if elapsed <= CANCEL_TIME + LATENCY_COMP:
-        # Valid cancel — roll back to origin (even if midway committed)
-        from_x = player.walk["from_x"]
-        from_y = player.walk["from_y"]
-        player.x = from_x
-        player.y = from_y
-        player.walk = None
-        await broadcast_to_room(player.room, {
-            "type": "walk_cancelled",
-            "name": player.name,
-            "x": from_x,
-            "y": from_y,
-        }, exclude=player.ws)
-        # No reconcile needed — client already snapped back optimistically.
-        # Sending one would interfere with any new walk the client started.
-    else:
-        # Too late to cancel — send reconcile with current walk state
-        await send_reconcile(player)
-
-
-# ---------------------------------------------------------------------------
-# Chat commands
-# ---------------------------------------------------------------------------
-
-async def handle_chat(player, text: str):
-    text = text.strip()
-    if not text:
-        return
-
-    # Slash commands
-    if text.startswith("/"):
-        parts = text[1:].split(None, 1)
-        cmd = parts[0].lower() if parts else ""
-        if cmd == "who":
-            lines = ["Players online:"]
-            for p in game.players.values():
-                room_name = game.rooms[p.room]["name"]
-                lines.append(f"  {p.name} — {p.description} (in {room_name})")
-            await send_to(player, {"type": "info", "text": "\n".join(lines)})
-        elif cmd == "help":
-            await send_to(player, {"type": "info", "text": (
-                "Arrow keys / WASD — Move\n"
-                "Space — Attack\n"
-                "Enter — Open chat\n"
-                "Escape — Close chat\n"
-                "M — Toggle music\n"
-                "/who — List online players\n"
-                "/dance — Bust a move\n"
-                "/help — Show this message"
-            )})
-        elif cmd == "dance":
-            player.dancing = True
-            await broadcast_to_room(player.room, {
-                "type": "dance", "name": player.name,
-            })
-        elif cmd == "me":
-            action = parts[1] if len(parts) > 1 else ""
-            if action:
-                await broadcast_to_room(player.room, {
-                    "type": "chat", "from": player.name, "text": f"*{action}*",
-                })
-        elif cmd == "cheat" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
-            if player.has_flag("invulnerable"):
-                player.flags.discard("invulnerable")
-                await send_to(player, {"type": "info", "text": "Cheat mode off: vulnerable again"})
-            else:
-                player.grant_flag("has_sword")
-                player.grant_flag("invulnerable")
-                player.hp = player.max_hp
-                await send_to(player, {"type": "sword_obtained"})
-                await send_to(player, {"type": "hp_update", "hp": player.hp, "max_hp": player.max_hp})
-                await send_to(player, {"type": "info", "text": "Cheat mode: sword + invulnerability"})
-        elif cmd == "debug_spawn" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
-            await handle_debug_spawn(player, parts[1] if len(parts) > 1 else "")
-        elif cmd == "deprecate" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
-            for _tid in list(game.content_libraries.keys()):
-                _run_content_deprecation(_tid)
-            await send_to(player, {"type": "info", "text": "Forced deprecation pass — see ~ debug log"})
-        elif cmd == "regen" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
-            regen_inst = get_dungeon_for_room(player.room)
-            regen_type = regen_inst.dungeon_id if regen_inst else "d1"
-            regen_libs = game.content_libraries.get(regen_type, {})
-            regen_room_lib = regen_libs.get("rooms")
-            count = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else (regen_room_lib.placeholder_count if regen_room_lib else 0)
-            if count <= 0:
-                await send_to(player, {"type": "info", "text": f"No {regen_type} room library slots to fill"})
-            else:
-                start_background_regen(count, regen_type)
-                await send_to(player, {"type": "info", "text": f"Regen started: {count} {regen_type} room(s) — see ~ debug log"})
-        elif cmd == "choir" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
-            debug_on = getattr(player, '_debug_choir', False)
-            choir_inst = get_dungeon_for_room(player.room)
-            if debug_on:
-                player._debug_choir = False
-                if choir_inst:
-                    choir_inst.boss_engaged = False
-                await send_to(player, {"type": "boss_choir_stop"})
-                await send_to(player, {"type": "info", "text": "Choir overlay OFF"})
-            else:
-                dist = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 2
-                player._debug_choir = True
-                if choir_inst:
-                    choir_inst.boss_engaged = True
-                await send_to(player, {"type": "boss_choir_start", "distance": dist})
-                await send_to(player, {"type": "info", "text": f"Choir overlay ON (distance={dist})"})
-        else:
-            await send_to(player, {"type": "info", "text": "Unknown command. Try /help"})
-        return
-
-    # Normal chat — broadcast to room
-    room_name = game.rooms[player.room]["name"]
-    log_event("CHAT", f"{player.name} ({room_name}): {text}")
-    await broadcast_to_room(player.room, {
-        "type": "chat",
-        "from": player.name,
-        "text": text,
-    })
-
-    # Check if player is adjacent to an NPC — trigger LLM conversation
-    guard = find_adjacent_npc(player)
-    if guard:
-        await handle_npc_chat(player, guard, text)
-
-
-# ---------------------------------------------------------------------------
 # Connection lifecycle
 # ---------------------------------------------------------------------------
 
@@ -404,41 +129,24 @@ async def handle_connection(websocket):
         await send_to(player, login_msg)
         if os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
             await send_to(player, {"type": "sword_obtained"})
-        await on_player_enter_room(player.room)
-        await send_room_enter(player)
-        await broadcast_to_room(
-            player.room,
-            {"type": "player_entered", **player_info(player)},
-            exclude=websocket,
-        )
 
+        # Room entry — use sync lifecycle with message batching
+        on_player_enter_room(player.room)
+        login_msgs = []
+        send_room_enter(player, login_msgs)
+        login_msgs.append(("broadcast", player.room,
+                           {"type": "player_entered", **player_info(player)}, websocket))
+        await flush_messages(login_msgs)
+
+        # Message loop — all game logic is queued for the tick loop
         async for raw in websocket:
             try:
                 data = json.loads(raw)
                 msg_type = data.get("type")
-                if msg_type == "walk":
-                    origin = data.get("origin", {})
-                    await handle_walk(player, data.get("direction", ""),
-                                      origin.get("x", player.x), origin.get("y", player.y))
-                elif msg_type == "cancel_walk":
-                    await handle_cancel_walk(player)
-                elif msg_type == "face":
-                    direction = data.get("direction", "")
-                    if direction in DIRECTIONS:
-                        player.walk = None
-                        player.direction = direction
-                        player.dancing = False
-                        await broadcast_to_room(player.room, {
-                            "type": "player_faced",
-                            "name": player.name,
-                            "direction": direction,
-                        }, exclude=player.ws)
-                elif msg_type == "attack":
-                    await handle_attack(player)
-                elif msg_type == "chat":
-                    await handle_chat(player, data.get("text", ""))
-                elif msg_type == "ping":
+                if msg_type == "ping":
                     await player.ws.send(json.dumps({"type": "pong"}))
+                elif msg_type in ("walk", "cancel_walk", "face", "attack", "chat"):
+                    player.command_queue.append((msg_type, data))
             except json.JSONDecodeError:
                 print(f"[WARN] {name}: bad JSON: {raw[:200]}")
             except websockets.ConnectionClosed:
@@ -462,11 +170,11 @@ async def handle_connection(websocket):
             log_event("LEAVE", player.name)
             print(f"[LEAVE] {player.name}")
             clear_player_history(player.name)
-            await broadcast_to_room(
-                leaving_room,
-                {"type": "player_left", "name": player.name},
-            )
-            await on_player_leave_room(leaving_room)
+            disc_msgs = []
+            disc_msgs.append(("broadcast", leaving_room,
+                              {"type": "player_left", "name": player.name}, None))
+            on_player_leave_room(leaving_room, disc_msgs)
+            await flush_messages(disc_msgs)
 
 
 # ---------------------------------------------------------------------------
@@ -492,9 +200,7 @@ STATIC_FILES = {
     "/music_chapel.mp3":       ("music/overworld/chapel.mp3", "audio/mpeg"),
     "/music_overworld.mp3":    ("music/overworld/overworld.mp3", "audio/mpeg"),
     # Dungeon 1 music
-    "/music_dungeon1.mp3":     ("music/dungeon1/dungeon_a.mp3", "audio/mpeg"),
     "/music_dungeon2.mp3":     ("music/dungeon1/dungeon_b.mp3", "audio/mpeg"),
-    "/music_dungeon3.mp3":     ("music/dungeon1/dungeon_c.mp3", "audio/mpeg"),
     "/music_dungeon4.mp3":     ("music/dungeon1/dungeon_d.mp3", "audio/mpeg"),
     "/music_dungeon5.mp3":     ("music/dungeon1/dungeon_e.mp3", "audio/mpeg"),
     "/music_dungeon6.mp3":     ("music/dungeon1/dungeon_f.mp3", "audio/mpeg"),
