@@ -5,13 +5,52 @@ import random
 import time
 
 from server.state import game
-from server.constants import ROOM_RESET_COOLDOWN, ENTRY_DIR, EDGE_SPAWN_POINTS, DEFAULT_SPAWN
+from server.constants import (
+    ROOM_RESET_COOLDOWN, ENTRY_DIR, EDGE_SPAWN_POINTS, DEFAULT_SPAWN,
+    ROOM_COLS, ROOM_ROWS, DOORWAY_TILES,
+)
 from server.models import Monster
 from server.net import players_in_room, player_info
 from server.dungeons import (
     create_dungeon, destroy_dungeon, dungeon_player_count, resolve_dungeon_room,
     is_dungeon_room, get_boss_distances, get_dungeon_for_room,
 )
+
+
+def _lock_room(room_id: str):
+    """Close all doorways in a trap room by replacing doorway tiles with CD."""
+    room = game.rooms.get(room_id)
+    if not room:
+        return
+    tilemap = room["tilemap"]
+    exits = room["exits"]
+    original_tiles = {}
+    for direction in exits:
+        if direction not in DOORWAY_TILES:
+            continue
+        for r, c in DOORWAY_TILES[direction]:
+            original_tiles[(r, c)] = tilemap[r][c]
+            tilemap[r][c] = "CD"
+    game.locked_rooms[room_id] = {"original_tiles": original_tiles}
+
+
+def unlock_room(room_id: str, msgs: list):
+    """Open doorways in a trap room by restoring original tiles."""
+    lock_data = game.locked_rooms.pop(room_id, None)
+    if not lock_data:
+        return
+    room = game.rooms.get(room_id)
+    if not room:
+        return
+    tilemap = room["tilemap"]
+    tile_changes = []
+    for (r, c), tile in lock_data["original_tiles"].items():
+        tilemap[r][c] = tile
+        tile_changes.append([r, c, tile])
+    msgs.append(("broadcast", room_id, {
+        "type": "doors_unlocked",
+        "tile_changes": tile_changes,
+    }, None))
 
 
 def spawn_monsters(room_id: str) -> list[Monster]:
@@ -58,6 +97,11 @@ def on_player_enter_room(room_id: str):
     # Spawn fresh monsters
     monsters = spawn_monsters(room_id)
     game.room_monsters[room_id] = monsters
+
+    # Lock doors in trap rooms
+    room = game.rooms.get(room_id)
+    if room and room.get("locked") and monsters and room_id not in game.locked_rooms:
+        _lock_room(room_id)
 
 
 def on_player_leave_room(room_id: str, msgs: list, skip_dungeon_teardown: bool = False):
@@ -142,6 +186,10 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
         "hp": player.hp,
         "max_hp": player.max_hp,
     }
+
+    # Trap room — tell client doors are locked
+    if player.room in game.locked_rooms:
+        msg["locked"] = True
 
     # Attach custom sprite/tile data so the client can render them.
     # For dungeon rooms, send ALL registered custom content (the player may
@@ -415,6 +463,17 @@ def do_room_transition(player, exit_direction: str, msgs: list):
         entering_dungeon = is_dungeon_room(new_room_id)
         on_player_leave_room(old_room, msgs, skip_dungeon_teardown=entering_dungeon)
         on_player_enter_room(new_room_id)
+
+        # Adjust spawn position for locked trap rooms — spawn 1 tile inward
+        if new_room_id in game.locked_rooms:
+            if entry == "south":
+                player.y = min(player.y, 9.0)
+            elif entry == "north":
+                player.y = max(player.y, 1.0)
+            elif entry == "east":
+                player.x = min(player.x, 13.0)
+            elif entry == "west":
+                player.x = max(player.x, 1.0)
 
         # Send new room data and broadcast arrival while still removed,
         # so game_tick can't target us before the client has loaded.

@@ -20,6 +20,7 @@ import time
 import asyncio
 import re as _re
 from collections import deque
+from server.constants import ROOM_COLS, ROOM_ROWS, ALL_DOORWAY_TILES, bfs_reachable
 from pathlib import Path
 from dataclasses import dataclass, field
 
@@ -442,29 +443,9 @@ def validate_layout(data: dict, valid_tile_ids: set[str],
                 if actual in walkable_tiles:
                     errors.append(f"tilemap[{row_idx}][{col_idx}] must be non-walkable (border), got {actual!r}")
 
-    # Doorway reachability (flood fill)
-    doorways = []
-    for c in range(6, 9):
-        doorways.append((0, c))
-        doorways.append((10, c))
-    for r in range(4, 7):
-        doorways.append((r, 0))
-        doorways.append((r, 14))
-
-    visited = set()
-    stack = [doorways[0]]
-    while stack:
-        row, col = stack.pop()
-        if (row, col) in visited:
-            continue
-        if row < 0 or row > 10 or col < 0 or col > 14:
-            continue
-        if tilemap[row][col] not in walkable_tiles:
-            continue
-        visited.add((row, col))
-        stack.extend([(row-1, col), (row+1, col), (row, col-1), (row, col+1)])
-
-    unreachable = [f"({r},{c})" for r, c in doorways if (r, c) not in visited]
+    # Doorway reachability
+    reachable = bfs_reachable(tilemap, lambda t: t in walkable_tiles)
+    unreachable = [f"({r},{c})" for r, c in ALL_DOORWAY_TILES if (r, c) not in reachable]
     if unreachable:
         errors.append(f"Doorways not connected — unreachable: {', '.join(unreachable)}")
 
@@ -564,19 +545,7 @@ def patch_monster_placements(data: dict, walkable: set[str]) -> list[str]:
     if not all(isinstance(r, list) and len(r) == 15 for r in tilemap):
         return patches
 
-    # Flood fill from north doorway to find reachable walkable tiles
-    reachable = set()
-    stack = [(0, 7)]
-    while stack:
-        r, c = stack.pop()
-        if (r, c) in reachable:
-            continue
-        if r < 0 or r > 10 or c < 0 or c > 14:
-            continue
-        if tilemap[r][c] not in walkable:
-            continue
-        reachable.add((r, c))
-        stack.extend([(r-1,c),(r+1,c),(r,c-1),(r,c+1)])
+    reachable = bfs_reachable(tilemap, lambda t: t in walkable)
 
     occupied = set()
 
@@ -633,30 +602,10 @@ def patch_unreachable_doorways(data: dict, walkable: set[str]) -> list[str]:
     if not all(isinstance(r, list) and len(r) == 15 for r in tilemap):
         return patches
 
-    doorways = []
-    for c in range(6, 9):
-        doorways.append((0, c))
-        doorways.append((10, c))
-    for r in range(4, 7):
-        doorways.append((r, 0))
-        doorways.append((r, 14))
+    doorways = list(ALL_DOORWAY_TILES)
 
-    def flood_fill():
-        visited = set()
-        stack = [doorways[0]]
-        while stack:
-            row, col = stack.pop()
-            if (row, col) in visited:
-                continue
-            if row < 0 or row > 10 or col < 0 or col > 14:
-                continue
-            if tilemap[row][col] not in walkable:
-                continue
-            visited.add((row, col))
-            stack.extend([(row-1,col),(row+1,col),(row,col-1),(row,col+1)])
-        return visited
-
-    reachable = flood_fill()
+    is_walk = lambda t: t in walkable
+    reachable = bfs_reachable(tilemap, is_walk)
 
     # Find dominant walkable tile for carving
     walkable_counts = {}
@@ -699,7 +648,7 @@ def patch_unreachable_doorways(data: dict, walkable: set[str]) -> list[str]:
                 pos = visited_bfs.get(pos)
             if carved:
                 patches.append(f"Carved path to doorway ({dc},{dr}): {', '.join(carved)}")
-                reachable = flood_fill()
+                reachable = bfs_reachable(tilemap, is_walk)
 
     return patches
 

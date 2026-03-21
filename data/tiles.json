@@ -9489,5 +9489,32 @@
       "decoration",
       "freestanding"
     ]
+  },
+  "CD": {
+    "name": "closed_door",
+    "walkable": false,
+    "colors": {
+      "base": "#1a1a2a",
+      "bar": "#8a8a9a",
+      "highlight": "#aaaabc",
+      "shadow": "#0e0e1a"
+    },
+    "layers": [
+      ["bar", 2, 0, 2, 16],
+      ["bar", 6, 0, 2, 16],
+      ["bar", 10, 0, 2, 16],
+      ["bar", 14, 0, 2, 16],
+      ["highlight", 2, 0, 1, 16],
+      ["highlight", 6, 0, 1, 16],
+      ["highlight", 10, 0, 1, 16],
+      ["highlight", 14, 0, 1, 16],
+      ["shadow", 4, 0, 1, 16],
+      ["shadow", 8, 0, 1, 16],
+      ["shadow", 12, 0, 1, 16],
+      ["bar", 0, 4, 16, 2],
+      ["bar", 0, 11, 16, 2],
+      ["highlight", 0, 4, 16, 1],
+      ["highlight", 0, 11, 16, 1]
+    ]
   }
 }

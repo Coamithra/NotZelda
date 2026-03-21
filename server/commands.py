@@ -16,6 +16,7 @@ from server.net import players_in_room, log_event
 from server.lifecycle import (
     do_room_transition, get_room_monsters,
     broadcast_choir_start, broadcast_choir_stop,
+    unlock_room,
 )
 from server.dungeons import get_dungeon_for_room, _run_content_deprecation, start_background_regen, broadcast_to_dungeon
 from server.npc_chat import find_adjacent_npc
@@ -358,6 +359,9 @@ def _process_attack(player, now, msgs):
                     alive = [m for m in game.room_monsters[player.room] if m.alive]
                     if not alive:
                         dinst.cleared_rooms.add(player.room)
+                        # Unlock trap room doors
+                        if player.room in game.locked_rooms:
+                            unlock_room(player.room, msgs)
                         # Boss defeated — silence music + stop choir
                         if is_boss:
                             print(f"[BOSS] Boss defeated in {player.room}, silencing music")

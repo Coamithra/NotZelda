@@ -1,4 +1,6 @@
-"""Shared constants for the MUD server — directions, gameplay tuning."""
+"""Shared constants and room geometry utilities for the MUD server."""
+
+from collections import deque
 
 # ---------------------------------------------------------------------------
 # Directions
@@ -70,3 +72,49 @@ DUNGEON_MUSIC_TRACKS = [
 ]
 
 DUNGEON_BOSS_TRACKS = ["boss1", "boss2", "boss3"]
+
+# ---------------------------------------------------------------------------
+# Room geometry — doorway positions
+# ---------------------------------------------------------------------------
+
+# Standard doorway tile positions (row, col) per direction
+DOORWAY_TILES = {
+    "north": [(0, 6), (0, 7), (0, 8)],
+    "south": [(10, 6), (10, 7), (10, 8)],
+    "west":  [(4, 0), (5, 0), (6, 0)],
+    "east":  [(4, 14), (5, 14), (6, 14)],
+}
+
+ALL_DOORWAY_TILES = [(r, c) for tiles in DOORWAY_TILES.values() for r, c in tiles]
+
+
+def bfs_reachable(tilemap, is_walkable, seeds=None):
+    """BFS from seed tiles to find all reachable walkable tiles.
+
+    Args:
+        tilemap: 11x15 grid of tile codes
+        is_walkable: callable(tile_code) -> bool
+        seeds: list of (row, col) start positions.
+               Defaults to all 12 standard doorway tiles.
+    Returns:
+        set of (row, col) reachable walkable tiles.
+    """
+    if seeds is None:
+        seeds = ALL_DOORWAY_TILES
+    reachable = set()
+    queue = deque()
+    for r, c in seeds:
+        if 0 <= r < ROOM_ROWS and 0 <= c < ROOM_COLS and is_walkable(tilemap[r][c]):
+            if (r, c) not in reachable:
+                reachable.add((r, c))
+                queue.append((r, c))
+    while queue:
+        r, c = queue.popleft()
+        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            nr, nc = r + dr, c + dc
+            if (0 <= nr < ROOM_ROWS and 0 <= nc < ROOM_COLS
+                    and (nr, nc) not in reachable
+                    and is_walkable(tilemap[nr][nc])):
+                reachable.add((nr, nc))
+                queue.append((nr, nc))
+    return reachable

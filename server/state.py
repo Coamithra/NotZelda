@@ -38,6 +38,7 @@ class GameState:
         self.room_cooldowns = {}     # room_id -> timestamp
         self.room_hearts = {}        # room_id -> [heart dicts]
         self.room_projectiles = {}   # room_id -> {proj_id: Projectile}
+        self.locked_rooms = {}       # room_id -> {"original_tiles": {(row,col): tile_code}}
 
         # Dungeons
         self.active_dungeons = {}    # type_id -> DungeonInstance

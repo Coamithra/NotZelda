@@ -599,6 +599,17 @@ function handleMessage(msg) {
       break;
     }
 
+    case "doors_unlocked": {
+      // Trap room cleared — restore doorway tiles
+      if (G.currentRoom && G.currentRoom.tilemap && msg.tile_changes) {
+        for (const [r, c, tile] of msg.tile_changes) {
+          G.currentRoom.tilemap[r][c] = tile;
+        }
+      }
+      G.infoMessages.push({ text: "The doors have opened!", expires: Date.now() + 3000 });
+      break;
+    }
+
     case "monster_hit": {
       const hitMon = G.monsters.find(m => m.id === msg.id);
       if (hitMon) {

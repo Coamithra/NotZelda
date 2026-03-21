@@ -7,7 +7,7 @@ import time
 from collections import deque
 
 from server.state import game
-from server.constants import EDGE_SPAWN_POINTS, DEFAULT_SPAWN, ROOM_COLS, ROOM_ROWS
+from server.constants import EDGE_SPAWN_POINTS, DEFAULT_SPAWN, ROOM_COLS, ROOM_ROWS, DOORWAY_TILES, bfs_reachable
 from server.net import players_in_room, broadcast_debug
 
 
@@ -77,44 +77,27 @@ def _find_item_tile(room_id):
     guards = game.guards.get(room_id, [])
     npc_tiles = {(g["x"], g["y"]) for g in guards}
 
-    # Find a doorway tile to start BFS from
-    doorway_tiles = []
+    # Build seeds from active exits + stairs
     exits = room.get("exits", {})
-    if "north" in exits:
-        doorway_tiles.extend([(c, 0) for c in (6, 7, 8) if game.is_walkable_tile(tilemap[0][c])])
-    if "south" in exits:
-        doorway_tiles.extend([(c, 10) for c in (6, 7, 8) if game.is_walkable_tile(tilemap[10][c])])
-    if "west" in exits:
-        doorway_tiles.extend([(0, r) for r in (4, 5, 6) if game.is_walkable_tile(tilemap[r][0])])
-    if "east" in exits:
-        doorway_tiles.extend([(14, r) for r in (4, 5, 6) if game.is_walkable_tile(tilemap[r][14])])
-    # Stairs
+    seeds = []
+    for direction in exits:
+        if direction in DOORWAY_TILES:
+            seeds.extend(DOORWAY_TILES[direction])
     for ry, trow in enumerate(tilemap):
         for rx, tile in enumerate(trow):
             if tile == "SU":
-                doorway_tiles.append((rx, ry))
+                seeds.append((ry, rx))
 
-    if not doorway_tiles:
+    if not seeds:
         return None
 
-    # BFS from a doorway to find all reachable walkable tiles
-    start = doorway_tiles[0]
-    reachable = set()
-    queue = deque([start])
-    reachable.add(start)
-    while queue:
-        cx, cy = queue.popleft()
-        for dx, dy in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
-            nx, ny = cx + dx, cy + dy
-            if 0 <= nx < ROOM_COLS and 0 <= ny < ROOM_ROWS and (nx, ny) not in reachable:
-                if game.is_walkable_tile(tilemap[ny][nx]):
-                    reachable.add((nx, ny))
-                    queue.append((nx, ny))
+    reachable = bfs_reachable(tilemap, game.is_walkable_tile, seeds)
 
     # Filter to interior tiles (avoid exit doorways), skip NPC tiles
-    candidates = [(col, row) for (col, row) in reachable
-                  if 1 <= row <= 9 and 1 <= col <= 13
-                  and (col, row) not in npc_tiles]
+    # bfs_reachable returns (row, col); convert to (col, row) for output
+    candidates = [(c, r) for (r, c) in reachable
+                  if 1 <= r <= 9 and 1 <= c <= 13
+                  and (c, r) not in npc_tiles]
     if candidates:
         return random.choice(candidates)
     return None
@@ -233,10 +216,93 @@ def _get_cell_exits(cell, connections, entrance_col, entrance_row, dungeon_id, e
 
 
 # ---------------------------------------------------------------------------
+# Trap room (lock-in) support
+# ---------------------------------------------------------------------------
+
+# Inner ring doorway positions: (col, row) per direction
+_INNER_RING = {
+    "north": [(6, 1), (7, 1), (8, 1)],
+    "south": [(6, 9), (7, 9), (8, 9)],
+    "west":  [(1, 4), (1, 5), (1, 6)],
+    "east":  [(13, 4), (13, 5), (13, 6)],
+}
+
+# Direction to "inward" offset (toward room center)
+_INWARD_OFFSET = {
+    "north": (0, 1),
+    "south": (0, -1),
+    "west":  (1, 0),
+    "east":  (-1, 0),
+}
+
+TRAP_ROOM_CHANCE = 1 / 3
+TRAP_ROOM_MIN_MONSTERS = 3
+
+
+def _apply_trap_room(room_id, tilemap, exits):
+    """Turn a resolved room into a trap room: force 2nd-ring clearance, relocate monsters."""
+    # Collect all inner-ring exclusion tiles for active exits
+    exclusion = set()
+    for direction in exits:
+        if direction not in _INNER_RING:
+            continue
+        exclusion.update(_INNER_RING[direction])
+
+        # Force 2nd-ring tiles to match the outer-ring floor tile
+        if direction == "north":
+            floor_tile = tilemap[0][7]
+            for c in (6, 7, 8):
+                tilemap[1][c] = floor_tile
+        elif direction == "south":
+            floor_tile = tilemap[10][7]
+            for c in (6, 7, 8):
+                tilemap[9][c] = floor_tile
+        elif direction == "west":
+            floor_tile = tilemap[5][0]
+            for r in (4, 5, 6):
+                tilemap[r][1] = floor_tile
+        elif direction == "east":
+            floor_tile = tilemap[5][14]
+            for r in (4, 5, 6):
+                tilemap[r][13] = floor_tile
+
+    # Relocate any monsters sitting on exclusion tiles (doorway spawn zones)
+    templates = game.monster_templates.get(room_id, [])
+    for t in templates:
+        if (t["x"], t["y"]) not in exclusion:
+            continue
+        # Find which direction this exclusion tile belongs to
+        for direction, tiles in _INNER_RING.items():
+            if direction not in exits or (t["x"], t["y"]) not in tiles:
+                continue
+            # Try pushing 1 tile inward
+            dx, dy = _INWARD_OFFSET[direction]
+            nx, ny = t["x"] + dx, t["y"] + dy
+            if (0 <= nx < ROOM_COLS and 0 <= ny < ROOM_ROWS
+                    and game.is_walkable_tile(tilemap[ny][nx])
+                    and (nx, ny) not in exclusion):
+                t["x"], t["y"] = nx, ny
+            else:
+                # Random search for a nearby walkable tile
+                for _ in range(10):
+                    rx = t["x"] + random.randint(-3, 3)
+                    ry = t["y"] + random.randint(-3, 3)
+                    if (0 <= rx < ROOM_COLS and 0 <= ry < ROOM_ROWS
+                            and game.is_walkable_tile(tilemap[ry][rx])
+                            and (rx, ry) not in exclusion):
+                        t["x"], t["y"] = rx, ry
+                        break
+            break
+
+    game.rooms[room_id]["locked"] = True
+    print(f"[DUNGEON] Room {room_id} is a trap room (locked)")
+
+
+# ---------------------------------------------------------------------------
 # Room resolution
 # ---------------------------------------------------------------------------
 
-def _resolve_room_from_entry(room_id, entry_data, exits, cell, music_track, is_entrance, biome="dungeon", music_override=None, wall_tile="DW"):
+def _resolve_room_from_entry(room_id, entry_data, exits, cell, music_track, is_entrance, biome="dungeon", music_override=None, wall_tile="DW", can_be_trap=False, is_boss=False):
     """Materialize a library entry's data into a live game.rooms[] entry.
 
     entry_data: dict with 'name', 'tilemap' (list[list[str]]), 'monster_placements'
@@ -289,6 +355,13 @@ def _resolve_room_from_entry(room_id, entry_data, exits, cell, music_track, is_e
             {"kind": p["kind"], "x": p["x"], "y": p["y"]}
             for p in placements
         ]
+
+    # Trap room selection — boss always, others 1/3 chance with 3+ monsters
+    if is_boss:
+        _apply_trap_room(room_id, tilemap, exits)
+    elif can_be_trap and len(placements) >= TRAP_ROOM_MIN_MONSTERS:
+        if random.random() < TRAP_ROOM_CHANCE:
+            _apply_trap_room(room_id, tilemap, exits)
 
 
 def create_dungeon(type_id) -> DungeonInstance | None:
@@ -497,8 +570,14 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
     if cell == instance.boss_cell:
         music_override = instance.boss_track
 
+    # Normal rooms can be trap rooms; boss/treasure/entrance rooms cannot
+    is_boss = cell == instance.boss_cell
+    is_treasure = cell == instance.treasure_cell
+    can_be_trap = not is_entrance and not is_boss and not is_treasure
+
     _resolve_room_from_entry(room_id, entry_data, exits, cell, instance.music_track, is_entrance,
-                             biome=biome, music_override=music_override, wall_tile=wall_tile)
+                             biome=biome, music_override=music_override, wall_tile=wall_tile,
+                             can_be_trap=can_be_trap, is_boss=is_boss)
 
     assignment["resolved"] = True
     instance.resolved_rooms.add(room_id)
@@ -735,6 +814,7 @@ def destroy_dungeon(instance):
         game.room_hearts.pop(room_id, None)
         game.room_projectiles.pop(room_id, None)
         game.room_to_dungeon.pop(room_id, None)
+        game.locked_rooms.pop(room_id, None)
 
     game.active_dungeons.pop(type_id, None)
 
