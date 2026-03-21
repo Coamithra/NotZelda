@@ -195,6 +195,10 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
         if room_items:
             msg["dungeon_items"] = [{"x": it["x"], "y": it["y"], "item_type": it["item_type"]} for it in room_items]
 
+    # Attach dungeon type for client-side ambient effects
+    if inst:
+        msg["dungeon_type"] = inst.dungeon_id
+
     # Attach dungeon debug info for dungeon rooms
     if inst:
         dungeon_id = inst.dungeon_id

@@ -584,6 +584,8 @@ function gameLoop(timestamp) {
     renderTransition(Date.now());
   } else {
     renderRoom();
+    renderBrightTiles();
+    renderWaterMist();
     renderAreaWarnings();
     renderHeartPickups();
     renderDungeonGroundItems();

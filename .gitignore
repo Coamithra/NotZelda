@@ -7,8 +7,8 @@ event_log.txt
 .env
 server.env
 data/*
-!data/builtin_tiles.json
-!data/builtin_monsters.json
+!data/tiles.json
+!data/monsters.json
 !data/npc_sprites.json
 tmp_prompts/
 desktop.ini

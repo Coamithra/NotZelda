@@ -21,6 +21,61 @@ function renderRoom() {
   }
 }
 
+function renderBrightTiles() {
+  if (!G.currentRoom) return;
+  const tm = G.currentRoom.tilemap;
+  const t = performance.now() / 1000;
+  const ctx = G.ctx;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const recipe = customTiles[tm[r][c]];
+      if (!recipe || !recipe.bright) continue;
+      const cx = c * TS + TS / 2;
+      const cy = r * TS + TS / 2;
+      // Organic flicker from two sine waves at different frequencies
+      const flicker = 0.3 + 0.15 * Math.sin(t * 8.3 + c * 2.1) + 0.1 * Math.sin(t * 13.7 + r * 3.3);
+      const radius = TS * 1.8 + TS * 0.4 * Math.sin(t * 5.1 + c + r);
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+      grad.addColorStop(0, `rgba(255, 170, 50, ${flicker * 0.35})`);
+      grad.addColorStop(0.5, `rgba(200, 100, 20, ${flicker * 0.12})`);
+      grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+    }
+  }
+  ctx.restore();
+}
+
+function renderWaterMist() {
+  if (!G.currentRoom || G.currentRoom.dungeon_type !== "d2") return;
+  const t = performance.now() / 1000;
+  const ctx = G.ctx;
+  ctx.save();
+  // Drifting mist wisps — semi-transparent blue-white
+  for (let i = 0; i < 8; i++) {
+    const speed = 0.3 + (i % 3) * 0.15;
+    const baseX = ((i * 97 + t * speed * 40) % (CW + 120)) - 60;
+    const baseY = (i * 67) % CH;
+    const wobble = Math.sin(t * 0.8 + i * 1.7) * 20;
+    const alpha = 0.04 + 0.03 * Math.sin(t * 1.2 + i * 2.3);
+    const w = 100 + 40 * Math.sin(t * 0.5 + i);
+    const h = 20 + 10 * Math.sin(t * 0.7 + i * 1.1);
+    const grad = ctx.createRadialGradient(baseX, baseY + wobble, 0, baseX, baseY + wobble, w / 2);
+    grad.addColorStop(0, `rgba(180, 210, 240, ${alpha})`);
+    grad.addColorStop(0.6, `rgba(140, 180, 220, ${alpha * 0.5})`);
+    grad.addColorStop(1, "rgba(100, 150, 200, 0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(baseX - w / 2, baseY + wobble - h, w, h * 2);
+  }
+  // Subtle overall blue tint
+  const tintAlpha = 0.03 + 0.01 * Math.sin(t * 0.6);
+  ctx.fillStyle = `rgba(100, 160, 220, ${tintAlpha})`;
+  ctx.fillRect(0, 0, CW, CH);
+  ctx.restore();
+}
+
 function startDance(name) {
   G.dancingPlayers[name] = { frame: 0, nextTime: Date.now() };
   G.speechBubbles.push({
@@ -658,6 +713,7 @@ function renderTransition(now) {
       G.ctx.fillRect(0, 0, CW, CH);
     } else {
       renderRoom();
+      renderBrightTiles();
       renderPlayers();
       renderUI();
       G.ctx.fillStyle = `rgba(0,0,0,${(1 - progress) * 2})`;
@@ -677,6 +733,7 @@ function renderTransition(now) {
     if (dir === "west")  G.ctx.translate(ox - CW, 0);
     if (dir === "east")  G.ctx.translate(ox + CW, 0);
     renderRoom();
+    renderBrightTiles();
     renderPlayers();
     renderUI();
     G.ctx.restore();

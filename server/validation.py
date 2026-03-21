@@ -312,11 +312,14 @@ def register_tile_type(data: dict) -> tuple[bool, list[str]]:
         return False, errors
 
     tile_id = data["id"]
-    game.custom_tile_recipes[tile_id] = {
+    recipe = {
         "colors": data["colors"],
         "layers": data["layers"],
         "walkable": data.get("walkable", False),
     }
+    if data.get("bright"):
+        recipe["bright"] = True
+    game.custom_tile_recipes[tile_id] = recipe
 
     print(f"[REG] Tile type registered: {tile_id} (walkable={data.get('walkable', False)})")
     return True, []

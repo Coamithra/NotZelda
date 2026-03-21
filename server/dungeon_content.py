@@ -1,612 +1,34 @@
-"""Precreated dungeon content — monsters, tiles, and room library entries.
+"""Dungeon content configuration — which monsters and tiles belong to each dungeon.
 
-All precreated content is defined here as data dicts and loaded into the
-content libraries at startup as permanent entries. This is the single source
-of truth for dungeon base content — no hardcoded content elsewhere.
+All monster and tile recipes live in data/monsters.json and data/tiles.json.
+This module just declares which IDs are permanent members of each dungeon's
+content library, and handles populating those libraries at startup.
 
-The AI prompt sees these entries alongside custom (AI-generated) entries
-with no distinction.
+# TODO: These ID lists could be moved to a data file (e.g. data/d1_content.json)
+# for full data-driven config, but that's probably overengineering for this
+# size of game. The IDs rarely change and are easy to maintain here.
 """
 
 from server.content_library import LibraryEntry, ContentLibrary
+from server.state import game
 
 # ---------------------------------------------------------------------------
-# Precreated monsters (4)
-# ---------------------------------------------------------------------------
-
-PRECREATED_MONSTERS = [
-    {
-        "kind": "skeleton",
-        "tags": ["undead", "melee", "dungeon"],
-        "stats": {"hp": 2, "walk_time": 0.25, "decision_time": 2.0, "damage": 3},
-        "behavior": {"rules": [
-            {"if": "player_within", "range": 5, "do": "move", "direction": "player"},
-            {"if": "always", "do": "move", "direction": "random"},
-        ]},
-        "sprite": {
-            "colors": {"bone": "#ddd8cc", "dark": "#aaa89a", "eyes": "#222222"},
-            "yOff": [0, -1],
-            "frames": [
-                [
-                    ["bone", 5, 1, 6, 5], ["eyes", 6, 3, 2, 2], ["eyes", 9, 3, 2, 2],
-                    ["eyes", 7, 5, 2, 1], ["bone", 6, 6, 4, 5], ["dark", 7, 7, 2, 1],
-                    ["dark", 7, 9, 2, 1], ["bone", 4, 7, 2, 1], ["bone", 3, 8, 1, 3],
-                    ["bone", 10, 7, 2, 1], ["bone", 12, 8, 1, 3], ["bone", 6, 11, 2, 3],
-                    ["bone", 9, 11, 2, 3], ["dark", 5, 14, 3, 1], ["dark", 9, 14, 3, 1],
-                ],
-                [
-                    ["bone", 5, 1, 6, 5], ["eyes", 6, 3, 2, 2], ["eyes", 9, 3, 2, 2],
-                    ["eyes", 7, 5, 2, 1], ["bone", 6, 6, 4, 5], ["dark", 7, 7, 2, 1],
-                    ["dark", 7, 9, 2, 1], ["bone", 4, 7, 2, 1], ["bone", 3, 8, 1, 3],
-                    ["bone", 10, 7, 2, 1], ["bone", 12, 8, 1, 3], ["bone", 6, 11, 2, 3],
-                    ["bone", 9, 11, 2, 3], ["dark", 5, 14, 3, 1], ["dark", 9, 14, 3, 1],
-                ],
-            ],
-        },
-        "death_sprite": {
-            "colors": {"clr": "#ddd8cc"},
-            "frames": [
-                [["clr", 3, 11, 10, 3], ["clr", 5, 10, 6, 1]],
-                [["clr", 1, 12, 3, 2], ["clr", 5, 13, 2, 1], ["clr", 8, 11, 3, 2], ["clr", 12, 13, 3, 1]],
-                {"alpha": 0.4, "layers": [["clr", 0, 13, 2, 1], ["clr", 6, 14, 2, 1], ["clr", 13, 13, 2, 1]]},
-            ],
-        },
-    },
-    {
-        "kind": "bat",
-        "tags": ["cave", "flying", "dungeon"],
-        "stats": {"hp": 1, "walk_time": 0.2, "decision_time": 1.0, "damage": 1},
-        "behavior": {"rules": [
-            {"if": "always", "do": "move", "direction": "random"},
-        ]},
-        "sprite": {
-            "colors": {"body": "#3a2a4a", "wing": "#5a3a6a", "eyes": "#ff4444"},
-            "frames": [
-                [
-                    ["body", 6, 6, 4, 4], ["wing", 1, 3, 5, 4], ["wing", 10, 3, 5, 4],
-                    ["wing", 2, 2, 3, 1], ["wing", 11, 2, 3, 1],
-                    ["eyes", 6, 7, 1, 1], ["eyes", 9, 7, 1, 1],
-                ],
-                [
-                    ["body", 6, 5, 4, 4], ["wing", 1, 7, 5, 4], ["wing", 10, 7, 5, 4],
-                    ["wing", 2, 11, 3, 1], ["wing", 11, 11, 3, 1],
-                    ["eyes", 6, 6, 1, 1], ["eyes", 9, 6, 1, 1],
-                ],
-            ],
-        },
-        "death_sprite": {
-            "colors": {"clr": "#3a2a4a"},
-            "frames": [
-                [["clr", 3, 11, 10, 3], ["clr", 5, 10, 6, 1]],
-                [["clr", 1, 12, 3, 2], ["clr", 5, 13, 2, 1], ["clr", 8, 11, 3, 2], ["clr", 12, 13, 3, 1]],
-                {"alpha": 0.4, "layers": [["clr", 0, 13, 2, 1], ["clr", 6, 14, 2, 1], ["clr", 13, 13, 2, 1]]},
-            ],
-        },
-    },
-    {
-        "kind": "dungeon_slime",
-        "tags": ["dungeon", "melee", "tank"],
-        "stats": {"hp": 3, "walk_time": 0.35, "decision_time": 2.5, "damage": 1},
-        "behavior": {"rules": [
-            {"if": "player_within", "range": 4, "do": "move", "direction": "player"},
-            {"if": "always", "do": "move", "direction": "random"},
-        ]},
-        "sprite": {
-            "colors": {"body": "#5a4a6a", "dark": "#3a2a4a", "eyes": "#cc4444", "highlight": "#8a7a9a"},
-            "frames": [
-                [
-                    ["dark", 2, 9, 12, 6], ["body", 3, 8, 10, 6], ["body", 4, 7, 8, 1],
-                    ["eyes", 5, 9, 2, 2], ["eyes", 9, 9, 2, 2], ["highlight", 5, 8, 2, 1],
-                ],
-                [
-                    ["dark", 4, 12, 8, 2], ["body", 4, 4, 8, 9], ["body", 5, 3, 6, 1],
-                    ["body", 5, 13, 6, 1], ["dark", 4, 11, 8, 2],
-                    ["eyes", 5, 6, 2, 2], ["eyes", 9, 6, 2, 2], ["highlight", 5, 4, 2, 1],
-                ],
-            ],
-        },
-        "death_sprite": {
-            "colors": {"clr": "#5a4a6a"},
-            "frames": [
-                [["clr", 3, 11, 10, 3], ["clr", 5, 10, 6, 1]],
-                [["clr", 1, 12, 3, 2], ["clr", 5, 13, 2, 1], ["clr", 8, 11, 3, 2], ["clr", 12, 13, 3, 1]],
-                {"alpha": 0.4, "layers": [["clr", 0, 13, 2, 1], ["clr", 6, 14, 2, 1], ["clr", 13, 13, 2, 1]]},
-            ],
-        },
-    },
-    {
-        "kind": "phantom",
-        "tags": ["undead", "magic", "dungeon", "flying"],
-        "stats": {"hp": 2, "walk_time": 0.25, "decision_time": 2.5, "damage": 2},
-        "behavior": {"rules": [
-            {"if": "player_within", "range": 6, "do": "teleport",
-             "target": "player", "drift": 2, "range": 6, "damage": 2,
-             "warmup": 1, "cooldown": 4},
-            {"if": "player_within", "range": 2, "do": "move", "direction": "away"},
-            {"if": "always", "do": "move", "direction": "random"},
-        ]},
-        "sprite": {
-            "colors": {"body": "#8888cc", "dark": "#5555aa", "eyes": "#ffffff", "glow": "#aaaaee"},
-            "frames": [
-                [
-                    ["dark", 5, 8, 6, 6], ["body", 4, 3, 8, 9], ["body", 5, 2, 6, 1],
-                    ["glow", 5, 3, 2, 1], ["eyes", 5, 5, 2, 2], ["eyes", 9, 5, 2, 2],
-                    ["dark", 4, 12, 2, 2], ["dark", 10, 12, 2, 2],
-                    ["dark", 6, 14, 1, 1], ["dark", 9, 14, 1, 1],
-                ],
-                [
-                    ["dark", 5, 7, 6, 6], ["body", 4, 2, 8, 9], ["body", 5, 1, 6, 1],
-                    ["glow", 5, 2, 2, 1], ["eyes", 5, 4, 2, 2], ["eyes", 9, 4, 2, 2],
-                    ["dark", 4, 11, 2, 2], ["dark", 10, 11, 2, 2],
-                    ["dark", 6, 13, 1, 1], ["dark", 9, 13, 1, 1],
-                ],
-            ],
-        },
-        "death_sprite": {
-            "colors": {"clr": "#8888cc"},
-            "frames": [
-                [["clr", 3, 11, 10, 3], ["clr", 5, 10, 6, 1]],
-                [["clr", 1, 12, 3, 2], ["clr", 5, 13, 2, 1], ["clr", 8, 11, 3, 2], ["clr", 12, 13, 3, 1]],
-                {"alpha": 0.4, "layers": [["clr", 0, 13, 2, 1], ["clr", 6, 14, 2, 1], ["clr", 13, 13, 2, 1]]},
-            ],
-        },
-    },
-]
-
-# ---------------------------------------------------------------------------
-# Boss monster — 2x2 tile dungeon boss (not in library; spawned via d1_boss.room)
-# ---------------------------------------------------------------------------
-
-BOSS_MONSTER = {
-    "kind": "dungeon_warden",
-    "tags": ["boss", "dungeon", "undead"],
-    "stats": {"hp": 20, "walk_time": 0.25, "decision_time": 0.67, "damage": 3, "width": 2, "height": 2, "boss": True},
-    "behavior": {"rules": [
-        # Phase 2 (low HP): rapid projectile barrage
-        {"if": "hp_below", "value": 10, "do": "projectile",
-         "direction": "player", "damage": 2, "sprite_color": "#cc33ff",
-         "warmup": 1, "cooldown": 2},
-        # Ground slam when player is close
-        {"if": "player_within", "range": 3, "do": "area",
-         "range": 2, "damage": 3, "warmup": 1, "cooldown": 4},
-        # Charge if player is in line of sight
-        {"if": "player_in_range_line", "range": 8, "los": True, "do": "charge",
-         "direction": "player", "range": 6, "damage": 4, "warmup": 1, "cooldown": 5},
-        # Chase player aggressively
-        {"if": "player_within", "range": 10, "do": "move", "direction": "player"},
-        # Idle patrol
-        {"if": "always", "do": "move", "direction": "random"},
-    ]},
-    "sprite": {
-        "colors": {
-            "armor": "#2a1a3a", "plate": "#3a2a4a", "visor": "#ff2200",
-            "glow": "#cc4400", "trim": "#8a6a2a", "cape": "#1a0a2a",
-            "dark": "#150a20", "shoulder": "#4a3a5a", "highlight": "#5a4a6a",
-        },
-        "yOff": [0, -1],
-        "frames": [
-            [
-                # Cape behind
-                ["cape", 3, 8, 10, 7], ["dark", 4, 14, 8, 2],
-                # Body/torso
-                ["armor", 4, 4, 8, 8], ["plate", 5, 5, 6, 6],
-                # Shoulder pads
-                ["shoulder", 2, 4, 3, 3], ["shoulder", 11, 4, 3, 3],
-                ["highlight", 2, 4, 3, 1], ["highlight", 11, 4, 3, 1],
-                # Helm
-                ["armor", 5, 1, 6, 4], ["plate", 6, 2, 4, 2],
-                ["dark", 6, 0, 4, 1],
-                # Visor
-                ["visor", 6, 3, 2, 1], ["visor", 9, 3, 2, 1],
-                ["glow", 5, 2, 1, 1], ["glow", 10, 2, 1, 1],
-                # Gold trim
-                ["trim", 4, 8, 8, 1], ["trim", 7, 4, 2, 1],
-                # Arms
-                ["armor", 2, 7, 2, 4], ["armor", 12, 7, 2, 4],
-                ["plate", 1, 10, 2, 1], ["plate", 13, 10, 2, 1],
-                # Legs
-                ["armor", 5, 12, 3, 3], ["armor", 9, 12, 3, 3],
-                ["dark", 5, 15, 3, 1], ["dark", 9, 15, 3, 1],
-            ],
-            [
-                # Cape behind
-                ["cape", 3, 7, 10, 7], ["dark", 4, 13, 8, 2],
-                # Body/torso
-                ["armor", 4, 3, 8, 8], ["plate", 5, 4, 6, 6],
-                # Shoulder pads
-                ["shoulder", 2, 3, 3, 3], ["shoulder", 11, 3, 3, 3],
-                ["highlight", 2, 3, 3, 1], ["highlight", 11, 3, 3, 1],
-                # Helm
-                ["armor", 5, 0, 6, 4], ["plate", 6, 1, 4, 2],
-                # Visor (brighter in hop frame)
-                ["visor", 6, 2, 2, 1], ["visor", 9, 2, 2, 1],
-                ["glow", 5, 1, 1, 1], ["glow", 10, 1, 1, 1],
-                # Gold trim
-                ["trim", 4, 7, 8, 1], ["trim", 7, 3, 2, 1],
-                # Arms
-                ["armor", 2, 6, 2, 4], ["armor", 12, 6, 2, 4],
-                ["plate", 1, 9, 2, 1], ["plate", 13, 9, 2, 1],
-                # Legs
-                ["armor", 5, 11, 3, 3], ["armor", 9, 11, 3, 3],
-                ["dark", 5, 14, 3, 1], ["dark", 9, 14, 3, 1],
-            ],
-        ],
-    },
-    "death_sprite": {
-        "colors": {"armor": "#2a1a3a", "glow": "#cc4400", "trim": "#8a6a2a"},
-        "frames": [
-            # Crumble frame 1 — armor collapses
-            [["armor", 2, 10, 12, 4], ["armor", 4, 8, 8, 2], ["trim", 5, 9, 6, 1],
-             ["glow", 6, 10, 2, 1], ["glow", 9, 10, 2, 1]],
-            # Crumble frame 2 — pieces scatter
-            [["armor", 1, 12, 4, 2], ["armor", 6, 11, 4, 2], ["armor", 11, 12, 4, 2],
-             ["trim", 3, 13, 2, 1], ["glow", 8, 12, 1, 1]],
-            # Crumble frame 3 — fading remnants
-            {"alpha": 0.4, "layers": [
-                ["armor", 0, 13, 3, 1], ["armor", 6, 14, 3, 1], ["armor", 12, 13, 3, 1],
-                ["glow", 7, 13, 2, 1],
-            ]},
-        ],
-    },
-}
-
-
-# ---------------------------------------------------------------------------
-# Precreated tiles (7) — server-side tile recipes for custom registry
-# ---------------------------------------------------------------------------
-
-PRECREATED_TILES = [
-    {
-        "id": "DW",
-        "walkable": False,
-        "tags": ["dungeon", "wall", "stone"],
-        "colors": {"base": "#3a3a4a", "alt": "#2a2a3a"},
-        "layers": [
-            ["alt", 0, 0, 1, 1], ["alt", 8, 0, 1, 1], ["alt", 0, 3, 16, 1],
-            ["alt", 4, 4, 1, 1], ["alt", 12, 4, 1, 1], ["alt", 0, 7, 16, 1],
-            ["alt", 0, 8, 1, 1], ["alt", 8, 8, 1, 1], ["alt", 0, 11, 16, 1],
-            ["alt", 4, 12, 1, 1], ["alt", 12, 12, 1, 1], ["alt", 0, 15, 16, 1],
-        ],
-    },
-    {
-        "id": "DF",
-        "walkable": True,
-        "tags": ["dungeon", "floor", "stone"],
-        "colors": {"base": "#5a5a5a", "alt": "#4a4a4a"},
-        "layers": [
-            ["alt", 0, 0, 1, 1], ["alt", 3, 0, 1, 1], ["alt", 8, 0, 2, 1],
-            ["alt", 15, 0, 1, 1], ["alt", 1, 1, 1, 1], ["alt", 13, 1, 2, 1],
-            ["alt", 3, 2, 1, 1], ["alt", 6, 2, 3, 1], ["alt", 12, 2, 1, 1],
-            ["alt", 2, 3, 1, 1], ["alt", 4, 3, 1, 1], ["alt", 14, 3, 2, 1],
-            ["alt", 15, 4, 1, 1], ["alt", 0, 5, 1, 1], ["alt", 6, 5, 2, 1],
-            ["alt", 9, 5, 2, 1], ["alt", 13, 5, 1, 1], ["alt", 1, 6, 1, 1],
-            ["alt", 5, 6, 1, 1], ["alt", 10, 6, 2, 1], ["alt", 6, 7, 2, 1],
-            ["alt", 11, 7, 1, 1], ["alt", 13, 7, 3, 1], ["alt", 1, 8, 2, 1],
-            ["alt", 4, 8, 1, 1], ["alt", 12, 8, 1, 1], ["alt", 4, 9, 1, 1],
-            ["alt", 15, 9, 1, 1], ["alt", 4, 10, 1, 1], ["alt", 11, 10, 1, 1],
-            ["alt", 13, 10, 2, 1], ["alt", 3, 11, 1, 1], ["alt", 7, 11, 2, 1],
-            ["alt", 12, 11, 1, 1], ["alt", 15, 11, 1, 1], ["alt", 1, 12, 1, 1],
-            ["alt", 7, 12, 1, 1], ["alt", 10, 12, 1, 1], ["alt", 3, 13, 1, 1],
-            ["alt", 5, 13, 2, 1], ["alt", 11, 13, 1, 1], ["alt", 14, 13, 1, 1],
-            ["alt", 1, 14, 1, 1], ["alt", 4, 14, 2, 1], ["alt", 8, 14, 1, 1],
-            ["alt", 4, 15, 1, 1], ["alt", 7, 15, 1, 1], ["alt", 9, 15, 1, 1],
-            ["#3a3a3a", 4, 3, 1, 6], ["#3a3a3a", 4, 9, 5, 1], ["#3a3a3a", 10, 6, 1, 5],
-        ],
-    },
-    {
-        "id": "PL",
-        "walkable": False,
-        "tags": ["dungeon", "wall", "decorative"],
-        "colors": {"base": "#5a5a5a", "alt": "#4a4a4a", "cap": "#7a7a7a", "body": "#6a6a6a"},
-        "layers": [
-            ["alt", 0, 0, 1, 1], ["alt", 3, 0, 1, 1], ["alt", 8, 0, 2, 1],
-            ["alt", 15, 0, 1, 1], ["alt", 1, 1, 1, 1], ["alt", 13, 1, 2, 1],
-            ["alt", 3, 2, 1, 1], ["alt", 6, 2, 3, 1], ["alt", 12, 2, 1, 1],
-            ["alt", 2, 3, 1, 1], ["alt", 4, 3, 1, 1], ["alt", 14, 3, 2, 1],
-            ["alt", 15, 4, 1, 1], ["alt", 0, 5, 1, 1], ["alt", 6, 5, 2, 1],
-            ["alt", 9, 5, 2, 1], ["alt", 13, 5, 1, 1], ["alt", 1, 6, 1, 1],
-            ["alt", 5, 6, 1, 1], ["alt", 10, 6, 2, 1], ["alt", 6, 7, 2, 1],
-            ["alt", 11, 7, 1, 1], ["alt", 13, 7, 3, 1], ["alt", 1, 8, 2, 1],
-            ["alt", 4, 8, 1, 1], ["alt", 12, 8, 1, 1], ["alt", 4, 9, 1, 1],
-            ["alt", 15, 9, 1, 1], ["alt", 4, 10, 1, 1], ["alt", 11, 10, 1, 1],
-            ["alt", 13, 10, 2, 1], ["alt", 3, 11, 1, 1], ["alt", 7, 11, 2, 1],
-            ["alt", 12, 11, 1, 1], ["alt", 15, 11, 1, 1], ["alt", 1, 12, 1, 1],
-            ["alt", 7, 12, 1, 1], ["alt", 10, 12, 1, 1], ["alt", 3, 13, 1, 1],
-            ["alt", 5, 13, 2, 1], ["alt", 11, 13, 1, 1], ["alt", 14, 13, 1, 1],
-            ["alt", 1, 14, 1, 1], ["alt", 4, 14, 2, 1], ["alt", 8, 14, 1, 1],
-            ["alt", 4, 15, 1, 1], ["alt", 7, 15, 1, 1], ["alt", 9, 15, 1, 1],
-            ["body", 5, 2, 6, 12], ["body", 4, 3, 8, 10],
-            ["cap", 4, 2, 8, 2], ["cap", 5, 1, 6, 1], ["cap", 4, 12, 8, 2],
-        ],
-    },
-    {
-        "id": "SC",
-        "walkable": False,
-        "tags": ["dungeon", "wall", "light"],
-        "colors": {"base": "#3a3a4a", "alt": "#2a2a3a", "flame": "#ffcc33"},
-        "layers": [
-            ["alt", 0, 0, 1, 1], ["alt", 8, 0, 1, 1], ["alt", 0, 3, 16, 1],
-            ["alt", 4, 4, 1, 1], ["alt", 12, 4, 1, 1], ["alt", 0, 7, 16, 1],
-            ["alt", 0, 8, 1, 1], ["alt", 8, 8, 1, 1], ["alt", 0, 11, 16, 1],
-            ["alt", 4, 12, 1, 1], ["alt", 12, 12, 1, 1], ["alt", 0, 15, 16, 1],
-            ["#5a5a5a", 6, 6, 4, 4], ["#5a5a5a", 7, 10, 2, 2],
-            ["flame", 7, 3, 2, 4], ["#ff8833", 6, 4, 4, 2],
-        ],
-    },
-    {
-        "id": "BZ",
-        "walkable": False,
-        "tags": ["dungeon", "decoration", "light", "freestanding"],
-        "colors": {"base": "#5a5a5a", "alt": "#4a4a4a", "pedestal": "#7a7a7a",
-                   "flame": "#ffcc33", "ember": "#ff8833"},
-        "layers": [
-            ["alt", 0, 0, 1, 1], ["alt", 3, 1, 1, 1], ["alt", 13, 0, 1, 1],
-            ["alt", 1, 14, 1, 1], ["alt", 14, 14, 1, 1], ["alt", 1, 15, 1, 1],
-            ["alt", 12, 15, 1, 1],
-            ["pedestal", 5, 10, 6, 5], ["pedestal", 6, 8, 4, 3],
-            ["#6a6a6a", 4, 7, 8, 2],
-            ["flame", 5, 2, 6, 6], ["ember", 6, 3, 4, 4], ["#fff4aa", 7, 2, 2, 2],
-        ],
-    },
-    {
-        "id": "MF",
-        "walkable": True,
-        "tags": ["dungeon", "floor", "decorative"],
-        "colors": {"base": "#5a5a5a", "alt": "#4a4a4a", "pattern": "#7a6a5a",
-                   "highlight": "#8a7a6a"},
-        "layers": [
-            ["alt", 1, 1, 1, 1], ["alt", 14, 1, 1, 1],
-            ["alt", 1, 14, 1, 1], ["alt", 14, 14, 1, 1],
-            ["pattern", 0, 0, 16, 1], ["pattern", 0, 15, 16, 1],
-            ["pattern", 0, 0, 1, 16], ["pattern", 15, 0, 1, 16],
-            ["pattern", 7, 3, 2, 1], ["pattern", 6, 4, 4, 1],
-            ["pattern", 5, 5, 6, 1], ["pattern", 4, 6, 8, 1],
-            ["pattern", 3, 7, 10, 1], ["pattern", 4, 8, 8, 1],
-            ["pattern", 5, 9, 6, 1], ["pattern", 6, 10, 4, 1],
-            ["pattern", 7, 11, 2, 1],
-            ["highlight", 7, 7, 2, 1],
-        ],
-    },
-    {
-        "id": "CF",
-        "walkable": True,
-        "tags": ["dungeon", "floor", "hazard"],
-        "colors": {"base": "#5a5a5a", "alt": "#4a4a4a", "crack": "#3a3a3a",
-                   "deep": "#2a2a2a"},
-        "layers": [
-            ["alt", 2, 0, 1, 1], ["alt", 9, 1, 1, 1], ["alt", 14, 0, 1, 1],
-            ["alt", 0, 5, 1, 1], ["alt", 12, 7, 1, 1], ["alt", 1, 12, 1, 1],
-            ["alt", 10, 14, 1, 1],
-            ["crack", 3, 0, 1, 3], ["crack", 4, 2, 1, 2], ["crack", 5, 3, 1, 3],
-            ["crack", 4, 5, 1, 2], ["crack", 3, 6, 1, 2], ["crack", 2, 7, 1, 3],
-            ["crack", 3, 9, 1, 2],
-            ["crack", 10, 1, 1, 2], ["crack", 11, 2, 1, 3], ["crack", 12, 4, 1, 2],
-            ["crack", 11, 5, 1, 2],
-            ["crack", 5, 11, 3, 1], ["crack", 7, 12, 3, 1], ["crack", 9, 11, 2, 1],
-            ["deep", 4, 3, 1, 1], ["deep", 3, 7, 1, 1], ["deep", 11, 3, 1, 1],
-            ["deep", 7, 12, 1, 1],
-        ],
-    },
-]
-
-
-# ---------------------------------------------------------------------------
-# Water Temple (d2) — precreated monsters (2)
-# ---------------------------------------------------------------------------
-
-D2_PRECREATED_MONSTERS = [
-    {
-        "kind": "water_serpent",
-        "tags": ["water", "melee", "dungeon"],
-        "stats": {"hp": 2, "walk_time": 0.2, "decision_time": 1.5, "damage": 2},
-        "behavior": {"rules": [
-            {"if": "player_within", "range": 5, "do": "move", "direction": "player"},
-            {"if": "always", "do": "move", "direction": "random"},
-        ]},
-        "sprite": {
-            "colors": {"body": "#1a6b6b", "scale": "#0e4f4f", "eyes": "#ffcc00", "belly": "#3a9a9a"},
-            "frames": [
-                [
-                    ["scale", 5, 2, 6, 3], ["body", 4, 4, 8, 7], ["body", 5, 11, 6, 3],
-                    ["belly", 6, 6, 4, 4], ["eyes", 6, 3, 2, 1], ["eyes", 9, 3, 2, 1],
-                    ["scale", 3, 5, 1, 3], ["scale", 12, 5, 1, 3],
-                ],
-                [
-                    ["scale", 5, 1, 6, 3], ["body", 4, 3, 8, 7], ["body", 5, 10, 6, 3],
-                    ["belly", 6, 5, 4, 4], ["eyes", 6, 2, 2, 1], ["eyes", 9, 2, 2, 1],
-                    ["scale", 3, 4, 1, 3], ["scale", 12, 4, 1, 3],
-                ],
-            ],
-        },
-        "death_sprite": {
-            "colors": {"clr": "#1a6b6b"},
-            "frames": [
-                [["clr", 3, 11, 10, 3], ["clr", 5, 10, 6, 1]],
-                [["clr", 1, 12, 3, 2], ["clr", 5, 13, 2, 1], ["clr", 8, 11, 3, 2], ["clr", 12, 13, 3, 1]],
-                {"alpha": 0.4, "layers": [["clr", 0, 13, 2, 1], ["clr", 6, 14, 2, 1], ["clr", 13, 13, 2, 1]]},
-            ],
-        },
-    },
-    {
-        "kind": "drowned_one",
-        "tags": ["water", "undead", "dungeon", "magic"],
-        "stats": {"hp": 3, "walk_time": 0.3, "decision_time": 2.0, "damage": 2},
-        "behavior": {"rules": [
-            {"if": "player_within", "range": 6, "do": "teleport",
-             "target": "player", "drift": 2, "range": 6, "damage": 2,
-             "warmup": 1, "cooldown": 4},
-            {"if": "player_within", "range": 2, "do": "move", "direction": "away"},
-            {"if": "always", "do": "move", "direction": "random"},
-        ]},
-        "sprite": {
-            "colors": {"body": "#4a7a6a", "dark": "#2a5a4a", "eyes": "#aaffcc", "glow": "#6abba0"},
-            "frames": [
-                [
-                    ["dark", 5, 8, 6, 6], ["body", 4, 3, 8, 9], ["body", 5, 2, 6, 1],
-                    ["glow", 5, 3, 2, 1], ["eyes", 5, 5, 2, 2], ["eyes", 9, 5, 2, 2],
-                    ["dark", 4, 12, 2, 2], ["dark", 10, 12, 2, 2],
-                ],
-                [
-                    ["dark", 5, 7, 6, 6], ["body", 4, 2, 8, 9], ["body", 5, 1, 6, 1],
-                    ["glow", 5, 2, 2, 1], ["eyes", 5, 4, 2, 2], ["eyes", 9, 4, 2, 2],
-                    ["dark", 4, 11, 2, 2], ["dark", 10, 11, 2, 2],
-                ],
-            ],
-        },
-        "death_sprite": {
-            "colors": {"clr": "#4a7a6a"},
-            "frames": [
-                [["clr", 3, 11, 10, 3], ["clr", 5, 10, 6, 1]],
-                [["clr", 1, 12, 3, 2], ["clr", 5, 13, 2, 1], ["clr", 8, 11, 3, 2], ["clr", 12, 13, 3, 1]],
-                {"alpha": 0.4, "layers": [["clr", 0, 13, 2, 1], ["clr", 6, 14, 2, 1], ["clr", 13, 13, 2, 1]]},
-            ],
-        },
-    },
-]
-
-# ---------------------------------------------------------------------------
-# Water Temple (d2) — boss monster
-# ---------------------------------------------------------------------------
-
-D2_BOSS_MONSTER = {
-    "kind": "temple_guardian",
-    "tags": ["boss", "dungeon", "water"],
-    "stats": {"hp": 15, "walk_time": 0.25, "decision_time": 0.67, "damage": 3, "width": 2, "height": 2, "boss": True},
-    "behavior": {"rules": [
-        {"if": "hp_below", "value": 7, "do": "projectile",
-         "direction": "player", "damage": 2, "sprite_color": "#33ccff",
-         "warmup": 1, "cooldown": 2},
-        {"if": "player_within", "range": 3, "do": "area",
-         "range": 2, "damage": 3, "warmup": 1, "cooldown": 4},
-        {"if": "player_in_range_line", "range": 8, "los": True, "do": "charge",
-         "direction": "player", "range": 6, "damage": 4, "warmup": 1, "cooldown": 5},
-        {"if": "player_within", "range": 10, "do": "move", "direction": "player"},
-        {"if": "always", "do": "move", "direction": "random"},
-    ]},
-    "sprite": {
-        "colors": {
-            "armor": "#0e3a5a", "plate": "#1a4a6a", "visor": "#00ccff",
-            "glow": "#0099cc", "trim": "#2a8a6a", "cape": "#0a2a4a",
-            "dark": "#061a30", "shoulder": "#2a5a7a", "highlight": "#3a6a8a",
-        },
-        "yOff": [0, -1],
-        "frames": [
-            [
-                ["cape", 3, 8, 10, 7], ["dark", 4, 14, 8, 2],
-                ["armor", 4, 4, 8, 8], ["plate", 5, 5, 6, 6],
-                ["shoulder", 2, 4, 3, 3], ["shoulder", 11, 4, 3, 3],
-                ["highlight", 2, 4, 3, 1], ["highlight", 11, 4, 3, 1],
-                ["armor", 5, 1, 6, 4], ["plate", 6, 2, 4, 2],
-                ["dark", 6, 0, 4, 1],
-                ["visor", 6, 3, 2, 1], ["visor", 9, 3, 2, 1],
-                ["glow", 5, 2, 1, 1], ["glow", 10, 2, 1, 1],
-                ["trim", 4, 8, 8, 1], ["trim", 7, 4, 2, 1],
-                ["armor", 2, 7, 2, 4], ["armor", 12, 7, 2, 4],
-                ["plate", 1, 10, 2, 1], ["plate", 13, 10, 2, 1],
-                ["armor", 5, 12, 3, 3], ["armor", 9, 12, 3, 3],
-                ["dark", 5, 15, 3, 1], ["dark", 9, 15, 3, 1],
-            ],
-            [
-                ["cape", 3, 7, 10, 7], ["dark", 4, 13, 8, 2],
-                ["armor", 4, 3, 8, 8], ["plate", 5, 4, 6, 6],
-                ["shoulder", 2, 3, 3, 3], ["shoulder", 11, 3, 3, 3],
-                ["highlight", 2, 3, 3, 1], ["highlight", 11, 3, 3, 1],
-                ["armor", 5, 0, 6, 4], ["plate", 6, 1, 4, 2],
-                ["visor", 6, 2, 2, 1], ["visor", 9, 2, 2, 1],
-                ["glow", 5, 1, 1, 1], ["glow", 10, 1, 1, 1],
-                ["trim", 4, 7, 8, 1], ["trim", 7, 3, 2, 1],
-                ["armor", 2, 6, 2, 4], ["armor", 12, 6, 2, 4],
-                ["plate", 1, 9, 2, 1], ["plate", 13, 9, 2, 1],
-                ["armor", 5, 11, 3, 3], ["armor", 9, 11, 3, 3],
-                ["dark", 5, 14, 3, 1], ["dark", 9, 14, 3, 1],
-            ],
-        ],
-    },
-    "death_sprite": {
-        "colors": {"armor": "#0e3a5a", "glow": "#0099cc", "trim": "#2a8a6a"},
-        "frames": [
-            [["armor", 2, 10, 12, 4], ["armor", 4, 8, 8, 2], ["trim", 5, 9, 6, 1],
-             ["glow", 6, 10, 2, 1], ["glow", 9, 10, 2, 1]],
-            [["armor", 1, 12, 4, 2], ["armor", 6, 11, 4, 2], ["armor", 11, 12, 4, 2],
-             ["trim", 3, 13, 2, 1], ["glow", 8, 12, 1, 1]],
-            {"alpha": 0.4, "layers": [
-                ["armor", 0, 13, 3, 1], ["armor", 6, 14, 3, 1], ["armor", 12, 13, 3, 1],
-                ["glow", 7, 13, 2, 1],
-            ]},
-        ],
-    },
-}
-
-# ---------------------------------------------------------------------------
-# Water Temple (d2) — precreated tiles (3)
-# ---------------------------------------------------------------------------
-
-D2_PRECREATED_TILES = [
-    {
-        "id": "TW",
-        "walkable": False,
-        "tags": ["water_temple", "wall", "stone"],
-        "colors": {"base": "#1a3a5a", "alt": "#0e2a4a"},
-        "layers": [
-            ["alt", 0, 0, 1, 1], ["alt", 8, 0, 1, 1], ["alt", 0, 3, 16, 1],
-            ["alt", 4, 4, 1, 1], ["alt", 12, 4, 1, 1], ["alt", 0, 7, 16, 1],
-            ["alt", 0, 8, 1, 1], ["alt", 8, 8, 1, 1], ["alt", 0, 11, 16, 1],
-            ["alt", 4, 12, 1, 1], ["alt", 12, 12, 1, 1], ["alt", 0, 15, 16, 1],
-            ["#0a4a3a", 3, 2, 2, 1], ["#0a4a3a", 10, 6, 3, 1],
-            ["#0a4a3a", 6, 10, 2, 1], ["#0a4a3a", 13, 14, 2, 1],
-        ],
-    },
-    {
-        "id": "TF",
-        "walkable": True,
-        "tags": ["water_temple", "floor", "stone"],
-        "colors": {"base": "#2a4a6a", "alt": "#1a3a5a"},
-        "layers": [
-            ["alt", 0, 0, 1, 1], ["alt", 3, 0, 1, 1], ["alt", 8, 0, 2, 1],
-            ["alt", 15, 0, 1, 1], ["alt", 1, 1, 1, 1], ["alt", 13, 1, 2, 1],
-            ["alt", 3, 2, 1, 1], ["alt", 6, 2, 3, 1], ["alt", 12, 2, 1, 1],
-            ["alt", 2, 3, 1, 1], ["alt", 4, 3, 1, 1], ["alt", 14, 3, 2, 1],
-            ["alt", 15, 4, 1, 1], ["alt", 0, 5, 1, 1], ["alt", 6, 5, 2, 1],
-            ["alt", 9, 5, 2, 1], ["alt", 13, 5, 1, 1], ["alt", 1, 6, 1, 1],
-            ["alt", 5, 6, 1, 1], ["alt", 10, 6, 2, 1], ["alt", 6, 7, 2, 1],
-            ["alt", 11, 7, 1, 1], ["alt", 13, 7, 3, 1], ["alt", 1, 8, 2, 1],
-            ["alt", 4, 8, 1, 1], ["alt", 12, 8, 1, 1], ["alt", 4, 9, 1, 1],
-            ["alt", 15, 9, 1, 1], ["alt", 4, 10, 1, 1], ["alt", 11, 10, 1, 1],
-            ["alt", 13, 10, 2, 1], ["alt", 3, 11, 1, 1], ["alt", 7, 11, 2, 1],
-            ["#1a4a5a", 5, 4, 1, 6], ["#1a4a5a", 5, 10, 4, 1], ["#1a4a5a", 11, 3, 1, 5],
-        ],
-    },
-    {
-        "id": "CR",
-        "walkable": False,
-        "tags": ["water_temple", "decoration", "freestanding"],
-        "colors": {"base": "#2a4a6a", "alt": "#1a3a5a", "coral": "#cc5544", "tip": "#ee7766"},
-        "layers": [
-            ["alt", 0, 0, 1, 1], ["alt", 3, 1, 1, 1], ["alt", 13, 0, 1, 1],
-            ["alt", 1, 14, 1, 1], ["alt", 14, 14, 1, 1],
-            ["coral", 6, 4, 4, 8], ["coral", 5, 6, 6, 4],
-            ["tip", 7, 2, 2, 3], ["tip", 5, 5, 1, 2], ["tip", 10, 5, 1, 2],
-            ["tip", 6, 3, 1, 1], ["tip", 9, 3, 1, 1],
-        ],
-    },
-]
-
-# ---------------------------------------------------------------------------
-# Per-type content registry
+# Per-dungeon permanent content IDs
 # ---------------------------------------------------------------------------
 
 PRECREATED_CONTENT = {
     "d1": {
-        "monsters": PRECREATED_MONSTERS,
-        "tiles": PRECREATED_TILES,
-        "boss": BOSS_MONSTER,
+        "monsters": ["skeleton", "bat", "dungeon_slime", "phantom"],
+        "boss": "dungeon_warden",
+        "tiles": ["DW", "DF", "PL", "SC", "BZ", "MF", "CF"],
     },
     "d2": {
-        "monsters": D2_PRECREATED_MONSTERS,
-        "tiles": D2_PRECREATED_TILES,
-        "boss": D2_BOSS_MONSTER,
+        "monsters": ["water_serpent", "drowned_one"],
+        "boss": "temple_guardian",
+        "tiles": ["TW", "TF", "CR"],
     },
 }
+
 
 # ---------------------------------------------------------------------------
 # Runtime registration — make precreated types available in the game engine
@@ -615,35 +37,27 @@ PRECREATED_CONTENT = {
 def register_precreated_types() -> None:
     """Register all precreated monster and tile types for all dungeon types.
 
-    Iterates PRECREATED_CONTENT to register monsters, bosses, and tiles
-    into global game registries (sprites, stats, behaviors, tile recipes).
+    Since all recipes are now loaded from data/monsters.json and data/tiles.json
+    at startup, this just verifies the IDs exist and prints confirmation.
     """
-    from server.validation import register_monster_type, register_tile_type
-
     for type_id, content in PRECREATED_CONTENT.items():
-        for mdata in content["monsters"]:
-            kind = mdata["kind"]
-            ok, errors = register_monster_type(mdata)
-            if not ok:
-                print(f"[CONTENT] WARNING: Failed to register {kind}: {errors}")
-            else:
+        for kind in content["monsters"]:
+            if kind in game.monster_stats:
                 print(f"[CONTENT] Registered monster type: {kind}")
-
-        # Register boss monster (not in library — spawned via boss.room template)
-        boss = content["boss"]
-        ok, errors = register_monster_type(boss)
-        if not ok:
-            print(f"[CONTENT] WARNING: Failed to register boss: {errors}")
-        else:
-            print(f"[CONTENT] Registered boss type: {boss['kind']}")
-
-        for tdata in content["tiles"]:
-            tile_id = tdata["id"]
-            ok, errors = register_tile_type(tdata)
-            if not ok:
-                print(f"[CONTENT] WARNING: Failed to register tile {tile_id}: {errors}")
             else:
+                print(f"[CONTENT] WARNING: Monster '{kind}' not found in data/monsters.json")
+
+        boss_kind = content["boss"]
+        if boss_kind in game.monster_stats:
+            print(f"[CONTENT] Registered boss type: {boss_kind}")
+        else:
+            print(f"[CONTENT] WARNING: Boss '{boss_kind}' not found in data/monsters.json")
+
+        for tile_id in content["tiles"]:
+            if tile_id in game.custom_tile_recipes:
                 print(f"[CONTENT] Registered tile type: {tile_id}")
+            else:
+                print(f"[CONTENT] WARNING: Tile '{tile_id}' not found in data/tiles.json")
 
 
 def _template_to_room_data(template: dict) -> dict:
@@ -663,6 +77,44 @@ def _template_to_room_data(template: dict) -> dict:
     }
 
 
+def _build_monster_data(kind: str) -> dict:
+    """Build a library-compatible monster data dict from loaded registries."""
+    data = {"kind": kind}
+
+    # Stats
+    if kind in game.monster_stats:
+        data["stats"] = dict(game.monster_stats[kind])
+    # Tags (stored during load from monsters.json via _monster_tags)
+    if kind in _monster_tags:
+        data["tags"] = list(_monster_tags[kind])
+    # Sprite
+    if kind in game.custom_sprites:
+        data["sprite"] = game.custom_sprites[kind]
+    # Death sprite
+    if kind in game.custom_death_sprites:
+        data["death_sprite"] = game.custom_death_sprites[kind]
+    # Behavior
+    if kind in game.monster_behaviors:
+        data["behavior"] = game.monster_behaviors[kind]
+
+    return data
+
+
+def _build_tile_data(tile_id: str) -> dict:
+    """Build a library-compatible tile data dict from loaded registries."""
+    recipe = game.custom_tile_recipes.get(tile_id, {})
+    data = {"id": tile_id}
+    data.update(recipe)
+    # Include tags if present
+    if "tags" in recipe:
+        data["tags"] = recipe["tags"]
+    return data
+
+
+# Tag cache — populated during load_precreated_content from monsters.json
+_monster_tags = {}
+
+
 # ---------------------------------------------------------------------------
 # Startup loader
 # ---------------------------------------------------------------------------
@@ -677,55 +129,63 @@ def load_precreated_content(
 ) -> None:
     """Populate libraries with precreated permanent entries at startup.
 
-    Args:
-        monster_lib: Monster content library to populate
-        tile_lib: Tile content library to populate
-        room_lib: Room content library to populate
-        dungeon_templates: Parsed templates for this type (template_id -> template)
-        special_rooms: Template IDs to exclude from library (boss/treasure)
-        type_id: Dungeon type ID — selects which precreated content to load
+    All monster/tile recipes are already loaded into game registries from
+    data/monsters.json and data/tiles.json. This function creates library
+    entries pointing to those recipes.
     """
+    import json
     import time
+    from pathlib import Path
+
     now = time.time()
 
     if special_rooms is None:
         special_rooms = {"d1_boss", "d1_treasure"}
 
     content = PRECREATED_CONTENT.get(type_id, PRECREATED_CONTENT.get("d1", {}))
-    monsters = content.get("monsters", [])
-    tiles = content.get("tiles", [])
+    monster_ids = content.get("monsters", [])
+    tile_ids = content.get("tiles", [])
+
+    # Load tags from monsters.json for library entries
+    monsters_path = Path(__file__).parent.parent / "data" / "monsters.json"
+    if monsters_path.exists():
+        all_monsters = json.loads(monsters_path.read_text(encoding="utf-8"))
+        for kind, mdata in all_monsters.items():
+            _monster_tags[kind] = mdata.get("tags", [])
 
     # --- Monsters ---
-    for mdata in monsters:
+    for kind in monster_ids:
+        mdata = _build_monster_data(kind)
+        tags = mdata.get("tags", [])
         entry = LibraryEntry(
-            id=mdata["kind"],
+            id=kind,
             content_type="monster",
-            tags=list(mdata["tags"]),
+            tags=list(tags),
             created_at=now,
             data=mdata,
             permanent=True,
         )
         monster_lib.add(entry)
-    print(f"[CONTENT] [{type_id}] Loaded {len(monsters)} permanent monsters: "
-          f"{[m['kind'] for m in monsters]}")
+    print(f"[CONTENT] [{type_id}] Loaded {len(monster_ids)} permanent monsters: "
+          f"{monster_ids}")
 
     # --- Tiles ---
-    for tdata in tiles:
+    for tile_id in tile_ids:
+        tdata = _build_tile_data(tile_id)
+        tags = tdata.get("tags", [])
         entry = LibraryEntry(
-            id=tdata["id"],
+            id=tile_id,
             content_type="tile",
-            tags=list(tdata["tags"]),
+            tags=list(tags),
             created_at=now,
             data=tdata,
             permanent=True,
         )
         tile_lib.add(entry)
-    print(f"[CONTENT] [{type_id}] Loaded {len(tiles)} permanent tiles: "
-          f"{[t['id'] for t in tiles]}")
+    print(f"[CONTENT] [{type_id}] Loaded {len(tile_ids)} permanent tiles: "
+          f"{tile_ids}")
 
     # --- Rooms (from dungeon templates) ---
-    # Special rooms (boss, treasure) are kept in dungeon_templates
-    # but excluded from the regular library pool
     room_count = 0
     for template_id in sorted(dungeon_templates.keys()):
         if template_id in special_rooms:

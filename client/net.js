@@ -192,6 +192,7 @@ function handleMessage(msg) {
         room_id: msg.room_id,
         exits: msg.exits || {},
         biome: msg.biome || "town",
+        dungeon_type: msg.dungeon_type || null,
       };
       G.myPlayer = {
         x: msg.your_pos.x,

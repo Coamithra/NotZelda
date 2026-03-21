@@ -8,6 +8,8 @@ Each layer is [colorKey, x, y, w, h] — a colored rectangle on the 16x16 grid.
 
 The "walkable" field is REQUIRED — it determines if players/monsters can walk on this tile.
 
+The optional "bright" field (boolean) marks light-emitting tiles like braziers, torches, or glowing crystals. Bright tiles get a flickering radial glow effect rendered over them in-game. Only use this for tiles that should visually emit light.
+
 ## RESPONSE FORMAT
 Return ONLY valid JSON (no markdown, no explanation):
 ```
@@ -24,6 +26,18 @@ Return ONLY valid JSON (no markdown, no explanation):
         ["glow", 3, 7, 1, 1],
         ["glow", 10, 4, 1, 1],
         ["glow", 6, 12, 2, 1]
+      ]
+    },
+    {
+      "id": "dark_brazier",
+      "walkable": false,
+      "bright": true,
+      "tags": ["fire", "light", "decoration"],
+      "colors": {"base": "#3a3a4a", "alt": "#2a2a3a", "flame": "#ffcc33", "bowl": "#5a4a3a"},
+      "layers": [
+        ["alt", 0, 3, 16, 1], ["alt", 0, 7, 16, 1], ["alt", 0, 11, 16, 1],
+        ["bowl", 5, 8, 6, 6], ["bowl", 6, 7, 4, 2],
+        ["flame", 6, 3, 4, 5], ["#f83", 7, 4, 2, 3]
       ]
     }
   ]
@@ -69,11 +83,43 @@ Dungeon floor (walkable) — stone floor with scattered dark speckles and subtle
 }
 ```
 
+Water temple wall (non-walkable) — dark blue stone:
+```
+{
+  "id": "temple_wall", "walkable": false,
+  "colors": {"base": "#1a3a5a", "alt": "#0e2a4a"},
+  "layers": [
+    ["alt",0,0,1,1], ["alt",8,0,1,1], ["alt",0,3,16,1], ["alt",4,4,1,1],
+    ["alt",12,4,1,1], ["alt",0,7,16,1], ["alt",0,8,1,1], ["alt",8,8,1,1],
+    ["alt",0,11,16,1], ["alt",4,12,1,1], ["alt",12,12,1,1], ["alt",0,15,16,1]
+  ]
+}
+```
+
+Water (non-walkable) — deep blue with wave pattern, blocks movement:
+```
+{
+  "id": "water", "walkable": false,
+  "colors": {"base": "#2a6aaa", "alt": "#3a7abb"}
+}
+```
+
+Shallow water (walkable) — lighter blue, players can wade through:
+```
+{
+  "id": "shallow_water", "walkable": true,
+  "colors": {"base": "#5a9acc", "alt": "#6aaadd"}
+}
+```
+
+For water_temple themes, prefer aquatic colors (blues, teals, greens) and feel free to use water/shallow_water as design elements. New tiles should complement these built-in water tiles.
+
 ## RULES
 1. IDs MUST be lowercase_snake_case [a-z][a-z0-9_]*
 2. Use 3-5 tags per tile
 3. Each tile MUST have a "walkable" boolean
-4. Each layer is [colorKey, x, y, w, h] — all coordinates must be within the 16x16 grid
-5. Color keys reference named colors in the "colors" dict, or can be literal "#RRGGBB" hex
-6. Use 4-15 rect layers per tile for visual detail
-7. Create visually distinct tiles that fit the requested theme
+4. Optionally set "bright": true for light-emitting tiles (torches, braziers, glowing crystals, etc.)
+5. Each layer is [colorKey, x, y, w, h] — all coordinates must be within the 16x16 grid
+6. Color keys reference named colors in the "colors" dict, or can be literal "#RRGGBB" hex
+7. Use 4-15 rect layers per tile for visual detail
+8. Create visually distinct tiles that fit the requested theme

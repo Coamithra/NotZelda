@@ -241,8 +241,8 @@ async def process_request(path, request_headers):
 # ---------------------------------------------------------------------------
 
 async def main():
-    game.load_builtin_tiles()
-    game.load_builtin_monsters()
+    game.load_tiles()
+    game.load_monsters()
     game.load_npc_sprites()
     load_room_files()
     register_precreated_types()

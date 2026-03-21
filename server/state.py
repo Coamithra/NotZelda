@@ -60,33 +60,33 @@ class GameState:
         recipe = self.custom_tile_recipes.get(tile)
         return recipe is not None and recipe.get("walkable", False)
 
-    def load_builtin_tiles(self):
-        """Load built-in tile definitions from data/builtin_tiles.json."""
-        path = Path(__file__).parent.parent / "data" / "builtin_tiles.json"
+    def load_tiles(self):
+        """Load all tile definitions from data/tiles.json."""
+        path = Path(__file__).parent.parent / "data" / "tiles.json"
         if not path.exists():
-            print("[STATE] WARNING: data/builtin_tiles.json not found")
+            print("[STATE] WARNING: data/tiles.json not found")
             return
         tiles = json.loads(path.read_text(encoding="utf-8"))
         for tile_id, recipe in tiles.items():
             self.custom_tile_recipes[tile_id] = recipe
-        print(f"[STATE] Loaded {len(tiles)} built-in tile recipes")
+        print(f"[STATE] Loaded {len(tiles)} tile recipes")
 
-    def load_builtin_monsters(self):
-        """Load built-in monster definitions from data/builtin_monsters.json."""
+    def load_monsters(self):
+        """Load all monster definitions from data/monsters.json."""
         from server.validation import register_monster_type
-        path = Path(__file__).parent.parent / "data" / "builtin_monsters.json"
+        path = Path(__file__).parent.parent / "data" / "monsters.json"
         if not path.exists():
-            print("[STATE] WARNING: data/builtin_monsters.json not found")
+            print("[STATE] WARNING: data/monsters.json not found")
             return
         monsters = json.loads(path.read_text(encoding="utf-8"))
-        for mdata in monsters:
-            kind = mdata["kind"]
+        for kind, mdata in monsters.items():
+            mdata.setdefault("kind", kind)
             ok, errors = register_monster_type(mdata)
             if ok:
-                print(f"[STATE] Registered built-in monster: {kind}")
+                print(f"[STATE] Registered monster: {kind}")
             else:
                 print(f"[STATE] WARNING: Failed to register {kind}: {errors}")
-        print(f"[STATE] Loaded {len(monsters)} built-in monsters")
+        print(f"[STATE] Loaded {len(monsters)} monsters")
 
     def load_npc_sprites(self):
         """Load NPC sprite definitions from data/npc_sprites.json."""
