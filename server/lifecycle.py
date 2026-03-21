@@ -47,10 +47,20 @@ def unlock_room(room_id: str, msgs: list):
     for (r, c), tile in lock_data["original_tiles"].items():
         tilemap[r][c] = tile
         tile_changes.append([r, c, tile])
-    msgs.append(("broadcast", room_id, {
+    unlock_msg = {
         "type": "doors_unlocked",
         "tile_changes": tile_changes,
-    }, None))
+    }
+    # Reveal hidden dungeon items now that the room is cleared
+    inst = get_dungeon_for_room(room_id)
+    if inst:
+        room_items = inst.dungeon_items.get(room_id, [])
+        if room_items:
+            unlock_msg["dungeon_items"] = [
+                {"x": it["x"], "y": it["y"], "item_type": it["item_type"]}
+                for it in room_items
+            ]
+    msgs.append(("broadcast", room_id, unlock_msg, None))
 
 
 def spawn_monsters(room_id: str) -> list[Monster]:
@@ -240,7 +250,8 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
         msg["dungeon_collected"] = sorted(inst.collected_items)
         msg["dungeon_boss_cell"] = list(inst.boss_cell) if inst.boss_cell else None
         room_items = inst.dungeon_items.get(player.room, [])
-        if room_items:
+        # Hide items in locked trap rooms — they appear when doors unlock
+        if room_items and player.room not in game.locked_rooms:
             msg["dungeon_items"] = [{"x": it["x"], "y": it["y"], "item_type": it["item_type"]} for it in room_items]
 
     # Attach dungeon type for client-side ambient effects

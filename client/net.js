@@ -606,6 +606,10 @@ function handleMessage(msg) {
           G.currentRoom.tilemap[r][c] = tile;
         }
       }
+      // Reveal dungeon items that were hidden during the trap
+      if (msg.dungeon_items) {
+        G.dungeonGroundItems = msg.dungeon_items;
+      }
       G.infoMessages.push({ text: "The doors have opened!", expires: Date.now() + 3000 });
       break;
     }
