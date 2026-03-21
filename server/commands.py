@@ -313,12 +313,14 @@ def _process_attack(player, now, msgs):
         "direction": player.direction,
     }, None))
 
-    # Hit detection — snap to nearest integer tile, then add direction offset
+    # Hit detection — float AABB overlap (sword is 1x1 hitbox in front of player)
     dx, dy = DIRECTIONS.get(player.direction, (0, 0))
-    hit_x = int(round(player.x)) + dx
-    hit_y = int(round(player.y)) + dy
+    sword_x = player.x + dx
+    sword_y = player.y + dy
     for i, monster in enumerate(get_room_monsters(player.room)):
-        if monster.alive and not monster.intangible and monster.occupies(hit_x, hit_y):
+        if monster.alive and not monster.intangible and (
+            sword_x < monster.x + monster.width and sword_x + 1 > monster.x and
+            sword_y < monster.y + monster.height and sword_y + 1 > monster.y):
             monster.hp -= 1
             # Boss engagement — start choir overlay if boss survives this hit
             dinst = get_dungeon_for_room(player.room)

@@ -13,7 +13,7 @@ class Player:
         self.name = name
         self.description = description
         self.room = STARTING_ROOM
-        self.x = 7.0
+        self.x = 8.0
         self.y = 5.0
         self.direction = "down"
         self.color_index = color_index
@@ -22,7 +22,7 @@ class Player:
         self.last_damage_time = 0.0
         self.last_attack_time = 0.0
         self.last_pos_update_time = 0.0   # anti-cheat: last accepted position_update timestamp
-        self.last_reported_x = 7.0        # last position relayed to other clients
+        self.last_reported_x = 8.0        # last position relayed to other clients
         self.last_reported_y = 5.0
         self.dancing = False
         self.guard_cooldowns = {}  # guard_key -> last_trigger_time

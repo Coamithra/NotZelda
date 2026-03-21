@@ -450,8 +450,13 @@ function playerTick() {
         }
       }
 
-      // Collision: try full move, then slide along walls
-      if (canMoveToPosition(newX, newY)) {
+      // Collision: use aligned perpendicular position for wall checks.
+      // The player is snapping to the nearest half-tile lane — check if
+      // that lane is clear so they can slip through gaps (NES Zelda style).
+      const checkX = isHorizontal ? newX : Math.round(G.preciseX * 2) / 2;
+      const checkY = isHorizontal ? Math.round(G.preciseY * 2) / 2 : newY;
+
+      if (canMoveToPosition(checkX, checkY)) {
         G.preciseX = newX;
         G.preciseY = newY;
       } else if (isHorizontal && canMoveToPosition(newX, G.preciseY)) {
@@ -459,7 +464,6 @@ function playerTick() {
       } else if (!isHorizontal && canMoveToPosition(G.preciseX, newY)) {
         G.preciseY = newY;
       }
-      // else: blocked
 
       G.displayX = G.preciseX;
       G.displayY = G.preciseY;
@@ -509,7 +513,7 @@ function gameLoop(timestamp) {
     }
 
     // Player state machine tick
-    if (!G.chatFocused && !G.transition) {
+    if (!G.chatFocused && !G.transition && !G.conjuring) {
       playerTick();
     }
 

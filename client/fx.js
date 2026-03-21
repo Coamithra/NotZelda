@@ -114,10 +114,10 @@ function spawnSlashArc(direction) {
 }
 
 const ARC_ANGLES = {
-  down:  { start: -Math.PI * 0.8, end: Math.PI * 0.8 },
-  up:    { start: Math.PI * 0.2,  end: Math.PI * 1.8 },
-  right: { start: -Math.PI * 0.3, end: Math.PI * 0.3 },
-  left:  { start: Math.PI * 0.7,  end: Math.PI * 1.3 },
+  down:  { start: Math.PI * 0.2,   end: Math.PI * 0.8 },
+  up:    { start: -Math.PI * 0.8,  end: -Math.PI * 0.2 },
+  right: { start: -Math.PI * 0.3,  end: Math.PI * 0.3 },
+  left:  { start: Math.PI * 0.7,   end: Math.PI * 1.3 },
 };
 
 function renderSlashArcs() {

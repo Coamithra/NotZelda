@@ -394,21 +394,21 @@ def _resolve_teleport(rule, monster, room_id):
     max_range = rule.get("range", 8)
     damage = rule.get("damage", monster.damage)
 
-    # Determine center point
+    # Determine center point (must be integer tile coords for tilemap lookups)
     if target_mode == "player":
         player, player_dist = _nearest_player(monster, room_id)
         if player is None:
             return None
         if player_dist > max_range:
             return None
-        cx, cy = player.x, player.y
+        cx, cy = int(round(player.x)), int(round(player.y))
     elif target_mode == "away":
         player, _ = _nearest_player(monster, room_id)
         if player is None:
             cx, cy = monster.x, monster.y
         else:
-            dx = monster.x - player.x
-            dy = monster.y - player.y
+            dx = monster.x - int(round(player.x))
+            dy = monster.y - int(round(player.y))
             length = max(abs(dx), abs(dy), 1)
             cx = monster.x + int(dx / length * max_range)
             cy = monster.y + int(dy / length * max_range)
