@@ -8,7 +8,6 @@ from datetime import datetime
 import websockets
 
 from server.state import game
-from server.constants import WALK_TIME
 
 
 async def send_to(player, msg: dict):
@@ -37,14 +36,6 @@ def player_info(p) -> dict:
     }
     if p.dancing:
         info["dancing"] = True
-    if p.walk:
-        elapsed = time.monotonic() - p.walk["start_time"]
-        progress = min(elapsed / WALK_TIME, 1.0)
-        info["walking"] = True
-        info["walk_from"] = {"x": p.walk["from_x"], "y": p.walk["from_y"]}
-        info["walk_to"] = {"x": p.walk["to_x"], "y": p.walk["to_y"]}
-        info["walk_progress"] = progress
-        info["walk_dir"] = p.walk["dir"]
     return info
 
 

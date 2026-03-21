@@ -1,5 +1,6 @@
 """Command processing — drains player command queues during game_tick."""
 
+import math
 import os
 import random
 import time
@@ -7,15 +8,15 @@ import time
 from server.state import game
 from server.constants import (
     DIRECTIONS, ROOM_COLS, ROOM_ROWS,
-    WALK_TIME, CANCEL_TIME, LATENCY_COMP,
-    ATTACK_COOLDOWN, HEART_DROP_CHANCE,
+    ATTACK_COOLDOWN, HEART_DROP_CHANCE, HEART_RESTORE_HP,
+    POSITION_UPDATE_RATE, MAX_MOVE_PER_UPDATE, GUARD_COOLDOWN,
 )
 from server.net import players_in_room, log_event
 from server.lifecycle import (
     do_room_transition, get_room_monsters,
     broadcast_choir_start, broadcast_choir_stop,
 )
-from server.dungeons import get_dungeon_for_room, _run_content_deprecation, start_background_regen
+from server.dungeons import get_dungeon_for_room, _run_content_deprecation, start_background_regen, broadcast_to_dungeon
 from server.npc_chat import find_adjacent_npc
 
 
@@ -23,10 +24,8 @@ def process_player_commands(player, now, msgs):
     """Drain and process all queued commands for a player."""
     while player.command_queue:
         cmd_type, data = player.command_queue.popleft()
-        if cmd_type == "walk":
-            _process_walk(player, data, now, msgs)
-        elif cmd_type == "cancel_walk":
-            _process_cancel_walk(player, now, msgs)
+        if cmd_type == "position_update":
+            _process_position_update(player, data, now, msgs)
         elif cmd_type == "face":
             _process_face(player, data, msgs)
         elif cmd_type == "attack":
@@ -39,49 +38,216 @@ def process_player_commands(player, now, msgs):
 # Reconcile helper
 # ---------------------------------------------------------------------------
 
-def _send_reconcile(player, now, msgs):
+def _send_reconcile(player, msgs, reason=""):
     """Append a reconcile message for the player."""
-    msg = {
+    if reason:
+        print(f"[RECONCILE] {player.name}: {reason} -> snap to ({player.x}, {player.y})")
+    msgs.append(("send", player, {
         "type": "reconcile",
         "x": player.x,
         "y": player.y,
         "direction": player.direction,
-    }
-    if player.walk:
-        elapsed = now - player.walk["start_time"]
-        progress = min(elapsed / WALK_TIME, 1.0)
-        msg["walking"] = True
-        msg["walk_progress"] = progress
-        msg["walk_from"] = {"x": player.walk["from_x"], "y": player.walk["from_y"]}
-        msg["walk_to"] = {"x": player.walk["to_x"], "y": player.walk["to_y"]}
-    else:
-        msg["walking"] = False
-    msgs.append(("send", player, msg))
+    }))
 
 
 # ---------------------------------------------------------------------------
-# Movement
+# Movement — half-tile free movement
 # ---------------------------------------------------------------------------
 
-def _check_edge_exit(player, new_x, new_y, room):
-    """Check if walking off-edge corresponds to a room exit."""
+def _check_edge_exit_float(x, y, direction, room):
+    """Check if a float position at room edge corresponds to an exit."""
     exits = room["exits"]
-    if new_y < 0 and "north" in exits and 6 <= player.x <= 8:
+    if direction == "up" and y < 0 and "north" in exits and 5.5 <= x <= 8.5:
         return "north"
-    if new_y > 10 and "south" in exits and 6 <= player.x <= 8:
+    if direction == "down" and y > 10 and "south" in exits and 5.5 <= x <= 8.5:
         return "south"
-    if new_x < 0 and "west" in exits and 4 <= player.y <= 6:
+    if direction == "left" and x < 0 and "west" in exits and 3.5 <= y <= 6.5:
         return "west"
-    if new_x > 14 and "east" in exits and 4 <= player.y <= 6:
+    if direction == "right" and x > 14 and "east" in exits and 3.5 <= y <= 6.5:
         return "east"
     return None
+
+
+def _is_position_walkable(x, y, room):
+    """Check if a 1x1 hitbox at (x,y) is walkable.
+    Only checks the bottom half (y+0.5 to y+1) so the sprite's top half
+    can overlap walls — NES Zelda style, regardless of direction."""
+    tilemap = room["tilemap"]
+    check_y_start = y + 0.5
+
+    min_tx = int(math.floor(x + 0.001))
+    max_tx = int(math.floor(x + 1.0 - 0.001))
+    min_ty = int(math.floor(check_y_start + 0.001))
+    max_ty = int(math.floor(y + 1.0 - 0.001))
+
+    for ty in range(min_ty, max_ty + 1):
+        for tx in range(min_tx, max_tx + 1):
+            if tx < 0 or tx >= ROOM_COLS or ty < 0 or ty >= ROOM_ROWS:
+                continue  # off-grid handled by edge detection
+            if not game.is_walkable_tile(tilemap[ty][tx]):
+                return False
+    return True
+
+
+def _process_position_update(player, data, now, msgs):
+    """Validate a client position update and relay to other players."""
+    new_x = data.get("x")
+    new_y = data.get("y")
+    direction = data.get("direction", player.direction)
+
+    if player.hp <= 0:
+        return
+    if not isinstance(new_x, (int, float)) or not isinstance(new_y, (int, float)):
+        return
+
+    new_x = float(new_x)
+    new_y = float(new_y)
+
+    # Validate half-tile snapped
+    if round(new_x * 2) / 2 != new_x or round(new_y * 2) / 2 != new_y:
+        _send_reconcile(player, msgs, f"not half-tile snapped: ({new_x}, {new_y})")
+        return
+
+    # Anti-cheat: rate limit
+    dt = now - player.last_pos_update_time
+    if dt < POSITION_UPDATE_RATE * 0.5:
+        return  # silently drop (too fast)
+
+    # Anti-cheat: distance check
+    dist = abs(new_x - player.x) + abs(new_y - player.y)
+    if dist > MAX_MOVE_PER_UPDATE:
+        _send_reconcile(player, msgs, f"too far: dist={dist:.2f} from ({player.x},{player.y}) to ({new_x},{new_y})")
+        return
+
+    # Direction
+    if direction in DIRECTIONS:
+        player.direction = direction
+    player.dancing = False
+
+    # Edge detection (room transition)
+    room = game.rooms[player.room]
+    exit_dir = _check_edge_exit_float(new_x, new_y, direction, room)
+    if exit_dir:
+        do_room_transition(player, exit_dir, msgs)
+        return
+
+    # Stairs
+    center_tx, center_ty = int(round(new_x)), int(round(new_y))
+    if 0 <= center_tx < ROOM_COLS and 0 <= center_ty < ROOM_ROWS:
+        tile = room["tilemap"][center_ty][center_tx]
+        if tile == "SU" and "up" in room["exits"]:
+            do_room_transition(player, "up", msgs)
+            return
+        if tile == "SD" and "down" in room["exits"]:
+            do_room_transition(player, "down", msgs)
+            return
+
+    # Walkability — check all tiles the 1x1 hitbox overlaps
+    if not _is_position_walkable(new_x, new_y, room):
+        _send_reconcile(player, msgs, f"unwalkable at ({new_x}, {new_y})")
+        return
+
+    # Guard collision (AABB)
+    for guard in game.guards.get(player.room, []):
+        if (new_x < guard["x"] + 1 and new_x + 1 > guard["x"] and
+            new_y < guard["y"] + 1 and new_y + 1 > guard["y"]):
+            _send_reconcile(player, msgs, f"guard collision at ({new_x}, {new_y}) vs guard ({guard['x']}, {guard['y']})")
+            return
+
+    # Accept — update position
+    player.x = new_x
+    player.y = new_y
+    player.last_pos_update_time = now
+
+    # Relay to other players
+    if new_x != player.last_reported_x or new_y != player.last_reported_y:
+        msgs.append(("broadcast", player.room, {
+            "type": "player_walk_half",
+            "name": player.name,
+            "x": new_x, "y": new_y,
+            "direction": player.direction,
+        }, player.ws))
+        player.last_reported_x = new_x
+        player.last_reported_y = new_y
+
+    # Collision checks (monster contact, hearts, dungeon items, guard proximity)
+    _check_position_collisions(player, now, msgs)
+
+
+def _check_position_collisions(player, now, msgs):
+    """Check monster contact, heart pickup, dungeon items at player position."""
+    # Monster contact damage (AABB: player 1x1 at float pos vs monster footprint)
+    if player.hp > 0:
+        for monster in get_room_monsters(player.room):
+            if monster.alive and not monster.intangible:
+                if (player.x < monster.x + monster.width and player.x + 1 > monster.x and
+                    player.y < monster.y + monster.height and player.y + 1 > monster.y):
+                    from server.combat import _apply_damage
+                    _apply_damage(player, monster.damage, player.room, msgs)
+                    break
+
+    # Heart pickup (proximity)
+    if player.hp > 0:
+        hearts = game.room_hearts.get(player.room, [])
+        for heart in hearts:
+            if (abs(player.x - heart["x"]) < 0.75 and
+                abs(player.y - heart["y"]) < 0.75 and player.hp < player.max_hp):
+                player.hp = min(player.max_hp, player.hp + HEART_RESTORE_HP)
+                hearts.remove(heart)
+                msgs.append(("send", player, {"type": "hp_update", "hp": player.hp, "max_hp": player.max_hp}))
+                msgs.append(("broadcast", player.room, {"type": "heart_collected", "id": heart["id"]}, None))
+                break
+
+    # Dungeon item pickup (proximity)
+    if player.hp > 0:
+        dinst = get_dungeon_for_room(player.room)
+        if dinst:
+            items = dinst.dungeon_items.get(player.room, [])
+            for item in list(items):
+                if abs(player.x - item["x"]) < 0.75 and abs(player.y - item["y"]) < 0.75:
+                    item_type = item["item_type"]
+                    dinst.collected_items.add(item_type)
+                    items.remove(item)
+                    item_name = {"map": "Dungeon Map", "compass": "Compass"}.get(item_type, item_type)
+                    msgs.append(("send", player, {
+                        "type": "item_obtained",
+                        "item_type": item_type,
+                        "item_name": item_name,
+                    }))
+                    msgs.append(("broadcast", player.room, {
+                        "type": "item_effect",
+                        "item_type": item_type,
+                        "name": player.name,
+                    }, player.ws))
+                    broadcast_to_dungeon(dinst, {
+                        "type": "dungeon_item_collected",
+                        "item_type": item_type,
+                        "collected_by": player.name,
+                    }, msgs)
+                    break
+
+    # Guard proximity chat (float-aware)
+    if player.hp > 0:
+        _check_guard_proximity_sync(player, now, msgs)
+
+
+def _check_guard_proximity_sync(player, now, msgs):
+    """If near a guard and cooldown has passed, queue guard dialog."""
+    for guard in game.guards.get(player.room, []):
+        dx = abs(player.x - guard["x"])
+        dy = abs(player.y - guard["y"])
+        if dx + dy <= 1.5:
+            key = f"{player.room}:{guard['name']}:{guard['x']},{guard['y']}"
+            last = player.guard_cooldowns.get(key, 0)
+            if now - last >= GUARD_COOLDOWN:
+                player.guard_cooldowns[key] = now
+                msgs.append(("guard_chat", player, guard))
 
 
 def _process_face(player, data, msgs):
     """Handle face direction change."""
     direction = data.get("direction", "")
     if direction in DIRECTIONS:
-        player.walk = None
         player.direction = direction
         player.dancing = False
         msgs.append(("broadcast", player.room, {
@@ -89,134 +255,6 @@ def _process_face(player, data, msgs):
             "name": player.name,
             "direction": direction,
         }, player.ws))
-
-
-def _process_walk(player, data, now, msgs):
-    """Handle a walk request — validate and start a server-side walk."""
-    direction = data.get("direction", "")
-    origin = data.get("origin", {})
-    origin_x = origin.get("x", player.x)
-    origin_y = origin.get("y", player.y)
-
-    if player.hp <= 0:
-        return
-
-    delta = DIRECTIONS.get(direction)
-    if not delta:
-        return
-    dx, dy = delta
-
-    # If already walking, check for chained walk acceptance
-    if player.walk:
-        elapsed = now - player.walk["start_time"]
-        progress = min(elapsed / WALK_TIME, 1.0)
-        if progress >= 1.0 - LATENCY_COMP / WALK_TIME:
-            # Near completion — accept chain. Complete current walk immediately.
-            if not player.walk["committed"]:
-                player.x = player.walk["to_x"]
-                player.y = player.walk["to_y"]
-            player.walk = None
-            # Use the completed walk's target as origin for the new walk
-            origin_x = player.x
-            origin_y = player.y
-        else:
-            # Not near completion — reject, send reconcile
-            _send_reconcile(player, now, msgs)
-            return
-
-    # Origin validation — client and server must agree on position
-    if origin_x != player.x or origin_y != player.y:
-        _send_reconcile(player, now, msgs)
-        return
-
-    player.direction = direction
-    player.dancing = False
-
-    to_x = origin_x + dx
-    to_y = origin_y + dy
-
-    room = game.rooms[player.room]
-    tilemap = room["tilemap"]
-
-    # Off-grid — check room exit
-    if to_x < 0 or to_x >= ROOM_COLS or to_y < 0 or to_y >= ROOM_ROWS:
-        exit_dir = _check_edge_exit(player, to_x, to_y, room)
-        if exit_dir:
-            player.walk = None
-            do_room_transition(player, exit_dir, msgs)
-        else:
-            _send_reconcile(player, now, msgs)
-        return
-
-    tile = tilemap[to_y][to_x]
-
-    # Stairs
-    if tile == "SU" and "up" in room["exits"]:
-        player.walk = None
-        do_room_transition(player, "up", msgs)
-        return
-    if tile == "SD" and "down" in room["exits"]:
-        player.walk = None
-        do_room_transition(player, "down", msgs)
-        return
-
-    # Not walkable
-    if not game.is_walkable_tile(tile):
-        _send_reconcile(player, now, msgs)
-        return
-
-    # Guard collision
-    for guard in game.guards.get(player.room, []):
-        if to_x == guard["x"] and to_y == guard["y"]:
-            _send_reconcile(player, now, msgs)
-            return
-
-    # Start walk
-    player.walk = {
-        "from_x": origin_x, "from_y": origin_y,
-        "to_x": to_x, "to_y": to_y,
-        "dir": direction,
-        "start_time": now,
-        "committed": False,
-    }
-
-    # Broadcast walk_started to other players with latency compensation offset
-    initial_progress = LATENCY_COMP / WALK_TIME
-    msgs.append(("broadcast", player.room, {
-        "type": "walk_started",
-        "name": player.name,
-        "from_x": origin_x, "from_y": origin_y,
-        "to_x": to_x, "to_y": to_y,
-        "dir": direction,
-        "progress": initial_progress,
-    }, player.ws))
-
-
-def _process_cancel_walk(player, now, msgs):
-    """Handle a cancel_walk request — validate timing and cancel or reject."""
-    if player.walk is None:
-        return
-
-    elapsed = now - player.walk["start_time"]
-
-    if elapsed <= CANCEL_TIME + LATENCY_COMP:
-        # Valid cancel — roll back to origin (even if midway committed)
-        from_x = player.walk["from_x"]
-        from_y = player.walk["from_y"]
-        player.x = from_x
-        player.y = from_y
-        player.walk = None
-        msgs.append(("broadcast", player.room, {
-            "type": "walk_cancelled",
-            "name": player.name,
-            "x": from_x,
-            "y": from_y,
-        }, player.ws))
-        # No reconcile needed — client already snapped back optimistically.
-        # Sending one would interfere with any new walk the client started.
-    else:
-        # Too late to cancel — send reconcile with current walk state
-        _send_reconcile(player, now, msgs)
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +272,6 @@ def _process_attack(player, now, msgs):
         return
     player.last_attack_time = now
     player.dancing = False
-    player.walk = None
 
     msgs.append(("broadcast", player.room, {
         "type": "attack",
@@ -242,10 +279,10 @@ def _process_attack(player, now, msgs):
         "direction": player.direction,
     }, None))
 
-    # Hit detection — check if sword hits a monster (supports multi-tile monsters)
+    # Hit detection — snap to nearest integer tile, then add direction offset
     dx, dy = DIRECTIONS.get(player.direction, (0, 0))
-    hit_x = player.x + dx
-    hit_y = player.y + dy
+    hit_x = int(round(player.x)) + dx
+    hit_y = int(round(player.y)) + dy
     for i, monster in enumerate(get_room_monsters(player.room)):
         if monster.alive and not monster.intangible and monster.occupies(hit_x, hit_y):
             monster.hp -= 1

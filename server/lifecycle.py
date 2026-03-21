@@ -353,7 +353,6 @@ def broadcast_choir_stop(room_id, msgs: list):
 
 def do_room_transition(player, exit_direction: str, msgs: list):
     """Move a player from their current room to an adjacent room via an exit."""
-    player.walk = None
     old_room = player.room
     new_room_id = game.rooms[old_room]["exits"][exit_direction]
 
@@ -399,11 +398,11 @@ def do_room_transition(player, exit_direction: str, msgs: list):
         player.room = new_room_id
         entry = ENTRY_DIR.get(exit_direction, "default")
         spawn = new_room["spawn_points"].get(entry, new_room["spawn_points"]["default"])
-        player.x, player.y = spawn
+        player.x, player.y = float(spawn[0]), float(spawn[1])
         if exit_direction in ("north", "south"):
-            player.x = old_x  # keep column
+            player.x = float(old_x)  # keep column
         elif exit_direction in ("east", "west"):
-            player.y = old_y  # keep row
+            player.y = float(old_y)  # keep row
 
         # Monster lifecycle — leave old room, enter new room
         # Skip dungeon teardown if the player is moving to another dungeon room

@@ -20,7 +20,6 @@ document.addEventListener("keydown", (e) => {
   if (dir && !G.chatFocused && !e.repeat) {
     G.dirStack = G.dirStack.filter(d => d !== dir);
     G.dirStack.push(dir);
-    G.inputEvents.push({ type: "dirDown", dir, time: performance.now() });
   }
 
   if (e.key === "Enter" && !G.chatFocused) {
@@ -56,17 +55,7 @@ document.addEventListener("keydown", (e) => {
       G.infoMessages.push({ text: "You don't have a weapon.", expires: Date.now() + 2000 });
       return;
     }
-    if (G.state === "walking") {
-      const elapsed = performance.now() - G.stateData.startTime;
-      if (elapsed < CANCEL_TIME_MS) {
-        // Within cancel window — cancel walk, attack immediately
-        cancelWalk();
-        sendToServer({ type: "attack" });
-        startAttack(G.myName, G.myPlayer.direction);
-        setState("attacking", { startTime: performance.now() });
-      }
-      // Past cancel window — space is held, playerTick checks on walk completion
-    } else if (G.state === "idle") {
+    if (G.state === "idle") {
       sendToServer({ type: "attack" });
       startAttack(G.myName, G.myPlayer.direction);
       setState("attacking", { startTime: performance.now() });
@@ -90,7 +79,6 @@ document.addEventListener("keyup", (e) => {
     );
     if (!stillHeld) {
       G.dirStack = G.dirStack.filter(d => d !== dir);
-      G.inputEvents.push({ type: "dirUp", dir, time: performance.now() });
     }
   }
 });

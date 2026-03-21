@@ -1,6 +1,7 @@
 """Combat system — damage, projectiles, monster AI tick, game loop."""
 
 import asyncio
+import math
 import time
 import traceback
 
@@ -39,21 +40,25 @@ def _apply_damage(player, damage: int, room_id: str, msgs: list):
         return
     player.hp = max(0, player.hp - damage)
     player.last_damage_time = now
-    # Cancel any active walk so knockback computes from committed position
-    player.walk = None
 
     if player.hp > 0:
-        # Calculate knockback — push player away from facing direction
+        # Calculate knockback — push player away from facing direction, snap to half-tile
         opp = DIRECTION_OPPOSITES.get(player.direction, "down")
         kdx, kdy = DIRECTIONS[opp]
-        kx, ky = player.x + kdx, player.y + kdy
+        kx = round((player.x + kdx) * 2) / 2
+        ky = round((player.y + kdy) * 2) / 2
         knocked = False
         room = game.rooms.get(room_id)
         if room:
-            tilemap = room["tilemap"]
+            from server.commands import _is_position_walkable
             guards = game.guards.get(room_id, [])
-            if 0 <= kx < ROOM_COLS and 0 <= ky < ROOM_ROWS and game.is_walkable_tile(tilemap[ky][kx]):
-                if not any(g["x"] == kx and g["y"] == ky for g in guards):
+            if 0 <= kx < ROOM_COLS and 0 <= ky < ROOM_ROWS and _is_position_walkable(kx, ky, room):
+                guard_blocked = any(
+                    kx < g["x"] + 1 and kx + 1 > g["x"] and
+                    ky < g["y"] + 1 and ky + 1 > g["y"]
+                    for g in guards
+                )
+                if not guard_blocked:
                     player.x, player.y = kx, ky
                     knocked = True
 
@@ -125,10 +130,9 @@ async def _death_respawn(player, old_room_id):
         player.hp = player.max_hp
         player.room = STARTING_ROOM
         spawn = game.rooms[STARTING_ROOM]["spawn_points"]["default"]
-        player.x, player.y = spawn
+        player.x, player.y = float(spawn[0]), float(spawn[1])
         player.direction = "down"
         player.dancing = False
-        player.walk = None
 
         from server.lifecycle import on_player_enter_room, on_player_leave_room, send_room_enter
 
@@ -237,9 +241,9 @@ def exec_projectile(monster, room_id, monster_idx, action, msgs):
         "color": color,
     }, None))
 
-    # Check if a player is already at the spawn tile
+    # Check if a player is already at the spawn tile (AABB overlap)
     for p in players_in_room(room_id):
-        if p.hp > 0 and p.x == start_x and p.y == start_y:
+        if p.hp > 0 and p.x < start_x + 1 and p.x + 1 > start_x and p.y < start_y + 1 and p.y + 1 > start_y:
             msgs.append(("broadcast", room_id, {
                 "type": "projectile_hit", "id": proj_id,
                 "x": start_x, "y": start_y,
@@ -302,12 +306,11 @@ def exec_charge(monster, room_id, monster_idx, action, msgs):
         "y": end_y,
     }, None))
 
-    # Check if player was hit — for multi-tile monsters, expand each path
-    # position to the monster's full footprint
+    # Check if player was hit — AABB overlap with charge path
     w, h = monster.width, monster.height
     for p in players_in_room(room_id):
         if p.hp > 0 and any(
-            px <= p.x < px + w and py <= p.y < py + h
+            p.x < px + w and p.x + 1 > px and p.y < py + h and p.y + 1 > py
             for px, py in path
         ):
             _apply_damage(p, damage, room_id, msgs)
@@ -403,103 +406,10 @@ EXEC_HANDLERS = {
 # Background tick loops
 # ---------------------------------------------------------------------------
 
-def _check_guard_proximity_sync(player, msgs):
-    """If adjacent to a guard and cooldown has passed, queue guard dialog."""
-    now = time.monotonic()
-    for guard in game.guards.get(player.room, []):
-        dx = abs(player.x - guard["x"])
-        dy = abs(player.y - guard["y"])
-        if dx + dy == 1:
-            key = f"{player.room}:{guard['name']}:{guard['x']},{guard['y']}"
-            last = player.guard_cooldowns.get(key, 0)
-            if now - last >= GUARD_COOLDOWN:
-                player.guard_cooldowns[key] = now
-                msgs.append(("guard_chat", player, guard))
-
-
 def _tick_players(now, msgs):
-    """Advance all active player walks, commit at midway, complete at 100%."""
-    from server.lifecycle import get_room_monsters
-    from server.dungeons import get_dungeon_for_room, broadcast_to_dungeon
-    for player in list(game.players.values()):
-        walk = player.walk
-        if walk is None:
-            continue
-
-        elapsed = now - walk["start_time"]
-        progress = min(elapsed / WALK_TIME, 1.0)
-
-        # Midway commit — set position and check collisions
-        if progress >= 0.5 and not walk["committed"]:
-            walk["committed"] = True
-            player.x = walk["to_x"]
-            player.y = walk["to_y"]
-
-            msgs.append(("broadcast", player.room, {
-                "type": "player_moved",
-                "name": player.name,
-                "x": player.x,
-                "y": player.y,
-                "direction": player.direction,
-            }, None))
-
-            # Monster contact damage at new position
-            if player.hp > 0:
-                for monster in get_room_monsters(player.room):
-                    if monster.alive and not monster.intangible and monster.occupies(player.x, player.y):
-                        _apply_damage(player, monster.damage, player.room, msgs)
-                        break
-
-            # Heart pickup
-            if player.hp > 0:
-                hearts = game.room_hearts.get(player.room, [])
-                for heart in hearts:
-                    if heart["x"] == player.x and heart["y"] == player.y and player.hp < player.max_hp:
-                        player.hp = min(player.max_hp, player.hp + HEART_RESTORE_HP)
-                        hearts.remove(heart)
-                        msgs.append(("send", player, {"type": "hp_update", "hp": player.hp, "max_hp": player.max_hp}))
-                        msgs.append(("broadcast", player.room, {"type": "heart_collected", "id": heart["id"]}, None))
-                        break
-
-            # Dungeon item pickup
-            if player.hp > 0:
-                dinst = get_dungeon_for_room(player.room)
-                if dinst:
-                    items = dinst.dungeon_items.get(player.room, [])
-                    for item in list(items):
-                        if item["x"] == player.x and item["y"] == player.y:
-                            item_type = item["item_type"]
-                            dinst.collected_items.add(item_type)
-                            items.remove(item)
-                            item_name = {"map": "Dungeon Map", "compass": "Compass"}.get(item_type, item_type)
-                            msgs.append(("send", player, {
-                                "type": "item_obtained",
-                                "item_type": item_type,
-                                "item_name": item_name,
-                            }))
-                            msgs.append(("broadcast", player.room, {
-                                "type": "item_effect",
-                                "item_type": item_type,
-                                "name": player.name,
-                            }, player.ws))
-                            broadcast_to_dungeon(dinst, {
-                                "type": "dungeon_item_collected",
-                                "item_type": item_type,
-                                "collected_by": player.name,
-                            }, msgs)
-                            break
-
-            # Guard proximity chat
-            if player.hp > 0:
-                _check_guard_proximity_sync(player, msgs)
-
-        # Walk complete
-        if progress >= 1.0:
-            player.walk = None
-            msgs.append(("broadcast", player.room, {
-                "type": "walk_complete",
-                "name": player.name,
-            }, None))
+    """Player tick — no walk state to advance in free-movement mode.
+    Collision checks are handled in _process_position_update in commands.py."""
+    pass
 
 
 def _tick_all_monsters(now, msgs):
@@ -528,7 +438,9 @@ def _tick_all_monsters(now, msgs):
                         monster.y = sd["to_y"]
                         if not monster.intangible:
                             for p in players_in_room(room_id):
-                                if p.hp > 0 and monster.occupies(p.x, p.y):
+                                if p.hp > 0 and (
+                                    p.x < monster.x + monster.width and p.x + 1 > monster.x and
+                                    p.y < monster.y + monster.height and p.y + 1 > monster.y):
                                     _apply_damage(p, monster.damage, room_id, msgs)
                     if progress >= 1.0:
                         remaining = sd.get("remaining_distance", 0)
@@ -578,10 +490,10 @@ def _tick_projectiles(msgs):
                         }, None))
                         break
 
-                    # Check player collision
+                    # Check player collision (AABB overlap)
                     hit_player = False
                     for p in players_in_room(room_id):
-                        if p.hp > 0 and p.x == proj.x and p.y == proj.y:
+                        if p.hp > 0 and p.x < proj.x + 1 and p.x + 1 > proj.x and p.y < proj.y + 1 and p.y + 1 > proj.y:
                             msgs.append(("broadcast", room_id, {
                                 "type": "projectile_hit", "id": proj_id,
                                 "x": proj.x, "y": proj.y,

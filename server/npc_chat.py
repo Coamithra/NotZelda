@@ -292,11 +292,11 @@ async def _call_api(system_prompt: str, messages: list[dict]) -> str:
 # ---------------------------------------------------------------------------
 
 def find_adjacent_npc(player) -> dict | None:
-    """Find an NPC adjacent to the player (Manhattan distance 1)."""
+    """Find an NPC adjacent to the player (Manhattan distance, float-aware)."""
     for guard in game.guards.get(player.room, []):
         dx = abs(player.x - guard["x"])
         dy = abs(player.y - guard["y"])
-        if dx + dy <= 2:  # within 1 tile gap
+        if dx + dy <= 2.25:  # within ~1 tile gap (float margin)
             return guard
     return None
 

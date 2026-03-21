@@ -284,24 +284,17 @@ function handleMessage(msg) {
           moving: false,
           walkState: null,
         };
-        if (p.walking) {
-          op.walkState = {
-            fromX: p.walk_from.x, fromY: p.walk_from.y,
-            toX: p.walk_to.x, toY: p.walk_to.y,
-            startTime: performance.now() - (p.walk_progress * WALK_TIME_MS),
-          };
-          op.x = p.walk_to.x;
-          op.y = p.walk_to.y;
-          op.direction = p.walk_dir || p.direction;
-        }
         G.otherPlayers[p.name] = op;
         if (p.dancing) startDance(p.name);
       }
 
+      G.preciseX = G.myPlayer.x;
+      G.preciseY = G.myPlayer.y;
+      G.lastReportedX = G.myPlayer.x;
+      G.lastReportedY = G.myPlayer.y;
       G.displayX = G.myPlayer.x;
       G.displayY = G.myPlayer.y;
       setState("idle", {});
-      G.walkQueue = null;
 
       // Dungeon state — track collected items and visited cells
       if (msg.dungeon_collected !== undefined) {
@@ -355,87 +348,38 @@ function handleMessage(msg) {
       break;
     }
 
-    case "player_moved":
-      stopDance(msg.name);
-      delete G.attackingPlayers[msg.name];
-      if (G.networkLog && msg.name === G.myName) {
-        const t = performance.now().toFixed(1);
-        const sInfo = G.state === "walking" ? `walking{(${G.stateData.fromX},${G.stateData.fromY})->(${G.stateData.toX},${G.stateData.toY})}` : G.state;
-        console.log(`[NET IN  t=${t}] player_moved SELF pos=(${msg.x},${msg.y}) [${sInfo}]`);
-      }
-      // player_moved is now only for OTHER players (self uses reconcile)
-      if (msg.name !== G.myName && G.otherPlayers[msg.name]) {
-        G.otherPlayers[msg.name].x = msg.x;
-        G.otherPlayers[msg.name].y = msg.y;
-        G.otherPlayers[msg.name].direction = msg.direction;
-      }
-      break;
-
     case "reconcile": {
       if (G.networkLog) {
         const t = performance.now().toFixed(1);
-        const sInfo = G.state === "walking" ? `walking{(${G.stateData.fromX},${G.stateData.fromY})->(${G.stateData.toX},${G.stateData.toY})}` : G.state;
-        console.log(`[NET IN  t=${t}] reconcile walking=${msg.walking} pos=(${msg.x},${msg.y}) [${sInfo}]`, msg);
+        console.log(`[NET IN  t=${t}] reconcile pos=(${msg.x},${msg.y}) [${G.state}]`);
       }
-      if (!msg.walking) {
-        G.myPlayer.x = msg.x;
-        G.myPlayer.y = msg.y;
-        G.myPlayer.direction = msg.direction;
-        G.displayX = msg.x;
-        G.displayY = msg.y;
-        // Hard reset — clear any animation state
-        delete G.attackingPlayers[G.myName];
-        setState("idle", {});
-        G.walkQueue = null;
-      } else {
-        G.myPlayer.direction = msg.direction;
-        G.myPlayer.x = msg.x;
-        G.myPlayer.y = msg.y;
-        setState("walking", {
-          fromX: msg.walk_from.x, fromY: msg.walk_from.y,
-          toX: msg.walk_to.x, toY: msg.walk_to.y,
-          dir: msg.direction,
-          startTime: performance.now() - (msg.walk_progress * WALK_TIME_MS),
-        });
-      }
+      G.preciseX = G.displayX = G.myPlayer.x = msg.x;
+      G.preciseY = G.displayY = G.myPlayer.y = msg.y;
+      G.lastReportedX = msg.x;
+      G.lastReportedY = msg.y;
+      G.myPlayer.direction = msg.direction;
+      delete G.attackingPlayers[G.myName];
+      setState("idle");
       break;
     }
 
-    case "walk_started":
-      // Another player started walking — set up time-based interpolation
-      if (msg.name !== G.myName && G.otherPlayers[msg.name]) {
-        const wp = G.otherPlayers[msg.name];
+    case "player_walk_half": {
+      // Another player moved half a tile — smooth interpolation
+      const op = G.otherPlayers[msg.name];
+      if (op) {
         stopDance(msg.name);
         delete G.attackingPlayers[msg.name];
-        wp.direction = msg.dir;
-        wp.x = msg.to_x;
-        wp.y = msg.to_y;
-        wp.walkState = {
-          fromX: msg.from_x, fromY: msg.from_y,
-          toX: msg.to_x, toY: msg.to_y,
-          startTime: performance.now() - (msg.progress * WALK_TIME_MS),
+        op.direction = msg.direction;
+        op.x = msg.x;
+        op.y = msg.y;
+        op.walkState = {
+          fromX: op.displayX, fromY: op.displayY,
+          toX: msg.x, toY: msg.y,
+          startTime: performance.now(),
         };
       }
       break;
-
-    case "walk_cancelled":
-      // Another player cancelled their walk — snap back
-      if (msg.name !== G.myName && G.otherPlayers[msg.name]) {
-        const wcp = G.otherPlayers[msg.name];
-        wcp.walkState = null;
-        wcp.x = msg.x;
-        wcp.y = msg.y;
-        wcp.displayX = msg.x;
-        wcp.displayY = msg.y;
-      }
-      break;
-
-    case "walk_complete":
-      // Another player finished walking — clear walk interpolation
-      if (msg.name !== G.myName && G.otherPlayers[msg.name]) {
-        G.otherPlayers[msg.name].walkState = null;
-      }
-      break;
+    }
 
     case "player_faced":
       if (msg.name !== G.myName && G.otherPlayers[msg.name]) {
@@ -454,16 +398,6 @@ function handleMessage(msg) {
           moving: false,
           walkState: null,
         };
-        if (msg.walking) {
-          ep.walkState = {
-            fromX: msg.walk_from.x, fromY: msg.walk_from.y,
-            toX: msg.walk_to.x, toY: msg.walk_to.y,
-            startTime: performance.now() - (msg.walk_progress * WALK_TIME_MS),
-          };
-          ep.x = msg.walk_to.x;
-          ep.y = msg.walk_to.y;
-          ep.direction = msg.walk_dir || msg.direction;
-        }
         G.otherPlayers[msg.name] = ep;
         if (msg.dancing) startDance(msg.name);
         appendChatLog(`<span class="chat-system">${escHtml(msg.name)} entered the room</span>`);
@@ -505,10 +439,13 @@ function handleMessage(msg) {
         G.myHp = msg.hp;
         G.myPlayer.x = msg.x;
         G.myPlayer.y = msg.y;
+        G.preciseX = msg.x;
+        G.preciseY = msg.y;
+        G.lastReportedX = msg.x;
+        G.lastReportedY = msg.y;
         G.displayX = msg.x;
         G.displayY = msg.y;
         setState("idle", {});
-        G.walkQueue = null;
         G.hurtFlash = Date.now() + 300;
         G.invincibleUntil = Date.now() + 1500;
       } else if (G.otherPlayers[msg.name]) {
@@ -523,7 +460,8 @@ function handleMessage(msg) {
       G.dyingPlayerSelf = { x: msg.x, y: msg.y, frame: 0, startTime: Date.now() };
       G.myHp = 0;
       setState("dying", {});
-      G.walkQueue = null;
+      G.preciseX = msg.x;
+      G.preciseY = msg.y;
       G.displayX = msg.x;
       G.displayY = msg.y;
       appendChatLog(`<span class="chat-system">You died!</span>`);

@@ -332,13 +332,12 @@ G.serverLog   = document.getElementById("server-log");
 // Game loop
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
-// Client-side prediction helpers
+// Movement helpers — half-tile free movement
 // ---------------------------------------------------------------------------
 const DIR_DX = { up: 0, down: 0, left: -1, right: 1 };
 const DIR_DY = { up: -1, down: 1, left: 0, right: 0 };
 
 function getActiveDirection() {
-  // Most recently pressed direction key wins (via dirStack)
   return G.dirStack.length > 0 ? G.dirStack[G.dirStack.length - 1] : null;
 }
 
@@ -349,170 +348,118 @@ function setState(newState, data) {
 
 function sendToServer(msg) {
   if (G.ws && G.ws.readyState === WebSocket.OPEN) {
-    if (G.networkLog && (msg.type === "walk" || msg.type === "cancel_walk" || msg.type === "face" || msg.type === "attack")) {
+    if (G.networkLog && (msg.type === "position_update" || msg.type === "face" || msg.type === "attack")) {
       const t = performance.now().toFixed(1);
-      const sd = G.stateData;
-      const sInfo = G.state === "walking" ? `${G.state}{dir:${sd.dir},(${sd.fromX},${sd.fromY})->(${sd.toX},${sd.toY}),elapsed:${(performance.now()-sd.startTime).toFixed(0)}}` : G.state;
-      const origin = msg.origin ? `origin=(${msg.origin.x},${msg.origin.y})` : "";
-      console.log(`[NET OUT t=${t}] ${msg.type} ${msg.direction||""} ${origin} [${sInfo}]`);
+      console.log(`[NET OUT t=${t}] ${msg.type} ${msg.direction||""} x=${msg.x} y=${msg.y} [${G.state}]`);
     }
     G.ws.send(JSON.stringify(msg));
   }
 }
 
-function isTransitionTile(x, y) {
+function canMoveToPosition(x, y) {
+  /** Check if a 1x1 hitbox at (x,y) can exist — wall + guard collision.
+      Only checks bottom half of hitbox for Y (NES Zelda style — sprite
+      top half can overlap walls regardless of direction). */
   if (!G.currentRoom) return false;
-  const tile = G.currentRoom.tilemap[y][x];
-  const exits = G.currentRoom.exits;
-  if ((tile === "SU" || tile === 9) && exits.up) return true;
-  if ((tile === "SD" || tile === 10) && exits.down) return true;
-  return false;
-}
+  const tilemap = G.currentRoom.tilemap;
 
-function canPredictWalk(x, y) {
-  if (!G.currentRoom) return false;
-  if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return false;
-  if (isTransitionTile(x, y)) return false;
-  const tile = G.currentRoom.tilemap[y][x];
-  if (!WALKABLE.has(tile)) return false;
+  const checkYStart = y + 0.5;
+
+  const minTx = Math.floor(x + 0.001);
+  const maxTx = Math.floor(x + 1.0 - 0.001);
+  const minTy = Math.floor(checkYStart + 0.001);
+  const maxTy = Math.floor(y + 1.0 - 0.001);
+
+  for (let ty = minTy; ty <= maxTy; ty++) {
+    for (let tx = minTx; tx <= maxTx; tx++) {
+      if (tx < 0 || tx >= COLS || ty < 0 || ty >= ROWS) continue;
+      const tile = tilemap[ty][tx];
+      if (!WALKABLE.has(tile)) return false;
+    }
+  }
+
+  // Guard AABB overlap
   for (const guard of G.guards) {
-    if (guard.x === x && guard.y === y) return false;
+    if (x < guard.x + 1 && x + 1 > guard.x &&
+        y < guard.y + 1 && y + 1 > guard.y) return false;
   }
   return true;
 }
 
-function cancelWalk() {
-  // Helper — cancel the current walk, snap back to origin
-  const sd = G.stateData;
-  sendToServer({ type: "cancel_walk" });
-  G.myPlayer.x = sd.fromX;
-  G.myPlayer.y = sd.fromY;
-  G.displayX = sd.fromX;
-  G.displayY = sd.fromY;
-  setState("idle", {});
-  G.walkQueue = null;
-  G.isMoving = false;
-}
+function maybeReportPosition() {
+  /** Round to nearest half-tile; report when it changes.
+      At y=5.0, report fires when y crosses 4.75 (reports 4.5) or 5.25 (reports 5.5).
+      Symmetric in all directions — triggers at the midpoint of each half-tile segment. */
+  const reportX = Math.round(G.preciseX * 2) / 2;
+  const reportY = Math.round(G.preciseY * 2) / 2;
 
-function tryStartWalk(dir) {
-  if (!G.myPlayer || !G.currentRoom) return;
-  const nx = G.myPlayer.x + DIR_DX[dir];
-  const ny = G.myPlayer.y + DIR_DY[dir];
-
-  const wasAlreadyFacing = (G.myPlayer.direction === dir);
-  G.myPlayer.direction = dir;
-
-  if (canPredictWalk(nx, ny)) {
-    setState("walking", {
-      fromX: G.myPlayer.x, fromY: G.myPlayer.y,
-      toX: nx, toY: ny,
-      dir: dir,
-      startTime: performance.now(),
+  if (reportX !== G.lastReportedX || reportY !== G.lastReportedY) {
+    sendToServer({
+      type: "position_update",
+      x: reportX,
+      y: reportY,
+      direction: G.myPlayer.direction,
     });
-    sendToServer({ type: "walk", direction: dir, origin: { x: G.myPlayer.x, y: G.myPlayer.y } });
-    G.myPlayer.x = nx;
-    G.myPlayer.y = ny;
-    return;
-  }
-
-  const offGrid = (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS);
-  const transition = !offGrid && isTransitionTile(nx, ny);
-  if (offGrid || transition) {
-    sendToServer({ type: "walk", direction: dir, origin: { x: G.myPlayer.x, y: G.myPlayer.y } });
-    return;
-  }
-
-  if (!wasAlreadyFacing) {
-    sendToServer({ type: "face", direction: dir });
-  }
-}
-
-function drainInputEvents() {
-  while (G.inputEvents.length > 0) {
-    const ev = G.inputEvents.shift();
-    if (G.state !== "walking") continue;
-    const elapsed = ev.time - G.stateData.startTime;
-    if (elapsed >= CANCEL_TIME_MS) continue;
-
-    if (ev.type === "dirUp" && ev.dir === G.stateData.dir) {
-      cancelWalk();
-      sendToServer({ type: "face", direction: ev.dir });
-    } else if (ev.type === "dirDown" && ev.dir !== G.stateData.dir) {
-      cancelWalk();
-      tryStartWalk(ev.dir);
-    }
+    G.lastReportedX = reportX;
+    G.lastReportedY = reportY;
   }
 }
 
 function playerTick() {
-  // Freeze movement during item pickup animation
   if (G.itemPickupActive) return;
 
-  drainInputEvents();
-  const dir = getActiveDirection();
   const now = performance.now();
+  const dt = Math.min((now - (G.lastTickTime || now)) / 1000, 0.05);
+  G.lastTickTime = now;
+
+  const dir = getActiveDirection();
 
   switch (G.state) {
-    case "idle":
-      if (dir) {
-        stopDance(G.myName);
-        tryStartWalk(dir);
-      }
-      G.isMoving = false;
-      break;
+    case "idle": {
+      if (!dir) { G.isMoving = false; break; }
 
-    case "walking": {
-      const sd = G.stateData;
-      const elapsed = now - sd.startTime;
-      const progress = Math.min(elapsed / WALK_TIME_MS, 1.0);
+      stopDance(G.myName);
+      G.myPlayer.direction = dir;
+      G.isMoving = true;
 
-      // Cancel window (frame-based fallback — input buffer handles inter-frame)
-      if (elapsed < CANCEL_TIME_MS) {
-        if (!dir) {
-          cancelWalk();
-          sendToServer({ type: "face", direction: sd.dir });
-          return;
-        }
-        if (dir !== sd.dir) {
-          cancelWalk();
-          tryStartWalk(dir);
-          return;
-        }
-      }
+      const isHorizontal = (dir === "left" || dir === "right");
+      const speed = MOVE_SPEED * dt;
 
-      // Buffer different direction for chaining
-      if (dir && dir !== sd.dir) {
-        G.walkQueue = dir;
-      }
+      let newX = G.preciseX + DIR_DX[dir] * speed;
+      let newY = G.preciseY + DIR_DY[dir] * speed;
 
-      if (progress >= 1.0) {
-        // Walk complete — snap to target
-        G.displayX = sd.toX;
-        G.displayY = sd.toY;
-        setState("idle", {});
-
-        // Attack if space is held
-        if (G.keysDown["Space"] && G.playerFlags.has("has_sword")) {
-          G.walkQueue = null;
-          sendToServer({ type: "attack" });
-          startAttack(G.myName, G.myPlayer.direction);
-          setState("attacking", { startTime: performance.now() });
-          G.isMoving = false;
-          return;
-        }
-
-        // Chain next walk
-        const nextDir = G.walkQueue || dir;
-        G.walkQueue = null;
-        if (nextDir) {
-          stopDance(G.myName);
-          tryStartWalk(nextDir);
+      // Axis alignment: snap perpendicular coord toward nearest half-tile
+      if (isHorizontal) {
+        const targetY = Math.round(G.preciseY * 2) / 2;
+        if (Math.abs(G.preciseY - targetY) > 0.01) {
+          const alignDelta = Math.sign(targetY - G.preciseY) * Math.min(speed, Math.abs(G.preciseY - targetY));
+          newY = G.preciseY + alignDelta;
         }
       } else {
-        G.displayX = sd.fromX + (sd.toX - sd.fromX) * progress;
-        G.displayY = sd.fromY + (sd.toY - sd.fromY) * progress;
+        const targetX = Math.round(G.preciseX * 2) / 2;
+        if (Math.abs(G.preciseX - targetX) > 0.01) {
+          const alignDelta = Math.sign(targetX - G.preciseX) * Math.min(speed, Math.abs(G.preciseX - targetX));
+          newX = G.preciseX + alignDelta;
+        }
       }
-      G.isMoving = G.state === "walking";
+
+      // Collision: try full move, then slide along walls
+      if (canMoveToPosition(newX, newY)) {
+        G.preciseX = newX;
+        G.preciseY = newY;
+      } else if (isHorizontal && canMoveToPosition(newX, G.preciseY)) {
+        G.preciseX = newX;
+      } else if (!isHorizontal && canMoveToPosition(G.preciseX, newY)) {
+        G.preciseY = newY;
+      }
+      // else: blocked
+
+      G.displayX = G.preciseX;
+      G.displayY = G.preciseY;
+      G.myPlayer.x = G.preciseX;
+      G.myPlayer.y = G.preciseY;
+
+      maybeReportPosition();
       break;
     }
 
@@ -525,7 +472,7 @@ function playerTick() {
           setState("attacking", { startTime: performance.now() });
         } else if (dir) {
           stopDance(G.myName);
-          tryStartWalk(dir);
+          setState("idle", {});
         } else {
           setState("idle", {});
         }
@@ -570,8 +517,9 @@ function gameLoop(timestamp) {
     G.monsterHopFrame = (G.monsterHopFrame + 1) % 2;
   }
 
-  // Interpolate positions — lerp fallback when not walking
-  if (G.myPlayer && G.state !== "walking") {
+  // Interpolate positions — lerp for reconciliation snaps
+  if (G.myPlayer && G.state !== "idle") {
+    // During attacking/dying, lerp displayX/Y toward myPlayer position
     if (G.displayX !== G.myPlayer.x || G.displayY !== G.myPlayer.y) {
       G.displayX += (G.myPlayer.x - G.displayX) * MOVE_LERP;
       G.displayY += (G.myPlayer.y - G.displayY) * MOVE_LERP;
@@ -583,7 +531,7 @@ function gameLoop(timestamp) {
   for (const p of Object.values(G.otherPlayers)) {
     if (p.walkState) {
       const elapsed = performance.now() - p.walkState.startTime;
-      const progress = Math.min(elapsed / WALK_TIME_MS, 1.0);
+      const progress = Math.min(elapsed / HALF_WALK_TIME_MS, 1.0);
       p.displayX = p.walkState.fromX + (p.walkState.toX - p.walkState.fromX) * progress;
       p.displayY = p.walkState.fromY + (p.walkState.toY - p.walkState.fromY) * progress;
       if (progress >= 1.0) {

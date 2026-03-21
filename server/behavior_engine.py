@@ -142,19 +142,19 @@ def cond_player_in_range_line(monster, room_id, rule):
     w = getattr(monster, "width", 1)
     h = getattr(monster, "height", 1)
 
-    # Check if player shares a column with any tile in monster's width
+    # Check if player shares a column with any tile in monster's width (float-aware)
     for dx in range(w):
         mx = monster.x + dx
-        if player.x == mx:
-            if check_los and not _has_los(mx, monster.y, player.x, player.y, room_id):
+        if abs(player.x - mx) < 0.75:
+            if check_los and not _has_los(mx, monster.y, int(round(player.x)), int(round(player.y)), room_id):
                 continue
             return True
 
-    # Check if player shares a row with any tile in monster's height
+    # Check if player shares a row with any tile in monster's height (float-aware)
     for dy in range(h):
         my = monster.y + dy
-        if player.y == my:
-            if check_los and not _has_los(monster.x, my, player.x, player.y, room_id):
+        if abs(player.y - my) < 0.75:
+            if check_los and not _has_los(monster.x, my, int(round(player.x)), int(round(player.y)), room_id):
                 continue
             return True
 

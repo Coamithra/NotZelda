@@ -24,7 +24,7 @@ EDGE_SPAWN_POINTS = {
     "north": (7, 0), "south": (7, 10),
     "east": (14, 5), "west": (0, 5),
 }
-DEFAULT_SPAWN = (7, 5)
+DEFAULT_SPAWN = (8, 5)
 
 # ---------------------------------------------------------------------------
 # Room dimensions
@@ -38,10 +38,17 @@ ROOM_ROWS = 11
 # ---------------------------------------------------------------------------
 
 STARTING_ROOM = "town_square"
-WALK_TIME = 0.250          # seconds — full tile-to-tile walk duration
-CANCEL_TIME = 0.090        # seconds — window to cancel a walk by releasing the key
-LATENCY_COMP = 0.066       # seconds — dead reckoning offset; also used as leeway for all timing checks
+WALK_TIME = 0.250          # seconds — monster tile-to-tile walk duration (kept for monster walks)
+CANCEL_TIME = 0.090        # seconds — legacy (kept for backward compat)
+LATENCY_COMP = 0.066       # seconds — legacy (kept for backward compat)
 ATTACK_COOLDOWN = 0.4
+
+# Half-tile free movement (NES Zelda-style)
+HALF_TILE = 0.5
+HALF_WALK_TIME = 0.125          # 125ms — other-player half-tile animation
+POSITION_UPDATE_RATE = 0.04     # min seconds between updates (25/sec max)
+MAX_MOVE_PER_UPDATE = 1.25      # max distance per position_update (0.5 on each axis + margin)
+PLAYER_SPEED = 4.0              # tiles/sec (for anti-cheat speed check)
 HEART_RESTORE_HP = 2
 PLAYER_MAX_HP = 6
 PLAYER_RESPAWN_DELAY = 5.5

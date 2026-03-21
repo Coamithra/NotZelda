@@ -10,8 +10,12 @@ const ROWS = 11;
 const CW = COLS * TS; // 720
 const CH = ROWS * TS; // 528
 const MOVE_LERP = 0.3;            // lerp factor for other players & monsters (fallback)
-const WALK_TIME_MS = 250;         // ms — full tile-to-tile walk duration
-const CANCEL_TIME_MS = 90;        // ms — window to cancel a walk by releasing the key
+
+// Half-tile free movement constants
+const MOVE_SPEED = 4.0;                  // tiles/sec
+const HALF_TILE = 0.5;
+// (position reporting triggers when Math.round(pos*2)/2 changes — see maybeReportPosition)
+const HALF_WALK_TIME_MS = 125;           // other player animation duration (ms)
 
 // Shared mutable game state
 const G = {
@@ -50,13 +54,18 @@ const G = {
   // Input
   keysDown: {},
   dirStack: [],            // direction key press order — last entry = active direction
-  inputEvents: [],         // buffered direction events: [{type: "dirDown"|"dirUp", dir, time}]
   lastMoveTime: 0,
 
   // Player state machine
-  state: "idle",           // "idle" | "walking" | "attacking" | "dying"
+  state: "idle",           // "idle" | "attacking" | "dying"
   stateData: {},           // state-scoped data, replaced on every transition
-  walkQueue: null,         // queued next direction for chaining
+
+  // Free movement (sub-tile)
+  preciseX: 0,             // pixel-precise position (local only)
+  preciseY: 0,
+  lastReportedX: 0,        // last position sent to server
+  lastReportedY: 0,
+  lastTickTime: 0,         // for deltaTime
 
   // Animation
   animFrame: 0,

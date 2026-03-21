@@ -116,7 +116,7 @@ async def handle_connection(websocket):
 
         player = Player(websocket, name, desc or "A mysterious stranger.", color_index)
         spawn = game.rooms[STARTING_ROOM]["spawn_points"]["default"]
-        player.x, player.y = spawn
+        player.x, player.y = float(spawn[0]), float(spawn[1])
         game.players[websocket] = player
         log_event("JOIN", f"{name} ({player.description})")
         print(f"[JOIN] {name} from {addr}")
@@ -145,7 +145,7 @@ async def handle_connection(websocket):
                 msg_type = data.get("type")
                 if msg_type == "ping":
                     await player.ws.send(json.dumps({"type": "pong"}))
-                elif msg_type in ("walk", "cancel_walk", "face", "attack", "chat"):
+                elif msg_type in ("position_update", "face", "attack", "chat"):
                     player.command_queue.append((msg_type, data))
             except json.JSONDecodeError:
                 print(f"[WARN] {name}: bad JSON: {raw[:200]}")
