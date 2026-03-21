@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>MUD — Zelda-style Adventure</title>
+<title>Legends of Amara</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -20,10 +20,10 @@
     overflow: hidden;
   }
 
-  /* ---------- Login screen ---------- */
+  /* ---------- Login / Title screen ---------- */
   #login-screen {
     position: fixed; inset: 0;
-    background: rgba(0,0,0,0.85);
+    background: #000;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -31,26 +31,44 @@
   }
   #login-screen.hidden { display: none; }
 
-  .login-card {
-    background: #161b22;
-    border: 1px solid #30363d;
-    border-radius: 12px;
-    padding: 2rem;
-    width: 380px;
-    max-width: 90vw;
+  #title-canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    max-width: 100vw;
+    max-height: 100vh;
   }
-  .login-card h1 { color: #e6b422; font-size: 1.6rem; margin-bottom: .3rem; }
-  .login-card p.subtitle { color: #8b949e; font-size: .85rem; margin-bottom: 1.5rem; }
+
+  .login-card {
+    position: absolute;
+    background: #0d0d1a;
+    border: 2px solid #c89e1c;
+    border-radius: 2px;
+    padding: 1.8rem 2rem;
+    width: 340px;
+    max-width: 85vw;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    pointer-events: none;
+  }
+  .login-card.hidden { display: none; }
+  .login-card.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+  .login-card h1 { color: #e6b422; font-size: 1.4rem; margin-bottom: .2rem; text-align: center; }
+  .login-card p.subtitle { color: #7a7e88; font-size: .8rem; margin-bottom: 1.4rem; text-align: center; }
   .login-card label { display: block; color: #8b949e; font-size: .8rem; margin-bottom: .3rem; }
   .login-card input {
     width: 100%; padding: .5rem .7rem; margin-bottom: 1rem;
-    background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+    background: #08081a; border: 1px solid #30363d; border-radius: 2px;
     color: #c9d1d9; font-family: inherit; font-size: .95rem;
   }
   .login-card input:focus { outline: none; border-color: #e6b422; }
   .login-card button {
     width: 100%; padding: .6rem; background: #e6b422; color: #0d1117;
-    border: none; border-radius: 6px; font-family: inherit;
+    border: none; border-radius: 2px; font-family: inherit;
     font-size: 1rem; font-weight: 700; cursor: pointer;
   }
   .login-card button:hover { background: #d4a31c; }
@@ -237,14 +255,15 @@
 </head>
 <body>
 
-<!-- Login -->
+<!-- Login / Title Screen -->
 <div id="login-screen">
-  <div class="login-card">
-    <h1>Enter the MUD</h1>
-    <p class="subtitle">A Zelda-style multiplayer adventure</p>
+  <canvas id="title-canvas" width="720" height="528"></canvas>
+  <div class="login-card hidden" id="login-card">
+    <h1>Legends of Amara</h1>
+    <p class="subtitle">Enter the world</p>
     <div id="login-error"></div>
     <label for="name-input">Your name</label>
-    <input id="name-input" type="text" maxlength="20" placeholder="e.g. Aldric" autofocus>
+    <input id="name-input" type="text" maxlength="20" placeholder="e.g. Aldric">
     <label for="desc-input">Short description</label>
     <input id="desc-input" type="text" maxlength="80" placeholder="e.g. A wandering bard with a lute">
     <button id="connect-btn">Connect</button>
@@ -277,6 +296,7 @@
 
 <!-- Game scripts — load order matters -->
 <script src="game_state.js?v=3"></script>
+<script src="title.js?v=1"></script>
 <script src="tiles.js?v=3"></script>
 <script src="sprite_data.js?v=3"></script>
 <script src="sprites.js?v=3"></script>
@@ -328,6 +348,22 @@ G.chatBar     = document.getElementById("chat-bar");
 G.chatHint    = document.getElementById("chat-hint");
 G.chatLog     = document.getElementById("chat-log");
 G.serverLog   = document.getElementById("server-log");
+
+// ---------------------------------------------------------------------------
+// Title screen
+// ---------------------------------------------------------------------------
+TITLE.init();
+
+// Title screen input — Enter/click/tap transitions to login form
+document.getElementById("title-canvas").addEventListener("click", function () {
+  if (TITLE.phase === "title") TITLE.showLogin();
+});
+document.addEventListener("keydown", function titleKey(e) {
+  if (TITLE.phase === "title" && (e.key === "Enter" || e.key === " ")) {
+    e.preventDefault();
+    TITLE.showLogin();
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Game loop

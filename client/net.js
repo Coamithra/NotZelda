@@ -96,6 +96,7 @@ function handleMessage(msg) {
       G.dungeonGroundItems = [];
       G.itemPickupActive = null;
       G.itemPickupEffects = {};
+      if (typeof TITLE !== "undefined") TITLE.hide();
       G.loginScreen.classList.add("hidden");
       G.gameScreen.classList.add("active");
       if (G.debugMode && G.serverLog) G.serverLog.classList.add("active");

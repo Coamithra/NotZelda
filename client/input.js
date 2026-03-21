@@ -12,6 +12,7 @@ const DIR_KEY_MAP = {
 // ---------------------------------------------------------------------------
 document.addEventListener("keydown", (e) => {
   if (e.target === G.nameInput || e.target === G.descInput) return;
+  if (typeof TITLE !== "undefined" && TITLE.phase !== "done") return;
 
   G.keysDown[e.code] = true;
 

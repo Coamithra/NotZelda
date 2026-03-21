@@ -187,6 +187,7 @@ STATIC_FILES = {
     "/":            ("client/client.html", "text/html; charset=utf-8"),
     "/index.html":  ("client/client.html", "text/html; charset=utf-8"),
     "/game_state.js": ("client/game_state.js", "application/javascript; charset=utf-8"),
+    "/title.js":    ("client/title.js",    "application/javascript; charset=utf-8"),
     "/sprite_data.js": ("client/sprite_data.js", "application/javascript; charset=utf-8"),
     "/sprites.js":  ("client/sprites.js",  "application/javascript; charset=utf-8"),
     "/tiles.js":    ("client/tiles.js",    "application/javascript; charset=utf-8"),
