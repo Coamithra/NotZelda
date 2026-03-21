@@ -7,7 +7,7 @@ import time
 from collections import deque
 
 from server.state import game
-from server.constants import EDGE_SPAWN_POINTS, DEFAULT_SPAWN
+from server.constants import EDGE_SPAWN_POINTS, DEFAULT_SPAWN, ROOM_COLS, ROOM_ROWS
 from server.net import players_in_room, broadcast_debug
 
 
@@ -38,6 +38,11 @@ class DungeonInstance:
         self.treasure_cell = None   # (col, row)
         self.boss_engaged = False   # True once boss takes first non-lethal hit
 
+        # Dungeon items (Map & Compass)
+        self.item_cells = {}           # "map" -> (col, row), "compass" -> (col, row)
+        self.dungeon_items = {}        # room_id -> [{x, y, item_type}]
+        self.collected_items = set()   # "map", "compass"
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -53,6 +58,66 @@ def get_dungeon_for_room(room_id):
 
 def is_dungeon_room(room_id: str) -> bool:
     return room_id in game.room_to_dungeon
+
+
+def broadcast_to_dungeon(instance, msg, msgs, exclude=None):
+    """Append a send message for all players currently in the dungeon."""
+    for p in list(game.players.values()):
+        if p.room in instance.active_rooms and p.ws != exclude:
+            msgs.append(("send", p, msg))
+
+
+def _find_item_tile(room_id):
+    """Find a random walkable interior tile reachable from a doorway,
+    not occupied by NPCs (which block movement)."""
+    room = game.rooms.get(room_id)
+    if not room:
+        return None
+    tilemap = room["tilemap"]
+    guards = game.guards.get(room_id, [])
+    npc_tiles = {(g["x"], g["y"]) for g in guards}
+
+    # Find a doorway tile to start BFS from
+    doorway_tiles = []
+    exits = room.get("exits", {})
+    if "north" in exits:
+        doorway_tiles.extend([(c, 0) for c in (6, 7, 8) if game.is_walkable_tile(tilemap[0][c])])
+    if "south" in exits:
+        doorway_tiles.extend([(c, 10) for c in (6, 7, 8) if game.is_walkable_tile(tilemap[10][c])])
+    if "west" in exits:
+        doorway_tiles.extend([(0, r) for r in (4, 5, 6) if game.is_walkable_tile(tilemap[r][0])])
+    if "east" in exits:
+        doorway_tiles.extend([(14, r) for r in (4, 5, 6) if game.is_walkable_tile(tilemap[r][14])])
+    # Stairs
+    for ry, trow in enumerate(tilemap):
+        for rx, tile in enumerate(trow):
+            if tile == "SU":
+                doorway_tiles.append((rx, ry))
+
+    if not doorway_tiles:
+        return None
+
+    # BFS from a doorway to find all reachable walkable tiles
+    start = doorway_tiles[0]
+    reachable = set()
+    queue = deque([start])
+    reachable.add(start)
+    while queue:
+        cx, cy = queue.popleft()
+        for dx, dy in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
+            nx, ny = cx + dx, cy + dy
+            if 0 <= nx < ROOM_COLS and 0 <= ny < ROOM_ROWS and (nx, ny) not in reachable:
+                if game.is_walkable_tile(tilemap[ny][nx]):
+                    reachable.add((nx, ny))
+                    queue.append((nx, ny))
+
+    # Filter to interior tiles (avoid exit doorways), skip NPC tiles
+    candidates = [(col, row) for (col, row) in reachable
+                  if 1 <= row <= 9 and 1 <= col <= 13
+                  and (col, row) not in npc_tiles]
+    if candidates:
+        return random.choice(candidates)
+    return None
 
 
 def dungeon_player_count(instance) -> int:
@@ -336,6 +401,17 @@ def create_dungeon(type_id) -> DungeonInstance | None:
                 "source": "special", "entry": entry, "resolved": False,
             }
 
+    # Pick cells for dungeon items (Map & Compass)
+    special_cells = {entrance, boss_cell, treasure_cell}
+    item_candidates = [c for c in active_cells if c not in special_cells]
+    item_cells = {}
+    if len(item_candidates) >= 2:
+        map_cell, compass_cell = random.sample(item_candidates, 2)
+        item_cells["map"] = map_cell
+        item_cells["compass"] = compass_cell
+    elif len(item_candidates) == 1:
+        item_cells["map"] = item_candidates[0]
+
     instance = DungeonInstance(
         dungeon_id=type_id,
         layout=layout,
@@ -350,6 +426,7 @@ def create_dungeon(type_id) -> DungeonInstance | None:
     instance.connections = connections
     instance.boss_cell = boss_cell
     instance.treasure_cell = treasure_cell
+    instance.item_cells = item_cells
 
     game.active_dungeons[type_id] = instance
     for room_id in active_rooms:
@@ -425,6 +502,17 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
 
     assignment["resolved"] = True
     instance.resolved_rooms.add(room_id)
+
+    # Place dungeon items if this cell holds one
+    for item_type, item_cell in instance.item_cells.items():
+        if cell == item_cell and item_type not in instance.collected_items:
+            pos = _find_item_tile(room_id)
+            if pos:
+                instance.dungeon_items.setdefault(room_id, []).append(
+                    {"x": pos[0], "y": pos[1], "item_type": item_type}
+                )
+                print(f"[DUNGEON] Placed {item_type} in {room_id} at ({pos[0]},{pos[1]})")
+
     print(f"[DUNGEON] Resolved {room_id} ({source_label})")
     return True
 

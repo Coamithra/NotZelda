@@ -25,6 +25,7 @@ const MusicPlayer = (function () {
     "boss3":      "music_boss3.mp3",
     "watertemple1": "music_watertemple1.mp3",
     "watertemple2": "music_watertemple2.mp3",
+    "watertemple3": "music_watertemple3.mp3",
     "watertemple_boss1": "music_watertemple_boss1.mp3",
   };
 
@@ -154,17 +155,20 @@ const MusicPlayer = (function () {
     // Fade in new track
     currentTrack = url;
     const audio = getOrCreateAudio(url);
-    if (audio.readyState >= 4) {
-      // Already buffered enough — play immediately
+    if (audio.readyState >= 2) {
+      // Buffered enough to start — play immediately
       fadeIn(url, FADE_MS);
     } else {
       // Wait for the file to buffer, then fade in
       audio.addEventListener("canplaythrough", function () {
-        // Only play if this is still the current track
         if (currentTrack === url && playing) {
           fadeIn(url, FADE_MS);
         }
       }, { once: true });
+      // Guard against race: if it loaded between check and listener
+      if (audio.readyState >= 2 && currentTrack === url && playing) {
+        fadeIn(url, FADE_MS);
+      }
     }
   }
 

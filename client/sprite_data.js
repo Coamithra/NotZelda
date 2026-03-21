@@ -125,6 +125,20 @@ const customMonsterSprites = {};
 const customDeathSprites = {};
 const customNPCSprites = {};
 
+// ---------------------------------------------------------------------------
+// Player item-hold frame — facing camera, arms raised above head
+// ---------------------------------------------------------------------------
+const ITEM_HOLD_FRAME = [
+  ["HAIR",  5, 0, 6, 2],
+  ["SKIN",  5, 2, 6, 4],
+  ["#222",  6, 3, 1, 1], ["#222",  9, 3, 1, 1],
+  ["SHIRT", 4, 6, 8, 5],
+  ["SHIRT", 3, 4, 1, 3], ["SHIRT",12, 4, 1, 3],
+  ["SKIN",  3, 3, 1, 1], ["SKIN", 12, 3, 1, 1],
+  ["PANTS", 5,11, 6, 2],
+  ["BOOTS", 5,13, 2, 2], ["BOOTS", 9,13, 2, 2],
+];
+
 const PLAYER_FALL_FRAMES = [
   // Frame 0 — leaning
   [

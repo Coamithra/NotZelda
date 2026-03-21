@@ -21,7 +21,7 @@ DUNGEON_TYPES = {
         "name": "Water Temple",
         "template_dir": "rooms/dungeon2",
         "layouts": D2_LAYOUTS,
-        "music_tracks": ["watertemple1", "watertemple2"],
+        "music_tracks": ["watertemple1", "watertemple2", "watertemple3"],
         "boss_tracks": ["watertemple_boss1"],
         "biome": "dungeon",
         "theme": "water_temple",

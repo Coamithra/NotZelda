@@ -420,6 +420,7 @@ def _check_guard_proximity_sync(player, msgs):
 def _tick_players(now, msgs):
     """Advance all active player walks, commit at midway, complete at 100%."""
     from server.lifecycle import get_room_monsters
+    from server.dungeons import get_dungeon_for_room, broadcast_to_dungeon
     for player in list(game.players.values()):
         walk = player.walk
         if walk is None:
@@ -459,6 +460,34 @@ def _tick_players(now, msgs):
                         msgs.append(("send", player, {"type": "hp_update", "hp": player.hp, "max_hp": player.max_hp}))
                         msgs.append(("broadcast", player.room, {"type": "heart_collected", "id": heart["id"]}, None))
                         break
+
+            # Dungeon item pickup
+            if player.hp > 0:
+                dinst = get_dungeon_for_room(player.room)
+                if dinst:
+                    items = dinst.dungeon_items.get(player.room, [])
+                    for item in list(items):
+                        if item["x"] == player.x and item["y"] == player.y:
+                            item_type = item["item_type"]
+                            dinst.collected_items.add(item_type)
+                            items.remove(item)
+                            item_name = {"map": "Dungeon Map", "compass": "Compass"}.get(item_type, item_type)
+                            msgs.append(("send", player, {
+                                "type": "item_obtained",
+                                "item_type": item_type,
+                                "item_name": item_name,
+                            }))
+                            msgs.append(("broadcast", player.room, {
+                                "type": "item_effect",
+                                "item_type": item_type,
+                                "name": player.name,
+                            }, player.ws))
+                            broadcast_to_dungeon(dinst, {
+                                "type": "dungeon_item_collected",
+                                "item_type": item_type,
+                                "collected_by": player.name,
+                            }, msgs)
+                            break
 
             # Guard proximity chat
             if player.hp > 0:

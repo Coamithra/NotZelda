@@ -92,6 +92,10 @@ function handleMessage(msg) {
       G.myMaxHp = msg.max_hp;
       G.debugMode = !!msg.debug_mode;
       G.playerFlags = new Set();
+      G.dungeonState = null;
+      G.dungeonGroundItems = [];
+      G.itemPickupActive = null;
+      G.itemPickupEffects = {};
       G.loginScreen.classList.add("hidden");
       G.gameScreen.classList.add("active");
       if (G.debugMode && G.serverLog) G.serverLog.classList.add("active");
@@ -169,6 +173,7 @@ function handleMessage(msg) {
         renderRoom();
         renderAreaWarnings();
         renderHeartPickups();
+        renderDungeonGroundItems();
         renderChargePreps();
         renderChargeTrails();
         renderPlayers();
@@ -176,6 +181,7 @@ function handleMessage(msg) {
         renderMonsterAttackFlashes();
         renderSpeechBubbles();
         renderSwordPickups();
+        renderItemPickups();
         G.ctx = savedCtx;
       }
 
@@ -238,6 +244,9 @@ function handleMessage(msg) {
       G.guards = msg.guards || [];
       G.dyingMonsters = [];
       G.heartPickups = [];
+      G.dungeonGroundItems = msg.dungeon_items || [];
+      G.itemPickupActive = null;
+      G.itemPickupEffects = {};
       G.dyingPlayerSelf = null;
       G.dyingOtherPlayers = {};
       G.bossDeathEffect = null;
@@ -293,6 +302,30 @@ function handleMessage(msg) {
       G.displayY = G.myPlayer.y;
       setState("idle", {});
       G.walkQueue = null;
+
+      // Dungeon state — track collected items and visited cells
+      if (msg.dungeon_collected !== undefined) {
+        // In a dungeon room — initialize or update dungeon state
+        const mm = msg.dungeon_debug && msg.dungeon_debug.minimap;
+        const currentCell = mm && mm.player;
+        if (!G.dungeonState) {
+          G.dungeonState = {
+            collected: new Set(msg.dungeon_collected),
+            cells: mm ? mm.cells : [],
+            bossCell: msg.dungeon_boss_cell,
+            currentCell: currentCell,
+          };
+        } else {
+          G.dungeonState.collected = new Set(msg.dungeon_collected);
+          G.dungeonState.cells = mm ? mm.cells : G.dungeonState.cells;
+          G.dungeonState.currentCell = currentCell;
+          G.dungeonState.bossCell = msg.dungeon_boss_cell || G.dungeonState.bossCell;
+        }
+      } else {
+        // Left the dungeon
+        G.dungeonState = null;
+        G.dungeonGroundItems = [];
+      }
 
       if (cameFromConjuring || isFirstRoom) {
         // Fade in from black on first login
@@ -740,8 +773,53 @@ function handleMessage(msg) {
     }
 
     case "item_obtained": {
-      G.playerFlags.add("has_" + msg.item);
-      G.infoMessages.push({ text: "You obtained: " + msg.name + "!", expires: Date.now() + 5000 });
+      if (msg.item_type) {
+        // Dungeon item (map/compass) — trigger pickup animation
+        G.itemPickupActive = {
+          item_type: msg.item_type,
+          item_name: msg.item_name,
+          startTime: Date.now(),
+          x: G.displayX,
+          y: G.displayY,
+        };
+        // Remove from ground items
+        G.dungeonGroundItems = G.dungeonGroundItems.filter(
+          it => it.item_type !== msg.item_type
+        );
+        setTimeout(() => {
+          G.infoMessages.push({ text: "You got the " + msg.item_name + "!", expires: Date.now() + 4000 });
+        }, 500);
+      } else {
+        // NPC gift item (legacy)
+        G.playerFlags.add("has_" + msg.item);
+        G.infoMessages.push({ text: "You obtained: " + msg.name + "!", expires: Date.now() + 5000 });
+      }
+      break;
+    }
+
+    case "item_effect": {
+      // Another player picking up a dungeon item — show their animation
+      const effPlayer = G.otherPlayers[msg.name];
+      if (effPlayer) {
+        G.itemPickupEffects[msg.name] = {
+          item_type: msg.item_type,
+          startTime: Date.now(),
+          x: effPlayer.displayX,
+          y: effPlayer.displayY,
+        };
+      }
+      break;
+    }
+
+    case "dungeon_item_collected": {
+      // Any player collected a dungeon item — update minimap state
+      if (G.dungeonState) {
+        G.dungeonState.collected.add(msg.item_type);
+      }
+      // Remove from ground items (in case we're in the same room)
+      G.dungeonGroundItems = G.dungeonGroundItems.filter(
+        it => it.item_type !== msg.item_type
+      );
       break;
     }
 

@@ -445,6 +445,9 @@ function drainInputEvents() {
 }
 
 function playerTick() {
+  // Freeze movement during item pickup animation
+  if (G.itemPickupActive) return;
+
   drainInputEvents();
   const dir = getActiveDirection();
   const now = performance.now();
@@ -559,6 +562,7 @@ function gameLoop(timestamp) {
   updateDyingOtherPlayers();
   updateProjectiles();
   updateAttackEffects();
+  updateItemPickups();
 
   // Toggle monster hop frame every ~500ms
   G.monsterHopTimer++;
@@ -633,6 +637,7 @@ function gameLoop(timestamp) {
     renderRoom();
     renderAreaWarnings();
     renderHeartPickups();
+    renderDungeonGroundItems();
     renderChargePreps();
     renderChargeTrails();
     renderPlayers();
@@ -640,6 +645,7 @@ function gameLoop(timestamp) {
     renderMonsterAttackFlashes();
     renderSpeechBubbles();
     renderSwordPickups();
+    renderItemPickups();
     renderUI();
     renderBossDeathEffect();
     renderDungeonDebug();

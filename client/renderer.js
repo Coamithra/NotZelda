@@ -187,6 +187,39 @@ function renderHeartPickups() {
   }
 }
 
+const ITEM_PICKUP_DURATION = 2500;
+
+function renderDungeonGroundItems() {
+  for (const item of G.dungeonGroundItems) {
+    drawGroundItem(G.ctx, item.x * TS, item.y * TS, item.item_type, SCALE);
+  }
+}
+
+function updateItemPickups() {
+  const now = Date.now();
+  if (G.itemPickupActive && now - G.itemPickupActive.startTime >= ITEM_PICKUP_DURATION) {
+    G.itemPickupActive = null;
+  }
+  for (const [name, eff] of Object.entries(G.itemPickupEffects)) {
+    if (now - eff.startTime >= ITEM_PICKUP_DURATION) {
+      delete G.itemPickupEffects[name];
+    }
+  }
+}
+
+function renderItemPickups() {
+  const now = Date.now();
+  if (G.itemPickupActive) {
+    const pu = G.itemPickupActive;
+    const progress = Math.min((now - pu.startTime) / ITEM_PICKUP_DURATION, 1.0);
+    drawItemPickupOverlay(G.ctx, pu.x * TS, pu.y * TS, pu.item_type, progress, SCALE);
+  }
+  for (const [name, eff] of Object.entries(G.itemPickupEffects)) {
+    const progress = Math.min((now - eff.startTime) / ITEM_PICKUP_DURATION, 1.0);
+    drawItemPickupOverlay(G.ctx, eff.x * TS, eff.y * TS, eff.item_type, progress, SCALE);
+  }
+}
+
 function renderDeathAnimation() {
   if (!G.dyingPlayerSelf) return;
   const elapsed = Date.now() - G.dyingPlayerSelf.startTime;
@@ -319,6 +352,8 @@ function renderPlayers() {
       continue;
     } else if (p.isGuard) {
       drawNPC(G.ctx, px, py, p.sprite, SCALE);
+    } else if ((p.name === G.myName && G.itemPickupActive) || G.itemPickupEffects[p.name]) {
+      drawPlayerHoldItem(G.ctx, px, py, p.color_index, SCALE);
     } else if (G.attackingPlayers[p.name]) {
       const atk = G.attackingPlayers[p.name];
       drawPlayerAttack(G.ctx, px, py, atk.direction, p.color_index, atk.frame, SCALE);
@@ -841,9 +876,16 @@ function renderDungeonMinimap() {
   const mm = G.dungeonDebug && G.dungeonDebug.minimap;
   if (!mm || !mm.cells || mm.cells.length === 0) return;
 
+  const ds = G.dungeonState;
+  const hasMap = ds && ds.collected.has("map");
+  const hasCompass = ds && ds.collected.has("compass");
+  const isDebug = G.showDebug;
+
+  // In non-debug mode, minimap shows when map or compass is collected
+  if (!isDebug && !hasMap && !hasCompass) return;
+
   const cells = mm.cells;
   const pc = mm.player; // [col, row] of player's current cell
-  const isDebug = G.showDebug;
   const conns = mm.connections || [];
 
   // Find grid bounds
@@ -869,6 +911,7 @@ function renderDungeonMinimap() {
 
   // Semi-transparent background
   G.ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+  G.ctx.beginPath();
   roundRect(G.ctx, mapX, mapY, mapW, mapH, 4);
   G.ctx.fill();
 
@@ -891,6 +934,18 @@ function renderDungeonMinimap() {
       G.ctx.stroke();
     }
     G.ctx.lineWidth = 1;
+  }
+
+  // Compass-only: fill entire bounding box so layout is hidden
+  if (!isDebug && hasCompass && !hasMap) {
+    for (let r = minR; r <= maxR; r++) {
+      for (let c = minC; c <= maxC; c++) {
+        const cx = mapX + pad + (c - minC) * step;
+        const cy = mapY + pad + (r - minR) * step;
+        G.ctx.fillStyle = "rgba(30, 35, 50, 0.45)";
+        G.ctx.fillRect(cx, cy, cellSize, cellSize);
+      }
+    }
   }
 
   // Draw each cell
@@ -921,40 +976,52 @@ function renderDungeonMinimap() {
         G.ctx.fillStyle = "rgba(80, 200, 120, 0.7)";
         G.ctx.fillRect(cx, cy, cellSize, cellSize);
       }
-    } else {
-      // Normal mode — uniform style, visited vs unvisited
-      if (cell.res) {
-        G.ctx.fillStyle = "rgba(160, 160, 170, 0.6)";
-        G.ctx.fillRect(cx, cy, cellSize, cellSize);
-      } else {
-        G.ctx.strokeStyle = "rgba(100, 100, 110, 0.4)";
-        G.ctx.strokeRect(cx + 0.5, cy + 0.5, cellSize - 1, cellSize - 1);
-      }
+    } else if (hasMap) {
+      // Map — reveals which cells are actual rooms
+      G.ctx.fillStyle = "rgba(100, 120, 160, 0.65)";
+      G.ctx.fillRect(cx, cy, cellSize, cellSize);
     }
+    // Compass-only: cells already drawn as full grid above
 
-    // Entrance marker — small diamond
-    if (cell.ent) {
-      G.ctx.fillStyle = "rgba(255, 220, 80, 0.9)";
+    // Entrance marker (map only, non-debug)
+    if (cell.ent && (isDebug || hasMap)) {
+      G.ctx.fillStyle = "rgba(80, 220, 80, 0.9)";
       const mx = cx + cellSize / 2, my = cy + cellSize / 2;
       G.ctx.beginPath();
-      G.ctx.moveTo(mx, my - 3);
-      G.ctx.lineTo(mx + 3, my);
-      G.ctx.lineTo(mx, my + 3);
-      G.ctx.lineTo(mx - 3, my);
-      G.ctx.closePath();
+      G.ctx.arc(mx, my, 2, 0, Math.PI * 2);
       G.ctx.fill();
+    }
+
+    // Boss room marker (compass collected, non-debug only)
+    if (!isDebug && hasCompass && ds.bossCell &&
+        cell.c === ds.bossCell[0] && cell.r === ds.bossCell[1]) {
+      G.ctx.fillStyle = "rgba(220, 40, 40, 0.9)";
+      G.ctx.fillRect(cx + 3, cy + 3, cellSize - 6, cellSize - 6);
     }
   }
 
-  // Player position — pulsing white border
+  // Player position — pulsing indicator
   if (pc) {
     const px = mapX + pad + (pc[0] - minC) * step;
     const py = mapY + pad + (pc[1] - minR) * step;
-    const pulse = 0.6 + 0.4 * Math.sin(Date.now() / 200);
-    G.ctx.strokeStyle = `rgba(255, 255, 255, ${pulse})`;
-    G.ctx.lineWidth = 2;
-    G.ctx.strokeRect(px - 1, py - 1, cellSize + 2, cellSize + 2);
-    G.ctx.lineWidth = 1;
+    if (hasCompass && !isDebug) {
+      // Compass: blinking yellow dot
+      const blink = Math.sin(Date.now() / 200) > 0;
+      if (blink) {
+        G.ctx.fillStyle = "rgba(255, 230, 50, 0.9)";
+        const mx = px + cellSize / 2, my = py + cellSize / 2;
+        G.ctx.beginPath();
+        G.ctx.arc(mx, my, 2.5, 0, Math.PI * 2);
+        G.ctx.fill();
+      }
+    } else {
+      // Default: pulsing white border
+      const pulse = 0.6 + 0.4 * Math.sin(Date.now() / 200);
+      G.ctx.strokeStyle = `rgba(255, 255, 255, ${pulse})`;
+      G.ctx.lineWidth = 2;
+      G.ctx.strokeRect(px - 1, py - 1, cellSize + 2, cellSize + 2);
+      G.ctx.lineWidth = 1;
+    }
   }
 
   // Layout name (debug only)

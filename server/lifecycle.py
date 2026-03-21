@@ -186,8 +186,16 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
     if npc_sprites:
         msg["npc_sprites"] = npc_sprites
 
-    # Attach dungeon debug info for dungeon rooms
+    # Attach dungeon item data for dungeon rooms
     inst = get_dungeon_for_room(player.room) if is_dungeon else None
+    if inst:
+        msg["dungeon_collected"] = sorted(inst.collected_items)
+        msg["dungeon_boss_cell"] = list(inst.boss_cell) if inst.boss_cell else None
+        room_items = inst.dungeon_items.get(player.room, [])
+        if room_items:
+            msg["dungeon_items"] = [{"x": it["x"], "y": it["y"], "item_type": it["item_type"]} for it in room_items]
+
+    # Attach dungeon debug info for dungeon rooms
     if inst:
         dungeon_id = inst.dungeon_id
         libs = game.content_libraries.get(dungeon_id, {})
