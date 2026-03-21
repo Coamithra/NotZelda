@@ -45,7 +45,7 @@ When pushing to git make sure to update CLAUDE.md first!
 
 ## Key Gotchas & Non-Obvious Conventions
 
-- **Client script load order matters**: `game_state.js` → `tiles.js` → `sprite_data.js` → `sprites.js` → `music.js` → `renderer.js` → `net.js` → inline init/gameLoop → `input.js`
+- **Client script load order matters**: `game_state.js` → `tiles.js` → `sprite_data.js` → `sprites.js` → `music.js` → `renderer.js` → `fx.js` → `net.js` → inline init/gameLoop → `input.js`
 - **Client state**: all mutable state lives on the shared `G` namespace object (`game_state.js`)
 - **Server state**: all mutable state lives on the `GameState` singleton (`from server.state import game`)
 - **Import order** avoids circular deps: `constants` → `state` → `models` → `net` → `rooms` → `validation` → `dungeon_types` → `dungeons` → `quests` → `lifecycle` → `commands` → `combat` → `debug_monsters` → `mud_server`. Combat uses lazy imports for commands; commands imports from lifecycle.
@@ -79,6 +79,8 @@ When pushing to git make sure to update CLAUDE.md first!
 - **Client player state machine**: `G.state` is an enum (`"idle"`, `"attacking"`, `"dying"`) with `G.stateData` holding state-scoped variables (replaced on every `setState()` call). Movement happens continuously in the `"idle"` state while direction keys are held — `playerTick()` computes local movement, collision, and position reporting each frame. Attacks are optimistic (animation starts immediately, server handles hit detection). Holding space chains attacks. Reconcile messages hard-reset to idle and snap `preciseX/Y`.
 - **NPC gifts are data-driven from `.room` files**: NPCs can give items to players through AI dialog. Room file format: `npc Name X Y sprite Dialog | Personality | Item Name:condition text`. The third `|` section is optional. Gift tracking flags are auto-generated as `gift_{room}_{npc}_{item}` for uniqueness. Special item effects (sword animation, heart container HP boost) are mapped in `GIFT_EFFECTS` in `npc_chat.py` by display name. The AI includes `[GIVE_ITEM]` in its response when it judges the condition is met (same pattern as `[CALL_GUARDS]`).
 - **Heart HUD is dynamic**: `renderHeartsHUD()` derives heart count from `G.myMaxHp / 2`, not hardcoded. Heart containers add +2 max HP (1 heart).
+- **Juice/FX system** (`client/fx.js`): Client-side visual effects — particle system (capped at 100), screen shake (CSS transform), hit pause (freezes game loop updates for ~40-60ms on impact), sword slash arcs, floating damage numbers, damage vignette (red edge flash on hurt), monster death corpses (last death frame lingers on ground until room exit), dust puffs on movement start, monster spawn pop (scale 0→1.15→1.0 with stagger), knockback dust trail. All FX state lives on `G` namespace. Particle system: `spawnBurst()` for radial bursts, `spawnParticle()` for individual. Screen shake: `triggerShake(intensity, durationMs)` — stronger shakes override weaker ones. Effects are triggered from `net.js` message handlers (`monster_hit`, `monster_killed`, `player_hurt`, etc.).
+- **Monster death sprites**: 4-frame death animations in `data/monsters.json` under `death_sprite`. Frame 4 is a visible corpse/remains (not a vanishing fade). AI prompt (`monster_sprite_system.txt`) requests `death_sprite` alongside `sprite`. Fallback: generic splat if AI omits it or for monsters without custom death sprites. Corpses rendered by `renderCorpses()` in `fx.js`, cleared on room enter.
 - **`websockets` must stay at 12.0** — v16+ breaks the `process_request` API.
 
 ## Running

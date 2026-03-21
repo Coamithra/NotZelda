@@ -138,4 +138,14 @@ const G = {
 
   // Mobile
   isMobile: false,
+
+  // Juice FX
+  particles: [],
+  screenShake: null,        // {startTime, duration, intensity}
+  hitPause: 0,              // timestamp: freeze updates until this time
+  slashArcs: [],            // [{x, y, direction, startTime}]
+  floatingTexts: [],        // [{x, y, text, startTime, color}]
+  roomCorpses: [],          // [{kind, x, y, width, height}]
+  damageVignette: 0,        // timestamp for red edge flash
+  lastMoveDir: null,        // for dust puff direction-change detection
 };

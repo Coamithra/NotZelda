@@ -192,6 +192,7 @@ STATIC_FILES = {
     "/tiles.js":    ("client/tiles.js",    "application/javascript; charset=utf-8"),
     "/music.js":    ("client/music.js",    "application/javascript; charset=utf-8"),
     "/renderer.js": ("client/renderer.js", "application/javascript; charset=utf-8"),
+    "/fx.js":       ("client/fx.js",       "application/javascript; charset=utf-8"),
     "/net.js":      ("client/net.js",      "application/javascript; charset=utf-8"),
     "/input.js":    ("client/input.js",    "application/javascript; charset=utf-8"),
     # Overworld music

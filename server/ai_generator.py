@@ -302,7 +302,7 @@ def validate_monster_design(monster: dict, index: int = 0) -> list[str]:
 
 
 def validate_monster_sprite(sprite_data: dict) -> list[str]:
-    """Validate a sprite-only response: {"sprite": {colors, frames}}. Returns errors."""
+    """Validate a sprite-only response: {"sprite": {colors, frames}, "death_sprite"?: {...}}. Returns errors."""
     errors = []
 
     sprite = sprite_data.get("sprite")
@@ -333,6 +333,28 @@ def validate_monster_sprite(sprite_data: dict) -> list[str]:
                     errors.append(f"sprite.frames[{fi}][{li}] coords must be numbers")
                 elif x < 0 or y < 0 or x + w > 16 or y + h > 16:
                     errors.append(f"sprite.frames[{fi}][{li}] out of 16x16 bounds")
+
+    # death_sprite is optional — validate if present but don't fail the whole
+    # sprite if it's malformed (we have a generic fallback)
+    death_sprite = sprite_data.get("death_sprite")
+    if death_sprite is not None:
+        if not isinstance(death_sprite, dict):
+            print("[VALIDATE] death_sprite not a dict, ignoring")
+            del sprite_data["death_sprite"]
+        else:
+            dcolors = death_sprite.get("colors")
+            dframes = death_sprite.get("frames")
+            if not isinstance(dcolors, dict) or not isinstance(dframes, list) or len(dframes) < 1:
+                print("[VALIDATE] death_sprite malformed, ignoring")
+                del sprite_data["death_sprite"]
+            else:
+                # Validate color hex values
+                for k, v in list(dcolors.items()):
+                    if not _is_hex_color(v):
+                        print(f"[VALIDATE] death_sprite.colors.{k} invalid: {v!r}, ignoring death_sprite")
+                        del sprite_data["death_sprite"]
+                        break
+
     return errors
 
 
@@ -1405,6 +1427,9 @@ async def generate_room(
         )
         if sprite_data and isinstance(sprite_data.get("sprite"), dict):
             design["sprite"] = sprite_data["sprite"]
+            if isinstance(sprite_data.get("death_sprite"), dict):
+                design["death_sprite"] = sprite_data["death_sprite"]
+                print(f"[GEN] Death sprite included for {design['kind']}")
         else:
             print(f"[GEN] Sprite generation failed for {design['kind']}, skipping monster")
             continue

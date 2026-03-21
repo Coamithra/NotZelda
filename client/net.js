@@ -245,24 +245,31 @@ function handleMessage(msg) {
       G.guards = msg.guards || [];
       G.dyingMonsters = [];
       G.heartPickups = [];
+      // Juice: clear corpses, particles, effects on room change
+      clearCorpses();
+      G.particles = [];
+      G.slashArcs = [];
+      G.floatingTexts = [];
+      G.screenShake = null;
+      G.canvas.style.transform = "";
       G.dungeonGroundItems = msg.dungeon_items || [];
       G.itemPickupActive = null;
       G.itemPickupEffects = {};
       G.dyingPlayerSelf = null;
       G.dyingOtherPlayers = {};
       G.bossDeathEffect = null;
-      G.canvas.style.transform = "";
       G.projectiles = [];
       G.areaWarnings = [];
       G.chargeTrails = [];
       G.chargePreps = [];
       G.monsterAttackFlashes = [];
-      G.monsters = (msg.monsters || []).map(m => {
+      G.monsters = (msg.monsters || []).map((m, idx) => {
         const mon = {
           id: m.id, kind: m.kind, x: m.x, y: m.y, displayX: m.x, displayY: m.y,
           width: m.width || 1, height: m.height || 1,
           walkTime: (m.walk_time || 2.0) * 1000,  // per-monster walk duration in ms
           walkState: null,
+          spawnTime: Date.now() + idx * 40,  // Juice: staggered spawn pop
         };
         if (m.walking) {
           mon.walkState = {
@@ -437,6 +444,15 @@ function handleMessage(msg) {
 
     case "player_hurt": {
       if (msg.name === G.myName) {
+        // Knockback dust trail (before position overwrite)
+        if (msg.knockback) {
+          const oldX = G.preciseX, oldY = G.preciseY;
+          for (let t = 0.33; t <= 0.66; t += 0.33) {
+            const dustX = (oldX + (msg.x - oldX) * t) * TS + TS / 2;
+            const dustY = (oldY + (msg.y - oldY) * t + 0.5) * TS;
+            spawnBurst(dustX, dustY, 2, 1.0, 250, ["#c8b898", "#a09068"], [2 * SCALE, 3 * SCALE], { shrink: true });
+          }
+        }
         G.myHp = msg.hp;
         G.myPlayer.x = msg.x;
         G.myPlayer.y = msg.y;
@@ -450,6 +466,9 @@ function handleMessage(msg) {
         G.hurtFlash = Date.now() + 300;
         G.invincibleUntil = Date.now() + 1500;
         G.stunUntil = performance.now() + 200;
+        // Juice: screen shake + damage vignette
+        triggerShake(4, 200);
+        G.damageVignette = Date.now() + VIGNETTE_DURATION;
         if (G.debugCollision && msg.debug_source_x != null) {
           G.debugGhosts.push({
             playerX: msg.debug_pre_x, playerY: msg.debug_pre_y,
@@ -501,9 +520,17 @@ function handleMessage(msg) {
       G.heartPickups.push({ id: msg.id, x: msg.x, y: msg.y });
       break;
 
-    case "heart_collected":
+    case "heart_collected": {
+      // Juice: sparkle particles at pickup point
+      const collectedHeart = G.heartPickups.find(h => h.id === msg.id);
+      if (collectedHeart) {
+        const hx = collectedHeart.x * TS + TS / 2;
+        const hy = collectedHeart.y * TS + TS / 2;
+        spawnBurst(hx, hy, 4, 2, 300, ["#ff6060", "#fff", "#ffaaaa"], [2 * SCALE, 4 * SCALE]);
+      }
       G.heartPickups = G.heartPickups.filter(h => h.id !== msg.id);
       break;
+    }
 
     case "monster_walk_started": {
       const walkMon = G.monsters.find(m => m.id === msg.id);
@@ -549,9 +576,23 @@ function handleMessage(msg) {
         const isBoss = (mon.width || 1) > 1 || (mon.height || 1) > 1;
         G.dyingMonsters.push({ kind: mon.kind, x: msg.x, y: msg.y, frame: 0, nextTime: Date.now() + (isBoss ? 400 : DYING_MONSTER_FRAME_MS), width: mon.width || 1, height: mon.height || 1 });
         G.monsters.splice(idx, 1);
+        // Juice: corpse persistence
+        addCorpse(mon.kind, msg.x, msg.y, mon.width, mon.height);
+        // Juice: death particles in monster's sprite colors
+        const monSprite = customMonsterSprites[mon.kind];
+        const deathColors = monSprite && monSprite.colors
+          ? Object.values(monSprite.colors).slice(0, 4)
+          : ["#888", "#666", "#aaa"];
+        const cx = msg.x * TS + (mon.width || 1) * TS / 2;
+        const cy = msg.y * TS + (mon.height || 1) * TS / 2;
+        spawnBurst(cx, cy, 10, 2.5, 500, deathColors, [3 * SCALE, 6 * SCALE], { gravity: 0.05, shrink: true });
+        // Juice: hit pause + screen shake
+        G.hitPause = Date.now() + 60;
+        triggerShake(2, 120);
         // Boss death: dramatic screen flash + shake
         if (isBoss) {
           G.bossDeathEffect = { startTime: Date.now(), duration: 2000 };
+          triggerShake(6, 1000);
         }
       }
       break;
@@ -561,6 +602,15 @@ function handleMessage(msg) {
       const hitMon = G.monsters.find(m => m.id === msg.id);
       if (hitMon) {
         hitMon.hitFlash = Date.now() + 200;
+        // Juice: hit sparks
+        const cx = hitMon.displayX * TS + (hitMon.width || 1) * TS / 2;
+        const cy = hitMon.displayY * TS + (hitMon.height || 1) * TS / 2;
+        spawnBurst(cx, cy, 5, 3, 300, ["#fff", "#ffee88", "#ffcc44"], [2 * SCALE, 4 * SCALE], { shrink: true });
+        // Juice: floating damage number
+        spawnFloatingText(cx, hitMon.displayY * TS, "1", "#fff");
+        // Juice: hit pause + tiny shake
+        G.hitPause = Date.now() + 40;
+        triggerShake(1, 60);
       }
       break;
     }
@@ -580,7 +630,7 @@ function handleMessage(msg) {
           }
         }
       }
-      G.monsters.push({ id: msg.id, kind: msg.kind, x: msg.x, y: msg.y, displayX: msg.x, displayY: msg.y, width: msg.width || 1, height: msg.height || 1, walkTime: (msg.walk_time || 2.0) * 1000, walkState: null });
+      G.monsters.push({ id: msg.id, kind: msg.kind, x: msg.x, y: msg.y, displayX: msg.x, displayY: msg.y, width: msg.width || 1, height: msg.height || 1, walkTime: (msg.walk_time || 2.0) * 1000, walkState: null, spawnTime: Date.now() });
       break;
 
     // --- Stage 5: Monster attack messages ---
@@ -605,9 +655,17 @@ function handleMessage(msg) {
       }
       break;
 
-    case "projectile_gone":
+    case "projectile_gone": {
+      // Juice: dust particles at impact point (read position before removing)
+      const deadProj = G.projectiles.find(p => p.id === msg.id);
+      if (deadProj) {
+        const px = deadProj.displayX * TS + TS / 2;
+        const py = deadProj.displayY * TS + TS / 2;
+        spawnBurst(px, py, 4, 1.5, 250, ["#aaa", "#888", "#666"], [2 * SCALE, 3 * SCALE], { shrink: true });
+      }
       G.projectiles = G.projectiles.filter(p => p.id !== msg.id);
       break;
+    }
 
     case "monster_attack":
       G.monsterAttackFlashes.push({ x: msg.target_x, y: msg.target_y, startTime: Date.now() });

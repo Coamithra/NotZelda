@@ -282,6 +282,7 @@
 <script src="sprites.js?v=3"></script>
 <script src="music.js?v=9"></script>
 <script src="renderer.js?v=2"></script>
+<script src="fx.js?v=1"></script>
 <script src="net.js?v=3"></script>
 <script>
 // ---------------------------------------------------------------------------
@@ -417,9 +418,14 @@ function playerTick() {
 
   switch (G.state) {
     case "idle": {
-      if (!dir) { G.isMoving = false; break; }
+      if (!dir) { G.isMoving = false; G.lastMoveDir = null; break; }
 
       stopDance(G.myName);
+      // Juice: dust puff on movement start or direction change
+      if (!G.isMoving || G.lastMoveDir !== dir) {
+        spawnDustPuff(G.preciseX, G.preciseY, dir);
+      }
+      G.lastMoveDir = dir;
       G.myPlayer.direction = dir;
       G.isMoving = true;
 
@@ -470,6 +476,7 @@ function playerTick() {
         if (G.keysDown["Space"] && G.playerFlags.has("has_sword")) {
           sendToServer({ type: "attack" });
           startAttack(G.myName, G.myPlayer.direction);
+          spawnSlashArc(G.myPlayer.direction);
           setState("attacking", { startTime: performance.now() });
         } else if (dir) {
           stopDance(G.myName);
@@ -491,88 +498,95 @@ function playerTick() {
 function gameLoop(timestamp) {
   requestAnimationFrame(gameLoop);
 
-  // Animation timer
-  G.animTimer++;
-  if (G.animTimer % 10 === 0) {
-    G.animFrame = (G.animFrame + 1) % 2;
-  }
+  // Hit pause — freeze updates but keep rendering the frozen frame
+  const frozen = G.hitPause && Date.now() < G.hitPause;
 
-  // Player state machine tick
-  if (!G.chatFocused && !G.transition) {
-    playerTick();
-  }
-
-  // Update animations
-  updateDances();
-  updateAttacks();
-  updateDyingMonsters();
-  updateSwordPickups();
-  updateDyingOtherPlayers();
-  updateProjectiles();
-  updateAttackEffects();
-  updateItemPickups();
-
-  // Toggle monster hop frame every ~500ms
-  G.monsterHopTimer++;
-  if (G.monsterHopTimer % 30 === 0) {
-    G.monsterHopFrame = (G.monsterHopFrame + 1) % 2;
-  }
-
-  // Interpolate positions — lerp for reconciliation snaps
-  if (G.myPlayer && G.state !== "idle") {
-    // During attacking/dying, lerp displayX/Y toward myPlayer position
-    if (G.displayX !== G.myPlayer.x || G.displayY !== G.myPlayer.y) {
-      G.displayX += (G.myPlayer.x - G.displayX) * MOVE_LERP;
-      G.displayY += (G.myPlayer.y - G.displayY) * MOVE_LERP;
-      if (Math.abs(G.myPlayer.x - G.displayX) < 0.05) G.displayX = G.myPlayer.x;
-      if (Math.abs(G.myPlayer.y - G.displayY) < 0.05) G.displayY = G.myPlayer.y;
+  if (!frozen) {
+    // Animation timer
+    G.animTimer++;
+    if (G.animTimer % 10 === 0) {
+      G.animFrame = (G.animFrame + 1) % 2;
     }
-  }
 
-  for (const p of Object.values(G.otherPlayers)) {
-    if (p.walkState) {
-      const elapsed = performance.now() - p.walkState.startTime;
-      const progress = Math.min(elapsed / HALF_WALK_TIME_MS, 1.0);
-      p.displayX = p.walkState.fromX + (p.walkState.toX - p.walkState.fromX) * progress;
-      p.displayY = p.walkState.fromY + (p.walkState.toY - p.walkState.fromY) * progress;
-      if (progress >= 1.0) {
-        p.displayX = p.walkState.toX;
-        p.displayY = p.walkState.toY;
-        p.walkState = null;
+    // Player state machine tick
+    if (!G.chatFocused && !G.transition) {
+      playerTick();
+    }
+
+    // Update animations
+    updateDances();
+    updateAttacks();
+    updateDyingMonsters();
+    updateSwordPickups();
+    updateDyingOtherPlayers();
+    updateProjectiles();
+    updateAttackEffects();
+    updateItemPickups();
+    updateParticles(16.67); // ~60fps dt
+
+    // Toggle monster hop frame every ~500ms
+    G.monsterHopTimer++;
+    if (G.monsterHopTimer % 30 === 0) {
+      G.monsterHopFrame = (G.monsterHopFrame + 1) % 2;
+    }
+
+    // Interpolate positions — lerp for reconciliation snaps
+    if (G.myPlayer && G.state !== "idle") {
+      // During attacking/dying, lerp displayX/Y toward myPlayer position
+      if (G.displayX !== G.myPlayer.x || G.displayY !== G.myPlayer.y) {
+        G.displayX += (G.myPlayer.x - G.displayX) * MOVE_LERP;
+        G.displayY += (G.myPlayer.y - G.displayY) * MOVE_LERP;
+        if (Math.abs(G.myPlayer.x - G.displayX) < 0.05) G.displayX = G.myPlayer.x;
+        if (Math.abs(G.myPlayer.y - G.displayY) < 0.05) G.displayY = G.myPlayer.y;
       }
-      p.moving = true;
-    } else {
-      // Lerp fallback for snaps (reconciliation, room enter)
-      p.displayX += (p.x - p.displayX) * MOVE_LERP;
-      p.displayY += (p.y - p.displayY) * MOVE_LERP;
-      if (Math.abs(p.x - p.displayX) < 0.05) p.displayX = p.x;
-      if (Math.abs(p.y - p.displayY) < 0.05) p.displayY = p.y;
-      p.moving = (p.displayX !== p.x || p.displayY !== p.y);
     }
-  }
 
-  for (const m of G.monsters) {
-    if (m.walkState) {
-      const ws = m.walkState;
-      const elapsed = performance.now() - ws.startTime;
-      const progress = Math.min(elapsed / ws.walkTime, 1.0);
-      m.displayX = ws.fromX + (ws.toX - ws.fromX) * progress;
-      m.displayY = ws.fromY + (ws.toY - ws.fromY) * progress;
-      // Use walk-paced hop frame: toggle at 50% progress
-      m.walkHop = progress >= 0.5 ? 1 : 0;
-      if (progress >= 1.0) {
-        m.displayX = ws.toX;
-        m.displayY = ws.toY;
-        m.walkState = null;
+    for (const p of Object.values(G.otherPlayers)) {
+      if (p.walkState) {
+        const elapsed = performance.now() - p.walkState.startTime;
+        const progress = Math.min(elapsed / HALF_WALK_TIME_MS, 1.0);
+        p.displayX = p.walkState.fromX + (p.walkState.toX - p.walkState.fromX) * progress;
+        p.displayY = p.walkState.fromY + (p.walkState.toY - p.walkState.fromY) * progress;
+        if (progress >= 1.0) {
+          p.displayX = p.walkState.toX;
+          p.displayY = p.walkState.toY;
+          p.walkState = null;
+        }
+        p.moving = true;
+      } else {
+        // Lerp fallback for snaps (reconciliation, room enter)
+        p.displayX += (p.x - p.displayX) * MOVE_LERP;
+        p.displayY += (p.y - p.displayY) * MOVE_LERP;
+        if (Math.abs(p.x - p.displayX) < 0.05) p.displayX = p.x;
+        if (Math.abs(p.y - p.displayY) < 0.05) p.displayY = p.y;
+        p.moving = (p.displayX !== p.x || p.displayY !== p.y);
       }
-    } else {
-      // Lerp fallback for instant moves (charges, teleports, reconciliation)
-      m.displayX += (m.x - m.displayX) * MOVE_LERP;
-      m.displayY += (m.y - m.displayY) * MOVE_LERP;
-      if (Math.abs(m.x - m.displayX) < 0.05) m.displayX = m.x;
-      if (Math.abs(m.y - m.displayY) < 0.05) m.displayY = m.y;
-      m.walkHop = undefined;
     }
+
+    for (const m of G.monsters) {
+      if (m.walkState) {
+        const ws = m.walkState;
+        const elapsed = performance.now() - ws.startTime;
+        const progress = Math.min(elapsed / ws.walkTime, 1.0);
+        m.displayX = ws.fromX + (ws.toX - ws.fromX) * progress;
+        m.displayY = ws.fromY + (ws.toY - ws.fromY) * progress;
+        // Use walk-paced hop frame: toggle at 50% progress
+        m.walkHop = progress >= 0.5 ? 1 : 0;
+        if (progress >= 1.0) {
+          m.displayX = ws.toX;
+          m.displayY = ws.toY;
+          m.walkState = null;
+        }
+      } else {
+        // Lerp fallback for instant moves (charges, teleports, reconciliation)
+        m.displayX += (m.x - m.displayX) * MOVE_LERP;
+        m.displayY += (m.y - m.displayY) * MOVE_LERP;
+        if (Math.abs(m.x - m.displayX) < 0.05) m.displayX = m.x;
+        if (Math.abs(m.y - m.displayY) < 0.05) m.displayY = m.y;
+        m.walkHop = undefined;
+      }
+    }
+
   }
 
   // Render
@@ -586,18 +600,23 @@ function gameLoop(timestamp) {
     renderRoom();
     renderBrightTiles();
     renderWaterMist();
+    renderCorpses();
     renderAreaWarnings();
     renderHeartPickups();
     renderDungeonGroundItems();
     renderChargePreps();
     renderChargeTrails();
     renderPlayers();
+    renderSlashArcs();
     renderProjectiles();
     renderMonsterAttackFlashes();
+    renderParticles();
+    renderFloatingTexts();
     renderSpeechBubbles();
     renderSwordPickups();
     renderItemPickups();
     renderUI();
+    renderDamageVignette();
     renderBossDeathEffect();
     renderCollisionDebug();
     renderDungeonDebug();
@@ -605,6 +624,7 @@ function gameLoop(timestamp) {
     if (G.dyingPlayerSelf) renderDeathAnimation();
   }
   renderHeartsHUD();
+  applyScreenShake();
 }
 </script>
 <!-- Input must load after DOM refs are bound and functions defined -->

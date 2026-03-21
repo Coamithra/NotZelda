@@ -108,7 +108,10 @@ function updateDyingMonsters() {
       const isBoss = (dm.width || 1) > 1 || (dm.height || 1) > 1;
       dm.nextTime = now + (isBoss ? 400 : DYING_MONSTER_FRAME_MS);
     }
-    return dm.frame < 3;
+    // Death sprites have up to 4 frames; last frame lingers as a corpse (rendered by renderCorpses)
+    const deathSprite = customDeathSprites[dm.kind];
+    const maxFrames = deathSprite && deathSprite.frames ? deathSprite.frames.length : 3;
+    return dm.frame < maxFrames;
   });
 }
 
@@ -370,7 +373,7 @@ function renderPlayers() {
   }
 
   for (const m of G.monsters) {
-    all.push({ x: m.displayX, y: m.displayY, isMonster: true, kind: m.kind, hitFlash: m.hitFlash, teleportAlpha: m.teleportAlpha, chargePrep: m.chargePrep, width: m.width || 1, height: m.height || 1, walkHop: m.walkHop });
+    all.push({ x: m.displayX, y: m.displayY, isMonster: true, kind: m.kind, hitFlash: m.hitFlash, teleportAlpha: m.teleportAlpha, chargePrep: m.chargePrep, width: m.width || 1, height: m.height || 1, walkHop: m.walkHop, spawnTime: m.spawnTime });
   }
 
   all.sort((a, b) => a.y - b.y);
@@ -395,8 +398,19 @@ function renderPlayers() {
       if (p.teleportAlpha !== undefined && p.teleportAlpha < 1) {
         G.ctx.globalAlpha = Math.max(0, p.teleportAlpha);
       }
+      // Spawn pop scale effect
+      const popScale = getSpawnPopScale(p.spawnTime);
+      if (popScale !== 1) {
+        const centerX = px + mw * TS / 2;
+        const centerY = py + mh * TS / 2;
+        G.ctx.save();
+        G.ctx.translate(centerX, centerY);
+        G.ctx.scale(popScale, popScale);
+        G.ctx.translate(-centerX, -centerY);
+      }
       const hopFrame = p.walkHop !== undefined ? p.walkHop : G.monsterHopFrame;
       drawMonsterSprite(G.ctx, px + shakeX, py, p.kind, hopFrame, mScale);
+      if (popScale !== 1) G.ctx.restore();
       G.ctx.globalAlpha = 1;
       if (p.hitFlash && Date.now() < p.hitFlash) {
         G.ctx.globalAlpha = 0.5;
@@ -981,15 +995,7 @@ function renderBossDeathEffect() {
     G.ctx.fillRect(0, 0, CW, CH);
   }
 
-  // Phase 2 (200-1200ms): screen shake via CSS transform on canvas element
-  if (elapsed > 200 && elapsed < 1200) {
-    const intensity = 4 * (1 - (elapsed - 200) / 1000);
-    const shakeX = Math.round(Math.sin(elapsed * 0.05) * intensity) * SCALE;
-    const shakeY = Math.round(Math.cos(elapsed * 0.07) * intensity) * SCALE;
-    G.canvas.style.transform = `translate(${shakeX}px, ${shakeY}px)`;
-  } else {
-    G.canvas.style.transform = "";
-  }
+  // Phase 2: screen shake now handled by triggerShake() in net.js monster_killed handler
 
   // Phase 3 (400-2000ms): particle explosion from center
   if (elapsed > 400) {
