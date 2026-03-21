@@ -538,17 +538,99 @@ function renderUI() {
 
 }
 
+function renderCollisionDebug() {
+  if (!G.debugCollision) return;
+  const ctx = G.ctx;
+
+  // Draw player AABB (bottom-half hitbox: y+0.5 to y+1)
+  if (G.myPlayer) {
+    ctx.strokeStyle = "lime";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(G.preciseX * TS, (G.preciseY + 0.5) * TS, TS, 0.5 * TS);
+    // Full tile outline (dimmer)
+    ctx.strokeStyle = "rgba(0,255,0,0.3)";
+    ctx.strokeRect(G.preciseX * TS, G.preciseY * TS, TS, TS);
+  }
+
+  // Draw monster AABBs
+  ctx.strokeStyle = "red";
+  ctx.lineWidth = 2;
+  for (const m of G.monsters) {
+    const w = m.width || 1;
+    const h = m.height || 1;
+    ctx.strokeRect(m.displayX * TS, m.displayY * TS, w * TS, h * TS);
+  }
+
+  // Draw hit ghosts (fade out over 5 seconds)
+  const now = Date.now();
+  G.debugGhosts = G.debugGhosts.filter(g => now - g.time < 5000);
+  for (const g of G.debugGhosts) {
+    const alpha = 1 - (now - g.time) / 5000;
+    // Player ghost box (pre-knockback)
+    ctx.strokeStyle = `rgba(0,255,255,${alpha})`;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(g.playerX * TS, g.playerY * TS, TS, TS);
+    // Source AABB (current monster pos at hit time)
+    ctx.strokeStyle = `rgba(255,0,0,${alpha})`;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(g.sourceX * TS, g.sourceY * TS, g.sourceW * TS, g.sourceH * TS);
+    // Previous source AABB (where monster was before — used for knockback calc)
+    if (g.prevSourceX != null && (g.prevSourceX !== g.sourceX || g.prevSourceY !== g.sourceY)) {
+      ctx.strokeStyle = `rgba(255,0,0,${alpha * 0.5})`;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(g.prevSourceX * TS, g.prevSourceY * TS, g.sourceW * TS, g.sourceH * TS);
+      ctx.setLineDash([]);
+    }
+    // Knockback destination
+    ctx.strokeStyle = `rgba(255,255,0,${alpha})`;
+    ctx.setLineDash([4, 4]);
+    ctx.strokeRect(g.knockX * TS, g.knockY * TS, TS, TS);
+    ctx.setLineDash([]);
+    // Arrow from prev source to prev player (the delta knockback is based on)
+    const psx = g.prevSourceX != null ? g.prevSourceX : g.sourceX;
+    const psy = g.prevSourceY != null ? g.prevSourceY : g.sourceY;
+    const ppx = g.prevPlayerX != null ? g.prevPlayerX : g.playerX;
+    const ppy = g.prevPlayerY != null ? g.prevPlayerY : g.playerY;
+    const fromX = psx * TS + TS / 2;
+    const fromY = psy * TS + TS / 2;
+    const toX = ppx * TS + TS / 2;
+    const toY = ppy * TS + TS / 2;
+    ctx.strokeStyle = `rgba(255,128,0,${alpha})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(fromX, fromY);
+    ctx.lineTo(toX, toY);
+    ctx.stroke();
+    // Arrowhead
+    const angle = Math.atan2(toY - fromY, toX - fromX);
+    ctx.beginPath();
+    ctx.moveTo(toX, toY);
+    ctx.lineTo(toX - 10 * Math.cos(angle - 0.4), toY - 10 * Math.sin(angle - 0.4));
+    ctx.lineTo(toX - 10 * Math.cos(angle + 0.4), toY - 10 * Math.sin(angle + 0.4));
+    ctx.closePath();
+    ctx.fillStyle = `rgba(255,128,0,${alpha})`;
+    ctx.fill();
+  }
+}
+
 function renderHeartsHUD() {
   const heartScale = SCALE * 0.45;
   const heartW = 12 * heartScale + 2;
+  const heartH = 11 * heartScale + 2;
   const totalHearts = Math.ceil(G.myMaxHp / 2);
-  const heartStartX = CW - totalHearts * heartW - 14;
+  const maxPerRow = 10;
+  const rows = Math.ceil(totalHearts / maxPerRow);
   for (let i = 0; i < totalHearts; i++) {
+    const row = Math.floor(i / maxPerRow);
+    const col = i % maxPerRow;
+    const heartsInRow = Math.min(maxPerRow, totalHearts - row * maxPerRow);
+    const x = CW - heartsInRow * heartW - 14 + col * heartW;
+    const y = 8 + row * heartH;
     const hpForHeart = G.myHp - i * 2;
     let state = "empty";
     if (hpForHeart >= 2) state = "full";
     else if (hpForHeart === 1) state = "half";
-    drawHeart(G.ctx, heartStartX + i * heartW, 8, state, heartScale);
+    drawHeart(G.ctx, x, y, state, heartScale);
   }
 }
 

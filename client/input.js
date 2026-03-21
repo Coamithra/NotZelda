@@ -46,6 +46,7 @@ document.addEventListener("keydown", (e) => {
 
   if (e.key === "`" && !G.chatFocused && G.debugMode) {
     G.showDebug = !G.showDebug;
+    G.debugCollision = !G.debugCollision;
     return;
   }
 

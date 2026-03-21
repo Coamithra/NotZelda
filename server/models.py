@@ -29,6 +29,7 @@ class Player:
         self.quests = {}   # quest_id (str) -> stage (int)
         self.flags = set() # string flags, e.g. {"has_sword"}
         self.command_queue = deque()  # (msg_type, data) tuples — drained by game_tick
+        self.pending_collisions = {}  # id(monster) -> {monster, room_id, time, knockback data}
 
     def quest(self, qid: str) -> int:
         return self.quests.get(qid, 0)

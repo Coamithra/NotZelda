@@ -407,6 +407,7 @@ function maybeReportPosition() {
 
 function playerTick() {
   if (G.itemPickupActive) return;
+  if (G.stunUntil && performance.now() < G.stunUntil) { G.isMoving = false; return; }
 
   const now = performance.now();
   const dt = Math.min((now - (G.lastTickTime || now)) / 1000, 0.05);
@@ -596,6 +597,7 @@ function gameLoop(timestamp) {
     renderItemPickups();
     renderUI();
     renderBossDeathEffect();
+    renderCollisionDebug();
     renderDungeonDebug();
     renderDungeonMinimap();
     if (G.dyingPlayerSelf) renderDeathAnimation();

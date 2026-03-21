@@ -448,6 +448,18 @@ function handleMessage(msg) {
         setState("idle", {});
         G.hurtFlash = Date.now() + 300;
         G.invincibleUntil = Date.now() + 1500;
+        G.stunUntil = performance.now() + 200;
+        if (G.debugCollision && msg.debug_source_x != null) {
+          G.debugGhosts.push({
+            playerX: msg.debug_pre_x, playerY: msg.debug_pre_y,
+            sourceX: msg.debug_source_x, sourceY: msg.debug_source_y,
+            prevPlayerX: msg.debug_prev_player_x, prevPlayerY: msg.debug_prev_player_y,
+            prevSourceX: msg.debug_prev_source_x, prevSourceY: msg.debug_prev_source_y,
+            sourceW: msg.debug_source_w || 1, sourceH: msg.debug_source_h || 1,
+            knockX: msg.x, knockY: msg.y,
+            time: Date.now(),
+          });
+        }
       } else if (G.otherPlayers[msg.name]) {
         G.otherPlayers[msg.name].x = msg.x;
         G.otherPlayers[msg.name].y = msg.y;

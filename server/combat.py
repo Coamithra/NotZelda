@@ -12,7 +12,7 @@ from server.constants import (
     INVINCIBILITY_DURATION, PLAYER_RESPAWN_DELAY, STARTING_ROOM,
     PROJECTILE_TICK_RATE,
     WALK_TIME, GUARD_COOLDOWN,
-    HEART_RESTORE_HP, TICK_INTERVAL,
+    HEART_RESTORE_HP, TICK_INTERVAL, COLLISION_GRACE_PERIOD,
 )
 from server.models import Projectile
 from server.net import send_to, broadcast_to_room, players_in_room, player_info
@@ -31,7 +31,11 @@ from server.net import send_to, broadcast_to_room, players_in_room, player_info
 #   ("debug_spawn", player, args)
 # ---------------------------------------------------------------------------
 
-def _apply_damage(player, damage: int, room_id: str, msgs: list):
+def _apply_damage(player, damage: int, room_id: str, msgs: list,
+                   source_x: float = None, source_y: float = None,
+                   prev_player_x: float = None, prev_player_y: float = None,
+                   prev_source_x: float = None, prev_source_y: float = None,
+                   source_w: float = 1, source_h: float = 1):
     """Synchronously apply damage to a player and append messages to the batch."""
     if player.has_flag("invulnerable"):
         return
@@ -42,11 +46,29 @@ def _apply_damage(player, damage: int, room_id: str, msgs: list):
     player.last_damage_time = now
 
     if player.hp > 0:
-        # Calculate knockback — push player away from facing direction, snap to half-tile
-        opp = DIRECTION_OPPOSITES.get(player.direction, "down")
-        kdx, kdy = DIRECTIONS[opp]
-        kx = round((player.x + kdx) * 2) / 2
-        ky = round((player.y + kdy) * 2) / 2
+        # Calculate knockback direction from previous positions (before overlap)
+        pre_x, pre_y = player.x, player.y
+        if prev_player_x is not None and prev_source_x is not None:
+            dx = prev_player_x - prev_source_x
+            dy = prev_player_y - prev_source_y
+        elif source_x is not None and source_y is not None:
+            dx = player.x - source_x
+            dy = player.y - source_y
+        else:
+            dx, dy = 0, 0
+        # Determine knockback axis and sign
+        if dx == 0 and dy == 0:
+            opp = DIRECTION_OPPOSITES.get(player.direction, "down")
+            knock_dx, knock_dy = DIRECTIONS[opp]
+        elif abs(dx) >= abs(dy):
+            knock_dx = 1 if dx >= 0 else -1
+            knock_dy = 0
+        else:
+            knock_dx = 0
+            knock_dy = 1 if dy >= 0 else -1
+        # Target: fixed 1 tile knockback, snapped to nearest half-tile
+        kx = round((player.x + knock_dx) * 2) / 2
+        ky = round((player.y + knock_dy) * 2) / 2
         knocked = False
         room = game.rooms.get(room_id)
         if room:
@@ -70,6 +92,16 @@ def _apply_damage(player, damage: int, room_id: str, msgs: list):
             "x": player.x,
             "y": player.y,
             "knockback": knocked,
+            "debug_pre_x": pre_x,
+            "debug_pre_y": pre_y,
+            "debug_source_x": source_x,
+            "debug_source_y": source_y,
+            "debug_prev_player_x": prev_player_x,
+            "debug_prev_player_y": prev_player_y,
+            "debug_prev_source_x": prev_source_x,
+            "debug_prev_source_y": prev_source_y,
+            "debug_source_w": source_w,
+            "debug_source_h": source_h,
         }, None))
     else:
         # Player died
@@ -248,7 +280,7 @@ def exec_projectile(monster, room_id, monster_idx, action, msgs):
                 "type": "projectile_hit", "id": proj_id,
                 "x": start_x, "y": start_y,
             }, None))
-            _apply_damage(p, damage, room_id, msgs)
+            _apply_damage(p, damage, room_id, msgs, start_x, start_y)
             game.room_projectiles.get(room_id, {}).pop(proj_id, None)
             return
 
@@ -313,7 +345,7 @@ def exec_charge(monster, room_id, monster_idx, action, msgs):
             p.x < px + w and p.x + 1 > px and p.y < py + h and p.y + 1 > py
             for px, py in path
         ):
-            _apply_damage(p, damage, room_id, msgs)
+            _apply_damage(p, damage, room_id, msgs, monster.x, monster.y)
 
 
 def warmup_teleport(monster, room_id, monster_idx, action, msgs):
@@ -349,7 +381,7 @@ def exec_teleport(monster, room_id, monster_idx, action, msgs):
     if damage > 0 and damage_radius >= 0:
         for p in players_in_room(room_id):
             if p.hp > 0 and abs(p.x - monster.x) + abs(p.y - monster.y) <= damage_radius:
-                _apply_damage(p, damage, room_id, msgs)
+                _apply_damage(p, damage, room_id, msgs, monster.x, monster.y)
 
 
 def warmup_area(monster, room_id, monster_idx, action, msgs):
@@ -384,7 +416,7 @@ def exec_area(monster, room_id, monster_idx, action, msgs):
         if p.hp > 0:
             dist = abs(p.x - ax) + abs(p.y - ay)
             if dist <= range_val:
-                _apply_damage(p, damage, room_id, msgs)
+                _apply_damage(p, damage, room_id, msgs, ax, ay)
 
 
 # Dispatch tables for warmup visuals and execution
@@ -441,7 +473,13 @@ def _tick_all_monsters(now, msgs):
                                 if p.hp > 0 and (
                                     p.x < monster.x + monster.width and p.x + 1 > monster.x and
                                     p.y < monster.y + monster.height and p.y + 1 > monster.y):
-                                    _apply_damage(p, monster.damage, room_id, msgs)
+                                    mid = id(monster)
+                                    if mid not in p.pending_collisions:
+                                        p.pending_collisions[mid] = {
+                                            "monster": monster, "room_id": room_id, "time": now,
+                                            "prev_player_x": p.x, "prev_player_y": p.y,
+                                            "prev_source_x": sd["from_x"], "prev_source_y": sd["from_y"],
+                                        }
                     if progress >= 1.0:
                         remaining = sd.get("remaining_distance", 0)
                         walk_dir = sd.get("direction", "random")
@@ -498,7 +536,7 @@ def _tick_projectiles(msgs):
                                 "type": "projectile_hit", "id": proj_id,
                                 "x": proj.x, "y": proj.y,
                             }, None))
-                            _apply_damage(p, proj.damage, room_id, msgs)
+                            _apply_damage(p, proj.damage, room_id, msgs, proj.x, proj.y)
                             hit_player = True
                             if not proj.piercing:
                                 to_remove.append(proj_id)
@@ -522,6 +560,43 @@ def _tick_projectiles(msgs):
             game.room_projectiles.pop(room_id, None)
 
 
+def _resolve_pending_collisions(now, msgs):
+    """Check pending contact collisions — apply damage if grace period elapsed and still valid."""
+    from server.commands import _get_monster_visual_pos
+    from server.lifecycle import get_room_monsters
+    for player in list(game.players.values()):
+        if not player.pending_collisions:
+            continue
+        for mid in list(player.pending_collisions):
+            pc = player.pending_collisions[mid]
+            monster = pc["monster"]
+            room_id = pc["room_id"]
+            # Stale check: player moved rooms, or monster/player dead
+            if player.room != room_id or player.hp <= 0 or not monster.alive or monster.intangible:
+                del player.pending_collisions[mid]
+                continue
+            # Check monster still in room
+            if monster not in get_room_monsters(room_id):
+                del player.pending_collisions[mid]
+                continue
+            # Re-check AABB overlap
+            mx, my = _get_monster_visual_pos(monster, now)
+            if not (player.x < mx + monster.width and player.x + 1 > mx and
+                    player.y < my + monster.height and player.y + 1 > my):
+                del player.pending_collisions[mid]
+                continue
+            # Grace period not yet elapsed
+            if now - pc["time"] < COLLISION_GRACE_PERIOD:
+                continue
+            # All checks passed — apply damage
+            del player.pending_collisions[mid]
+            _apply_damage(player, monster.damage, room_id, msgs, mx, my,
+                          pc["prev_player_x"], pc["prev_player_y"],
+                          pc["prev_source_x"], pc["prev_source_y"],
+                          source_w=monster.width, source_h=monster.height)
+            break  # one hit per tick per player
+
+
 async def game_tick():
     """Unified game loop — processes commands, ticks players/monsters/projectiles at ~30Hz."""
     from server.commands import process_player_commands
@@ -539,6 +614,7 @@ async def game_tick():
                     traceback.print_exc()
             _tick_players(now, msgs)
             _tick_all_monsters(now, msgs)
+            _resolve_pending_collisions(now, msgs)
             if now - last_projectile_tick >= PROJECTILE_TICK_RATE:
                 last_projectile_tick = now
                 _tick_projectiles(msgs)

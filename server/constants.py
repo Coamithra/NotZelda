@@ -55,6 +55,7 @@ PLAYER_RESPAWN_DELAY = 5.5
 GUARD_COOLDOWN = 10
 HEART_DROP_CHANCE = 0.1
 INVINCIBILITY_DURATION = 1.5
+COLLISION_GRACE_PERIOD = 0.1  # seconds before contact damage triggers (corner-scrape forgiveness)
 
 # Tick loop
 TICK_INTERVAL = 1.0 / 30     # ~33ms — unified game tick rate

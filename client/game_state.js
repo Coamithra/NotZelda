@@ -126,6 +126,8 @@ const G = {
   dungeonDebug: null,    // {lib_monsters, lib_tiles, lib_rooms, room_source, minimap?} — from server
   debugLog: [],
   MAX_DEBUG_LINES: 12,
+  debugCollision: false, // tilde toggle: show AABBs + hit ghosts
+  debugGhosts: [],       // [{playerBox, sourcePos, arrowDx, arrowDy, time}]
 
   // Reconnect
   lastLoginName: "",

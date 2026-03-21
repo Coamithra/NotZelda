@@ -10,6 +10,7 @@ from server.constants import (
     DIRECTIONS, ROOM_COLS, ROOM_ROWS,
     ATTACK_COOLDOWN, HEART_DROP_CHANCE, HEART_RESTORE_HP,
     POSITION_UPDATE_RATE, MAX_MOVE_PER_UPDATE, GUARD_COOLDOWN,
+    COLLISION_GRACE_PERIOD,
 )
 from server.net import players_in_room, log_event
 from server.lifecycle import (
@@ -155,6 +156,7 @@ def _process_position_update(player, data, now, msgs):
             return
 
     # Accept — update position
+    prev_x, prev_y = player.x, player.y
     player.x = new_x
     player.y = new_y
     player.last_pos_update_time = now
@@ -171,20 +173,52 @@ def _process_position_update(player, data, now, msgs):
         player.last_reported_y = new_y
 
     # Collision checks (monster contact, hearts, dungeon items, guard proximity)
-    _check_position_collisions(player, now, msgs)
+    _check_position_collisions(player, now, msgs, prev_x, prev_y)
 
 
-def _check_position_collisions(player, now, msgs):
+def _get_monster_visual_pos(monster, now):
+    """Get interpolated monster position during walks, actual position otherwise."""
+    if monster.state == "walking":
+        sd = monster.state_data
+        elapsed = now - sd["start_time"]
+        progress = min(elapsed / monster.walk_time, 1.0)
+        fx = sd["from_x"]
+        fy = sd["from_y"]
+        return fx + (sd["to_x"] - fx) * progress, fy + (sd["to_y"] - fy) * progress
+    return monster.x, monster.y
+
+
+def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_player_y=None):
     """Check monster contact, heart pickup, dungeon items at player position."""
+    if prev_player_x is None:
+        prev_player_x = player.x
+    if prev_player_y is None:
+        prev_player_y = player.y
     # Monster contact damage (AABB: player 1x1 at float pos vs monster footprint)
+    # Records pending collisions with a grace period for corner-scrape forgiveness
     if player.hp > 0:
+        overlapping = set()
         for monster in get_room_monsters(player.room):
             if monster.alive and not monster.intangible:
-                if (player.x < monster.x + monster.width and player.x + 1 > monster.x and
-                    player.y < monster.y + monster.height and player.y + 1 > monster.y):
-                    from server.combat import _apply_damage
-                    _apply_damage(player, monster.damage, player.room, msgs)
-                    break
+                mx, my = _get_monster_visual_pos(monster, now)
+                if (player.x < mx + monster.width and player.x + 1 > mx and
+                    player.y < my + monster.height and player.y + 1 > my):
+                    mid = id(monster)
+                    overlapping.add(mid)
+                    if mid not in player.pending_collisions:
+                        prev_mx, prev_my = monster.x, monster.y
+                        if monster.state == "walking":
+                            prev_mx = monster.state_data.get("from_x", monster.x)
+                            prev_my = monster.state_data.get("from_y", monster.y)
+                        player.pending_collisions[mid] = {
+                            "monster": monster, "room_id": player.room, "time": now,
+                            "prev_player_x": prev_player_x, "prev_player_y": prev_player_y,
+                            "prev_source_x": prev_mx, "prev_source_y": prev_my,
+                        }
+        # Clear pending for monsters no longer overlapping
+        for mid in list(player.pending_collisions):
+            if mid not in overlapping:
+                del player.pending_collisions[mid]
 
     # Heart pickup (proximity)
     if player.hp > 0:

@@ -395,6 +395,7 @@ def do_room_transition(player, exit_direction: str, msgs: list):
 
         # Move player — preserve column/row through the doorway
         old_x, old_y = player.x, player.y
+        player.pending_collisions.clear()
         player.room = new_room_id
         entry = ENTRY_DIR.get(exit_direction, "default")
         spawn = new_room["spawn_points"].get(entry, new_room["spawn_points"]["default"])
