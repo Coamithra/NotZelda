@@ -89,7 +89,7 @@ const MusicPlayer = (function () {
     }
     const start = performance.now();
     function step(now) {
-      const t = Math.min(1, (now - start) / duration);
+      const t = Math.max(0, Math.min(1, (now - start) / duration));
       audio.volume = t * VOLUME;
       if (t < 1) {
         fadeIds[url] = requestAnimationFrame(step);
@@ -111,7 +111,7 @@ const MusicPlayer = (function () {
     }
     const start = performance.now();
     function step(now) {
-      const t = Math.min(1, (now - start) / duration);
+      const t = Math.max(0, Math.min(1, (now - start) / duration));
       audio.volume = startVol * (1 - t);
       if (t < 1) {
         fadeIds[url] = requestAnimationFrame(step);
@@ -235,7 +235,7 @@ const MusicPlayer = (function () {
     var startVol = choirAudio.volume;
     var startTime = performance.now();
     function step(now) {
-      var t = Math.min(1, (now - startTime) / duration);
+      var t = Math.max(0, Math.min(1, (now - startTime) / duration));
       choirAudio.volume = startVol + (targetVol - startVol) * t;
       if (t < 1) {
         choirFadeId = requestAnimationFrame(step);
