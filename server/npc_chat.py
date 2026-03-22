@@ -54,8 +54,8 @@ NPC_CHATS_PER_HOUR = 150    # server-wide hourly LLM call budget (ignored for ol
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma2:2b")
 OLLAMA_TIMEOUT = 30.0       # seconds — CPU inference is slow
-OLLAMA_NUM_CTX = 2048       # plenty for NPC chat (~500 system + ~200 history)
-OLLAMA_NUM_PREDICT = -1     # no limit — server truncates to 200 chars anyway
+OLLAMA_NUM_CTX = 1024       # smaller = faster prompt eval on CPU (CX22)
+OLLAMA_NUM_PREDICT = 80     # ~200 chars max output; caps CPU inference time
 
 
 def warmup_ollama():
