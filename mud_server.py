@@ -330,7 +330,7 @@ async def main():
               f"tile {t.real_count}/{t.capacity}, room {r.real_count}/{r.capacity}")
 
     behavior_engine.init(players_in_room, ROOM_COLS, ROOM_ROWS, game.is_walkable_tile, game.guards, game.rooms)
-    port = 8080
+    port = int(os.environ.get("PORT", 8080))
     server = await websockets.serve(
         handle_connection, "0.0.0.0", port,
         process_request=process_request,

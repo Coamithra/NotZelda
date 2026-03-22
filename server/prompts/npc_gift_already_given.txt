@@ -1,0 +1,1 @@
+SPECIAL ITEM: This adventurer already carries {{item_name}} you gave them. You have nothing left to give.

@@ -9,18 +9,37 @@ import asyncio
 import json
 import os
 import random
+import re
 import subprocess
 import time
+import urllib.request
+import urllib.error
 from collections import defaultdict
+
+from pathlib import Path
 
 from server.state import game
 from server.net import broadcast_to_room, players_in_room, log_event, send_to
 
 # ---------------------------------------------------------------------------
+# Prompt loading — templates live in server/prompts/*.txt
+# ---------------------------------------------------------------------------
+
+_PROMPTS_DIR = Path(__file__).parent / "prompts"
+
+
+def _load_prompt(filename: str, **kwargs: str) -> str:
+    """Load a prompt template, replacing {{key}} placeholders."""
+    text = (_PROMPTS_DIR / filename).read_text(encoding="utf-8").strip()
+    for key, value in kwargs.items():
+        text = text.replace("{{" + key + "}}", str(value))
+    return text
+
+# ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
-# Use same backend as ai_generator
+# Backend: "cli" (Claude CLI), "api" (Anthropic API), "ollama" (local Ollama)
 AI_BACKEND = os.environ.get("AI_BACKEND", "cli").lower()
 NPC_MODEL = "claude-haiku-4-5-20251001"
 NPC_TIMEOUT = 30.0          # seconds — shorter than content gen
@@ -28,7 +47,15 @@ NPC_API_TIMEOUT = 10.0      # API is faster
 MAX_HISTORY = 10            # conversation turns to remember per player-NPC pair
 NPC_CHAT_COOLDOWN = 3.0     # seconds between NPC chat messages per player
 GUARD_SUMMON_COOLDOWN = 60.0  # seconds between guard summons per room
-NPC_CHATS_PER_HOUR = 150    # server-wide hourly LLM call budget
+NPC_CHATS_PER_HOUR = 150    # server-wide hourly LLM call budget (ignored for ollama)
+
+# Ollama configuration — uses native /api/chat (NOT /v1) to support num_ctx.
+# See learnings/ollama-considerations.md for why this matters.
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma2:2b")
+OLLAMA_TIMEOUT = 30.0       # seconds — CPU inference is slow
+OLLAMA_NUM_CTX = 2048       # plenty for NPC chat (~500 system + ~200 history)
+OLLAMA_NUM_PREDICT = -1     # no limit — server truncates to 200 chars anyway
 
 # ---------------------------------------------------------------------------
 # NPC gift item effects — server-side logic keyed by display name.
@@ -187,8 +214,8 @@ Rules:
 - Match your speech style to your character (a farmer talks differently than a ghost).
 - You may use the adventurer's name when addressing them.
 - If the adventurer is being rude, threatening, hostile, or insulting toward you, you can call \
-for armed guards by including [CALL_GUARDS] at the end of your response. Only do this when \
-genuinely provoked, not for playful banter. Example: Guards! Seize this scoundrel! [CALL_GUARDS]"""
+for armed guards by STARTING your response with [CALL_GUARDS]. Only do this when \
+genuinely provoked, not for playful banter. Example: [CALL_GUARDS] Guards! Seize this scoundrel!"""
 
     # Dynamic part — player-specific context (kept small to preserve cache hits)
     gift_section = ""
@@ -203,18 +230,12 @@ genuinely provoked, not for playful banter. Example: Guards! Seize this scoundre
             if gameplay_flag and gameplay_flag in player_flags:
                 already_has = True
         if already_has:
-            gift_section = f"""
-
-SPECIAL ITEM: This adventurer already carries {prompt_name} you gave them. \
-You have nothing left to give."""
+            gift_section = "\n\n" + _load_prompt("npc_gift_already_given.txt",
+                                                  item_name=prompt_name)
         else:
-            gift_section = f"""
-
-SPECIAL ITEM: You have {prompt_name} you can give to a deserving adventurer.
-Condition: {gift['condition']}
-To give it, include [GIVE_ITEM] at the END of your response after your dialog.
-Do NOT give it too easily. The adventurer must genuinely earn it through conversation.
-Do NOT mention the tag in your speech. Example: Take this, you've earned it! [GIVE_ITEM]"""
+            gift_section = "\n\n" + _load_prompt("npc_gift_available.txt",
+                                                  item_name=prompt_name,
+                                                  condition=gift["condition"])
 
     dynamic = f"""\
 You are speaking with an adventurer named {player_name}. They look like: {player_desc}{gift_section}"""
@@ -229,8 +250,12 @@ You are speaking with an adventurer named {player_name}. They look like: {player
 async def _call_npc_llm(static_prompt: str, dynamic_prompt: str,
                         messages: list[dict]) -> str | None:
     """Call the LLM for NPC conversation. Returns plain text or None on failure."""
+    backend = AI_BACKEND if AI_BACKEND in ("ollama", "api") else "cli"
+    model = OLLAMA_MODEL if backend == "ollama" else NPC_MODEL
     try:
-        if AI_BACKEND == "api":
+        if backend == "ollama":
+            return await _call_ollama(static_prompt, dynamic_prompt, messages)
+        elif backend == "api":
             return await _call_api(static_prompt, dynamic_prompt, messages)
         else:
             return await _call_cli(static_prompt, dynamic_prompt, messages)
@@ -330,6 +355,49 @@ async def _call_api(static_prompt: str, dynamic_prompt: str,
     return response.content[0].text.strip()
 
 
+async def _call_ollama(static_prompt: str, dynamic_prompt: str,
+                       messages: list[dict]) -> str:
+    """Call a local Ollama instance for NPC chat.
+
+    Uses the native /api/chat endpoint (NOT /v1/chat/completions) because
+    the OpenAI-compatible endpoint silently ignores num_ctx, which causes
+    Ollama to fall back to a VRAM-based default (often 4k or less).
+    """
+    system_prompt = static_prompt + "\n\n" + dynamic_prompt
+
+    # Build messages list with system prompt first
+    ollama_messages = [{"role": "system", "content": system_prompt}]
+    ollama_messages.extend(messages)
+
+    payload = json.dumps({
+        "model": OLLAMA_MODEL,
+        "messages": ollama_messages,
+        "stream": False,
+        "options": {
+            "num_ctx": OLLAMA_NUM_CTX,
+            "num_predict": OLLAMA_NUM_PREDICT,
+        },
+    }).encode("utf-8")
+
+    def _do_request():
+        req = urllib.request.Request(
+            f"{OLLAMA_URL}/api/chat",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=OLLAMA_TIMEOUT) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    result = await asyncio.wait_for(
+        asyncio.get_running_loop().run_in_executor(None, _do_request),
+        timeout=OLLAMA_TIMEOUT + 5,
+    )
+
+    text = result.get("message", {}).get("content", "")
+    return text.strip()
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -364,26 +432,26 @@ async def handle_npc_chat(player, guard: dict, text: str):
     npc_name = guard["name"]
     conv_key = (player.name, npc_name)
 
-    # --- Server-wide hourly budget ---
-    if now - _hourly_reset_time >= 3600:
-        _hourly_chat_count = 0
-        _hourly_reset_time = now
+    # --- Server-wide hourly budget (skipped for ollama — it's free) ---
+    if AI_BACKEND != "ollama":
+        if now - _hourly_reset_time >= 3600:
+            _hourly_chat_count = 0
+            _hourly_reset_time = now
 
-    if _hourly_chat_count >= NPC_CHATS_PER_HOUR:
-        # Budget exhausted — fall back to static dialog
-        response = guard.get("dialog") or "..."
-        log_event("NPC_CHAT", f"BUDGET — {npc_name} used static dialog for {player.name}")
-        await asyncio.sleep(1.0)
-        _last_chat_time[player.name] = time.monotonic()
-        room_name = game.rooms.get(player.room, {}).get("name", player.room)
-        await broadcast_to_room(player.room, {
-            "type": "chat",
-            "from": npc_name,
-            "text": response,
-        })
-        return
+        if _hourly_chat_count >= NPC_CHATS_PER_HOUR:
+            # Budget exhausted — fall back to static dialog
+            response = guard.get("dialog") or "..."
+            log_event("NPC_CHAT", f"BUDGET — {npc_name} used static dialog for {player.name}")
+            await asyncio.sleep(1.0)
+            _last_chat_time[player.name] = time.monotonic()
+            await broadcast_to_room(player.room, {
+                "type": "chat",
+                "from": npc_name,
+                "text": response,
+            })
+            return
 
-    _hourly_chat_count += 1
+        _hourly_chat_count += 1
 
     # Add player message to history
     _conversations[conv_key].append({"role": "user", "content": text})
@@ -415,6 +483,7 @@ async def handle_npc_chat(player, guard: dict, text: str):
             response = "..."
 
     # Clean up response — remove quotes, truncate
+    raw_response = response  # keep original for debug log
     response = response.strip('"\'')
 
     # Check for special tags before truncating
@@ -426,8 +495,29 @@ async def handle_npc_chat(player, guard: dict, text: str):
     if give_item:
         response = response.replace("[GIVE_ITEM]", "").strip()
 
+    # Strip emojis and *actions* — small models love these
+    response = re.sub(r'\*[^*]+\*', '', response)  # *winks*, *laughs*, etc.
+    response = re.sub(
+        r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF'
+        r'\U0001F900-\U0001F9FF\U00002702-\U000027B0\U0000FE00-\U0000FE0F'
+        r'\U0001FA00-\U0001FA6F\U0001FA70-\U0001FAFF\U00002600-\U000026FF'
+        r'\U0000200D\U00002B50]+', '', response)
+    response = re.sub(r'\s{2,}', ' ', response).strip()
+
+    # Trim trailing incomplete sentence (small models hard-stop at token limit)
+    if response and response[-1] not in '.!?':
+        last_sentence = max(response.rfind('.'), response.rfind('!'), response.rfind('?'))
+        if last_sentence > 20:  # only if we keep a reasonable chunk
+            response = response[:last_sentence + 1]
+
     if len(response) > 200:
-        response = response[:197] + "..."
+        # Truncate at last sentence boundary, fall back to hard cut
+        truncated = response[:200]
+        last_sentence = max(truncated.rfind('.'), truncated.rfind('!'), truncated.rfind('?'))
+        if last_sentence > 40:
+            response = truncated[:last_sentence + 1]
+        else:
+            response = response[:197] + "..."
 
     # Add NPC response to history (without tags)
     _conversations[conv_key].append({"role": "assistant", "content": response})
@@ -437,7 +527,14 @@ async def handle_npc_chat(player, guard: dict, text: str):
 
     # Log and broadcast NPC response
     room_name = game.rooms.get(player.room, {}).get("name", player.room)
-    log_event("NPC_CHAT", f"{npc_name} -> {player.name} ({room_name}): {response}")
+    _backend = AI_BACKEND if AI_BACKEND in ("ollama", "api") else "cli"
+    _model = OLLAMA_MODEL if _backend == "ollama" else NPC_MODEL
+    log_event("NPC_CHAT", f"[{_backend}:{_model}] {npc_name} -> {player.name} ({room_name}): {response}")
+    if raw_response != response:
+        log_event("NPC_RAW", f"{npc_name}: {raw_response}")
+    # Print raw response to sidelog (encode-safe for Windows cp1252 console)
+    safe_raw = raw_response.encode("ascii", errors="replace").decode("ascii")
+    print(f"[NPC_RAW] [{_backend}:{_model}] {npc_name}: {safe_raw}")
     await broadcast_to_room(player.room, {
         "type": "chat",
         "from": npc_name,
