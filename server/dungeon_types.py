@@ -22,7 +22,7 @@ DUNGEON_TYPES = {
         "template_dir": "rooms/dungeon2",
         "layouts": D2_LAYOUTS,
         "music_tracks": ["watertemple1", "watertemple2", "watertemple3"],
-        "boss_tracks": ["watertemple_boss1"],
+        "boss_tracks": ["watertemple_boss1", "watertemple_boss2"],
         "biome": "dungeon",
         "theme": "water_temple",
         "exit_room": "forest_path",
