@@ -49,12 +49,27 @@ function renderBrightTiles() {
 }
 
 function renderWaterMist() {
-  if (!G.currentRoom || G.currentRoom.dungeon_type !== "d2") return;
+  if (!G.currentRoom || !G.currentRoom.tilemap || G.currentRoom.dungeon_type !== "d2") return;
+  // Count water tiles: WA = 1 point, SH = 0.5 points, max 40 = full strength
+  if (G._mistStrength === undefined || G._mistRoom !== G.currentRoom) {
+    let score = 0;
+    for (const row of G.currentRoom.tilemap) {
+      for (const t of row) {
+        if (t === "WA") score += 1;
+        else if (t === "SH") score += 0.5;
+      }
+    }
+    G._mistStrength = Math.min(score / 40, 1.0);
+    G._mistRoom = G.currentRoom;
+  }
+  const s = G._mistStrength;
+  if (s <= 0) return;
   const t = performance.now() / 1000;
   const ctx = G.ctx;
   ctx.save();
-  // Drifting mist wisps — semi-transparent blue-white
-  for (let i = 0; i < 8; i++) {
+  // Drifting mist wisps — more wisps with more water, opacity stays constant
+  const wispCount = Math.round(8 + 72 * s);
+  for (let i = 0; i < wispCount; i++) {
     const speed = 0.3 + (i % 3) * 0.15;
     const baseX = ((i * 97 + t * speed * 40) % (CW + 120)) - 60;
     const baseY = (i * 67) % CH;
@@ -1149,8 +1164,8 @@ function renderDungeonMinimap() {
   if (pc) {
     const px = mapX + pad + (pc[0] - minC) * step;
     const py = mapY + pad + (pc[1] - minR) * step;
-    if (hasCompass && !isDebug) {
-      // Compass: blinking yellow dot
+    if (hasCompass || isDebug) {
+      // Compass/debug: blinking yellow dot showing current room
       const blink = Math.sin(Date.now() / 200) > 0;
       if (blink) {
         G.ctx.fillStyle = "rgba(255, 230, 50, 0.9)";
@@ -1159,13 +1174,6 @@ function renderDungeonMinimap() {
         G.ctx.arc(mx, my, 2.5, 0, Math.PI * 2);
         G.ctx.fill();
       }
-    } else {
-      // Default: pulsing white border
-      const pulse = 0.6 + 0.4 * Math.sin(Date.now() / 200);
-      G.ctx.strokeStyle = `rgba(255, 255, 255, ${pulse})`;
-      G.ctx.lineWidth = 2;
-      G.ctx.strokeRect(px - 1, py - 1, cellSize + 2, cellSize + 2);
-      G.ctx.lineWidth = 1;
     }
   }
 

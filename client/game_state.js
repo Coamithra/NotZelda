@@ -107,6 +107,7 @@ const G = {
   myMaxHp: 6,
   hurtFlash: 0,
   invincibleUntil: 0,
+  knockbackSlide: null,
   heartPickups: [],      // [{id, x, y}]
   dyingPlayerSelf: null,
   dyingOtherPlayers: {},

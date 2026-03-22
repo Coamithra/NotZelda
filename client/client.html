@@ -571,7 +571,21 @@ function gameLoop(timestamp) {
     }
 
     // Interpolate positions — lerp for reconciliation snaps
-    if (G.myPlayer && G.state !== "idle") {
+    function easeOutQuad(t) { return t * (2 - t); }
+    if (G.knockbackSlide) {
+      // Smooth knockback slide for local player
+      const ks = G.knockbackSlide;
+      const elapsed = performance.now() - ks.startTime;
+      const t = Math.min(elapsed / ks.duration, 1.0);
+      const progress = easeOutQuad(t);
+      G.displayX = ks.fromX + (ks.toX - ks.fromX) * progress;
+      G.displayY = ks.fromY + (ks.toY - ks.fromY) * progress;
+      if (t >= 1.0) {
+        G.displayX = ks.toX;
+        G.displayY = ks.toY;
+        G.knockbackSlide = null;
+      }
+    } else if (G.myPlayer && G.state !== "idle") {
       // During attacking/dying, lerp displayX/Y toward myPlayer position
       if (G.displayX !== G.myPlayer.x || G.displayY !== G.myPlayer.y) {
         G.displayX += (G.myPlayer.x - G.displayX) * MOVE_LERP;
@@ -582,7 +596,19 @@ function gameLoop(timestamp) {
     }
 
     for (const p of Object.values(G.otherPlayers)) {
-      if (p.walkState) {
+      if (p.knockbackSlide) {
+        const ks = p.knockbackSlide;
+        const elapsed = performance.now() - ks.startTime;
+        const t = Math.min(elapsed / ks.duration, 1.0);
+        const progress = easeOutQuad(t);
+        p.displayX = ks.fromX + (ks.toX - ks.fromX) * progress;
+        p.displayY = ks.fromY + (ks.toY - ks.fromY) * progress;
+        if (t >= 1.0) {
+          p.displayX = ks.toX;
+          p.displayY = ks.toY;
+          p.knockbackSlide = null;
+        }
+      } else if (p.walkState) {
         const elapsed = performance.now() - p.walkState.startTime;
         const progress = Math.min(elapsed / HALF_WALK_TIME_MS, 1.0);
         p.displayX = p.walkState.fromX + (p.walkState.toX - p.walkState.fromX) * progress;
@@ -604,7 +630,19 @@ function gameLoop(timestamp) {
     }
 
     for (const m of G.monsters) {
-      if (m.walkState) {
+      if (m.knockbackSlide) {
+        const ks = m.knockbackSlide;
+        const elapsed = performance.now() - ks.startTime;
+        const t = Math.min(elapsed / ks.duration, 1.0);
+        const progress = easeOutQuad(t);
+        m.displayX = ks.fromX + (ks.toX - ks.fromX) * progress;
+        m.displayY = ks.fromY + (ks.toY - ks.fromY) * progress;
+        if (t >= 1.0) {
+          m.displayX = ks.toX;
+          m.displayY = ks.toY;
+          m.knockbackSlide = null;
+        }
+      } else if (m.walkState) {
         const ws = m.walkState;
         const elapsed = performance.now() - ws.startTime;
         const progress = Math.min(elapsed / ws.walkTime, 1.0);

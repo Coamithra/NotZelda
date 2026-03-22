@@ -52,7 +52,12 @@ When pushing to git make sure to update CLAUDE.md first!
 - **AI prompt templates** are in `server/prompts/*.txt` — edit the text files directly, no Python changes needed.
 - **AI generation uses Claude CLI by default** (`AI_BACKEND=cli`), not the API. The `.env` must NOT set `AI_BACKEND=api`.
 - **Boss monsters** have `"boss": True` in their stats dict. Use `monster.is_boss` — never hardcode boss checks to a specific kind.
-- **Trap rooms** (lock-in): dungeon rooms with 3+ monsters have a 1/3 chance of locking doors until all monsters are defeated. Boss rooms always lock. Decided at resolution time in `_resolve_room_from_entry()`. Runtime lock state tracked in `game.locked_rooms`. `CD` tile = closed door.
+- **Trap rooms** (lock-in): dungeon rooms with 3+ monsters have a 1/3 chance of locking doors until all monsters are defeated. Boss rooms always lock. Decided at resolution time in `_resolve_room_from_entry()`. Runtime lock state tracked in `game.locked_rooms`. `CD` tile = closed door. Dungeon items are hidden and non-pickable during trap lockdown.
+- **Monster knockback**: non-boss monsters get knocked back 1 tile in the attack direction when hit (if they survive). Server cancels any in-progress walk state. Client uses a separate `knockbackSlide` state (not `walkState`) for a 200ms easeOutQuad slide animation.
+- **Sword hitbox**: 1.5 tiles in the attack direction (extends 0.5 tiles back into the player's own tile), 1 tile perpendicular. This lets players hit monsters overlapping their position.
+- **Player knockback slide**: `G.knockbackSlide` in `client.html` game loop — 200ms easeOutQuad, separate from walk interpolation. Other players and monsters each use their own `knockbackSlide` object.
+- **Water mist** (d2 only): `renderWaterMist()` in `renderer.js` scales wisp count by water tile coverage (WA=1pt, SH=0.5pt, max 40). Opacity stays constant; density increases with more water.
+- **Dungeon map vs compass**: map reveals room layout but does NOT show current position. Compass adds blinking yellow dot for current room.
 - **Room geometry constants** live in `server/constants.py`: `DOORWAY_TILES`, `ALL_DOORWAY_TILES`, `bfs_reachable()`. Use `bfs_reachable()` instead of inline BFS for tile reachability checks.
 
 ## Key Gotchas

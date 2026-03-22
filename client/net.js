@@ -453,6 +453,12 @@ function handleMessage(msg) {
             const dustY = (oldY + (msg.y - oldY) * t + 0.5) * TS;
             spawnBurst(dustX, dustY, 2, 1.0, 250, ["#c8b898", "#a09068"], [2 * SCALE, 3 * SCALE], { shrink: true });
           }
+          // Smooth knockback slide — keep displayX/Y at old position, animate to new
+          G.knockbackSlide = {
+            fromX: G.displayX, fromY: G.displayY,
+            toX: msg.x, toY: msg.y,
+            startTime: performance.now(), duration: 200,
+          };
         }
         G.myHp = msg.hp;
         G.myPlayer.x = msg.x;
@@ -461,8 +467,10 @@ function handleMessage(msg) {
         G.preciseY = msg.y;
         G.lastReportedX = msg.x;
         G.lastReportedY = msg.y;
-        G.displayX = msg.x;
-        G.displayY = msg.y;
+        if (!msg.knockback) {
+          G.displayX = msg.x;
+          G.displayY = msg.y;
+        }
         setState("idle", {});
         G.hurtFlash = Date.now() + 300;
         G.invincibleUntil = Date.now() + 1500;
@@ -482,9 +490,17 @@ function handleMessage(msg) {
           });
         }
       } else if (G.otherPlayers[msg.name]) {
-        G.otherPlayers[msg.name].x = msg.x;
-        G.otherPlayers[msg.name].y = msg.y;
-        G.otherPlayers[msg.name].hurtFlash = Date.now() + 300;
+        const op = G.otherPlayers[msg.name];
+        if (msg.knockback) {
+          op.knockbackSlide = {
+            fromX: op.displayX, fromY: op.displayY,
+            toX: msg.x, toY: msg.y,
+            startTime: performance.now(), duration: 200,
+          };
+        }
+        op.x = msg.x;
+        op.y = msg.y;
+        op.hurtFlash = Date.now() + 300;
       }
       break;
     }
@@ -618,6 +634,17 @@ function handleMessage(msg) {
       const hitMon = G.monsters.find(m => m.id === msg.id);
       if (hitMon) {
         hitMon.hitFlash = Date.now() + 200;
+        // Knockback slide (separate from walkState so no hop animation)
+        if (msg.knock_x != null) {
+          hitMon.knockbackSlide = {
+            fromX: hitMon.displayX, fromY: hitMon.displayY,
+            toX: msg.knock_x, toY: msg.knock_y,
+            startTime: performance.now(), duration: 200,
+          };
+          hitMon.x = msg.knock_x;
+          hitMon.y = msg.knock_y;
+          hitMon.walkState = null;  // cancel any in-progress walk
+        }
         // Juice: hit sparks
         const cx = hitMon.displayX * TS + (hitMon.width || 1) * TS / 2;
         const cy = hitMon.displayY * TS + (hitMon.height || 1) * TS / 2;

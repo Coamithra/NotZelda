@@ -233,10 +233,10 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
                 msgs.append(("broadcast", player.room, {"type": "heart_collected", "id": heart["id"]}, None))
                 break
 
-    # Dungeon item pickup (proximity)
+    # Dungeon item pickup (proximity) — hidden during trap room lockdown
     if player.hp > 0:
         dinst = get_dungeon_for_room(player.room)
-        if dinst:
+        if dinst and player.room not in game.locked_rooms:
             items = dinst.dungeon_items.get(player.room, [])
             for item in list(items):
                 if abs(player.x - item["x"]) < 0.75 and abs(player.y - item["y"]) < 0.75:
@@ -314,15 +314,43 @@ def _process_attack(player, now, msgs):
         "direction": player.direction,
     }, None))
 
-    # Hit detection — float AABB overlap (sword is 1x1 hitbox in front of player)
+    # Hit detection — AABB overlap, 1.5 tiles in attack dir (covers half player tile + full sword tile)
     dx, dy = DIRECTIONS.get(player.direction, (0, 0))
-    sword_x = player.x + dx
-    sword_y = player.y + dy
+    sword_x = player.x + (0.5 if dx > 0 else -1.0 if dx < 0 else 0)
+    sword_y = player.y + (0.5 if dy > 0 else -1.0 if dy < 0 else 0)
+    sword_w = 1.5 if dx != 0 else 1.0
+    sword_h = 1.5 if dy != 0 else 1.0
     for i, monster in enumerate(get_room_monsters(player.room)):
         if monster.alive and not monster.intangible and (
-            sword_x < monster.x + monster.width and sword_x + 1 > monster.x and
-            sword_y < monster.y + monster.height and sword_y + 1 > monster.y):
+            sword_x < monster.x + monster.width and sword_x + sword_w > monster.x and
+            sword_y < monster.y + monster.height and sword_y + sword_h > monster.y):
             monster.hp -= 1
+            # Knockback: push surviving non-boss monster 1 tile in attack direction
+            knock_x = None
+            knock_y = None
+            if monster.hp > 0 and not monster.is_boss:
+                room = game.rooms.get(player.room)
+                if room:
+                    kx = round(monster.x + dx)
+                    ky = round(monster.y + dy)
+                    can_knock = True
+                    for oy in range(monster.height):
+                        for ox in range(monster.width):
+                            cx, cy = kx + ox, ky + oy
+                            if cx < 0 or cx + 1 > ROOM_COLS or cy < 0 or cy + 1 > ROOM_ROWS:
+                                can_knock = False
+                            elif not _is_position_walkable(cx, cy, room):
+                                can_knock = False
+                    if can_knock:
+                        monster.x = kx
+                        monster.y = ky
+                        knock_x = kx
+                        knock_y = ky
+                        # Cancel any in-progress walk so it doesn't overwrite the knockback position
+                        if monster.state == "walking":
+                            monster.state = "idle"
+                            monster.state_data = {}
+                            monster.last_action_time = time.monotonic()
             # Boss engagement — start choir overlay if boss survives this hit
             dinst = get_dungeon_for_room(player.room)
             is_boss = monster.is_boss and dinst is not None
@@ -336,12 +364,16 @@ def _process_attack(player, now, msgs):
                 monster.alive = False
                 monster.state = "idle"
                 monster.state_data = {}
-                msgs.append(("broadcast", player.room, {
+                msg_killed = {
                     "type": "monster_killed",
                     "id": i,
                     "x": monster.x,
                     "y": monster.y,
-                }, None))
+                }
+                if knock_x is not None:
+                    msg_killed["knock_x"] = knock_x
+                    msg_killed["knock_y"] = knock_y
+                msgs.append(("broadcast", player.room, msg_killed, None))
                 # Heart drop
                 if random.random() < HEART_DROP_CHANCE:
                     hid = game.next_heart_id
@@ -371,13 +403,17 @@ def _process_attack(player, now, msgs):
                             }, None))
                             broadcast_choir_stop(player.room, msgs)
             else:
-                msgs.append(("broadcast", player.room, {
+                msg_hit = {
                     "type": "monster_hit",
                     "id": i,
                     "x": monster.x,
                     "y": monster.y,
                     "hp": monster.hp,
-                }, None))
+                }
+                if knock_x is not None:
+                    msg_hit["knock_x"] = knock_x
+                    msg_hit["knock_y"] = knock_y
+                msgs.append(("broadcast", player.room, msg_hit, None))
 
 
 # ---------------------------------------------------------------------------
