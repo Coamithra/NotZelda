@@ -579,9 +579,15 @@ function handleMessage(msg) {
     case "monster_walk_complete": {
       const wcMon = G.monsters.find(m => m.id === msg.id);
       if (wcMon) {
+        // Don't snap displayX/Y — let the walk interpolation finish naturally
+        // or let the lerp fallback smoothly move to the destination.
+        // Snapping here causes visible jumps when walk_complete arrives
+        // right after room_enter with stale walk progress.
+        if (wcMon.walkState) {
+          wcMon.displayX = wcMon.walkState.toX;
+          wcMon.displayY = wcMon.walkState.toY;
+        }
         wcMon.walkState = null;
-        wcMon.displayX = wcMon.x;
-        wcMon.displayY = wcMon.y;
       }
       break;
     }
