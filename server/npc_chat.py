@@ -66,7 +66,7 @@ OLLAMA_NUM_PREDICT = -1     # no limit — server truncates to 200 chars anyway
 
 GIFT_EFFECTS = {
     "Sword": {"effect": "sword", "flag": "has_sword"},
-    "Heart Container": {"effect": "heart"},
+    "Barmaid's Heart Container": {"effect": "heart"},
     # Items without an entry here get a generic "You obtained X!" message.
 }
 
@@ -574,11 +574,11 @@ async def _grant_npc_gift(player, guard: dict):
         player.grant_flag(gameplay_flag)
     log_event("NPC_GIFT", f"{guard['name']} gave {display_name} to {player.name}")
 
-    if effect == "sword":
-        # Use dungeon-style item pickup animation
-        await send_to(player, {"type": "item_obtained", "item_type": "sword", "item_name": "Sword"})
+    if effect in ("sword", "heart"):
+        # Use item pickup animation (golden glow + sparkles + hold pose)
+        await send_to(player, {"type": "item_obtained", "item_type": effect, "item_name": display_name})
         await broadcast_to_room(player.room, {
-            "type": "item_effect", "item_type": "sword", "name": player.name,
+            "type": "item_effect", "item_type": effect, "name": player.name,
         }, exclude=player.ws)
     else:
         # Generic item obtained message

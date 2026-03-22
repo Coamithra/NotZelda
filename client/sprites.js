@@ -354,10 +354,69 @@ function drawItemCompass(ctx, px, py, S) {
   ctx.fillRect(cx - 0.5*S, cy - 0.5*S, S, S);
 }
 
+function drawBigHeartSolid(ctx, px, py, color, S) {
+  // 18x13 heart shape — bigger than HUD heart for item pickup/ground display
+  ctx.fillStyle = color;
+  // Left half
+  ctx.fillRect(px+2*S, py, 5*S, S);
+  ctx.fillRect(px+S, py+S, 7*S, S);
+  ctx.fillRect(px, py+2*S, 9*S, 3*S);
+  ctx.fillRect(px+S, py+5*S, 8*S, S);
+  ctx.fillRect(px+2*S, py+6*S, 7*S, S);
+  ctx.fillRect(px+3*S, py+7*S, 6*S, S);
+  ctx.fillRect(px+4*S, py+8*S, 5*S, S);
+  ctx.fillRect(px+5*S, py+9*S, 4*S, S);
+  ctx.fillRect(px+6*S, py+10*S, 3*S, S);
+  ctx.fillRect(px+7*S, py+11*S, 2*S, S);
+  ctx.fillRect(px+8*S, py+12*S, S, S);
+  // Right half
+  ctx.fillRect(px+11*S, py, 5*S, S);
+  ctx.fillRect(px+10*S, py+S, 7*S, S);
+  ctx.fillRect(px+9*S, py+2*S, 9*S, 3*S);
+  ctx.fillRect(px+9*S, py+5*S, 8*S, S);
+  ctx.fillRect(px+9*S, py+6*S, 7*S, S);
+  ctx.fillRect(px+9*S, py+7*S, 6*S, S);
+  ctx.fillRect(px+9*S, py+8*S, 5*S, S);
+  ctx.fillRect(px+9*S, py+9*S, 4*S, S);
+  ctx.fillRect(px+9*S, py+10*S, 3*S, S);
+  ctx.fillRect(px+9*S, py+11*S, 2*S, S);
+  ctx.fillRect(px+9*S, py+12*S, S, S);
+}
+
+function drawItemHeart(ctx, px, py, S) {
+  const ox = px - 4*S, oy = py - S;
+  // Gold container border (1px dilation of big heart shape)
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      drawBigHeartSolid(ctx, ox + dx*S, oy + dy*S, "#DAA520", S);
+    }
+  }
+  // Red heart fill
+  drawBigHeartSolid(ctx, ox, oy, "#e03030", S);
+  // Highlight (top-left lobe)
+  ctx.fillStyle = "#ff6060";
+  ctx.fillRect(ox+2*S, oy+S, 3*S, S);
+  ctx.fillRect(ox+S, oy+2*S, 2*S, S);
+  // Subtle highlight (right lobe)
+  ctx.fillStyle = "#f04848";
+  ctx.fillRect(ox+12*S, oy+S, 2*S, S);
+  // Shadow (lower edges)
+  ctx.fillStyle = "#a02020";
+  ctx.fillRect(ox, oy+4*S, S, S);
+  ctx.fillRect(ox+S, oy+5*S, S, S);
+  ctx.fillRect(ox+2*S, oy+6*S, S, S);
+  ctx.fillRect(ox+3*S, oy+7*S, S, S);
+  ctx.fillRect(ox+17*S, oy+4*S, S, S);
+  ctx.fillRect(ox+16*S, oy+5*S, S, S);
+  ctx.fillRect(ox+15*S, oy+6*S, S, S);
+  ctx.fillRect(ox+14*S, oy+7*S, S, S);
+}
+
 const ITEM_DRAW_FNS = {
   sword: drawItemSword,
   map: drawItemMap,
   compass: drawItemCompass,
+  heart: drawItemHeart,
 };
 
 function drawGroundItem(ctx, px, py, itemType, S) {

@@ -62,7 +62,8 @@ When pushing to git make sure to update CLAUDE.md first!
 - **Player knockback slide**: `G.knockbackSlide` in `client.html` game loop — 200ms easeOutQuad, separate from walk interpolation. Other players and monsters each use their own `knockbackSlide` object.
 - **Water mist** (d2 only): `renderWaterMist()` in `renderer.js` scales wisp count by water tile coverage (WA=1pt, SH=0.5pt, max 40). Opacity stays constant; density increases with more water.
 - **Dungeon map vs compass**: map reveals room layout but does NOT show current position. Compass adds blinking yellow dot for current room.
-- **Item pickup animation**: all item grants (sword, map, compass) use the same `item_obtained`/`item_effect` message flow with `drawItemPickupOverlay` (golden glow + sparkles). Player is frozen during the 2.5s animation. `ITEM_DRAW_FNS` in `sprites.js` maps item_type to draw functions.
+- **Item pickup animation**: all item grants (sword, map, compass, heart) use the same `item_obtained`/`item_effect` message flow with `drawItemPickupOverlay` (golden glow + sparkles). Player is frozen during the 2.5s animation. `ITEM_DRAW_FNS` in `sprites.js` maps item_type to draw functions. Heart container uses a larger hand-crafted 18x13 sprite (`drawBigHeartSolid`) with gold container border.
+- **NPC gifts**: defined in `.room` files (`| Gift Name:condition`). Server-side effects keyed by display name in `GIFT_EFFECTS` dict in `npc_chat.py`. Tags like `[GIVE_ITEM]` are extracted from AI output *before* response cleanup (emoji/action stripping, truncation).
 - **Debug /viewserver**: sends full `debug_state` snapshot every tick to subscribed players (toggled via `/viewserver` chat command, debug-only). Renders semi-transparent red shapes for server-side entity positions.
 - **Room geometry constants** live in `server/constants.py`: `DOORWAY_TILES`, `ALL_DOORWAY_TILES`, `bfs_reachable()`. Use `bfs_reachable()` instead of inline BFS for tile reachability checks.
 
