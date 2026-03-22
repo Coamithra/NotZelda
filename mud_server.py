@@ -33,7 +33,7 @@ from server.rooms import load_room_files, load_dungeon_templates
 from server.lifecycle import on_player_enter_room, on_player_leave_room, send_room_enter
 from server.combat import game_tick, flush_messages
 from server.debug_monsters import auto_register_debug_monsters
-from server.npc_chat import clear_player_history, register_town_guard
+from server.npc_chat import clear_player_history, register_town_guard, warmup_ollama
 from server.dungeon_content import register_precreated_types, load_precreated_content
 from server.dungeons import load_deprecation_timestamp, load_deprecated_sets
 from server.dungeon_types import DUNGEON_TYPES
@@ -127,6 +127,7 @@ async def handle_connection(websocket):
         game.players[websocket] = player
         log_event("JOIN", f"{name} ({player.description})")
         print(f"[JOIN] {name} from {addr}")
+        warmup_ollama()
 
         login_msg = {"type": "login_ok", "color_index": color_index, "hp": PLAYER_MAX_HP, "max_hp": PLAYER_MAX_HP}
         if os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):

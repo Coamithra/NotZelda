@@ -57,6 +57,37 @@ OLLAMA_TIMEOUT = 30.0       # seconds — CPU inference is slow
 OLLAMA_NUM_CTX = 2048       # plenty for NPC chat (~500 system + ~200 history)
 OLLAMA_NUM_PREDICT = -1     # no limit — server truncates to 200 chars anyway
 
+
+def warmup_ollama():
+    """Fire-and-forget request to preload the Ollama model into memory.
+
+    Called on first player join so the model is warm when someone talks to an NPC.
+    """
+    if AI_BACKEND != "ollama":
+        return
+    def _ping():
+        try:
+            payload = json.dumps({
+                "model": OLLAMA_MODEL,
+                "messages": [{"role": "user", "content": "hi"}],
+                "stream": False,
+                "keep_alive": "1h",
+                "options": {"num_predict": 1},
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                f"{OLLAMA_URL}/api/chat",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            urllib.request.urlopen(req, timeout=OLLAMA_TIMEOUT)
+            print("[NPC_CHAT] Ollama model warmed up")
+        except Exception as e:
+            print(f"[NPC_CHAT] Ollama warmup failed: {e}")
+    loop = asyncio.get_running_loop()
+    loop.run_in_executor(None, _ping)
+
+
 # ---------------------------------------------------------------------------
 # NPC gift item effects — server-side logic keyed by display name.
 # Gift definitions (display_name, condition) are data-driven from .room files.
@@ -373,6 +404,7 @@ async def _call_ollama(static_prompt: str, dynamic_prompt: str,
         "model": OLLAMA_MODEL,
         "messages": ollama_messages,
         "stream": False,
+        "keep_alive": "1h",
         "options": {
             "num_ctx": OLLAMA_NUM_CTX,
             "num_predict": OLLAMA_NUM_PREDICT,
