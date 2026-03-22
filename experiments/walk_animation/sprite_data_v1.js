@@ -1,0 +1,236 @@
+// ---------------------------------------------------------------------------
+// Sprite data — declarative pixel-art definitions
+// Each sprite is an array of [colorKey, x, y, w, h] layers drawn in order.
+// Color keys resolve as: sprite local colors > PALETTE globals > literal hex.
+// ---------------------------------------------------------------------------
+
+const PALETTE = {
+  SKIN: "#e8c898", HAIR: "#4a3020", PANTS: "#3a4a8a", BOOTS: "#3a2a1a",
+};
+
+// (NPC, monster, and death sprite data loaded from server at runtime)
+
+// ---------------------------------------------------------------------------
+// Player dance frames — uses SHIRT placeholder resolved at draw time
+// ---------------------------------------------------------------------------
+const DANCE_FRAMES = [
+  // Frame 0 — lean left, right arm up
+  [
+    ["HAIR",  4, 0, 6, 2], ["SKIN",  4, 2, 6, 4],
+    ["#222",  5, 3, 1, 1], ["#222",  8, 3, 1, 1], ["#222",  6, 5, 2, 1],
+    ["SHIRT", 3, 6, 8, 5], ["SHIRT", 1, 7, 2, 1], ["SKIN",  0, 7, 1, 1],
+    ["SHIRT",11, 4, 1, 3], ["SKIN", 11, 3, 1, 1],
+    ["PANTS", 3,11, 3, 2], ["PANTS", 8,11, 3, 2],
+    ["BOOTS", 2,13, 3, 2], ["BOOTS", 9,13, 3, 2],
+  ],
+  // Frame 1 — lean right, left arm up
+  [
+    ["HAIR",  6, 0, 6, 2], ["SKIN",  6, 2, 6, 4],
+    ["#222",  7, 3, 1, 1], ["#222", 10, 3, 1, 1], ["#222",  8, 5, 2, 1],
+    ["SHIRT", 5, 6, 8, 5], ["SHIRT",13, 7, 2, 1], ["SKIN", 15, 7, 1, 1],
+    ["SHIRT", 4, 4, 1, 3], ["SKIN",  4, 3, 1, 1],
+    ["PANTS", 5,11, 3, 2], ["PANTS",10,11, 3, 2],
+    ["BOOTS", 4,13, 3, 2], ["BOOTS",11,13, 3, 2],
+  ],
+  // Frame 2 — both arms up, squat
+  [
+    ["HAIR",  5, 1, 6, 2], ["SKIN",  5, 3, 6, 4],
+    ["#222",  6, 4, 1, 1], ["#222",  9, 4, 1, 1], ["#222",  7, 6, 2, 1],
+    ["SHIRT", 4, 7, 8, 5], ["SHIRT", 3, 5, 1, 3], ["SHIRT",12, 5, 1, 3],
+    ["SKIN",  3, 4, 1, 1], ["SKIN", 12, 4, 1, 1],
+    ["PANTS", 4,12, 3, 2], ["PANTS", 9,12, 3, 2],
+    ["BOOTS", 3,14, 3, 1], ["BOOTS",10,14, 3, 1],
+  ],
+  // Frame 3 — arms crossed, cool pause
+  [
+    ["HAIR",  5, 0, 6, 2], ["SKIN",  5, 2, 6, 4],
+    ["#222",  6, 3, 1, 1], ["#222",  9, 3, 1, 1], ["#222",  7, 5, 2, 1],
+    ["SHIRT", 4, 6, 8, 5],
+    ["SKIN",  4, 8, 2, 1], ["SKIN", 10, 8, 2, 1],
+    ["PANTS", 5,11, 6, 2],
+    ["BOOTS", 5,13, 2, 2], ["BOOTS", 9,13, 2, 2],
+  ],
+];
+
+// ---------------------------------------------------------------------------
+// Player walk frames — [direction][animFrame] -> layers
+// Uses SHIRT placeholder
+// ---------------------------------------------------------------------------
+const PLAYER_WALK_FRAMES = {
+  down: [
+    [
+      ["HAIR", 5, 0, 6, 2], ["SKIN", 5, 2, 6, 4], ["#222", 6, 3, 1, 1], ["#222", 9, 3, 1, 1],
+      ["SHIRT", 4, 6, 8, 5], ["SHIRT", 3, 6, 1, 4], ["SHIRT",12, 6, 1, 4],
+      ["SKIN", 3,10, 1, 1], ["SKIN",12,10, 1, 1],
+      ["PANTS", 5,11, 6, 2], ["BOOTS", 5,13, 2, 2], ["BOOTS", 9,13, 2, 2],
+    ],
+    [
+      ["HAIR", 5, 0, 6, 2], ["SKIN", 5, 2, 6, 4], ["#222", 6, 3, 1, 1], ["#222", 9, 3, 1, 1],
+      ["SHIRT", 4, 6, 8, 5], ["SHIRT", 3, 6, 1, 4], ["SHIRT",12, 6, 1, 4],
+      ["SKIN", 3,10, 1, 1], ["SKIN",12,10, 1, 1],
+      ["PANTS", 5,11, 6, 2], ["BOOTS", 4,13, 2, 2], ["BOOTS",10,13, 2, 2],
+    ],
+  ],
+  up: [
+    [
+      ["HAIR", 5, 0, 6, 5], ["SKIN", 4, 3, 1, 2], ["SKIN",11, 3, 1, 2],
+      ["SHIRT", 4, 6, 8, 5], ["SHIRT", 3, 6, 1, 4], ["SHIRT",12, 6, 1, 4],
+      ["SKIN", 3,10, 1, 1], ["SKIN",12,10, 1, 1],
+      ["PANTS", 5,11, 6, 2], ["BOOTS", 5,13, 2, 2], ["BOOTS", 9,13, 2, 2],
+    ],
+    [
+      ["HAIR", 5, 0, 6, 5], ["SKIN", 4, 3, 1, 2], ["SKIN",11, 3, 1, 2],
+      ["SHIRT", 4, 6, 8, 5], ["SHIRT", 3, 6, 1, 4], ["SHIRT",12, 6, 1, 4],
+      ["SKIN", 3,10, 1, 1], ["SKIN",12,10, 1, 1],
+      ["PANTS", 5,11, 6, 2], ["BOOTS", 4,13, 2, 2], ["BOOTS",10,13, 2, 2],
+    ],
+  ],
+  left: [
+    // F0 — Stride A: wide stance, arm swung back (shoulder stub only)
+    [
+      ["HAIR", 4, 0, 6, 2], ["HAIR", 8, 2, 2, 4],
+      ["SKIN", 4, 2, 4, 4], ["#222", 4, 3, 1, 1],
+      ["SHIRT", 5, 6, 6, 5], ["SHIRT", 4, 7, 1, 1],
+      ["PANTS", 4,11, 3, 2], ["PANTS", 8,11, 2, 2],
+      ["BOOTS", 3,13, 3, 2], ["BOOTS", 8,13, 2, 2],
+    ],
+    // F1 — Closing: legs narrowing, arm emerging
+    [
+      ["HAIR", 4, 0, 6, 2], ["HAIR", 8, 2, 2, 4],
+      ["SKIN", 4, 2, 4, 4], ["#222", 4, 3, 1, 1],
+      ["SHIRT", 5, 6, 6, 5], ["SHIRT", 4, 7, 1, 2],
+      ["PANTS", 5,11, 2, 2], ["PANTS", 7,11, 2, 2],
+      ["BOOTS", 4,13, 2, 2], ["BOOTS", 7,13, 2, 2],
+    ],
+    // F2 — Pass: legs together, body bobbed up 1px (highest point)
+    [
+      ["HAIR", 4,-1, 6, 2], ["HAIR", 8, 1, 2, 4],
+      ["SKIN", 4, 1, 4, 4], ["#222", 4, 2, 1, 1],
+      ["SHIRT", 5, 5, 6, 5], ["SHIRT", 4, 6, 1, 3], ["SKIN", 4, 9, 1, 1],
+      ["PANTS", 5,10, 5, 2],
+      ["BOOTS", 5,12, 3, 2],
+    ],
+    // F3 — Stride B: wide stance, arm swung forward (extended)
+    [
+      ["HAIR", 4, 0, 6, 2], ["HAIR", 8, 2, 2, 4],
+      ["SKIN", 4, 2, 4, 4], ["#222", 4, 3, 1, 1],
+      ["SHIRT", 5, 6, 6, 5], ["SHIRT", 3, 7, 1, 3], ["SKIN", 2,10, 1, 1],
+      ["PANTS", 5,11, 2, 2], ["PANTS", 8,11, 3, 2],
+      ["BOOTS", 4,13, 2, 2], ["BOOTS", 8,13, 3, 2],
+    ],
+    // F4 — Closing: legs narrowing, arm retracting
+    [
+      ["HAIR", 4, 0, 6, 2], ["HAIR", 8, 2, 2, 4],
+      ["SKIN", 4, 2, 4, 4], ["#222", 4, 3, 1, 1],
+      ["SHIRT", 5, 6, 6, 5], ["SHIRT", 3, 7, 1, 2], ["SKIN", 3, 9, 1, 1],
+      ["PANTS", 5,11, 2, 2], ["PANTS", 7,11, 2, 2],
+      ["BOOTS", 4,13, 2, 2], ["BOOTS", 7,13, 2, 2],
+    ],
+    // F5 — Pass: same as F2
+    [
+      ["HAIR", 4,-1, 6, 2], ["HAIR", 8, 1, 2, 4],
+      ["SKIN", 4, 1, 4, 4], ["#222", 4, 2, 1, 1],
+      ["SHIRT", 5, 5, 6, 5], ["SHIRT", 4, 6, 1, 3], ["SKIN", 4, 9, 1, 1],
+      ["PANTS", 5,10, 5, 2],
+      ["BOOTS", 5,12, 3, 2],
+    ],
+  ],
+  right: [
+    // F0 — Stride A: wide stance, arm swung back (mirrored from left)
+    [
+      ["HAIR", 6, 0, 6, 2], ["HAIR", 6, 2, 2, 4],
+      ["SKIN", 8, 2, 4, 4], ["#222",11, 3, 1, 1],
+      ["SHIRT", 5, 6, 6, 5], ["SHIRT",11, 7, 1, 1],
+      ["PANTS", 6,11, 2, 2], ["PANTS", 9,11, 3, 2],
+      ["BOOTS", 6,13, 2, 2], ["BOOTS",10,13, 3, 2],
+    ],
+    // F1 — Closing: legs narrowing, arm emerging (mirrored)
+    [
+      ["HAIR", 6, 0, 6, 2], ["HAIR", 6, 2, 2, 4],
+      ["SKIN", 8, 2, 4, 4], ["#222",11, 3, 1, 1],
+      ["SHIRT", 5, 6, 6, 5], ["SHIRT",11, 7, 1, 2],
+      ["PANTS", 7,11, 2, 2], ["PANTS", 9,11, 2, 2],
+      ["BOOTS", 7,13, 2, 2], ["BOOTS",10,13, 2, 2],
+    ],
+    // F2 — Pass: legs together, body bobbed up 1px (mirrored)
+    [
+      ["HAIR", 6,-1, 6, 2], ["HAIR", 6, 1, 2, 4],
+      ["SKIN", 8, 1, 4, 4], ["#222",11, 2, 1, 1],
+      ["SHIRT", 5, 5, 6, 5], ["SHIRT",11, 6, 1, 3], ["SKIN",11, 9, 1, 1],
+      ["PANTS", 6,10, 5, 2],
+      ["BOOTS", 8,12, 3, 2],
+    ],
+    // F3 — Stride B: wide stance, arm swung forward (mirrored)
+    [
+      ["HAIR", 6, 0, 6, 2], ["HAIR", 6, 2, 2, 4],
+      ["SKIN", 8, 2, 4, 4], ["#222",11, 3, 1, 1],
+      ["SHIRT", 5, 6, 6, 5], ["SHIRT",12, 7, 1, 3], ["SKIN",13,10, 1, 1],
+      ["PANTS", 5,11, 3, 2], ["PANTS", 9,11, 2, 2],
+      ["BOOTS", 5,13, 3, 2], ["BOOTS",10,13, 2, 2],
+    ],
+    // F4 — Closing: legs narrowing, arm retracting (mirrored)
+    [
+      ["HAIR", 6, 0, 6, 2], ["HAIR", 6, 2, 2, 4],
+      ["SKIN", 8, 2, 4, 4], ["#222",11, 3, 1, 1],
+      ["SHIRT", 5, 6, 6, 5], ["SHIRT",12, 7, 1, 2], ["SKIN",12, 9, 1, 1],
+      ["PANTS", 7,11, 2, 2], ["PANTS", 9,11, 2, 2],
+      ["BOOTS", 7,13, 2, 2], ["BOOTS",10,13, 2, 2],
+    ],
+    // F5 — Pass: same as F2 (mirrored)
+    [
+      ["HAIR", 6,-1, 6, 2], ["HAIR", 6, 1, 2, 4],
+      ["SKIN", 8, 1, 4, 4], ["#222",11, 2, 1, 1],
+      ["SHIRT", 5, 5, 6, 5], ["SHIRT",11, 6, 1, 3], ["SKIN",11, 9, 1, 1],
+      ["PANTS", 6,10, 5, 2],
+      ["BOOTS", 8,12, 3, 2],
+    ],
+  ],
+};
+
+// ---------------------------------------------------------------------------
+// Player fall-over frames — uses SHIRT placeholder
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Runtime sprite registries — populated from server data on room enter
+// ---------------------------------------------------------------------------
+const customMonsterSprites = {};
+const customDeathSprites = {};
+const customNPCSprites = {};
+
+// ---------------------------------------------------------------------------
+// Player item-hold frame — facing camera, arms raised above head
+// ---------------------------------------------------------------------------
+const ITEM_HOLD_FRAME = [
+  ["HAIR",  5, 0, 6, 2],
+  ["SKIN",  5, 2, 6, 4],
+  ["#222",  6, 3, 1, 1], ["#222",  9, 3, 1, 1],
+  ["SHIRT", 4, 6, 8, 5],
+  ["SHIRT", 3, 4, 1, 3], ["SHIRT",12, 4, 1, 3],
+  ["SKIN",  3, 3, 1, 1], ["SKIN", 12, 3, 1, 1],
+  ["PANTS", 5,11, 6, 2],
+  ["BOOTS", 5,13, 2, 2], ["BOOTS", 9,13, 2, 2],
+];
+
+const PLAYER_FALL_FRAMES = [
+  // Frame 0 — leaning
+  [
+    ["HAIR", 6, 1, 6, 2], ["SKIN", 6, 3, 6, 3],
+    ["SHIRT", 5, 6, 8, 5],
+    ["PANTS", 5,11, 6, 2],
+    ["BOOTS", 5,13, 2, 2], ["BOOTS", 9,13, 2, 2],
+  ],
+  // Frame 1 — sideways
+  [
+    ["HAIR", 1, 8, 2, 4], ["SKIN", 3, 8, 3, 4],
+    ["SHIRT", 6, 7, 5, 5],
+    ["PANTS",11, 8, 2, 4],
+    ["BOOTS",13, 8, 2, 2],
+  ],
+  // Frame 2 — flat on ground (alpha handled by renderer)
+  [
+    ["HAIR", 1,10, 2, 3], ["SKIN", 3,10, 3, 3],
+    ["SHIRT", 6, 9, 5, 4],
+    ["PANTS",11,10, 2, 3],
+    ["BOOTS",13,10, 2, 2],
+  ],
+];
