@@ -345,8 +345,8 @@ async def main():
         handle_connection, "0.0.0.0", port,
         process_request=process_request,
         compression=None,
-        ping_interval=None,
-        ping_timeout=None,
+        ping_interval=15,
+        ping_timeout=120,
     )
     asyncio.create_task(game_tick())
     load_deprecation_timestamp()
