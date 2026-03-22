@@ -7,7 +7,6 @@ Then open http://localhost:8080 in your browser.
 
 import asyncio
 import json
-import logging
 import os
 import time
 import sys
@@ -147,15 +146,10 @@ async def handle_connection(websocket):
         await flush_messages(login_msgs)
 
         # Message loop — all game logic is queued for the tick loop
-        msg_count = 0
         async for raw in websocket:
             try:
                 data = json.loads(raw)
                 msg_type = data.get("type")
-                msg_count += 1
-                if msg_count <= 5 or msg_count % 20 == 0:
-                    elapsed = time.time() - connect_time
-                    print(f"[DBG] {name}: msg #{msg_count} type={msg_type} at {elapsed:.1f}s")
                 if msg_type == "ping":
                     await player.ws.send(json.dumps({"type": "pong"}))
                 elif msg_type in ("position_update", "face", "attack", "chat"):

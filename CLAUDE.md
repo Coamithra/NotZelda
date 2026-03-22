@@ -70,6 +70,7 @@ When pushing to git make sure to update CLAUDE.md first!
 - **Dungeon room resolution is synchronous** — no JIT AI generation. Custom rooms resolve from the library pool or fall back to precreated.
 - **Tile properties** live in `custom_tile_recipes[tile_id]` — no separate walkability sets. `is_walkable_tile()` reads from the recipe dict.
 - **`websockets` must stay at 12.0** — v16+ breaks the `process_request` API.
+- **WebSocket bypasses nginx** — iOS Safari has a 30s disconnect bug when WebSocket goes through nginx TLS proxy. The client connects `wss://` directly to Python on port 8443 (TLS handled by Python's `ssl` module using the Let's Encrypt cert). nginx only serves static files on port 443.
 
 ## Running
 
