@@ -496,7 +496,7 @@ def _process_slash_command(player, text, msgs):
             player.grant_flag("has_sword")
             player.grant_flag("invulnerable")
             player.hp = player.max_hp
-            msgs.append(("send", player, {"type": "sword_obtained"}))
+            msgs.append(("send", player, {"type": "item_obtained", "item_type": "sword", "item_name": "Sword"}))
             msgs.append(("send", player, {"type": "hp_update", "hp": player.hp, "max_hp": player.max_hp}))
             msgs.append(("send", player, {"type": "info", "text": "Cheat mode: sword + invulnerability"}))
 
@@ -519,6 +519,11 @@ def _process_slash_command(player, text, msgs):
         else:
             start_background_regen(count, regen_type)
             msgs.append(("send", player, {"type": "info", "text": f"Regen started: {count} {regen_type} room(s) — see ~ debug log"}))
+
+    elif cmd == "viewserver" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+        enabled = not getattr(player, '_viewserver', False)
+        player._viewserver = enabled
+        msgs.append(("send", player, {"type": "viewserver_toggle", "enabled": enabled}))
 
     elif cmd == "choir" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
         debug_on = getattr(player, '_debug_choir', False)

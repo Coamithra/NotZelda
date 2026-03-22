@@ -697,6 +697,55 @@ function renderCollisionDebug() {
   }
 }
 
+function renderServerDebug() {
+  if (!G.viewServer || !G.serverState) return;
+  const ctx = G.ctx;
+  const s = G.serverState;
+  ctx.globalAlpha = 0.45;
+
+  // Players — red
+  ctx.fillStyle = "#ff0000";
+  for (const p of s.players) {
+    ctx.fillRect(p.x * TS, p.y * TS, TS, TS);
+  }
+
+  // Monsters — red (darker for dead)
+  for (const m of s.monsters) {
+    ctx.fillStyle = m.alive ? "#ff0000" : "#660000";
+    ctx.fillRect(m.x * TS, m.y * TS, (m.w || 1) * TS, (m.h || 1) * TS);
+  }
+
+  // Projectiles — orange
+  ctx.fillStyle = "#ff6600";
+  for (const p of s.projectiles) {
+    ctx.fillRect(p.x * TS + TS * 0.25, p.y * TS + TS * 0.25, TS * 0.5, TS * 0.5);
+  }
+
+  // Hearts — pink
+  ctx.fillStyle = "#ff66aa";
+  for (const h of s.hearts) {
+    ctx.fillRect(h.x * TS + TS * 0.2, h.y * TS + TS * 0.2, TS * 0.6, TS * 0.6);
+  }
+
+  // Ground items — yellow
+  ctx.fillStyle = "#ffcc00";
+  for (const it of s.items) {
+    ctx.fillRect(it.x * TS + TS * 0.15, it.y * TS + TS * 0.15, TS * 0.7, TS * 0.7);
+  }
+
+  ctx.globalAlpha = 1;
+
+  // Labels (fully opaque, small text)
+  ctx.font = "10px monospace";
+  ctx.fillStyle = "#ff4444";
+  for (const p of s.players) {
+    ctx.fillText(p.name, p.x * TS + 2, p.y * TS - 2);
+  }
+  for (const m of s.monsters) {
+    if (m.alive) ctx.fillText(m.kind, m.x * TS + 2, m.y * TS - 2);
+  }
+}
+
 function renderHeartsHUD() {
   const heartScale = SCALE * 0.45;
   const heartW = 12 * heartScale + 2;

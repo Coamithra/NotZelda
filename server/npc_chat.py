@@ -407,10 +407,10 @@ async def _grant_npc_gift(player, guard: dict):
     log_event("NPC_GIFT", f"{guard['name']} gave {display_name} to {player.name}")
 
     if effect == "sword":
-        # Reuse existing sword pickup animation
-        await send_to(player, {"type": "sword_obtained"})
+        # Use dungeon-style item pickup animation
+        await send_to(player, {"type": "item_obtained", "item_type": "sword", "item_name": "Sword"})
         await broadcast_to_room(player.room, {
-            "type": "sword_effect", "name": player.name,
+            "type": "item_effect", "item_type": "sword", "name": player.name,
         }, exclude=player.ws)
     else:
         # Generic item obtained message

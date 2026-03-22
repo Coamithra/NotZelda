@@ -57,9 +57,9 @@ async def smith_interact(player, guard):
             await broadcast_to_room(player.room, {
                 "type": "chat", "from": guard["name"], "text": dialog,
             })
-            await send_to(player, {"type": "sword_obtained"})
+            await send_to(player, {"type": "item_obtained", "item_type": "sword", "item_name": "Sword"})
             await broadcast_to_room(player.room, {
-                "type": "sword_effect", "name": player.name,
+                "type": "item_effect", "item_type": "sword", "name": player.name,
             }, exclude=player.ws)
             return
     else:

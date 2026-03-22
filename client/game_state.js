@@ -129,6 +129,8 @@ const G = {
   MAX_DEBUG_LINES: 12,
   debugCollision: false, // tilde toggle: show AABBs + hit ghosts
   debugGhosts: [],       // [{playerBox, sourcePos, arrowDx, arrowDy, time}]
+  viewServer: false,     // /viewserver toggle: show server-side entity positions
+  serverState: null,     // latest debug_state snapshot from server
 
   // Reconnect
   lastLoginName: "",

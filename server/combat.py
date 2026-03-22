@@ -208,7 +208,7 @@ def start_walk(monster, room_id, monster_idx, action, msgs, now):
         "from_x": monster.x, "from_y": monster.y,
         "to_x": nx, "to_y": ny,
         "start_time": now,
-        "committed": False,
+        "midpoint_checked": False,
         "room_id": room_id,
         "monster_idx": monster_idx,
         "remaining_distance": remaining,
@@ -459,15 +459,16 @@ def _tick_all_monsters(now, msgs):
                         monster.state = "idle"
                         monster.state_data = {}
                     continue
-                # Walk progression (midway commit, completion)
+                # Walk progression — midpoint position at 50%, destination + collision at 100%
                 if monster.state == "walking":
                     sd = monster.state_data
                     elapsed = now - sd["start_time"]
                     progress = min(elapsed / monster.walk_time, 1.0)
-                    if progress >= 0.5 and not sd["committed"]:
-                        sd["committed"] = True
-                        monster.x = sd["to_x"]
-                        monster.y = sd["to_y"]
+                    # At 50%: move hitbox to midpoint between origin and destination
+                    if progress >= 0.5 and not sd["midpoint_checked"]:
+                        sd["midpoint_checked"] = True
+                        monster.x = (sd["from_x"] + sd["to_x"]) / 2
+                        monster.y = (sd["from_y"] + sd["to_y"]) / 2
                         if not monster.intangible:
                             for p in players_in_room(room_id):
                                 if p.hp > 0 and (
@@ -480,7 +481,24 @@ def _tick_all_monsters(now, msgs):
                                             "prev_player_x": p.x, "prev_player_y": p.y,
                                             "prev_source_x": sd["from_x"], "prev_source_y": sd["from_y"],
                                         }
+                    # At 100%: commit to destination, check collision, complete walk
                     if progress >= 1.0:
+                        monster.x = sd["to_x"]
+                        monster.y = sd["to_y"]
+                        if not monster.intangible:
+                            mid_src_x = (sd["from_x"] + sd["to_x"]) / 2
+                            mid_src_y = (sd["from_y"] + sd["to_y"]) / 2
+                            for p in players_in_room(room_id):
+                                if p.hp > 0 and (
+                                    p.x < monster.x + monster.width and p.x + 1 > monster.x and
+                                    p.y < monster.y + monster.height and p.y + 1 > monster.y):
+                                    mid = id(monster)
+                                    if mid not in p.pending_collisions:
+                                        p.pending_collisions[mid] = {
+                                            "monster": monster, "room_id": room_id, "time": now,
+                                            "prev_player_x": p.x, "prev_player_y": p.y,
+                                            "prev_source_x": mid_src_x, "prev_source_y": mid_src_y,
+                                        }
                         remaining = sd.get("remaining_distance", 0)
                         walk_dir = sd.get("direction", "random")
                         monster.state = "idle"
@@ -597,6 +615,49 @@ def _resolve_pending_collisions(now, msgs):
             break  # one hit per tick per player
 
 
+async def _send_debug_state_snapshots():
+    """Send full room state to players with /viewserver active."""
+    from server.dungeons import get_dungeon_for_room
+    for player in list(game.players.values()):
+        if not getattr(player, '_viewserver', False):
+            continue
+        room_id = player.room
+        # Players in this room
+        players = []
+        for p in game.players.values():
+            if p.room == room_id:
+                players.append({"name": p.name, "x": p.x, "y": p.y})
+        # Monsters
+        monsters = []
+        for m in game.room_monsters.get(room_id, []):
+            monsters.append({
+                "x": m.x, "y": m.y, "w": m.width, "h": m.height,
+                "alive": m.alive, "kind": m.kind,
+            })
+        # Projectiles
+        projectiles = []
+        for proj in game.room_projectiles.get(room_id, {}).values():
+            projectiles.append({"x": proj.x, "y": proj.y})
+        # Hearts
+        hearts = []
+        for h in game.room_hearts.get(room_id, []):
+            hearts.append({"x": h["x"], "y": h["y"]})
+        # Dungeon ground items
+        items = []
+        dinst = get_dungeon_for_room(room_id)
+        if dinst:
+            for it in dinst.dungeon_items.get(room_id, []):
+                items.append({"x": it["x"], "y": it["y"]})
+        await send_to(player, {
+            "type": "debug_state",
+            "players": players,
+            "monsters": monsters,
+            "projectiles": projectiles,
+            "hearts": hearts,
+            "items": items,
+        })
+
+
 async def game_tick():
     """Unified game loop — processes commands, ticks players/monsters/projectiles at ~30Hz."""
     from server.commands import process_player_commands
@@ -621,6 +682,8 @@ async def game_tick():
         except Exception:
             traceback.print_exc()
         await flush_messages(msgs)
+        # Send debug state snapshots to /viewserver subscribers
+        await _send_debug_state_snapshots()
 
 
 GUARD_DESPAWN_TIMEOUT = 30.0   # seconds before summoned guards vanish

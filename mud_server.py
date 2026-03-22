@@ -135,7 +135,7 @@ async def handle_connection(websocket):
             player.grant_flag("invulnerable")
         await send_to(player, login_msg)
         if os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
-            await send_to(player, {"type": "sword_obtained"})
+            await send_to(player, {"type": "item_obtained", "item_type": "sword", "item_name": "Sword"})
 
         # Room entry — use sync lifecycle with message batching
         on_player_enter_room(player.room)

@@ -823,27 +823,10 @@ function handleMessage(msg) {
     case "quest_update":
       break;
 
-    case "sword_obtained": {
-      const now = Date.now();
-      G.swordPickups.push({ x: G.displayX, y: G.displayY, frame: 0, nextTime: now + 200 });
-      setTimeout(() => {
-        G.playerFlags.add("has_sword");
-        G.infoMessages.push({ text: "You obtained a sword!", expires: Date.now() + 4000 });
-      }, 800);
-      break;
-    }
-
-    case "sword_effect": {
-      const other = G.otherPlayers[msg.name];
-      if (other) {
-        G.swordPickups.push({ x: other.displayX, y: other.displayY, frame: 0, nextTime: Date.now() + 200 });
-      }
-      break;
-    }
 
     case "item_obtained": {
       if (msg.item_type) {
-        // Dungeon item (map/compass) — trigger pickup animation
+        // Item pickup animation (dungeon items, sword, etc.)
         G.itemPickupActive = {
           item_type: msg.item_type,
           item_name: msg.item_name,
@@ -851,10 +834,14 @@ function handleMessage(msg) {
           x: G.displayX,
           y: G.displayY,
         };
-        // Remove from ground items
+        // Remove from ground items (dungeon items only)
         G.dungeonGroundItems = G.dungeonGroundItems.filter(
           it => it.item_type !== msg.item_type
         );
+        // Grant gameplay flag after animation starts
+        if (msg.item_type === "sword") {
+          setTimeout(() => { G.playerFlags.add("has_sword"); }, 500);
+        }
         setTimeout(() => {
           G.infoMessages.push({ text: "You got the " + msg.item_name + "!", expires: Date.now() + 4000 });
         }, 500);
@@ -891,6 +878,16 @@ function handleMessage(msg) {
       );
       break;
     }
+
+    case "debug_state":
+      G.serverState = msg;
+      break;
+
+    case "viewserver_toggle":
+      G.viewServer = msg.enabled;
+      G.serverState = null;
+      G.infoMessages.push({ text: msg.enabled ? "Server view ON" : "Server view OFF", expires: Date.now() + 3000 });
+      break;
 
     case "debug_log":
       dbg(msg.text);
