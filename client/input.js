@@ -58,7 +58,7 @@ document.addEventListener("keydown", (e) => {
       return;
     }
     if (G.state === "idle") {
-      sendToServer({ type: "attack" });
+      sendToServer({ type: "attack", direction: G.myPlayer.direction });
       startAttack(G.myName, G.myPlayer.direction);
       spawnSlashArc(G.myPlayer.direction);
       setState("attacking", { startTime: performance.now() });
@@ -226,7 +226,7 @@ if (G.isMobile) {
     if (!G.ws || !G.myName || G.attackingPlayers[G.myName]) return;
     if (!G.playerFlags.has("has_sword")) return;
     if (G.state !== "idle" && G.state !== "attacking") return;
-    sendToServer({ type: "attack" });
+    sendToServer({ type: "attack", direction: G.myPlayer.direction });
     startAttack(G.myName, G.myPlayer.direction);
     spawnSlashArc(G.myPlayer.direction);
     setState("attacking", { startTime: performance.now() });

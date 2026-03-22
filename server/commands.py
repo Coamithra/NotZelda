@@ -31,7 +31,7 @@ def process_player_commands(player, now, msgs):
         elif cmd_type == "face":
             _process_face(player, data, msgs)
         elif cmd_type == "attack":
-            _process_attack(player, now, msgs)
+            _process_attack(player, data, now, msgs)
         elif cmd_type == "chat":
             _process_chat(player, data, msgs)
 
@@ -296,7 +296,7 @@ def _process_face(player, data, msgs):
 # Attack
 # ---------------------------------------------------------------------------
 
-def _process_attack(player, now, msgs):
+def _process_attack(player, data, now, msgs):
     """Handle a player's sword attack."""
     if player.hp <= 0:
         return
@@ -307,6 +307,12 @@ def _process_attack(player, now, msgs):
         return
     player.last_attack_time = now
     player.dancing = False
+
+    # Use client-supplied direction so quick turn+attack works without waiting
+    # for the server to process the direction change first
+    direction = data.get("direction")
+    if direction in DIRECTIONS:
+        player.direction = direction
 
     msgs.append(("broadcast", player.room, {
         "type": "attack",

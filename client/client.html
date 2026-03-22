@@ -514,7 +514,7 @@ function playerTick() {
       const attackDone = now - G.stateData.startTime >= ATTACK_FRAME_MS * ATTACK_FRAMES;
       if (attackDone) {
         if (G.keysDown["Space"] && G.playerFlags.has("has_sword")) {
-          sendToServer({ type: "attack" });
+          sendToServer({ type: "attack", direction: G.myPlayer.direction });
           startAttack(G.myName, G.myPlayer.direction);
           spawnSlashArc(G.myPlayer.direction);
           setState("attacking", { startTime: performance.now() });
@@ -706,6 +706,6 @@ function gameLoop(timestamp) {
 }
 </script>
 <!-- Input must load after DOM refs are bound and functions defined -->
-<script src="input.js?v=4"></script>
+<script src="input.js?v=5"></script>
 </body>
 </html>
