@@ -8,6 +8,7 @@ Then open http://localhost:8080 in your browser.
 import asyncio
 import json
 import os
+import time
 import sys
 from http import HTTPStatus
 from pathlib import Path
@@ -90,9 +91,15 @@ if os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
 
 async def handle_connection(websocket):
     player = None
+    connect_time = time.time()
     remote = websocket.remote_address
     addr = f"{remote[0]}:{remote[1]}" if remote else "unknown"
-    print(f"[CONN] New connection from {addr}")
+    # Extract real IP and User-Agent from nginx proxy headers
+    headers = websocket.request_headers if hasattr(websocket, 'request_headers') else {}
+    real_ip = headers.get("X-Forwarded-For", addr)
+    user_agent = headers.get("User-Agent", "unknown")
+    ua_short = user_agent[:80]
+    print(f"[CONN] New connection from {real_ip} (UA: {ua_short})")
     try:
         raw = await websocket.recv()
         data = json.loads(raw)
@@ -157,11 +164,13 @@ async def handle_connection(websocket):
     except websockets.ConnectionClosed as e:
         reason = f"code={e.code} reason='{e.reason}'" if e.code else "no close frame"
         who = player.name if player else addr
-        print(f"[DISC] {who} disconnected: {reason}")
-        log_event("DISCONNECT", f"{who} — {reason}")
+        duration = time.time() - connect_time
+        print(f"[DISC] {who} disconnected after {duration:.0f}s: {reason} (IP: {real_ip}, UA: {ua_short})")
+        log_event("DISCONNECT", f"{who} — {reason} — {duration:.0f}s")
     except Exception as e:
         who = player.name if player else addr
-        print(f"[ERROR] {who} error: {type(e).__name__}: {e}")
+        duration = time.time() - connect_time
+        print(f"[ERROR] {who} error after {duration:.0f}s: {type(e).__name__}: {e}")
         log_event("ERROR", f"{who} — {type(e).__name__}: {e}")
     finally:
         if player and websocket in game.players:
