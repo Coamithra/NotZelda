@@ -149,6 +149,7 @@ function handleMessage(msg) {
             if (G.conjuring && G.conjuring.pendingRoomEnter) {
               const pending = G.conjuring.pendingRoomEnter;
               pending._fromConjuring = true;
+              pending._lateArrivals = G.conjuring.lateArrivals || {};
               G.conjuring = null;
               handleMessage(pending);
             }
@@ -272,15 +273,27 @@ function handleMessage(msg) {
           width: m.width || 1, height: m.height || 1,
           walkTime: (m.walk_time || 2.0) * 1000,  // per-monster walk duration in ms
           walkState: null,
-          spawnTime: Date.now() + idx * 40,  // Juice: staggered spawn pop
+          spawnTime: cameFromConjuring ? 0 : Date.now() + idx * 40,
         };
         if (m.walking) {
-          mon.walkState = {
-            fromX: m.walk_from.x, fromY: m.walk_from.y,
-            toX: m.walk_to.x, toY: m.walk_to.y,
-            startTime: performance.now() - (m.walk_progress * mon.walkTime),
-            walkTime: mon.walkTime,
-          };
+          // Advance walk progress by conjuring deferral time so monsters
+          // don't appear at stale positions and then teleport
+          let progress = m.walk_progress;
+          if (cameFromConjuring) {
+            progress = Math.min(1.0, progress + 2500 / mon.walkTime);
+          }
+          if (progress >= 1.0) {
+            // Walk completed during deferral — place at destination
+            mon.displayX = m.walk_to.x;
+            mon.displayY = m.walk_to.y;
+          } else {
+            mon.walkState = {
+              fromX: m.walk_from.x, fromY: m.walk_from.y,
+              toX: m.walk_to.x, toY: m.walk_to.y,
+              startTime: performance.now() - (progress * mon.walkTime),
+              walkTime: mon.walkTime,
+            };
+          }
           mon.x = m.walk_to.x;
           mon.y = m.walk_to.y;
         }
@@ -297,6 +310,13 @@ function handleMessage(msg) {
         };
         G.otherPlayers[p.name] = op;
         if (p.dancing) startDance(p.name);
+      }
+      // Re-apply players who entered during conjuring deferral (their player_entered
+      // arrived after room_enter was queued, so they're not in msg.players)
+      if (cameFromConjuring && msg._lateArrivals) {
+        for (const [name, ep] of Object.entries(msg._lateArrivals)) {
+          if (!G.otherPlayers[name]) G.otherPlayers[name] = ep;
+        }
       }
 
       G.preciseX = G.myPlayer.x;
@@ -411,6 +431,11 @@ function handleMessage(msg) {
         };
         G.otherPlayers[msg.name] = ep;
         if (msg.dancing) startDance(msg.name);
+        // Track arrivals during conjuring so deferred room_enter doesn't wipe them
+        if (G.conjuring) {
+          if (!G.conjuring.lateArrivals) G.conjuring.lateArrivals = {};
+          G.conjuring.lateArrivals[msg.name] = ep;
+        }
         appendChatLog(`<span class="chat-system">${escHtml(msg.name)} entered the room</span>`);
       }
       break;
