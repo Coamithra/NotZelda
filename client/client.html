@@ -461,6 +461,9 @@ function playerTick() {
       if (!G.isMoving || G.lastMoveDir !== dir) {
         spawnDustPuff(G.preciseX, G.preciseY, dir);
       }
+      if (G.myPlayer.direction !== dir) {
+        sendToServer({ type: "face", direction: dir });
+      }
       G.lastMoveDir = dir;
       G.myPlayer.direction = dir;
       G.isMoving = true;
