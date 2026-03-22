@@ -51,6 +51,7 @@ When pushing to git make sure to update CLAUDE.md first!
 - **All rooms loaded from `.room` files** — no hardcoded room definitions in Python.
 - **AI prompt templates** are in `server/prompts/*.txt` — edit the text files directly, no Python changes needed.
 - **AI generation uses Claude CLI by default** (`AI_BACKEND=cli`), not the API. The `.env` must NOT set `AI_BACKEND=api`.
+- **NPC chat has a server-wide hourly budget** (`NPC_CHATS_PER_HOUR` in `npc_chat.py`). When exhausted, NPCs fall back to static dialog. The system prompt is split into static (per-NPC, cached) and dynamic (per-player) parts for API prompt caching. Cooldown starts from NPC response time, not player message time.
 - **Boss monsters** have `"boss": True` in their stats dict. Use `monster.is_boss` — never hardcode boss checks to a specific kind.
 - **Trap rooms** (lock-in): dungeon rooms with 3+ monsters have a 1/3 chance of locking doors until all monsters are defeated. Boss rooms always lock. Decided at resolution time in `_resolve_room_from_entry()`. Runtime lock state tracked in `game.locked_rooms`. `CD` tile = closed door. Dungeon items are hidden and non-pickable during trap lockdown.
 - **Monster walk collision**: server checks collision at two points during a walk — at 50% (hitbox at the midpoint between origin and destination) and at 100% (hitbox at destination). This gives players a dodge window since the monster doesn't reach the target tile until the walk completes.

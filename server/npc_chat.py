@@ -28,6 +28,7 @@ NPC_API_TIMEOUT = 10.0      # API is faster
 MAX_HISTORY = 10            # conversation turns to remember per player-NPC pair
 NPC_CHAT_COOLDOWN = 3.0     # seconds between NPC chat messages per player
 GUARD_SUMMON_COOLDOWN = 60.0  # seconds between guard summons per room
+NPC_CHATS_PER_HOUR = 150    # server-wide hourly LLM call budget
 
 # ---------------------------------------------------------------------------
 # NPC gift item effects — server-side logic keyed by display name.
@@ -49,6 +50,13 @@ GIFT_EFFECTS = {
 _conversations: dict[tuple[str, str], list[dict]] = defaultdict(list)
 _last_chat_time: dict[str, float] = {}  # player_name -> last npc chat time
 _last_guard_summon: dict[str, float] = {}  # room_id -> last summon time
+
+# ---------------------------------------------------------------------------
+# Server-wide hourly budget tracking
+# ---------------------------------------------------------------------------
+
+_hourly_chat_count = 0
+_hourly_reset_time = 0.0  # monotonic — resets every hour
 
 # ---------------------------------------------------------------------------
 # Town guard monster — spawned when NPCs call for help
@@ -141,8 +149,13 @@ seek to lift the curse on Princess Amara."""
 
 
 def _build_system_prompt(guard: dict, room_id: str, player_name: str, player_desc: str,
-                         player_flags: set | None = None) -> str:
-    """Build a system prompt for an NPC conversation."""
+                         player_flags: set | None = None) -> tuple[str, str]:
+    """Build a system prompt for NPC conversation.
+
+    Returns (static_prompt, dynamic_prompt) — split for prompt caching.
+    The static part is per-NPC (cacheable across all players talking to this NPC).
+    The dynamic part is per-player (small, changes per conversation).
+    """
     room = game.rooms.get(room_id, {})
     room_name = room.get("name", room_id)
     biome = room.get("biome", "unknown")
@@ -152,7 +165,32 @@ def _build_system_prompt(guard: dict, room_id: str, player_name: str, player_des
         # Generic fallback based on sprite type
         personality = f"A {guard['sprite']} who lives in this area."
 
-    # Gift section — if NPC has an item to give (defined in .room file)
+    # Static part — NPC identity, world context, rules (shared across players)
+    static = f"""\
+You are {guard['name']}, an NPC in a fantasy adventure game.
+You are in {room_name} ({biome} area).
+
+Your personality: {personality}
+
+World context:
+{WORLD_CONTEXT}
+
+Rules:
+- Stay in character at ALL times. You ARE this character.
+- KEEP IT VERY SHORT. One sentence, 10-15 words max. This is a tiny speech bubble in a game.
+- Be colorful and interesting — give the player a reason to talk to you.
+- You can hint at lore, give directions, share rumors, or be funny.
+- Never break the fourth wall or mention being an AI.
+- Never use quotation marks around your response.
+- Never use em dashes. Use commas or periods instead.
+- If asked about game mechanics, answer in-character (e.g. "swing your sword" not "press space").
+- Match your speech style to your character (a farmer talks differently than a ghost).
+- You may use the adventurer's name when addressing them.
+- If the adventurer is being rude, threatening, hostile, or insulting toward you, you can call \
+for armed guards by including [CALL_GUARDS] at the end of your response. Only do this when \
+genuinely provoked, not for playful banter. Example: Guards! Seize this scoundrel! [CALL_GUARDS]"""
+
+    # Dynamic part — player-specific context (kept small to preserve cache hits)
     gift_section = ""
     gift = guard.get("gift")
     if gift:
@@ -178,44 +216,24 @@ To give it, include [GIVE_ITEM] at the END of your response after your dialog.
 Do NOT give it too easily. The adventurer must genuinely earn it through conversation.
 Do NOT mention the tag in your speech. Example: Take this, you've earned it! [GIVE_ITEM]"""
 
-    return f"""\
-You are {guard['name']}, an NPC in a fantasy adventure game.
-You are in {room_name} ({biome} area).
-You are speaking with an adventurer named {player_name}. They look like: {player_desc}
+    dynamic = f"""\
+You are speaking with an adventurer named {player_name}. They look like: {player_desc}{gift_section}"""
 
-Your personality: {personality}
-
-World context:
-{WORLD_CONTEXT}
-
-Rules:
-- Stay in character at ALL times. You ARE this character.
-- KEEP IT VERY SHORT. One sentence, 10-15 words max. This is a tiny speech bubble in a game.
-- Be colorful and interesting — give the player a reason to talk to you.
-- You can hint at lore, give directions, share rumors, or be funny.
-- Never break the fourth wall or mention being an AI.
-- Never use quotation marks around your response.
-- Never use em dashes. Use commas or periods instead.
-- If asked about game mechanics, answer in-character (e.g. "swing your sword" not "press space").
-- Match your speech style to your character (a farmer talks differently than a ghost).
-- You may use the adventurer's name when addressing them.
-- If the adventurer is being rude, threatening, hostile, or insulting toward you, you can call \
-for armed guards by including [CALL_GUARDS] at the end of your response. Only do this when \
-genuinely provoked, not for playful banter. Example: Guards! Seize this scoundrel! [CALL_GUARDS]\
-{gift_section}"""
+    return static, dynamic
 
 
 # ---------------------------------------------------------------------------
 # LLM call (simplified — no JSON parsing needed, just text)
 # ---------------------------------------------------------------------------
 
-async def _call_npc_llm(system_prompt: str, messages: list[dict]) -> str | None:
+async def _call_npc_llm(static_prompt: str, dynamic_prompt: str,
+                        messages: list[dict]) -> str | None:
     """Call the LLM for NPC conversation. Returns plain text or None on failure."""
     try:
         if AI_BACKEND == "api":
-            return await _call_api(system_prompt, messages)
+            return await _call_api(static_prompt, dynamic_prompt, messages)
         else:
-            return await _call_cli(system_prompt, messages)
+            return await _call_cli(static_prompt, dynamic_prompt, messages)
     except asyncio.TimeoutError:
         print("[NPC_CHAT] Timeout waiting for LLM response")
         return None
@@ -224,8 +242,12 @@ async def _call_npc_llm(system_prompt: str, messages: list[dict]) -> str | None:
         return None
 
 
-async def _call_cli(system_prompt: str, messages: list[dict]) -> str:
+async def _call_cli(static_prompt: str, dynamic_prompt: str,
+                    messages: list[dict]) -> str:
     """Call the local Claude CLI for NPC chat."""
+    # CLI doesn't support prompt caching — concatenate both parts
+    system_prompt = static_prompt + "\n\n" + dynamic_prompt
+
     # Build a conversation prompt from history
     parts = [system_prompt, ""]
     for msg in messages:
@@ -262,8 +284,19 @@ async def _call_cli(system_prompt: str, messages: list[dict]) -> str:
     return text.strip()
 
 
-async def _call_api(system_prompt: str, messages: list[dict]) -> str:
-    """Call the Anthropic API for NPC chat."""
+async def _call_api(static_prompt: str, dynamic_prompt: str,
+                    messages: list[dict]) -> str:
+    """Call the Anthropic API for NPC chat with prompt caching.
+
+    The system prompt is split into two blocks:
+    - Static (NPC identity, personality, world, rules) — marked for caching
+      so it's reused across all players talking to the same NPC.
+    - Dynamic (player name, description, gift status) — small, uncached,
+      changes per player without invalidating the cached prefix.
+
+    Note: Haiku requires ~2048 tokens in the cached prefix for caching to
+    activate. Shorter prompts are sent correctly but may not get cache hits.
+    """
     import anthropic
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -277,7 +310,17 @@ async def _call_api(system_prompt: str, messages: list[dict]) -> str:
             lambda: client.messages.create(
                 model=NPC_MODEL,
                 max_tokens=100,
-                system=system_prompt,
+                system=[
+                    {
+                        "type": "text",
+                        "text": static_prompt,
+                        "cache_control": {"type": "ephemeral"},
+                    },
+                    {
+                        "type": "text",
+                        "text": dynamic_prompt,
+                    },
+                ],
                 messages=messages,
                 metadata={"user_id": "notzelda-npc-chat"},
             )
@@ -309,15 +352,38 @@ async def handle_npc_chat(player, guard: dict, text: str):
     3. Call LLM with conversation history
     4. Broadcast the NPC's response
     """
-    # Rate limit
+    global _hourly_chat_count, _hourly_reset_time
+
+    # Rate limit — cooldown starts from when NPC last responded
     now = time.monotonic()
     last = _last_chat_time.get(player.name, 0)
     if now - last < NPC_CHAT_COOLDOWN:
         return
-    _last_chat_time[player.name] = now
+    _last_chat_time[player.name] = now  # prevent dupes during LLM call
 
     npc_name = guard["name"]
     conv_key = (player.name, npc_name)
+
+    # --- Server-wide hourly budget ---
+    if now - _hourly_reset_time >= 3600:
+        _hourly_chat_count = 0
+        _hourly_reset_time = now
+
+    if _hourly_chat_count >= NPC_CHATS_PER_HOUR:
+        # Budget exhausted — fall back to static dialog
+        response = guard.get("dialog") or "..."
+        log_event("NPC_CHAT", f"BUDGET — {npc_name} used static dialog for {player.name}")
+        await asyncio.sleep(1.0)
+        _last_chat_time[player.name] = time.monotonic()
+        room_name = game.rooms.get(player.room, {}).get("name", player.room)
+        await broadcast_to_room(player.room, {
+            "type": "chat",
+            "from": npc_name,
+            "text": response,
+        })
+        return
+
+    _hourly_chat_count += 1
 
     # Add player message to history
     _conversations[conv_key].append({"role": "user", "content": text})
@@ -326,14 +392,16 @@ async def handle_npc_chat(player, guard: dict, text: str):
     if len(_conversations[conv_key]) > MAX_HISTORY * 2:
         _conversations[conv_key] = _conversations[conv_key][-MAX_HISTORY * 2:]
 
-    # Build system prompt (pass player flags so gift prompts can check inventory)
-    system = _build_system_prompt(guard, player.room, player.name,
-                                  player.description or "a wandering adventurer",
-                                  player.flags)
+    # Build system prompt (split for caching — static is per-NPC, dynamic is per-player)
+    static_prompt, dynamic_prompt = _build_system_prompt(
+        guard, player.room, player.name,
+        player.description or "a wandering adventurer",
+        player.flags)
 
     # Call LLM
     t0 = time.monotonic()
-    response = await _call_npc_llm(system, _conversations[conv_key])
+    response = await _call_npc_llm(static_prompt, dynamic_prompt,
+                                   _conversations[conv_key])
 
     # NPCs should pause before responding (feels more natural)
     elapsed = time.monotonic() - t0
@@ -363,6 +431,9 @@ async def handle_npc_chat(player, guard: dict, text: str):
 
     # Add NPC response to history (without tags)
     _conversations[conv_key].append({"role": "assistant", "content": response})
+
+    # Cooldown starts from when the NPC finishes responding
+    _last_chat_time[player.name] = time.monotonic()
 
     # Log and broadcast NPC response
     room_name = game.rooms.get(player.room, {}).get("name", player.room)
