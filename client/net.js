@@ -121,7 +121,7 @@ function handleMessage(msg) {
       renderPlayers();
       renderUI();
       G.ctx = savedCtx2;
-      G.conjuring = { startTime: Date.now(), pendingRoomEnter: null, progressSteps: [], oldCanvas: conjureCanvas };
+      G.conjuring = { startTime: Date.now(), progressSteps: [], oldCanvas: conjureCanvas };
       break;
     }
 
@@ -137,27 +137,32 @@ function handleMessage(msg) {
       break;
 
     case "room_enter": {
-      // If conjuring animation is active, check minimum duration
-      let cameFromConjuring = !!msg._fromConjuring;
+      // Process immediately even during conjuring — the conjuring animation
+      // is purely visual overlay. Room state updates in the background so
+      // monsters, players etc. stay in sync with the server.
+      const cameFromConjuring = !!G.conjuring;
       if (G.conjuring) {
-        const elapsed = Date.now() - G.conjuring.startTime;
+        // Schedule end of conjuring overlay — fade into the already-live room
         const MIN_CONJURE_MS = 2500;
-        if (elapsed < MIN_CONJURE_MS) {
-          // Queue this message until minimum time passes
-          G.conjuring.pendingRoomEnter = msg;
-          setTimeout(() => {
-            if (G.conjuring && G.conjuring.pendingRoomEnter) {
-              const pending = G.conjuring.pendingRoomEnter;
-              pending._fromConjuring = true;
-              pending._lateArrivals = G.conjuring.lateArrivals || {};
-              G.conjuring = null;
-              handleMessage(pending);
-            }
-          }, MIN_CONJURE_MS - elapsed);
-          break;
-        }
-        G.conjuring = null;
-        cameFromConjuring = true;
+        const elapsed = Date.now() - G.conjuring.startTime;
+        const remaining = Math.max(0, MIN_CONJURE_MS - elapsed);
+        setTimeout(() => {
+          if (G.conjuring) {
+            G.conjuring = null;
+            G.transition = {
+              type: "fade",
+              direction: "north",
+              oldCanvas: (() => {
+                const c = document.createElement("canvas");
+                c.width = CW; c.height = CH;
+                c.getContext("2d").fillRect(0, 0, CW, CH);
+                return c;
+              })(),
+              startTime: Date.now(),
+              duration: 500,
+            };
+          }
+        }, remaining);
       }
 
       // Store dungeon debug info if present
@@ -269,21 +274,22 @@ function handleMessage(msg) {
       G.monsterAttackFlashes = [];
       G.monsters = (msg.monsters || []).map((m, idx) => {
         const mon = {
-          id: m.id, kind: m.kind, x: m.x, y: m.y,
+          id: m.id, kind: m.kind, x: m.x, y: m.y, displayX: m.x, displayY: m.y,
           width: m.width || 1, height: m.height || 1,
           walkTime: (m.walk_time || 2.0) * 1000,  // per-monster walk duration in ms
           walkState: null,
           spawnTime: Date.now() + idx * 40,  // Juice: staggered spawn pop
         };
-        // Place walking monsters at their destination — the snapshot is already
-        // stale by the time the client renders, so starting mid-walk causes a
-        // visible teleport when the next server update arrives.
         if (m.walking) {
+          mon.walkState = {
+            fromX: m.walk_from.x, fromY: m.walk_from.y,
+            toX: m.walk_to.x, toY: m.walk_to.y,
+            startTime: performance.now() - (m.walk_progress * mon.walkTime),
+            walkTime: mon.walkTime,
+          };
           mon.x = m.walk_to.x;
           mon.y = m.walk_to.y;
         }
-        mon.displayX = mon.x;
-        mon.displayY = mon.y;
         return mon;
       });
       for (const p of msg.players) {
@@ -298,14 +304,6 @@ function handleMessage(msg) {
         G.otherPlayers[p.name] = op;
         if (p.dancing) startDance(p.name);
       }
-      // Re-apply players who entered during conjuring deferral (their player_entered
-      // arrived after room_enter was queued, so they're not in msg.players)
-      if (cameFromConjuring && msg._lateArrivals) {
-        for (const [name, ep] of Object.entries(msg._lateArrivals)) {
-          if (!G.otherPlayers[name]) G.otherPlayers[name] = ep;
-        }
-      }
-
       G.preciseX = G.myPlayer.x;
       G.preciseY = G.myPlayer.y;
       G.lastReportedX = G.myPlayer.x;
@@ -338,7 +336,11 @@ function handleMessage(msg) {
         G.dungeonGroundItems = [];
       }
 
-      if (cameFromConjuring || isFirstRoom) {
+      if (cameFromConjuring) {
+        // Conjuring overlay is still active — the setTimeout in the conjuring
+        // handler will create the fade transition when the animation ends.
+        // Don't create a transition now.
+      } else if (isFirstRoom) {
         // Fade in from black on first login
         G.transition = {
           type: "fade",
@@ -418,11 +420,6 @@ function handleMessage(msg) {
         };
         G.otherPlayers[msg.name] = ep;
         if (msg.dancing) startDance(msg.name);
-        // Track arrivals during conjuring so deferred room_enter doesn't wipe them
-        if (G.conjuring) {
-          if (!G.conjuring.lateArrivals) G.conjuring.lateArrivals = {};
-          G.conjuring.lateArrivals[msg.name] = ep;
-        }
         appendChatLog(`<span class="chat-system">${escHtml(msg.name)} entered the room</span>`);
       }
       break;
