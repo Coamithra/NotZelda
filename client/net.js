@@ -269,34 +269,21 @@ function handleMessage(msg) {
       G.monsterAttackFlashes = [];
       G.monsters = (msg.monsters || []).map((m, idx) => {
         const mon = {
-          id: m.id, kind: m.kind, x: m.x, y: m.y, displayX: m.x, displayY: m.y,
+          id: m.id, kind: m.kind, x: m.x, y: m.y,
           width: m.width || 1, height: m.height || 1,
           walkTime: (m.walk_time || 2.0) * 1000,  // per-monster walk duration in ms
           walkState: null,
-          spawnTime: cameFromConjuring ? 0 : Date.now() + idx * 40,
+          spawnTime: Date.now() + idx * 40,  // Juice: staggered spawn pop
         };
+        // Place walking monsters at their destination — the snapshot is already
+        // stale by the time the client renders, so starting mid-walk causes a
+        // visible teleport when the next server update arrives.
         if (m.walking) {
-          // Advance walk progress by conjuring deferral time so monsters
-          // don't appear at stale positions and then teleport
-          let progress = m.walk_progress;
-          if (cameFromConjuring) {
-            progress = Math.min(1.0, progress + 2500 / mon.walkTime);
-          }
-          if (progress >= 1.0) {
-            // Walk completed during deferral — place at destination
-            mon.displayX = m.walk_to.x;
-            mon.displayY = m.walk_to.y;
-          } else {
-            mon.walkState = {
-              fromX: m.walk_from.x, fromY: m.walk_from.y,
-              toX: m.walk_to.x, toY: m.walk_to.y,
-              startTime: performance.now() - (progress * mon.walkTime),
-              walkTime: mon.walkTime,
-            };
-          }
           mon.x = m.walk_to.x;
           mon.y = m.walk_to.y;
         }
+        mon.displayX = mon.x;
+        mon.displayY = mon.y;
         return mon;
       });
       for (const p of msg.players) {
