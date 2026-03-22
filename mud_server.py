@@ -336,10 +336,6 @@ async def main():
               f"tile {t.real_count}/{t.capacity}, room {r.real_count}/{r.capacity}")
 
     behavior_engine.init(players_in_room, ROOM_COLS, ROOM_ROWS, game.is_walkable_tile, game.guards, game.rooms)
-    # Temp: enable websockets protocol-level debug logging
-    ws_logger = logging.getLogger("websockets")
-    ws_logger.setLevel(logging.DEBUG)
-    ws_logger.addHandler(logging.StreamHandler())
     port = 8080
     server = await websockets.serve(
         handle_connection, "0.0.0.0", port,
@@ -348,6 +344,26 @@ async def main():
         ping_interval=15,
         ping_timeout=120,
     )
+
+    # TLS WebSocket on port 8443 — bypasses nginx to avoid iOS Safari 30s disconnect
+    tls_port = 8443
+    cert_path = Path("/etc/letsencrypt/live/notzelda.haraldmaassen.com")
+    if cert_path.exists():
+        import ssl
+        ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ssl_ctx.load_cert_chain(cert_path / "fullchain.pem", cert_path / "privkey.pem")
+        tls_server = await websockets.serve(
+            handle_connection, "0.0.0.0", tls_port,
+            process_request=process_request,
+            ssl=ssl_ctx,
+            compression=None,
+            ping_interval=15,
+            ping_timeout=120,
+        )
+        print(f"TLS WebSocket on port {tls_port}")
+    else:
+        print(f"No TLS cert found at {cert_path} — TLS WebSocket disabled")
+
     asyncio.create_task(game_tick())
     load_deprecation_timestamp()
     load_deprecated_sets()

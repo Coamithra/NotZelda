@@ -29,8 +29,10 @@ function connect(name, description) {
   if (G.pingInterval) { clearInterval(G.pingInterval); G.pingInterval = null; }
 
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  // Use port 8443 for TLS WebSocket (bypasses nginx — fixes iOS Safari 30s disconnect)
+  const wsHost = proto === "wss:" ? location.hostname + ":8443" : location.host;
   dbg(`Connecting...`);
-  G.ws = new WebSocket(`${proto}//${location.host}/ws`);
+  G.ws = new WebSocket(`${proto}//${wsHost}/ws`);
 
   G.ws.onopen = () => {
     dbg(`Connected, logging in`);
