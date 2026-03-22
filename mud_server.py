@@ -334,8 +334,8 @@ async def main():
     server = await websockets.serve(
         handle_connection, "0.0.0.0", port,
         process_request=process_request,
-        ping_interval=30,
-        ping_timeout=60,
+        ping_interval=None,
+        ping_timeout=None,
     )
     asyncio.create_task(game_tick())
     load_deprecation_timestamp()
