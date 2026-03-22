@@ -7,6 +7,7 @@ Then open http://localhost:8080 in your browser.
 
 import asyncio
 import json
+import logging
 import os
 import time
 import sys
@@ -335,6 +336,10 @@ async def main():
               f"tile {t.real_count}/{t.capacity}, room {r.real_count}/{r.capacity}")
 
     behavior_engine.init(players_in_room, ROOM_COLS, ROOM_ROWS, game.is_walkable_tile, game.guards, game.rooms)
+    # Temp: enable websockets protocol-level debug logging
+    ws_logger = logging.getLogger("websockets")
+    ws_logger.setLevel(logging.DEBUG)
+    ws_logger.addHandler(logging.StreamHandler())
     port = 8080
     server = await websockets.serve(
         handle_connection, "0.0.0.0", port,
