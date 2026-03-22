@@ -344,6 +344,7 @@ async def main():
     server = await websockets.serve(
         handle_connection, "0.0.0.0", port,
         process_request=process_request,
+        compression=None,
         ping_interval=None,
         ping_timeout=None,
     )
