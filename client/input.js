@@ -225,7 +225,11 @@ if (G.isMobile) {
     e.preventDefault();
     if (!G.ws || !G.myName || G.attackingPlayers[G.myName]) return;
     if (!G.playerFlags.has("has_sword")) return;
-    G.ws.send(JSON.stringify({ type: "attack" }));
+    if (G.state !== "idle" && G.state !== "attacking") return;
+    sendToServer({ type: "attack" });
+    startAttack(G.myName, G.myPlayer.direction);
+    spawnSlashArc(G.myPlayer.direction);
+    setState("attacking", { startTime: performance.now() });
   });
 
   // Re-scale when login completes and game screen appears
