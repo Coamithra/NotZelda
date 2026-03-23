@@ -10,6 +10,8 @@ For detailed module descriptions and game system documentation, see [docs/ARCHIT
 
 **Project tracking:** [Trello — Legends of Amara](https://trello.com/b/FEqdR6QL/legends-of-amara). Bugs, features, and refactoring are tracked there.
 
+**Contributing workflow:** See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for the step-by-step runbook for tackling any Trello card (pick up → research → design → branch & implement → verify → review & ship).
+
 ## General Rules
 
 When pushing to git make sure to update CLAUDE.md first!
