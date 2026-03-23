@@ -518,10 +518,21 @@ def _tick_all_monsters(now, msgs):
                 print(f"[MONSTER TICK ERROR] monster {i} ({monster.kind}) in {room_id} "
                       f"state={monster.state}: {e}")
                 traceback.print_exc()
-                # Reset to safe state so the monster doesn't stay corrupted
+                # Reset to safe state so the monster doesn't stay corrupted.
+                # Snap position to nearest tile in case we crashed mid-walk
+                # at a fractional coordinate.
+                was_walking = monster.state == "walking"
+                monster.x = round(monster.x)
+                monster.y = round(monster.y)
                 monster.state = "idle"
                 monster.state_data = {}
+                if was_walking:
+                    msgs.append(("broadcast", room_id, {
+                        "type": "monster_walk_complete", "id": i,
+                    }, None))
                 if _debug:
+                    # Re-raises past the per-monster loop — skips remaining
+                    # monsters/rooms for this tick. Acceptable for dev only.
                     raise
 
 
