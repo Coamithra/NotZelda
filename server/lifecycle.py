@@ -7,7 +7,7 @@ import time
 from server.state import game
 from server.constants import (
     ROOM_RESET_COOLDOWN, ENTRY_DIR, EDGE_SPAWN_POINTS, DEFAULT_SPAWN,
-    ROOM_COLS, ROOM_ROWS, DOORWAY_TILES,
+    ROOM_COLS, ROOM_ROWS, DOORWAY_TILES, STARTING_ROOM,
 )
 from server.models import Monster
 from server.net import players_in_room, player_info
@@ -156,7 +156,16 @@ def on_player_leave_room(room_id: str, msgs: list, skip_dungeon_teardown: bool =
 
 def send_room_enter(player, msgs: list, exit_direction: str = None):
     """Build and append the room_enter message with all room data."""
-    room = game.rooms[player.room]
+    room = game.rooms.get(player.room)
+    if not room:
+        print(f"[BUG] send_room_enter: room {player.room} missing for {player.name}! Redirecting to spawn.")
+        assert os.environ.get("DEBUG_MODE", "").lower() not in ("1", "true"), \
+            f"send_room_enter called with destroyed room {player.room} — this should never happen"
+        player.room = STARTING_ROOM
+        spawn = game.rooms[STARTING_ROOM]["spawn_points"]["default"]
+        player.x, player.y = float(spawn[0]), float(spawn[1])
+        room = game.rooms[STARTING_ROOM]
+        exit_direction = None
     others = [player_info(p) for p in players_in_room(player.room, exclude=player.ws)]
     guards = game.guards.get(player.room, [])
     monsters = []
@@ -473,6 +482,20 @@ def do_room_transition(player, exit_direction: str, msgs: list):
         # (they're removed from game.players so dungeon_player_count would be wrong)
         entering_dungeon = is_dungeon_room(new_room_id)
         on_player_leave_room(old_room, msgs, skip_dungeon_teardown=entering_dungeon)
+
+        # Defensive: verify destination room wasn't destroyed by dungeon teardown.
+        # This should never happen with the current synchronous tick design, but
+        # guards against future code changes introducing await points mid-transition.
+        if new_room_id not in game.rooms:
+            print(f"[BUG] Room {new_room_id} destroyed mid-transition for {player.name}! Redirecting to spawn.")
+            assert os.environ.get("DEBUG_MODE", "").lower() not in ("1", "true"), \
+                f"Room {new_room_id} destroyed during do_room_transition — this should never happen"
+            new_room_id = STARTING_ROOM
+            player.room = STARTING_ROOM
+            spawn = game.rooms[STARTING_ROOM]["spawn_points"]["default"]
+            player.x, player.y = float(spawn[0]), float(spawn[1])
+            exit_direction = None
+
         on_player_enter_room(new_room_id)
 
         # Adjust spawn position for locked trap rooms — spawn 1 tile inward
