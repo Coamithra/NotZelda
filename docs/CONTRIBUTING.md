@@ -6,8 +6,9 @@ Step-by-step workflow for picking up and completing any card from the [Legends o
 
 ## Phase 1: Pick Up the Card
 
-1. **Pull the card** — Read the full card description, comments, and any linked docs (e.g. `docs/PLAN_AI_GENERATION.md`, `docs/PLAN_WALK_SYSTEM.md`)
-2. **Move card to In Progress** — `move_card` to the "Features (In Progress)" list
+1. **Pull latest master** — `git pull origin master` to ensure you're working from the newest code
+2. **Pull the card** — Read the full card description, comments, and any linked docs (e.g. `docs/PLAN_AI_GENERATION.md`, `docs/PLAN_WALK_SYSTEM.md`)
+3. **Move card to In Progress** — `move_card` to the "Features (In Progress)" list
 
 ## Phase 2: Research
 
