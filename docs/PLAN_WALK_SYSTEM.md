@@ -179,5 +179,4 @@ In practice, ship Steps 1–6 as one commit since they're tightly coupled.
 
 ## Deferred
 
-- **Monster fleeing exception** — requires monsters to also have walk state. Will be added later.
-- **Bump animation on wall rejection** — cosmetic polish, add after core system works.
+Moved to Trello: https://trello.com/b/FEqdR6QL/legends-of-amara

@@ -559,9 +559,9 @@ resolution is deferred to room entry.**
   5. Store assignments in dungeon instance: `cell → library_entry`
   6. Resolve entrance room immediately (if placeholder, generate it)
   7. Player enters dungeon immediately
-- [ ] Add lazy resolution in `on_player_enter_room()`:
+- [x] Add lazy resolution in `on_player_enter_room()`:
   1. Already resolved? Use it (instant). ✅
-  2. Real library entry? Late-bind monster/tile refs → instant. **← NOT DONE**
+  2. Real library entry? Late-bind monster/tile refs → instant. **(moved to Trello)**
   3. Placeholder? Call `generate_room()` → register monsters/tiles, add to libraries, persist. Falls back to permanent room on failure. ✅
   4. API failure? Use fallback room from permanent entries. ✅
   5. Send all needed custom_sprites/custom_tiles to client. ✅
@@ -616,39 +616,14 @@ verify fallback rooms work.
 ---
 
 ### Stage 8: Monster Variant System
-**Goal:** AI creates recognizable variants of existing monsters.
 
-Tasks:
-- [ ] When generating a monster in mode B (tweak):
-  - Pick a base monster from library (weighted toward most-used or
-    best-tagged matches)
-  - Send full base monster data to AI with instruction to create variant
-  - AI can: change colors, add/remove sprite layers, adjust behavior
-    parameters, modify stats, rename
-  - Validate output against same rules as brand new monsters
-- [ ] Track lineage: variant stores `based_on` field pointing to base
-- [ ] Control mode ratio: configurable A/B split (default 30/70)
-- [ ] Skew toward mode A when library is sparse (< 10 monsters)
-
-**Test:** Generate 10 variants of "slime". Verify they look related but
-distinct — different colors, maybe extra sprite layers, tweaked behaviors.
+Moved to Trello: https://trello.com/b/FEqdR6QL/legends-of-amara
 
 ---
 
 ### Stage 9: Polish & Resilience
-**Goal:** Production-ready. Handles edge cases, feels polished.
 
-Tasks:
-- [ ] Generation timeout: if API takes > 5s, fall back to library content
-- [ ] Offline mode: if API key not set, dungeon uses only hand-crafted
-      templates (current behavior, fully backward compatible)
-- [ ] Difficulty scaling: deeper dungeon rooms request harder monsters
-- [ ] Themed dungeons: AI gets a theme hint (fire, ice, shadow) that
-      influences all generated content in that instance
-- [ ] Monster death messages: "You defeated the Flame Wyrm!"
-- [ ] Content stats endpoint: `/admin/library-stats` shows library
-      composition, generation counts, API usage
-- [ ] Stress testing: generate 100 monsters, verify all valid
+Moved to Trello: https://trello.com/b/FEqdR6QL/legends-of-amara
 
 
 ## Dependency Graph
