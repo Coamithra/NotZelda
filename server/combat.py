@@ -133,7 +133,9 @@ async def flush_messages(msgs: list):
             await send_to(player, msg)
         elif kind == "death":
             _, player, old_room_id = entry
-            asyncio.ensure_future(_death_respawn(player, old_room_id))
+            player.dead = True
+            player.death_time = time.monotonic()
+            player.death_room = old_room_id
         elif kind == "guard_chat":
             _, player, guard = entry
             asyncio.ensure_future(handle_quest_npc(player, guard))
@@ -148,50 +150,41 @@ async def flush_messages(msgs: list):
     msgs.clear()
 
 
-async def _death_respawn(player, old_room_id):
-    """Background task — wait for death animation, then respawn the player."""
-    await asyncio.sleep(PLAYER_RESPAWN_DELAY)
+def _respawn_player(player, msgs):
+    """Synchronous respawn — called from _tick_players when delay has elapsed."""
+    from server.lifecycle import on_player_enter_room, on_player_leave_room, send_room_enter
 
-    # If player disconnected during death animation, skip respawn
-    if player.ws not in game.players:
-        return
+    old_room_id = player.death_room
+    player.dead = False
+    player.death_time = 0.0
+    player.death_room = None
+    player.hp = player.max_hp
+    player.room = STARTING_ROOM
+    spawn = game.rooms[STARTING_ROOM]["spawn_points"]["default"]
+    player.x, player.y = float(spawn[0]), float(spawn[1])
+    player.direction = "down"
+    player.dancing = False
+    player.pending_collisions.clear()
+    player.command_queue.clear()
 
-    # Remove from game during respawn so ticks/projectiles can't target us
-    game.players.pop(player.ws, None)
-    try:
-        player.hp = player.max_hp
-        player.room = STARTING_ROOM
-        spawn = game.rooms[STARTING_ROOM]["spawn_points"]["default"]
-        player.x, player.y = float(spawn[0]), float(spawn[1])
-        player.direction = "down"
-        player.dancing = False
+    # Despawn summoned town guards — their job is done
+    if old_room_id in game.room_monsters:
+        for i, m in enumerate(game.room_monsters[old_room_id]):
+            if m.kind == "town_guard" and m.alive:
+                m.alive = False
+                msgs.append(("broadcast", old_room_id, {
+                    "type": "monster_killed",
+                    "id": i, "x": m.x, "y": m.y,
+                }, None))
 
-        from server.lifecycle import on_player_enter_room, on_player_leave_room, send_room_enter
-
-        # Despawn summoned town guards — their job is done
-        msgs = []
-        if old_room_id in game.room_monsters:
-            for i, m in enumerate(game.room_monsters[old_room_id]):
-                if m.kind == "town_guard" and m.alive:
-                    m.alive = False
-                    msgs.append(("broadcast", old_room_id, {
-                        "type": "monster_killed",
-                        "id": i, "x": m.x, "y": m.y,
-                    }, None))
-
-        msgs.append(("broadcast", old_room_id, {
-            "type": "player_left", "name": player.name,
-        }, None))
-        on_player_leave_room(old_room_id, msgs)
-        on_player_enter_room(STARTING_ROOM)
-        send_room_enter(player, msgs)
-        msgs.append(("broadcast", STARTING_ROOM,
-                      {"type": "player_entered", **player_info(player)}, player.ws))
-        await flush_messages(msgs)
-    finally:
-        # Only re-add if player didn't disconnect during respawn
-        if player.ws not in game.players:
-            game.players[player.ws] = player
+    msgs.append(("broadcast", old_room_id, {
+        "type": "player_left", "name": player.name,
+    }, None))
+    on_player_leave_room(old_room_id, msgs)
+    on_player_enter_room(STARTING_ROOM)
+    send_room_enter(player, msgs)
+    msgs.append(("broadcast", STARTING_ROOM,
+                  {"type": "player_entered", **player_info(player)}, player.ws))
 
 
 # ---------------------------------------------------------------------------
@@ -439,9 +432,10 @@ EXEC_HANDLERS = {
 # ---------------------------------------------------------------------------
 
 def _tick_players(now, msgs):
-    """Player tick — no walk state to advance in free-movement mode.
-    Collision checks are handled in _process_position_update in commands.py."""
-    pass
+    """Check dead players for respawn after death animation delay."""
+    for player in list(game.players.values()):
+        if player.dead and now - player.death_time >= PLAYER_RESPAWN_DELAY:
+            _respawn_player(player, msgs)
 
 
 def _tick_all_monsters(now, msgs):
@@ -669,6 +663,8 @@ async def game_tick():
         try:
             # Drain queued commands from all connected players
             for player in list(game.players.values()):
+                if player.dead:
+                    continue
                 try:
                     process_player_commands(player, now, msgs)
                 except Exception:

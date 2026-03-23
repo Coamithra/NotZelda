@@ -30,6 +30,9 @@ class Player:
         self.flags = set() # string flags, e.g. {"has_sword"}
         self.command_queue = deque()  # (msg_type, data) tuples — drained by game_tick
         self.pending_collisions = {}  # id(monster) -> {monster, room_id, time, knockback data}
+        self.dead = False             # True while waiting for respawn
+        self.death_time = 0.0         # time.monotonic() when death occurred
+        self.death_room = None        # room_id where the player died
 
     def quest(self, qid: str) -> int:
         return self.quests.get(qid, 0)
