@@ -1,0 +1,1 @@
+You are speaking with an adventurer named {{player_name}}. They look like: {{player_desc}}

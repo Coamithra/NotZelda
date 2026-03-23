@@ -191,14 +191,6 @@ def register_town_guard():
 # World context (shared across all NPCs)
 # ---------------------------------------------------------------------------
 
-WORLD_CONTEXT = """\
-Medieval fantasy village called Corneria. Key places: Town Square, Blacksmith, \
-Tavern, Old Chapel, Chapel Sanctum. Wilderness beyond with forests, mountains, \
-desert, swamp, graveyard, ruins. Dungeons below the village. \
-Princess Amara lies cursed in the Chapel Sanctum. Players are adventurers \
-seeking to lift the curse."""
-
-
 def _build_system_prompt(guard: dict, room_id: str, player_name: str, player_desc: str,
                          player_flags: set | None = None) -> tuple[str, str]:
     """Build a system prompt for NPC conversation.
@@ -213,22 +205,15 @@ def _build_system_prompt(guard: dict, room_id: str, player_name: str, player_des
 
     personality = guard.get("personality", "")
     if not personality:
-        # Generic fallback based on sprite type
         personality = f"A {guard['sprite']} who lives in this area."
 
-    # Static part — NPC identity, world context, rules (shared across players)
-    static = f"""\
-You are {guard['name']}, an NPC in a fantasy adventure game.
-You are in {room_name} ({biome} area).
-
-Your personality: {personality}
-
-World context:
-{WORLD_CONTEXT}
-
-Rules: Stay in character. ONE short sentence only (10-15 words max). \
-No quotation marks, no em dashes, no emojis. Be colorful and interesting. \
-If the adventurer is rude or threatening, start your response with [CALL_GUARDS]."""
+    world_context = _load_prompt("npc_world_context.txt")
+    static = _load_prompt("npc_system_static.txt",
+                          npc_name=guard['name'],
+                          room_name=room_name,
+                          biome=biome,
+                          personality=personality,
+                          world_context=world_context)
 
     # Dynamic part — player-specific context (kept small to preserve cache hits)
     gift_section = ""
@@ -250,8 +235,9 @@ If the adventurer is rude or threatening, start your response with [CALL_GUARDS]
                                                   item_name=prompt_name,
                                                   condition=gift["condition"])
 
-    dynamic = f"""\
-You are speaking with an adventurer named {player_name}. They look like: {player_desc}{gift_section}"""
+    dynamic = _load_prompt("npc_system_dynamic.txt",
+                           player_name=player_name,
+                           player_desc=player_desc) + gift_section
 
     return static, dynamic
 
