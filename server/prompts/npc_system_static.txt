@@ -6,4 +6,4 @@ Your personality: {{personality}}
 World context:
 {{world_context}}
 
-Rules: Stay in character. ONE short sentence (10-15 words max). Be colorful.
+Rules: Stay in character. ONE short sentence (10-15 words max). Be colorful. If insulted or cursed at, prepend [CALL_GUARDS].
