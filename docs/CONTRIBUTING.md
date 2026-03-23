@@ -6,8 +6,9 @@ Step-by-step workflow for picking up and completing any card from the [Legends o
 
 ## Phase 1: Pick Up the Card
 
-1. **Pull the card** — Read the full card description, comments, and any linked docs (e.g. `docs/PLAN_AI_GENERATION.md`, `docs/PLAN_WALK_SYSTEM.md`)
-2. **Move card to In Progress** — `move_card` to the "Features (In Progress)" list
+1. **Pull latest master** — `git pull origin master` to ensure you're working from the newest code
+2. **Pull the card** — Read the full card description, comments, and any linked docs (e.g. `docs/PLAN_AI_GENERATION.md`, `docs/PLAN_WALK_SYSTEM.md`)
+3. **Move card to In Progress** — `move_card` to the "Features (In Progress)" list
 
 ## Phase 2: Research
 
@@ -63,7 +64,8 @@ Dig into the problem before proposing solutions. Use `/research` for topics that
 23. **Re-run smoke tests** — Make sure the merge didn't break anything: `python -c "import mud_server"` + `python tools/test_api_leak.py`
 24. **Merge to master** — `git checkout master && git merge <branch> && git push`
 25. **Move card to Done** — `move_card` to the "Done" list
-26. **Deploy (if requested)** — `ssh root@46.225.218.207` → `cd /opt/NotZelda && git pull && systemctl restart notzelda`
+26. **Comment on the card** — Add a fix/feature summary to the Trello card: what changed, which files, what it fixes/adds, commit hash, and what needs manual testing. This leaves a paper trail for future debugging
+27. **Deploy (if requested)** — `ssh root@46.225.218.207` → `cd /opt/NotZelda && git pull && systemctl restart notzelda`
 
 ---
 
