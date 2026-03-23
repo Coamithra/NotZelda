@@ -4,6 +4,28 @@ Step-by-step workflow for picking up and completing any card from the [Legends o
 
 ---
 
+## Before You Start: Create a Tracker Doc
+
+**This is mandatory.** Before doing anything else, create a file `docs/tracker_<branch-name>.md` with every step from this runbook as a checkbox list. Example:
+
+```markdown
+# Tracker: fix/room-transition-race
+
+## Phase 1: Pick Up the Card
+- [ ] Pull latest master
+- [ ] Read the card (description, comments, linked docs)
+- [ ] Move card to In Progress
+
+## Phase 2: Research
+- [ ] Read the referenced code
+- [ ] Trace the call chain
+...
+```
+
+Check off each step as you complete it. This is your source of truth for progress — if you get interrupted or context is lost, the tracker tells you exactly where you left off. Delete the tracker file after the card is shipped.
+
+---
+
 ## Phase 1: Pick Up the Card
 
 1. **Pull latest master** — `git pull origin master` to ensure you're working from the newest code
@@ -63,9 +85,10 @@ Dig into the problem before proposing solutions. Use `/research` for topics that
 22. **Pull master into the branch** — `git pull origin master` into the feature branch to pick up any changes that landed while we worked. Resolve conflicts if any
 23. **Re-run smoke tests** — Make sure the merge didn't break anything: `python -c "import mud_server"` + `python tools/test_api_leak.py`
 24. **Merge to master** — `git checkout master && git merge <branch> && git push`
-25. **Move card to Done** — `move_card` to the "Done" list
-26. **Comment on the card** — Add a fix/feature summary to the Trello card: what changed, which files, what it fixes/adds, commit hash, and what needs manual testing. This leaves a paper trail for future debugging
-27. **Deploy (if requested)** — `ssh root@46.225.218.207` → `cd /opt/NotZelda && git pull && systemctl restart notzelda`
+25. **Clean up the branch** — `git branch -d <branch> && git push origin --delete <branch>`. Branches are just labels — the commits live on in master's history. If a worktree was used, remove it first with `git worktree remove <path>` then `git worktree prune`
+26. **Move card to Done** — `move_card` to the "Done" list
+27. **Comment on the card** — Add a fix/feature summary to the Trello card: what changed, which files, what it fixes/adds, commit hash, and what needs manual testing. This leaves a paper trail for future debugging
+28. **Deploy (if requested)** — `ssh root@46.225.218.207` → `cd /opt/NotZelda && git pull && systemctl restart notzelda`
 
 ---
 
