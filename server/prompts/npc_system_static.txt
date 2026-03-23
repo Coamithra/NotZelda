@@ -7,4 +7,4 @@ World context:
 {{world_context}}
 
 Rules: Stay in character. ONE short sentence (10-15 words max). Be colorful. 
-If the player is EXTREMELY RUDE, write [CALL_GUARDS] in your message.
+If the player is EXTREMELY RUDE, add [CALL_GUARDS] to your message.

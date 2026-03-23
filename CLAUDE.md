@@ -53,7 +53,8 @@ When pushing to git make sure to update CLAUDE.md first!
 - **All rooms loaded from `.room` files** — no hardcoded room definitions in Python.
 - **AI prompt templates** are in `server/prompts/*.txt` — edit the text files directly, no Python changes needed.
 - **AI generation uses Claude CLI by default** (`AI_BACKEND=cli`), not the API. The `.env` must NOT set `AI_BACKEND=api`.
-- **NPC chat backends**: `AI_BACKEND` supports `cli` (Claude CLI, default), `api` (Anthropic API), or `ollama` (local Ollama). Ollama uses native `/api/chat` endpoint (not `/v1`) with explicit `num_ctx` to avoid silent truncation — see `mtgai/learnings/ollama-considerations.md`. Default model: `gemma2:2b`.
+- **NPC chat backends**: `AI_BACKEND` supports `cli` (Claude CLI, default), `api` (Anthropic API), or `ollama` (local Ollama). Ollama uses native `/api/chat` endpoint (not `/v1`) with explicit `num_ctx` to avoid silent truncation. Default model: `gemma2:2b` (overridable via `OLLAMA_MODEL` env var). Hetzner production runs `gemma2:2b` on Ollama with `OLLAMA_NUM_PARALLEL=2` for multi-player cache slots.
+- **NPC thinking bubble**: server sends `npc_thinking` message when LLM call starts. Client shows animated `...` bubble above the NPC, clears when the response arrives. One bubble per NPC max.
 - **NPC chat has a server-wide hourly budget** (`NPC_CHATS_PER_HOUR` in `npc_chat.py`, skipped for Ollama). When exhausted, NPCs fall back to static dialog. The system prompt is split into static (per-NPC, cached) and dynamic (per-player) parts for API prompt caching. Cooldown starts from NPC response time, not player message time.
 - **NPC response cleanup**: server strips emojis, `*action*` text, and trailing incomplete sentences. Truncates at last sentence boundary within 200 chars. Raw model output logged to `event_log.txt` as `NPC_RAW` and printed to sidelog for debugging.
 - **Boss monsters** have `"boss": True` in their stats dict. Use `monster.is_boss` — never hardcode boss checks to a specific kind.
@@ -65,7 +66,8 @@ When pushing to git make sure to update CLAUDE.md first!
 - **Water mist** (d2 only): `renderWaterMist()` in `renderer.js` scales wisp count by water tile coverage (WA=1pt, SH=0.5pt, max 40). Opacity stays constant; density increases with more water.
 - **Dungeon map vs compass**: map reveals room layout but does NOT show current position. Compass adds blinking yellow dot for current room.
 - **Item pickup animation**: all item grants (sword, map, compass, heart) use the same `item_obtained`/`item_effect` message flow with `drawItemPickupOverlay` (golden glow + sparkles). Player is frozen during the 2.5s animation. `ITEM_DRAW_FNS` in `sprites.js` maps item_type to draw functions. Heart container uses a larger hand-crafted 18x13 sprite (`drawBigHeartSolid`) with gold container border.
-- **NPC gifts**: defined in `.room` files (`| Gift Name:condition`). Server-side effects keyed by display name in `GIFT_EFFECTS` dict in `npc_chat.py`. Tags like `[GIVE_ITEM]` are extracted from AI output *before* response cleanup (emoji/action stripping, truncation).
+- **NPC gifts**: defined in `.room` files (`| Gift Name:condition`). Server-side effects keyed by display name in `GIFT_EFFECTS` dict in `npc_chat.py`. Tags like `[GIVE_ITEM]` and `[CALL_GUARDS]` are extracted from AI output *before* response cleanup (emoji/action stripping, truncation).
+- **NPC prompt tuning**: small models (gemma2:2b) are very sensitive to prompt wording. Keep NPC personalities short. Avoid words like "gruff" or "stern" — the model reads them as hostile. Tags like `[CALL_GUARDS]` need emphatic instructions (e.g. "EXTREMELY RUDE") or the model uses them on every response.
 - **Debug /viewserver**: sends full `debug_state` snapshot every tick to subscribed players (toggled via `/viewserver` chat command, debug-only). Renders semi-transparent red shapes for server-side entity positions.
 - **Room geometry constants** live in `server/constants.py`: `DOORWAY_TILES`, `ALL_DOORWAY_TILES`, `bfs_reachable()`. Use `bfs_reachable()` instead of inline BFS for tile reachability checks.
 
@@ -101,6 +103,10 @@ Opens on http://localhost:8080.
   - `systemctl status notzelda` — check status
   - `systemctl restart notzelda` — restart after changes
   - `journalctl -u notzelda -f` — tail logs
+- **Ollama:** installed as systemd service (`ollama`), runs `gemma2:2b` for NPC chat (CPU-only)
+  - `OLLAMA_NUM_PARALLEL=2` configured via `/etc/systemd/system/ollama.service.d/parallel.conf`
+  - Model warmup fires on first player join (`warmup_ollama()`)
+  - `.env` on server sets `AI_BACKEND=ollama` and `OLLAMA_MODEL=gemma2:2b`
 - **Deploying updates:** `cd /opt/NotZelda && git pull && systemctl restart notzelda`
 
 ## Dependencies
