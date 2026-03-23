@@ -39,6 +39,17 @@ def player_info(p) -> dict:
     return info
 
 
+_debug_tasks = set()  # prevent GC of fire-and-forget debug sends
+
+
+async def _safe_debug_send(player, msg):
+    """send_to wrapper that swallows all exceptions for fire-and-forget use."""
+    try:
+        await send_to(player, msg)
+    except Exception:
+        pass
+
+
 def broadcast_debug(text: str):
     """Send a debug_log message to all connected players (fire-and-forget).
 
@@ -46,7 +57,9 @@ def broadcast_debug(text: str):
     """
     msg = {"type": "debug_log", "text": text}
     for p in list(game.players.values()):
-        asyncio.ensure_future(send_to(p, msg))
+        task = asyncio.ensure_future(_safe_debug_send(p, msg))
+        _debug_tasks.add(task)
+        task.add_done_callback(_debug_tasks.discard)
 
 
 def log_event(kind: str, text: str):

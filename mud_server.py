@@ -45,6 +45,17 @@ from server.validation import register_monster_type, register_tile_type
 # Stdout capture — tees print() output to connected debug clients
 # ---------------------------------------------------------------------------
 
+_log_tasks = set()  # prevent GC of fire-and-forget log-broadcast tasks
+
+
+async def _safe_log_send(ws, msg):
+    """Send a log message to a single websocket, swallowing errors."""
+    try:
+        await ws.send(msg)
+    except Exception:
+        pass
+
+
 class _LogBroadcaster:
     """Wraps sys.stdout to broadcast lines to debug-mode WebSocket clients."""
 
@@ -69,7 +80,9 @@ class _LogBroadcaster:
                 msg = json.dumps({"type": "server_log", "text": line})
                 for p in list(game.players.values()):
                     try:
-                        asyncio.ensure_future(p.ws.send(msg))
+                        task = asyncio.ensure_future(_safe_log_send(p.ws, msg))
+                        _log_tasks.add(task)
+                        task.add_done_callback(_log_tasks.discard)
                     except Exception:
                         pass
         except RuntimeError:
