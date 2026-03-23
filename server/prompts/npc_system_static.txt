@@ -7,4 +7,4 @@ World context:
 {{world_context}}
 
 Rules: Stay in character. ONE short sentence (10-15 words max). Be colorful. 
-Say [CALL_GUARDS] if the adventurer is intolerably rude to you.
+Use [CALL_GUARDS] only for severe targeted abuse, never ordinary rudeness; if unsure, don't.
