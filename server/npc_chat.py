@@ -53,7 +53,7 @@ NPC_CHATS_PER_HOUR = 150    # server-wide hourly LLM call budget (ignored for ol
 # See learnings/ollama-considerations.md for why this matters.
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma2:2b")
-OLLAMA_TIMEOUT = 30.0       # seconds — CPU inference is slow
+OLLAMA_TIMEOUT = 45.0       # seconds — CPU-only inference on CX22 is slow
 OLLAMA_NUM_CTX = 1024       # smaller = faster prompt eval on CPU (CX22)
 OLLAMA_NUM_PREDICT = 80     # ~200 chars max output; caps CPU inference time
 
@@ -86,6 +86,7 @@ def warmup_ollama():
             print(f"[NPC_CHAT] Ollama warmup failed: {e}")
     loop = asyncio.get_running_loop()
     loop.run_in_executor(None, _ping)
+
 
 
 # ---------------------------------------------------------------------------
@@ -191,19 +192,11 @@ def register_town_guard():
 # ---------------------------------------------------------------------------
 
 WORLD_CONTEXT = """\
-This is a medieval fantasy world. The main settlement is a small village with a \
-Town Square, Blacksmith, Tavern, Old Chapel, and Chapel Sanctum. Beyond the village \
-lies a vast wilderness with forests, mountains, deserts, swamps, a lake, rivers, \
-graveyards, and a ruined castle. Underneath the village clearing is a dungeon \
-filled with monsters.
-
-Princess Amara lies cursed in the Chapel Sanctum — no one knows who cursed her. \
-The Priest watches over the chapel. The Smith forges weapons. The Barmaid runs the \
-tavern and can heal wounds. Monsters roam the wilderness — slimes in the forests, \
-scorpions in the desert, skeletons in the graveyard, and bats in the caves.
-
-Players are adventurers who explore this world, fight monsters with swords, and \
-seek to lift the curse on Princess Amara."""
+Medieval fantasy village called Corneria. Key places: Town Square, Blacksmith, \
+Tavern, Old Chapel, Chapel Sanctum. Wilderness beyond with forests, mountains, \
+desert, swamp, graveyard, ruins. Dungeons below the village. \
+Princess Amara lies cursed in the Chapel Sanctum. Players are adventurers \
+seeking to lift the curse."""
 
 
 def _build_system_prompt(guard: dict, room_id: str, player_name: str, player_desc: str,
@@ -233,20 +226,9 @@ Your personality: {personality}
 World context:
 {WORLD_CONTEXT}
 
-Rules:
-- Stay in character at ALL times. You ARE this character.
-- KEEP IT VERY SHORT. One sentence, 10-15 words max. This is a tiny speech bubble in a game.
-- Be colorful and interesting — give the player a reason to talk to you.
-- You can hint at lore, give directions, share rumors, or be funny.
-- Never break the fourth wall or mention being an AI.
-- Never use quotation marks around your response.
-- Never use em dashes. Use commas or periods instead.
-- If asked about game mechanics, answer in-character (e.g. "swing your sword" not "press space").
-- Match your speech style to your character (a farmer talks differently than a ghost).
-- You may use the adventurer's name when addressing them.
-- If the adventurer is being rude, threatening, hostile, or insulting toward you, you can call \
-for armed guards by STARTING your response with [CALL_GUARDS]. Only do this when \
-genuinely provoked, not for playful banter. Example: [CALL_GUARDS] Guards! Seize this scoundrel!"""
+Rules: Stay in character. ONE short sentence only (10-15 words max). \
+No quotation marks, no em dashes, no emojis. Be colorful and interesting. \
+If the adventurer is rude or threatening, start your response with [CALL_GUARDS]."""
 
     # Dynamic part — player-specific context (kept small to preserve cache hits)
     gift_section = ""
