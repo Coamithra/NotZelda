@@ -277,8 +277,10 @@ def exec_projectile(monster, room_id, monster_idx, action, msgs):
                 "x": start_x, "y": start_y,
             }, None))
             _apply_damage(p, damage, room_id, msgs, start_x, start_y)
-            game.room_projectiles.get(room_id, {}).pop(proj_id, None)
-            return
+            proj.hit_entities.add(id(p))
+            if not piercing:
+                game.room_projectiles.get(room_id, {}).pop(proj_id, None)
+                return
 
 
 def warmup_charge(monster, room_id, monster_idx, action, msgs):
@@ -564,12 +566,15 @@ def _tick_projectiles(msgs):
                     # Check player collision (AABB overlap)
                     hit_player = False
                     for p in players_in_room(room_id):
+                        if id(p) in proj.hit_entities:
+                            continue
                         if p.hp > 0 and p.x < proj.x + 1 and p.x + 1 > proj.x and p.y < proj.y + 1 and p.y + 1 > proj.y:
                             msgs.append(("broadcast", room_id, {
                                 "type": "projectile_hit", "id": proj_id,
                                 "x": proj.x, "y": proj.y,
                             }, None))
                             _apply_damage(p, proj.damage, room_id, msgs, proj.x, proj.y)
+                            proj.hit_entities.add(id(p))
                             hit_player = True
                             if not proj.piercing:
                                 to_remove.append(proj_id)

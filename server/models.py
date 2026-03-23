@@ -103,3 +103,4 @@ class Projectile:
         self.room_id = room_id
         self.speed = speed        # tiles per move tick
         self.piercing = piercing  # pass through players (hit all in path)
+        self.hit_entities = set()  # track already-hit entity ids to prevent double damage
