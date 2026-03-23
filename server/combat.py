@@ -2,6 +2,7 @@
 
 import asyncio
 import math
+import os
 import time
 import traceback
 
@@ -16,6 +17,8 @@ from server.constants import (
 )
 from server.models import Projectile
 from server.net import send_to, broadcast_to_room, players_in_room, player_info
+
+_debug = os.environ.get("DEBUG_MODE", "").lower() in ("1", "true")
 
 
 # ---------------------------------------------------------------------------
@@ -511,8 +514,15 @@ def _tick_all_monsters(now, msgs):
                                 start_walk(monster, room_id, i, next_move, msgs, now)
                 # State machine (behavior eval, warmup countdown)
                 _tick_monster_state(monster, room_id, i, now, msgs)
-            except Exception:
+            except Exception as e:
+                print(f"[MONSTER TICK ERROR] monster {i} ({monster.kind}) in {room_id} "
+                      f"state={monster.state}: {e}")
                 traceback.print_exc()
+                # Reset to safe state so the monster doesn't stay corrupted
+                monster.state = "idle"
+                monster.state_data = {}
+                if _debug:
+                    raise
 
 
 def _tick_projectiles(msgs):
