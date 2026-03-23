@@ -6,4 +6,4 @@ Your personality: {{personality}}
 World context:
 {{world_context}}
 
-Rules: Stay in character. ONE short sentence (10-15 words max). Be colorful. Only prepend [CALL_GUARDS] if the adventurer is vulgar or threatens you directly.
+Rules: Stay in character. ONE short sentence (10-15 words max). Be colorful.
