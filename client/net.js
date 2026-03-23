@@ -855,10 +855,12 @@ function handleMessage(msg) {
         setTimeout(() => {
           G.infoMessages.push({ text: "You got the " + msg.item_name + "!", expires: Date.now() + 4000 });
         }, 500);
+        appendChatLog(`<span class="chat-item">${escHtml(G.myName)} obtained ${escHtml(msg.item_name)}!</span>`);
       } else {
         // NPC gift item (legacy)
         G.playerFlags.add("has_" + msg.item);
         G.infoMessages.push({ text: "You obtained: " + msg.name + "!", expires: Date.now() + 5000 });
+        appendChatLog(`<span class="chat-item">${escHtml(G.myName)} obtained ${escHtml(msg.name)}!</span>`);
       }
       break;
     }
@@ -874,6 +876,7 @@ function handleMessage(msg) {
           y: effPlayer.displayY,
         };
       }
+      appendChatLog(`<span class="chat-item">${escHtml(msg.name)} obtained ${escHtml(msg.item_name)}!</span>`);
       break;
     }
 
