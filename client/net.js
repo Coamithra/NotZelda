@@ -188,6 +188,7 @@ function handleMessage(msg) {
         renderPlayers();
         renderProjectiles();
         renderMonsterAttackFlashes();
+        renderNpcThinking();
         renderSpeechBubbles();
         renderSwordPickups();
         renderItemPickups();
@@ -251,6 +252,7 @@ function handleMessage(msg) {
       G.dancingPlayers = {};
       G.attackingPlayers = {};
       G.speechBubbles = [];
+      G.npcThinking = {};
       G.guards = msg.guards || [];
       G.dyingMonsters = [];
       G.heartPickups = [];
@@ -440,9 +442,17 @@ function handleMessage(msg) {
       startDance(msg.name);
       break;
 
+    case "npc_thinking": {
+      // Show animated "..." thinking bubble above the NPC
+      G.npcThinking[msg.name] = Date.now();
+      break;
+    }
+
     case "chat": {
       // NPC responses get longer display time and more lines
       const isNpc = G.guards && G.guards.some(g => g.name === msg.from);
+      // Clear thinking bubble when the NPC responds
+      if (isNpc) delete G.npcThinking[msg.from];
       G.speechBubbles.push({
         from: msg.from,
         text: msg.text,

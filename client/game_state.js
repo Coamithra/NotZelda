@@ -48,6 +48,7 @@ const G = {
 
   // Chat
   speechBubbles: [],     // [{from, text, expires}]
+  npcThinking: {},       // {npcName: startTimestamp} — animated "..." bubble
   chatFocused: false,
   infoMessages: [],      // [{text, expires}]
 

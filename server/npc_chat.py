@@ -466,6 +466,11 @@ async def handle_npc_chat(player, guard: dict, text: str):
         player.description or "a wandering adventurer",
         player.flags)
 
+    # Show thinking indicator to all players in the room
+    await broadcast_to_room(player.room, {
+        "type": "npc_thinking", "name": npc_name,
+    })
+
     # Call LLM
     t0 = time.monotonic()
     response = await _call_npc_llm(static_prompt, dynamic_prompt,

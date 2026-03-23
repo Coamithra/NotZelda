@@ -562,6 +562,57 @@ function renderSpeechBubbles() {
   }
 }
 
+function renderNpcThinking() {
+  const now = Date.now();
+  for (const [name, startTime] of Object.entries(G.npcThinking)) {
+    // Timeout after 60s in case server never clears it
+    if (now - startTime > 60000) { delete G.npcThinking[name]; continue; }
+    // Don't show thinking bubble if there's already a speech bubble from this NPC
+    if (G.speechBubbles.some(b => b.from === name)) continue;
+
+    const guard = G.guards.find(g => g.name === name);
+    if (!guard) continue;
+
+    const px = guard.x * TS + TS / 2;
+    const py = guard.y * TS - 16;
+
+    // Animate dots: cycle through ".", "..", "..." every 500ms
+    const dotCount = (Math.floor((now - startTime) / 500) % 3) + 1;
+    const text = ".".repeat(dotCount);
+
+    G.ctx.font = "bold 13px monospace";
+    const pad = 6;
+    const bw = G.ctx.measureText("...").width + pad * 2;
+    const bh = 14 + pad * 2;
+    const bx = px - bw / 2;
+    const by = py - bh - 8;
+
+    // Bubble background
+    G.ctx.fillStyle = "rgba(255,255,255,0.9)";
+    G.ctx.beginPath();
+    roundRect(G.ctx, bx, by, bw, bh, 6);
+    G.ctx.fill();
+
+    // Tail
+    G.ctx.beginPath();
+    G.ctx.moveTo(px - 5, by + bh);
+    G.ctx.lineTo(px, by + bh + 6);
+    G.ctx.lineTo(px + 5, by + bh);
+    G.ctx.fill();
+
+    // Border
+    G.ctx.strokeStyle = "rgba(0,0,0,0.2)";
+    G.ctx.lineWidth = 1;
+    G.ctx.beginPath();
+    roundRect(G.ctx, bx, by, bw, bh, 6);
+    G.ctx.stroke();
+
+    // Dots
+    G.ctx.fillStyle = "#666";
+    G.ctx.fillText(text, bx + pad, by + pad + 11);
+  }
+}
+
 function renderSwordPickups() {
   for (const sp of G.swordPickups) {
     drawSwordPickup(G.ctx, sp.x * TS, sp.y * TS, sp.frame, SCALE);
