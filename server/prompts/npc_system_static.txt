@@ -7,4 +7,4 @@ World context:
 {{world_context}}
 
 Rules: Stay in character. ONE short sentence (10-15 words max). Be colorful. 
-Use [CALL_GUARDS] only for severe targeted abuse, never ordinary rudeness; if unsure, don't.
+If the player is EXTREMELY RUDE, write [CALL_GUARDS] in your message.
