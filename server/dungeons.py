@@ -8,7 +8,7 @@ from collections import deque
 
 from server.state import game
 from server.constants import EDGE_SPAWN_POINTS, DEFAULT_SPAWN, ROOM_COLS, ROOM_ROWS, DOORWAY_TILES, bfs_reachable
-from server.net import players_in_room, broadcast_debug
+from server.net import broadcast_debug
 
 
 class DungeonInstance:
