@@ -55,18 +55,17 @@ def _nearest_player(monster, room_id):
     For multi-tile monsters, distance is measured from the closest occupied tile.
     Returns (player, dist) or (None, inf).
     """
-    players = _players_in_room(room_id)
     best = None
     best_dist = float("inf")
     w = getattr(monster, "width", 1)
     h = getattr(monster, "height", 1)
-    for p in players:
+    for p, a in _players_in_room(room_id):
         if p.hp <= 0:
             continue
         # Clamp player position to the monster's footprint for distance calc
-        cx = max(monster.x, min(p.x, monster.x + w - 1))
-        cy = max(monster.y, min(p.y, monster.y + h - 1))
-        dist = abs(p.x - cx) + abs(p.y - cy)
+        cx = max(monster.x, min(a.x, monster.x + w - 1))
+        cy = max(monster.y, min(a.y, monster.y + h - 1))
+        dist = abs(a.x - cx) + abs(a.y - cy)
         if dist < best_dist:
             best_dist = dist
             best = p
@@ -138,6 +137,7 @@ def cond_player_in_range_line(monster, room_id, rule):
     player, dist = _nearest_player(monster, room_id)
     if player is None or dist > max_range:
         return False
+    pa = player.avatar
 
     w = getattr(monster, "width", 1)
     h = getattr(monster, "height", 1)
@@ -145,16 +145,16 @@ def cond_player_in_range_line(monster, room_id, rule):
     # Check if player shares a column with any tile in monster's width (float-aware)
     for dx in range(w):
         mx = monster.x + dx
-        if abs(player.x - mx) < 0.75:
-            if check_los and not _has_los(mx, monster.y, int(round(player.x)), int(round(player.y)), room_id):
+        if abs(pa.x - mx) < 0.75:
+            if check_los and not _has_los(mx, monster.y, int(round(pa.x)), int(round(pa.y)), room_id):
                 continue
             return True
 
     # Check if player shares a row with any tile in monster's height (float-aware)
     for dy in range(h):
         my = monster.y + dy
-        if abs(player.y - my) < 0.75:
-            if check_los and not _has_los(monster.x, my, int(round(player.x)), int(round(player.y)), room_id):
+        if abs(pa.y - my) < 0.75:
+            if check_los and not _has_los(monster.x, my, int(round(pa.x)), int(round(pa.y)), room_id):
                 continue
             return True
 
@@ -216,8 +216,9 @@ def _resolve_direction(direction, monster, room_id):
     if direction == "player":
         if player is None:
             return None
-        dx = player.x - monster.x
-        dy = player.y - monster.y
+        pa = player.avatar
+        dx = pa.x - monster.x
+        dy = pa.y - monster.y
         if dx == 0 and dy == 0:
             return None
         if abs(dx) >= abs(dy):
@@ -228,8 +229,9 @@ def _resolve_direction(direction, monster, room_id):
     if direction == "away":
         if player is None:
             return None
-        dx = monster.x - player.x
-        dy = monster.y - player.y
+        pa = player.avatar
+        dx = monster.x - pa.x
+        dy = monster.y - pa.y
         if dx == 0 and dy == 0:
             # Pick random direction to flee
             dirs = list(CARDINAL_DIRS.values())
@@ -285,6 +287,7 @@ def _resolve_move(rule, monster, room_id):
         target, _ = _nearest_player(monster, room_id)
         if target is None:
             return _resolve_move({"direction": "random"}, monster, room_id)
+        ta = target.avatar
         best_dir = None
         best_dist = float("inf")
         dirs = [(0, -1), (0, 1), (-1, 0), (1, 0)]
@@ -293,7 +296,7 @@ def _resolve_move(rule, monster, room_id):
             nx, ny = monster.x + dx, monster.y + dy
             if not _can_move_to(monster, nx, ny, room_id):
                 continue
-            dist = abs(target.x - nx) + abs(target.y - ny)
+            dist = abs(ta.x - nx) + abs(ta.y - ny)
             if dist < best_dist:
                 best_dist = dist
                 best_dir = (dx, dy)
@@ -305,6 +308,7 @@ def _resolve_move(rule, monster, room_id):
         target, _ = _nearest_player(monster, room_id)
         if target is None:
             return _resolve_move({"direction": "random"}, monster, room_id)
+        ta = target.avatar
         best_dir = None
         best_dist = -1
         dirs = [(0, -1), (0, 1), (-1, 0), (1, 0)]
@@ -313,7 +317,7 @@ def _resolve_move(rule, monster, room_id):
             nx, ny = monster.x + dx, monster.y + dy
             if not _can_move_to(monster, nx, ny, room_id):
                 continue
-            dist = abs(target.x - nx) + abs(target.y - ny)
+            dist = abs(ta.x - nx) + abs(ta.y - ny)
             if dist > best_dist:
                 best_dist = dist
                 best_dir = (dx, dy)
@@ -401,14 +405,16 @@ def _resolve_teleport(rule, monster, room_id):
             return None
         if player_dist > max_range:
             return None
-        cx, cy = int(round(player.x)), int(round(player.y))
+        pa = player.avatar
+        cx, cy = int(round(pa.x)), int(round(pa.y))
     elif target_mode == "away":
         player, _ = _nearest_player(monster, room_id)
         if player is None:
             cx, cy = monster.x, monster.y
         else:
-            dx = monster.x - int(round(player.x))
-            dy = monster.y - int(round(player.y))
+            pa = player.avatar
+            dx = monster.x - int(round(pa.x))
+            dy = monster.y - int(round(pa.y))
             length = max(abs(dx), abs(dy), 1)
             cx = monster.x + int(dx / length * max_range)
             cy = monster.y + int(dy / length * max_range)

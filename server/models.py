@@ -7,32 +7,43 @@ from server.state import game
 from server.constants import PLAYER_MAX_HP, STARTING_ROOM
 
 
+class Avatar:
+    """Physical presence of a character in the game world.
+
+    Holds position, direction, appearance, and transient collision state.
+    When a player has no avatar (avatar is None), they have no physical
+    presence — monsters can't target them and they don't appear to others.
+    """
+    def __init__(self, x: float, y: float, direction: str = "down"):
+        self.x = x
+        self.y = y
+        self.direction = direction
+        self.dancing = False
+        self.last_reported_x = x       # last position relayed to other clients
+        self.last_reported_y = y
+        self.pending_collisions = {}   # id(monster) -> {monster, room_id, time, knockback data}
+
+
 class Player:
     def __init__(self, ws, name: str, description: str, color_index: int):
         self.ws = ws
         self.name = name
         self.description = description
         self.room = STARTING_ROOM
-        self.x = 8.0
-        self.y = 5.0
-        self.direction = "down"
         self.color_index = color_index
         self.hp = PLAYER_MAX_HP
         self.max_hp = PLAYER_MAX_HP
         self.last_damage_time = 0.0
         self.last_attack_time = 0.0
         self.last_pos_update_time = 0.0   # anti-cheat: last accepted position_update timestamp
-        self.last_reported_x = 8.0        # last position relayed to other clients
-        self.last_reported_y = 5.0
-        self.dancing = False
         self.guard_cooldowns = {}  # guard_key -> last_trigger_time
         self.quests = {}   # quest_id (str) -> stage (int)
         self.flags = set() # string flags, e.g. {"has_sword"}
         self.command_queue = deque()  # (msg_type, data) tuples — drained by game_tick
-        self.pending_collisions = {}  # id(monster) -> {monster, room_id, time, knockback data}
         self.dead = False             # True while waiting for respawn
         self.death_time = 0.0         # time.monotonic() when death occurred
         self.death_room = None        # room_id where the player died
+        self.avatar = Avatar(8.0, 5.0, "down")
 
     def quest(self, qid: str) -> int:
         return self.quests.get(qid, 0)

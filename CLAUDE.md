@@ -53,6 +53,8 @@ When pushing to git make sure to update CLAUDE.md first!
 
 - **Client state**: all mutable state lives on the shared `G` namespace object (`game_state.js`).
 - **Server state**: all mutable state lives on the `GameState` singleton (`from server.state import game`).
+- **Player vs Avatar**: `Player` holds session/identity state (name, hp, quests, flags, room, color_index). `Avatar` holds physical-world state (x, y, direction, dancing, pending_collisions). Access position via `player.avatar.x` or use `avatars_in_room()` which returns `(player, avatar)` tuples. `player.avatar` is `None` during room transitions — monsters can't target avatar-less players. `player.room` stays on Player so dungeon tracking works even without an avatar.
+- **Room queries**: `players_in_room(room_id)` returns all players in a room (for broadcasting, player lookup). `avatars_in_room(room_id)` returns `(player, avatar)` tuples for players with physical presence (for combat, collision, targeting).
 - **All content is data-driven**: tiles, monsters, NPC sprites loaded from JSON in `data/`. No hardcoded tile IDs, sprite data, or monster stats in code. Tilemaps use 2-char string codes (`"GR"`, `"DW"`). Sprites/tiles use `[colorKey, x, y, w, h]` rect layer format everywhere.
 - **All rooms loaded from `.room` files** — no hardcoded room definitions in Python.
 - **AI prompt templates** are in `server/prompts/*.txt` — edit the text files directly, no Python changes needed.
@@ -81,7 +83,7 @@ When pushing to git make sure to update CLAUDE.md first!
 - **Import order** avoids circular deps: `constants` → `state` → `models` → `net` → `rooms` → `validation` → `dungeon_types` → `dungeons` → `quests` → `lifecycle` → `commands` → `combat` → `debug_monsters` → `mud_server`. Combat uses lazy imports for commands; commands imports from lifecycle.
 - **Command queue**: websocket messages are never processed inline — handler appends to `player.command_queue`, drained by `game_tick()`. Only `ping` is handled directly.
 - **game_tick() is synchronous** with message batching — no `await` mid-tick. Messages collected as tuples, flushed after the full tick. This prevents dungeon teardown crashes.
-- **Room transitions**: player is temporarily removed from `game.players` during `do_room_transition()` so tick loops can't target them mid-swap.
+- **Room transitions**: player's avatar is set to `None` during `do_room_transition()`, then a new avatar is created at the spawn point. `avatars_in_room()` naturally excludes avatar-less players so monsters can't target them mid-transition. Player stays in `game.players` throughout.
 - **Dungeon room resolution is synchronous** — no JIT AI generation. Custom rooms resolve from the library pool or fall back to precreated.
 - **Tile properties** live in `custom_tile_recipes[tile_id]` — no separate walkability sets. `is_walkable_tile()` reads from the recipe dict.
 - **`websockets` must stay at 12.0** — v16+ breaks the `process_request` API.

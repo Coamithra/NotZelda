@@ -12,7 +12,7 @@ from server.constants import (
     POSITION_UPDATE_RATE, MAX_MOVE_PER_UPDATE, GUARD_COOLDOWN,
     COLLISION_GRACE_PERIOD,
 )
-from server.net import players_in_room, log_event
+from server.net import log_event
 from server.lifecycle import (
     do_room_transition, get_room_monsters,
     broadcast_choir_start, broadcast_choir_stop,
@@ -42,13 +42,14 @@ def process_player_commands(player, now, msgs):
 
 def _send_reconcile(player, msgs, reason=""):
     """Append a reconcile message for the player."""
+    a = player.avatar
     if reason:
-        print(f"[RECONCILE] {player.name}: {reason} -> snap to ({player.x}, {player.y})")
+        print(f"[RECONCILE] {player.name}: {reason} -> snap to ({a.x}, {a.y})")
     msgs.append(("send", player, {
         "type": "reconcile",
-        "x": player.x,
-        "y": player.y,
-        "direction": player.direction,
+        "x": a.x,
+        "y": a.y,
+        "direction": a.direction,
     }))
 
 
@@ -93,9 +94,10 @@ def _is_position_walkable(x, y, room):
 
 def _process_position_update(player, data, now, msgs):
     """Validate a client position update and relay to other players."""
+    a = player.avatar
     new_x = data.get("x")
     new_y = data.get("y")
-    direction = data.get("direction", player.direction)
+    direction = data.get("direction", a.direction)
 
     if player.hp <= 0:
         return
@@ -116,15 +118,15 @@ def _process_position_update(player, data, now, msgs):
         return  # silently drop (too fast)
 
     # Anti-cheat: distance check
-    dist = abs(new_x - player.x) + abs(new_y - player.y)
+    dist = abs(new_x - a.x) + abs(new_y - a.y)
     if dist > MAX_MOVE_PER_UPDATE:
-        _send_reconcile(player, msgs, f"too far: dist={dist:.2f} from ({player.x},{player.y}) to ({new_x},{new_y})")
+        _send_reconcile(player, msgs, f"too far: dist={dist:.2f} from ({a.x},{a.y}) to ({new_x},{new_y})")
         return
 
     # Direction
     if direction in DIRECTIONS:
-        player.direction = direction
-    player.dancing = False
+        a.direction = direction
+    a.dancing = False
 
     # Edge detection (room transition)
     room = game.rooms[player.room]
@@ -157,21 +159,21 @@ def _process_position_update(player, data, now, msgs):
             return
 
     # Accept — update position
-    prev_x, prev_y = player.x, player.y
-    player.x = new_x
-    player.y = new_y
+    prev_x, prev_y = a.x, a.y
+    a.x = new_x
+    a.y = new_y
     player.last_pos_update_time = now
 
     # Relay to other players
-    if new_x != player.last_reported_x or new_y != player.last_reported_y:
+    if new_x != a.last_reported_x or new_y != a.last_reported_y:
         msgs.append(("broadcast", player.room, {
             "type": "player_walk_half",
             "name": player.name,
             "x": new_x, "y": new_y,
-            "direction": player.direction,
+            "direction": a.direction,
         }, player.ws))
-        player.last_reported_x = new_x
-        player.last_reported_y = new_y
+        a.last_reported_x = new_x
+        a.last_reported_y = new_y
 
     # Collision checks (monster contact, hearts, dungeon items, guard proximity)
     _check_position_collisions(player, now, msgs, prev_x, prev_y)
@@ -191,10 +193,11 @@ def _get_monster_visual_pos(monster, now):
 
 def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_player_y=None):
     """Check monster contact, heart pickup, dungeon items at player position."""
+    a = player.avatar
     if prev_player_x is None:
-        prev_player_x = player.x
+        prev_player_x = a.x
     if prev_player_y is None:
-        prev_player_y = player.y
+        prev_player_y = a.y
     # Monster contact damage (AABB: player 1x1 at float pos vs monster footprint)
     # Records pending collisions with a grace period for corner-scrape forgiveness
     if player.hp > 0:
@@ -202,31 +205,31 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
         for monster in get_room_monsters(player.room):
             if monster.alive and not monster.intangible:
                 mx, my = _get_monster_visual_pos(monster, now)
-                if (player.x < mx + monster.width and player.x + 1 > mx and
-                    player.y < my + monster.height and player.y + 1 > my):
+                if (a.x < mx + monster.width and a.x + 1 > mx and
+                    a.y < my + monster.height and a.y + 1 > my):
                     mid = id(monster)
                     overlapping.add(mid)
-                    if mid not in player.pending_collisions:
+                    if mid not in a.pending_collisions:
                         prev_mx, prev_my = monster.x, monster.y
                         if monster.state == "walking":
                             prev_mx = monster.state_data.get("from_x", monster.x)
                             prev_my = monster.state_data.get("from_y", monster.y)
-                        player.pending_collisions[mid] = {
+                        a.pending_collisions[mid] = {
                             "monster": monster, "room_id": player.room, "time": now,
                             "prev_player_x": prev_player_x, "prev_player_y": prev_player_y,
                             "prev_source_x": prev_mx, "prev_source_y": prev_my,
                         }
         # Clear pending for monsters no longer overlapping
-        for mid in list(player.pending_collisions):
+        for mid in list(a.pending_collisions):
             if mid not in overlapping:
-                del player.pending_collisions[mid]
+                del a.pending_collisions[mid]
 
     # Heart pickup (proximity)
     if player.hp > 0:
         hearts = game.room_hearts.get(player.room, [])
         for heart in hearts:
-            if (abs(player.x - heart["x"]) < 0.75 and
-                abs(player.y - heart["y"]) < 0.75 and player.hp < player.max_hp):
+            if (abs(a.x - heart["x"]) < 0.75 and
+                abs(a.y - heart["y"]) < 0.75 and player.hp < player.max_hp):
                 player.hp = min(player.max_hp, player.hp + HEART_RESTORE_HP)
                 hearts.remove(heart)
                 msgs.append(("send", player, {"type": "hp_update", "hp": player.hp, "max_hp": player.max_hp}))
@@ -239,7 +242,7 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
         if dinst and player.room not in game.locked_rooms:
             items = dinst.dungeon_items.get(player.room, [])
             for item in list(items):
-                if abs(player.x - item["x"]) < 0.75 and abs(player.y - item["y"]) < 0.75:
+                if abs(a.x - item["x"]) < 0.75 and abs(a.y - item["y"]) < 0.75:
                     item_type = item["item_type"]
                     dinst.collected_items.add(item_type)
                     items.remove(item)
@@ -268,9 +271,10 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
 
 def _check_guard_proximity_sync(player, now, msgs):
     """If near a guard and cooldown has passed, queue guard dialog."""
+    a = player.avatar
     for guard in game.guards.get(player.room, []):
-        dx = abs(player.x - guard["x"])
-        dy = abs(player.y - guard["y"])
+        dx = abs(a.x - guard["x"])
+        dy = abs(a.y - guard["y"])
         if dx + dy <= 1.5:
             key = f"{player.room}:{guard['name']}:{guard['x']},{guard['y']}"
             last = player.guard_cooldowns.get(key, 0)
@@ -281,10 +285,11 @@ def _check_guard_proximity_sync(player, now, msgs):
 
 def _process_face(player, data, msgs):
     """Handle face direction change."""
+    a = player.avatar
     direction = data.get("direction", "")
     if direction in DIRECTIONS:
-        player.direction = direction
-        player.dancing = False
+        a.direction = direction
+        a.dancing = False
         msgs.append(("broadcast", player.room, {
             "type": "player_faced",
             "name": player.name,
@@ -306,24 +311,25 @@ def _process_attack(player, data, now, msgs):
     if now - player.last_attack_time < ATTACK_COOLDOWN:
         return
     player.last_attack_time = now
-    player.dancing = False
+    a = player.avatar
+    a.dancing = False
 
     # Use client-supplied direction so quick turn+attack works without waiting
     # for the server to process the direction change first
     direction = data.get("direction")
     if direction in DIRECTIONS:
-        player.direction = direction
+        a.direction = direction
 
     msgs.append(("broadcast", player.room, {
         "type": "attack",
         "name": player.name,
-        "direction": player.direction,
+        "direction": a.direction,
     }, None))
 
     # Hit detection — AABB overlap, 1.5 tiles in attack dir (covers half player tile + full sword tile)
-    dx, dy = DIRECTIONS.get(player.direction, (0, 0))
-    sword_x = player.x + (0.5 if dx > 0 else -1.0 if dx < 0 else 0)
-    sword_y = player.y + (0.5 if dy > 0 else -1.0 if dy < 0 else 0)
+    dx, dy = DIRECTIONS.get(a.direction, (0, 0))
+    sword_x = a.x + (0.5 if dx > 0 else -1.0 if dx < 0 else 0)
+    sword_y = a.y + (0.5 if dy > 0 else -1.0 if dy < 0 else 0)
     sword_w = 1.5 if dx != 0 else 1.0
     sword_h = 1.5 if dy != 0 else 1.0
     for i, monster in enumerate(get_room_monsters(player.room)):
@@ -446,7 +452,7 @@ def _process_chat(player, data, msgs):
     }, None))
 
     # Check if player is adjacent to an NPC — trigger LLM conversation
-    guard = find_adjacent_npc(player)
+    guard = find_adjacent_npc(player.room, player.avatar)
     if guard:
         msgs.append(("npc_chat", player, guard, text))
 
@@ -476,7 +482,7 @@ def _process_slash_command(player, text, msgs):
         )}))
 
     elif cmd == "dance":
-        player.dancing = True
+        player.avatar.dancing = True
         msgs.append(("broadcast", player.room, {
             "type": "dance", "name": player.name,
         }, None))

@@ -19,7 +19,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from server.state import game
-from server.net import broadcast_to_room, players_in_room, log_event, send_to
+from server.net import broadcast_to_room, avatars_in_room, log_event, send_to
 
 # ---------------------------------------------------------------------------
 # Prompt loading — templates live in server/prompts/*.txt
@@ -402,11 +402,13 @@ async def _call_ollama(static_prompt: str, dynamic_prompt: str,
 # Public API
 # ---------------------------------------------------------------------------
 
-def find_adjacent_npc(player) -> dict | None:
-    """Find an NPC adjacent to the player (Manhattan distance, float-aware)."""
-    for guard in game.guards.get(player.room, []):
-        dx = abs(player.x - guard["x"])
-        dy = abs(player.y - guard["y"])
+def find_adjacent_npc(room_id, avatar) -> dict | None:
+    """Find an NPC adjacent to the avatar (Manhattan distance, float-aware)."""
+    if avatar is None:
+        return None
+    for guard in game.guards.get(room_id, []):
+        dx = abs(avatar.x - guard["x"])
+        dy = abs(avatar.y - guard["y"])
         if dx + dy <= 2.25:  # within ~1 tile gap (float margin)
             return guard
     return None
@@ -627,7 +629,7 @@ async def _spawn_summoned_guards(room_id: str, npc_x: int, npc_y: int, npc_name:
         return
     tilemap = room["tilemap"]
     guards = game.guards.get(room_id, [])
-    player_positions = {(p.x, p.y) for p in players_in_room(room_id)}
+    player_positions = {(a.x, a.y) for _p, a in avatars_in_room(room_id)}
 
     # Find walkable tiles near the NPC (expanding Manhattan distance rings)
     candidates = []

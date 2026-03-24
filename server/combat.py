@@ -16,7 +16,7 @@ from server.constants import (
     HEART_RESTORE_HP, TICK_INTERVAL, COLLISION_GRACE_PERIOD,
 )
 from server.models import Projectile
-from server.net import send_to, broadcast_to_room, players_in_room, player_info
+from server.net import send_to, broadcast_to_room, avatars_in_room, player_info
 
 _debug = os.environ.get("DEBUG_MODE", "").lower() in ("1", "true")
 
@@ -47,21 +47,22 @@ def _apply_damage(player, damage: int, room_id: str, msgs: list,
         return
     player.hp = max(0, player.hp - damage)
     player.last_damage_time = now
+    a = player.avatar
 
     if player.hp > 0:
         # Calculate knockback direction from previous positions (before overlap)
-        pre_x, pre_y = player.x, player.y
+        pre_x, pre_y = a.x, a.y
         if prev_player_x is not None and prev_source_x is not None:
             dx = prev_player_x - prev_source_x
             dy = prev_player_y - prev_source_y
         elif source_x is not None and source_y is not None:
-            dx = player.x - source_x
-            dy = player.y - source_y
+            dx = a.x - source_x
+            dy = a.y - source_y
         else:
             dx, dy = 0, 0
         # Determine knockback axis and sign
         if dx == 0 and dy == 0:
-            opp = DIRECTION_OPPOSITES.get(player.direction, "down")
+            opp = DIRECTION_OPPOSITES.get(a.direction, "down")
             knock_dx, knock_dy = DIRECTIONS[opp]
         elif abs(dx) >= abs(dy):
             knock_dx = 1 if dx >= 0 else -1
@@ -70,8 +71,8 @@ def _apply_damage(player, damage: int, room_id: str, msgs: list,
             knock_dx = 0
             knock_dy = 1 if dy >= 0 else -1
         # Target: fixed 1 tile knockback, snapped to nearest half-tile
-        kx = round((player.x + knock_dx) * 2) / 2
-        ky = round((player.y + knock_dy) * 2) / 2
+        kx = round((a.x + knock_dx) * 2) / 2
+        ky = round((a.y + knock_dy) * 2) / 2
         knocked = False
         room = game.rooms.get(room_id)
         if room:
@@ -84,7 +85,7 @@ def _apply_damage(player, damage: int, room_id: str, msgs: list,
                     for g in guards
                 )
                 if not guard_blocked:
-                    player.x, player.y = kx, ky
+                    a.x, a.y = kx, ky
                     knocked = True
 
         msgs.append(("broadcast", room_id, {
@@ -92,8 +93,8 @@ def _apply_damage(player, damage: int, room_id: str, msgs: list,
             "name": player.name,
             "hp": player.hp,
             "max_hp": player.max_hp,
-            "x": player.x,
-            "y": player.y,
+            "x": a.x,
+            "y": a.y,
             "knockback": knocked,
             "debug_pre_x": pre_x,
             "debug_pre_y": pre_y,
@@ -111,14 +112,14 @@ def _apply_damage(player, damage: int, room_id: str, msgs: list,
         msgs.append(("broadcast", room_id, {
             "type": "player_died",
             "name": player.name,
-            "x": player.x,
-            "y": player.y,
+            "x": a.x,
+            "y": a.y,
             "color_index": player.color_index,
         }, player.ws))
         msgs.append(("send", player, {
             "type": "you_died",
-            "x": player.x,
-            "y": player.y,
+            "x": a.x,
+            "y": a.y,
         }))
         msgs.append(("death", player, room_id))
 
@@ -156,6 +157,7 @@ async def flush_messages(msgs: list):
 def _respawn_player(player, msgs):
     """Synchronous respawn — called from _tick_players when delay has elapsed."""
     from server.lifecycle import on_player_enter_room, on_player_leave_room, send_room_enter
+    from server.models import Avatar
 
     old_room_id = player.death_room
     player.dead = False
@@ -164,10 +166,7 @@ def _respawn_player(player, msgs):
     player.hp = player.max_hp
     player.room = STARTING_ROOM
     spawn = game.rooms[STARTING_ROOM]["spawn_points"]["default"]
-    player.x, player.y = float(spawn[0]), float(spawn[1])
-    player.direction = "down"
-    player.dancing = False
-    player.pending_collisions.clear()
+    player.avatar = Avatar(float(spawn[0]), float(spawn[1]), "down")
     player.command_queue.clear()
 
     # Despawn summoned town guards — their job is done
@@ -270,8 +269,8 @@ def exec_projectile(monster, room_id, monster_idx, action, msgs):
     }, None))
 
     # Check if a player is already at the spawn tile (AABB overlap)
-    for p in players_in_room(room_id):
-        if p.hp > 0 and p.x < start_x + 1 and p.x + 1 > start_x and p.y < start_y + 1 and p.y + 1 > start_y:
+    for p, a in avatars_in_room(room_id):
+        if p.hp > 0 and a.x < start_x + 1 and a.x + 1 > start_x and a.y < start_y + 1 and a.y + 1 > start_y:
             msgs.append(("broadcast", room_id, {
                 "type": "projectile_hit", "id": proj_id,
                 "x": start_x, "y": start_y,
@@ -338,9 +337,9 @@ def exec_charge(monster, room_id, monster_idx, action, msgs):
 
     # Check if player was hit — AABB overlap with charge path
     w, h = monster.width, monster.height
-    for p in players_in_room(room_id):
+    for p, a in avatars_in_room(room_id):
         if p.hp > 0 and any(
-            p.x < px + w and p.x + 1 > px and p.y < py + h and p.y + 1 > py
+            a.x < px + w and a.x + 1 > px and a.y < py + h and a.y + 1 > py
             for px, py in path
         ):
             _apply_damage(p, damage, room_id, msgs, monster.x, monster.y)
@@ -377,8 +376,8 @@ def exec_teleport(monster, room_id, monster_idx, action, msgs):
     # Damage players within damage_radius of landing position
     damage_radius = action.get("damage_radius", 1)
     if damage > 0 and damage_radius >= 0:
-        for p in players_in_room(room_id):
-            if p.hp > 0 and abs(p.x - monster.x) + abs(p.y - monster.y) <= damage_radius:
+        for p, a in avatars_in_room(room_id):
+            if p.hp > 0 and abs(a.x - monster.x) + abs(a.y - monster.y) <= damage_radius:
                 _apply_damage(p, damage, room_id, msgs, monster.x, monster.y)
 
 
@@ -410,9 +409,9 @@ def exec_area(monster, room_id, monster_idx, action, msgs):
         "range": range_val,
     }, None))
 
-    for p in players_in_room(room_id):
+    for p, a in avatars_in_room(room_id):
         if p.hp > 0:
-            dist = abs(p.x - ax) + abs(p.y - ay)
+            dist = abs(a.x - ax) + abs(a.y - ay)
             if dist <= range_val:
                 _apply_damage(p, damage, room_id, msgs, ax, ay)
 
@@ -448,7 +447,7 @@ def _tick_all_monsters(now, msgs):
     for room_id, monster_list in list(game.room_monsters.items()):
         if room_id not in game.rooms:
             continue
-        if not players_in_room(room_id):
+        if not avatars_in_room(room_id):
             continue
         _check_guard_despawn(room_id, monster_list, now, msgs)
         for i, monster in enumerate(monster_list):
@@ -469,15 +468,15 @@ def _tick_all_monsters(now, msgs):
                         monster.x = (sd["from_x"] + sd["to_x"]) / 2
                         monster.y = (sd["from_y"] + sd["to_y"]) / 2
                         if not monster.intangible:
-                            for p in players_in_room(room_id):
+                            for p, pa in avatars_in_room(room_id):
                                 if p.hp > 0 and (
-                                    p.x < monster.x + monster.width and p.x + 1 > monster.x and
-                                    p.y < monster.y + monster.height and p.y + 1 > monster.y):
+                                    pa.x < monster.x + monster.width and pa.x + 1 > monster.x and
+                                    pa.y < monster.y + monster.height and pa.y + 1 > monster.y):
                                     mid = id(monster)
-                                    if mid not in p.pending_collisions:
-                                        p.pending_collisions[mid] = {
+                                    if mid not in pa.pending_collisions:
+                                        pa.pending_collisions[mid] = {
                                             "monster": monster, "room_id": room_id, "time": now,
-                                            "prev_player_x": p.x, "prev_player_y": p.y,
+                                            "prev_player_x": pa.x, "prev_player_y": pa.y,
                                             "prev_source_x": sd["from_x"], "prev_source_y": sd["from_y"],
                                         }
                     # At 100%: commit to destination, check collision, complete walk
@@ -487,15 +486,15 @@ def _tick_all_monsters(now, msgs):
                         if not monster.intangible:
                             mid_src_x = (sd["from_x"] + sd["to_x"]) / 2
                             mid_src_y = (sd["from_y"] + sd["to_y"]) / 2
-                            for p in players_in_room(room_id):
+                            for p, pa in avatars_in_room(room_id):
                                 if p.hp > 0 and (
-                                    p.x < monster.x + monster.width and p.x + 1 > monster.x and
-                                    p.y < monster.y + monster.height and p.y + 1 > monster.y):
+                                    pa.x < monster.x + monster.width and pa.x + 1 > monster.x and
+                                    pa.y < monster.y + monster.height and pa.y + 1 > monster.y):
                                     mid = id(monster)
-                                    if mid not in p.pending_collisions:
-                                        p.pending_collisions[mid] = {
+                                    if mid not in pa.pending_collisions:
+                                        pa.pending_collisions[mid] = {
                                             "monster": monster, "room_id": room_id, "time": now,
-                                            "prev_player_x": p.x, "prev_player_y": p.y,
+                                            "prev_player_x": pa.x, "prev_player_y": pa.y,
                                             "prev_source_x": mid_src_x, "prev_source_y": mid_src_y,
                                         }
                         remaining = sd.get("remaining_distance", 0)
@@ -565,10 +564,10 @@ def _tick_projectiles(msgs):
 
                     # Check player collision (AABB overlap)
                     hit_player = False
-                    for p in players_in_room(room_id):
+                    for p, pa in avatars_in_room(room_id):
                         if id(p) in proj.hit_entities:
                             continue
-                        if p.hp > 0 and p.x < proj.x + 1 and p.x + 1 > proj.x and p.y < proj.y + 1 and p.y + 1 > proj.y:
+                        if p.hp > 0 and pa.x < proj.x + 1 and pa.x + 1 > proj.x and pa.y < proj.y + 1 and pa.y + 1 > proj.y:
                             msgs.append(("broadcast", room_id, {
                                 "type": "projectile_hit", "id": proj_id,
                                 "x": proj.x, "y": proj.y,
@@ -603,31 +602,32 @@ def _resolve_pending_collisions(now, msgs):
     from server.commands import _get_monster_visual_pos
     from server.lifecycle import get_room_monsters
     for player in list(game.players.values()):
-        if not player.pending_collisions:
+        a = player.avatar
+        if a is None or not a.pending_collisions:
             continue
-        for mid in list(player.pending_collisions):
-            pc = player.pending_collisions[mid]
+        for mid in list(a.pending_collisions):
+            pc = a.pending_collisions[mid]
             monster = pc["monster"]
             room_id = pc["room_id"]
             # Stale check: player moved rooms, or monster/player dead
             if player.room != room_id or player.hp <= 0 or not monster.alive or monster.intangible:
-                del player.pending_collisions[mid]
+                del a.pending_collisions[mid]
                 continue
             # Check monster still in room
             if monster not in get_room_monsters(room_id):
-                del player.pending_collisions[mid]
+                del a.pending_collisions[mid]
                 continue
             # Re-check AABB overlap
             mx, my = _get_monster_visual_pos(monster, now)
-            if not (player.x < mx + monster.width and player.x + 1 > mx and
-                    player.y < my + monster.height and player.y + 1 > my):
-                del player.pending_collisions[mid]
+            if not (a.x < mx + monster.width and a.x + 1 > mx and
+                    a.y < my + monster.height and a.y + 1 > my):
+                del a.pending_collisions[mid]
                 continue
             # Grace period not yet elapsed
             if now - pc["time"] < COLLISION_GRACE_PERIOD:
                 continue
             # All checks passed — apply damage
-            del player.pending_collisions[mid]
+            del a.pending_collisions[mid]
             _apply_damage(player, monster.damage, room_id, msgs, mx, my,
                           pc["prev_player_x"], pc["prev_player_y"],
                           pc["prev_source_x"], pc["prev_source_y"],
@@ -642,11 +642,10 @@ async def _send_debug_state_snapshots():
         if not getattr(player, '_viewserver', False):
             continue
         room_id = player.room
-        # Players in this room
+        # Players in this room (need name from player, position from avatar)
         players = []
-        for p in game.players.values():
-            if p.room == room_id:
-                players.append({"name": p.name, "x": p.x, "y": p.y})
+        for p, a in avatars_in_room(room_id):
+            players.append({"name": p.name, "x": a.x, "y": a.y})
         # Monsters
         monsters = []
         for m in game.room_monsters.get(room_id, []):
@@ -689,7 +688,7 @@ async def game_tick():
         try:
             # Drain queued commands from all connected players
             for player in list(game.players.values()):
-                if player.dead:
+                if player.dead or player.avatar is None:
                     continue
                 try:
                     process_player_commands(player, now, msgs)
@@ -740,15 +739,15 @@ def _check_guard_despawn(room_id, monster_list, now, msgs):
     if not target_name:
         return
 
-    # Find target in room
-    target = None
-    for p in players_in_room(room_id):
+    # Find target in room (need avatar for distance check)
+    target_avatar = None
+    for p, a in avatars_in_room(room_id):
         if p.name == target_name:
-            target = p
+            target_avatar = a
             break
 
-    if target is None:
-        # Target left the room — despawn
+    if target_avatar is None:
+        # Target left the room or has no avatar — despawn
         for i, m in guards:
             m.alive = False
             msgs.append(("broadcast", room_id, {
@@ -757,7 +756,7 @@ def _check_guard_despawn(room_id, monster_list, now, msgs):
         return
 
     # Despawn if target is beyond distance from ALL guards
-    nearest = min(abs(target.x - m.x) + abs(target.y - m.y) for _, m in guards)
+    nearest = min(abs(target_avatar.x - m.x) + abs(target_avatar.y - m.y) for _, m in guards)
     if nearest > GUARD_DESPAWN_DISTANCE:
         for i, m in guards:
             m.alive = False

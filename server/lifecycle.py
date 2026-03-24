@@ -10,7 +10,7 @@ from server.constants import (
     ROOM_COLS, ROOM_ROWS, DOORWAY_TILES, STARTING_ROOM,
 )
 from server.models import Monster
-from server.net import players_in_room, player_info
+from server.net import avatars_in_room, player_info
 from server.dungeons import (
     create_dungeon, destroy_dungeon, dungeon_player_count, resolve_dungeon_room,
     is_dungeon_room, get_boss_distances, get_dungeon_for_room,
@@ -121,8 +121,8 @@ def on_player_leave_room(room_id: str, msgs: list, skip_dungeon_teardown: bool =
     dungeon room (they're temporarily removed from game.players so the count
     would incorrectly hit 0).
     """
-    if players_in_room(room_id):
-        return  # still has players
+    if avatars_in_room(room_id):
+        return  # still has players with physical presence
 
     game.room_hearts.pop(room_id, None)
     game.room_projectiles.pop(room_id, None)
@@ -156,6 +156,7 @@ def on_player_leave_room(room_id: str, msgs: list, skip_dungeon_teardown: bool =
 
 def send_room_enter(player, msgs: list, exit_direction: str = None):
     """Build and append the room_enter message with all room data."""
+    from server.models import Avatar
     room = game.rooms.get(player.room)
     if not room:
         print(f"[BUG] send_room_enter: room {player.room} missing for {player.name}! Redirecting to spawn.")
@@ -163,10 +164,12 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
             f"send_room_enter called with destroyed room {player.room} — this should never happen"
         player.room = STARTING_ROOM
         spawn = game.rooms[STARTING_ROOM]["spawn_points"]["default"]
-        player.x, player.y = float(spawn[0]), float(spawn[1])
+        a = player.avatar
+        a.x, a.y = float(spawn[0]), float(spawn[1])
         room = game.rooms[STARTING_ROOM]
         exit_direction = None
-    others = [player_info(p) for p in players_in_room(player.room, exclude=player.ws)]
+    a = player.avatar
+    others = [player_info(p) for p, _a in avatars_in_room(player.room, exclude=player.ws)]
     guards = game.guards.get(player.room, [])
     monsters = []
     now = time.monotonic()
@@ -194,7 +197,7 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
         "room_id": player.room,
         "name": room["name"],
         "tilemap": room["tilemap"],
-        "your_pos": {"x": player.x, "y": player.y},
+        "your_pos": {"x": a.x, "y": a.y},
         "players": others,
         "guards": [{"name": g["name"], "x": g["x"], "y": g["y"], "sprite": g.get("sprite", "guard")} for g in guards],
         "monsters": monsters,
@@ -456,63 +459,63 @@ def do_room_transition(player, exit_direction: str, msgs: list):
                 break
 
     new_room = game.rooms[new_room_id]
+    from server.models import Avatar
 
-    # Remove player from game during the transition so monster ticks / projectiles
-    # can't target them while they're between rooms.
-    game.players.pop(player.ws, None)
-    try:
-        # Broadcast departure (player already removed, so exclude isn't needed
-        # but other players in old room still see the message)
-        msgs.append(("broadcast", old_room, {"type": "player_left", "name": player.name}, None))
+    # Detach avatar — character vanishes from the world.  Monster ticks /
+    # projectiles can't target a player with no avatar.
+    old_avatar = player.avatar
+    old_x, old_y = old_avatar.x, old_avatar.y
+    player.avatar = None
 
-        # Move player — preserve column/row through the doorway
-        old_x, old_y = player.x, player.y
-        player.pending_collisions.clear()
-        player.room = new_room_id
-        entry = ENTRY_DIR.get(exit_direction, "default")
-        spawn = new_room["spawn_points"].get(entry, new_room["spawn_points"]["default"])
-        player.x, player.y = float(spawn[0]), float(spawn[1])
-        if exit_direction in ("north", "south"):
-            player.x = float(old_x)  # keep column
-        elif exit_direction in ("east", "west"):
-            player.y = float(old_y)  # keep row
+    # Broadcast departure (avatar is gone so player is excluded from
+    # players_in_room, but we add explicit exclude for broadcast_to_room
+    # which checks player.room)
+    msgs.append(("broadcast", old_room, {"type": "player_left", "name": player.name}, player.ws))
 
-        # Monster lifecycle — leave old room, enter new room
-        # Skip dungeon teardown if the player is moving to another dungeon room
-        # (they're removed from game.players so dungeon_player_count would be wrong)
-        entering_dungeon = is_dungeon_room(new_room_id)
-        on_player_leave_room(old_room, msgs, skip_dungeon_teardown=entering_dungeon)
+    # Update which room the player is in
+    player.room = new_room_id
+    entry = ENTRY_DIR.get(exit_direction, "default")
+    spawn = new_room["spawn_points"].get(entry, new_room["spawn_points"]["default"])
+    spawn_x, spawn_y = float(spawn[0]), float(spawn[1])
+    if exit_direction in ("north", "south"):
+        spawn_x = float(old_x)  # keep column through doorway
+    elif exit_direction in ("east", "west"):
+        spawn_y = float(old_y)  # keep row through doorway
 
-        # Defensive: verify destination room wasn't destroyed by dungeon teardown.
-        # This should never happen with the current synchronous tick design, but
-        # guards against future code changes introducing await points mid-transition.
-        if new_room_id not in game.rooms:
-            print(f"[BUG] Room {new_room_id} destroyed mid-transition for {player.name}! Redirecting to spawn.")
-            assert os.environ.get("DEBUG_MODE", "").lower() not in ("1", "true"), \
-                f"Room {new_room_id} destroyed during do_room_transition — this should never happen"
-            new_room_id = STARTING_ROOM
-            player.room = STARTING_ROOM
-            spawn = game.rooms[STARTING_ROOM]["spawn_points"]["default"]
-            player.x, player.y = float(spawn[0]), float(spawn[1])
-            exit_direction = None
+    # Monster lifecycle — leave old room, enter new room
+    # Skip dungeon teardown if moving to another dungeon room
+    entering_dungeon = is_dungeon_room(new_room_id)
+    on_player_leave_room(old_room, msgs, skip_dungeon_teardown=entering_dungeon)
 
-        on_player_enter_room(new_room_id)
+    # Defensive: verify destination room wasn't destroyed by dungeon teardown.
+    if new_room_id not in game.rooms:
+        print(f"[BUG] Room {new_room_id} destroyed mid-transition for {player.name}! Redirecting to spawn.")
+        assert os.environ.get("DEBUG_MODE", "").lower() not in ("1", "true"), \
+            f"Room {new_room_id} destroyed during do_room_transition — this should never happen"
+        new_room_id = STARTING_ROOM
+        player.room = STARTING_ROOM
+        spawn = game.rooms[STARTING_ROOM]["spawn_points"]["default"]
+        spawn_x, spawn_y = float(spawn[0]), float(spawn[1])
+        exit_direction = None
 
-        # Adjust spawn position for locked trap rooms — spawn 1 tile inward
-        if new_room_id in game.locked_rooms:
-            if entry == "south":
-                player.y = min(player.y, 9.0)
-            elif entry == "north":
-                player.y = max(player.y, 1.0)
-            elif entry == "east":
-                player.x = min(player.x, 13.0)
-            elif entry == "west":
-                player.x = max(player.x, 1.0)
+    on_player_enter_room(new_room_id)
 
-        # Send new room data and broadcast arrival while still removed,
-        # so game_tick can't target us before the client has loaded.
-        send_room_enter(player, msgs, exit_direction=exit_direction)
-        msgs.append(("broadcast", new_room_id,
-                      {"type": "player_entered", **player_info(player)}, None))
-    finally:
-        game.players[player.ws] = player
+    # Adjust spawn position for locked trap rooms — spawn 1 tile inward
+    if new_room_id in game.locked_rooms:
+        if entry == "south":
+            spawn_y = min(spawn_y, 9.0)
+        elif entry == "north":
+            spawn_y = max(spawn_y, 1.0)
+        elif entry == "east":
+            spawn_x = min(spawn_x, 13.0)
+        elif entry == "west":
+            spawn_x = max(spawn_x, 1.0)
+
+    # Create new avatar at the spawn position
+    player.avatar = Avatar(spawn_x, spawn_y, old_avatar.direction)
+
+    # Send new room data and broadcast arrival (exclude self from broadcast
+    # since player.room is already new_room_id)
+    send_room_enter(player, msgs, exit_direction=exit_direction)
+    msgs.append(("broadcast", new_room_id,
+                  {"type": "player_entered", **player_info(player)}, player.ws))

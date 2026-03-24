@@ -23,18 +23,31 @@ async def broadcast_to_room(room_id: str, msg: dict, exclude=None):
 
 
 def players_in_room(room_id: str, exclude=None):
+    """Return all players whose current room matches — regardless of avatar state."""
     return [p for p in game.players.values() if p.room == room_id and p.ws != exclude]
 
 
+def avatars_in_room(room_id: str, exclude=None):
+    """Return (player, avatar) tuples for players physically present in a room.
+
+    Use this for combat targeting, collision checks, and anything that requires
+    the character to be physically in the world.  Avatar is guaranteed non-None.
+    """
+    return [(p, p.avatar) for p in game.players.values()
+            if p.avatar is not None and p.room == room_id and p.ws != exclude]
+
+
 def player_info(p) -> dict:
+    """Build the wire-format dict for a player (requires avatar)."""
+    a = p.avatar
     info = {
         "name": p.name,
-        "x": p.x,
-        "y": p.y,
-        "direction": p.direction,
+        "x": a.x,
+        "y": a.y,
+        "direction": a.direction,
         "color_index": p.color_index,
     }
-    if p.dancing:
+    if a.dancing:
         info["dancing"] = True
     return info
 

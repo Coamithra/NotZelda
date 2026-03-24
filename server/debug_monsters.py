@@ -560,7 +560,7 @@ async def handle_debug_spawn(player, args: str):
     guards = game.guards.get(player.room, [])
     spawn_x, spawn_y = None, None
     for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1), (2, 0), (-2, 0), (0, 2), (0, -2)]:
-        nx, ny = player.x + dx, player.y + dy
+        nx, ny = player.avatar.x + dx, player.avatar.y + dy
         if 0 <= nx < ROOM_COLS and 0 <= ny < ROOM_ROWS:
             if game.is_walkable_tile(tilemap[ny][nx]):
                 if not any(g["x"] == nx and g["y"] == ny for g in guards):

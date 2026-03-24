@@ -28,7 +28,7 @@ from server import behavior_engine
 from server.state import game
 from server.constants import STARTING_ROOM, PLAYER_MAX_HP, ROOM_COLS, ROOM_ROWS
 from server.models import Player
-from server.net import send_to, players_in_room, player_info, log_event
+from server.net import send_to, avatars_in_room, player_info, log_event
 from server.rooms import load_room_files, load_dungeon_templates
 from server.lifecycle import on_player_enter_room, on_player_leave_room, send_room_enter
 from server.combat import game_tick, flush_messages
@@ -136,7 +136,9 @@ async def handle_connection(websocket):
 
         player = Player(websocket, name, desc or "A mysterious stranger.", color_index)
         spawn = game.rooms[STARTING_ROOM]["spawn_points"]["default"]
-        player.x, player.y = float(spawn[0]), float(spawn[1])
+        player.avatar.x, player.avatar.y = float(spawn[0]), float(spawn[1])
+        player.avatar.last_reported_x = player.avatar.x
+        player.avatar.last_reported_y = player.avatar.y
         game.players[websocket] = player
         log_event("JOIN", f"{name} ({player.description})")
         print(f"[JOIN] {name} from {addr}")
@@ -343,7 +345,7 @@ async def main():
         print(f"[LIBS] {type_id}: monster {m.real_count}/{m.capacity}, "
               f"tile {t.real_count}/{t.capacity}, room {r.real_count}/{r.capacity}")
 
-    behavior_engine.init(players_in_room, ROOM_COLS, ROOM_ROWS, game.is_walkable_tile, game.guards, game.rooms)
+    behavior_engine.init(avatars_in_room, ROOM_COLS, ROOM_ROWS, game.is_walkable_tile, game.guards, game.rooms)
     port = int(os.environ.get("PORT", 8080))
     server = await websockets.serve(
         handle_connection, "0.0.0.0", port,
