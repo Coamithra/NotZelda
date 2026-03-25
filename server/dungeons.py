@@ -1527,12 +1527,20 @@ def get_boss_distances(instance: DungeonInstance) -> dict:
     if not instance or not instance.boss_cell:
         return {}
     boss = instance.boss_cell
+    connections = instance.connections
+    if not connections:
+        # No connections — return just the boss cell at distance 0
+        c, r = boss
+        return {f"{instance.dungeon_id}_{c}_{r}": 0}
     adj = {}
-    for conn in instance.connections:
+    for conn in connections:
         cells = list(conn)
-        if len(cells) == 2:
-            adj.setdefault(cells[0], []).append(cells[1])
-            adj.setdefault(cells[1], []).append(cells[0])
+        if len(cells) != 2:
+            print(f"[DUNGEON] WARNING: malformed connection (len={len(cells)}): {conn}")
+            continue
+        a, b = cells
+        adj.setdefault(a, []).append(b)
+        adj.setdefault(b, []).append(a)
     dist = {boss: 0}
     queue = deque([boss])
     while queue:
