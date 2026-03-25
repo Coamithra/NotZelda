@@ -189,6 +189,7 @@ SYSTEM_PROMPT_MONSTER_DESIGN = _load_prompt("monster_design_system.txt")
 SYSTEM_PROMPT_MONSTER_SPRITE = _load_prompt("monster_sprite_system.txt")
 SYSTEM_PROMPT_TILES = _load_prompt("tiles_system.txt")
 SYSTEM_PROMPT_LAYOUT = _load_prompt("layout_system.txt")
+SYSTEM_PROMPT_RENAME = "You rename game content to avoid name collisions. Return ONLY valid JSON."
 
 
 # ---------------------------------------------------------------------------
@@ -1308,6 +1309,70 @@ def _roll_new_count(library_full: bool, library_count: int, library_capacity: in
         return 1 if random.random() < 0.4 else 0
 
 
+async def _rename_monster_kind(old_kind: str, taken_names: set[str],
+                               theme: str) -> str | None:
+    """Ask the AI for a new unique monster kind name.
+
+    Returns the new kind string, or None if all attempts collide.
+    """
+    taken_list = ", ".join(sorted(taken_names))
+    prompt = _load_prompt("rename_kind_user.txt",
+                          old_kind=old_kind, theme=theme,
+                          taken_names=taken_list)
+
+    for attempt in range(3):
+        result = await _call_ai(
+            system_prompt=SYSTEM_PROMPT_RENAME,
+            user_prompt=prompt,
+            validate_fn=lambda d: (
+                [] if isinstance(d.get("kind"), str)
+                       and _re.match(r'^[a-z][a-z0-9_]*$', d["kind"])
+                else ["must return {\"kind\": \"lowercase_snake_case\"}"]
+            ),
+            label=f"rename_kind_{old_kind}",
+            max_retries=0,
+        )
+        if result and result["kind"] not in taken_names:
+            return result["kind"]
+        if result:
+            taken_names.add(result["kind"])
+            print(f"[GEN] Rename attempt {attempt+1} for '{old_kind}' "
+                  f"returned '{result['kind']}' which is also taken")
+    return None
+
+
+async def _rename_tile_id(old_id: str, taken_ids: set[str],
+                          theme: str) -> str | None:
+    """Ask the AI for a new unique tile id.
+
+    Returns the new id string, or None if all attempts collide.
+    """
+    taken_list = ", ".join(sorted(taken_ids))
+    prompt = _load_prompt("rename_tile_id_user.txt",
+                          old_id=old_id, theme=theme,
+                          taken_ids=taken_list)
+
+    for attempt in range(3):
+        result = await _call_ai(
+            system_prompt=SYSTEM_PROMPT_RENAME,
+            user_prompt=prompt,
+            validate_fn=lambda d: (
+                [] if isinstance(d.get("id"), str)
+                       and _re.match(r'^[a-z][a-z0-9_]*$', d["id"])
+                else ["must return {\"id\": \"lowercase_snake_case\"}"]
+            ),
+            label=f"rename_tile_{old_id}",
+            max_retries=0,
+        )
+        if result and result["id"] not in taken_ids:
+            return result["id"]
+        if result:
+            taken_ids.add(result["id"])
+            print(f"[GEN] Rename attempt {attempt+1} for '{old_id}' "
+                  f"returned '{result['id']}' which is also taken")
+    return None
+
+
 async def generate_room(
     theme: str = "dungeon",
     difficulty: int = 5,
@@ -1321,6 +1386,8 @@ async def generate_room(
     tile_library_count: int = 0,
     tile_library_capacity: int = 20,
     progress=None,
+    taken_monster_kinds: set[str] | None = None,
+    taken_tile_ids: set[str] | None = None,
 ) -> dict | None:
     """Generate a complete dungeon room via multiple focused AI calls.
 
@@ -1328,6 +1395,8 @@ async def generate_room(
     then generates the layout with the full inventory.
 
     progress: optional async callback(step: str, detail: str) called at each step.
+    taken_monster_kinds: all currently registered monster kinds (for collision detection).
+    taken_tile_ids: all currently registered tile IDs (for collision detection).
 
     Returns the validated room dict, or None on failure.
     Each dict has: name, tilemap, new_tiles, new_monsters, monster_placements.
@@ -1401,6 +1470,39 @@ async def generate_room(
             print(f"[GEN] Created {len(new_tiles)} tile(s): {[t.get('id') for t in new_tiles]}")
         else:
             print("[GEN] Tile generation failed, continuing with existing tiles only")
+
+    # --- Step 2b: Resolve name collisions before layout sees the names ---
+    if taken_monster_kinds is not None:
+        for m in list(new_monsters):
+            if m["kind"] in taken_monster_kinds:
+                old = m["kind"]
+                await _progress("rename", f"Renaming monster '{old}' (name taken)...")
+                new_kind = await _rename_monster_kind(old, taken_monster_kinds, theme)
+                if new_kind:
+                    print(f"[GEN] Renamed monster '{old}' -> '{new_kind}'")
+                    m["kind"] = new_kind
+                else:
+                    print(f"[GEN] Could not rename monster '{old}', "
+                          "room will reuse existing definition")
+                    new_monsters.remove(m)
+                    continue
+            taken_monster_kinds.add(m["kind"])
+
+    if taken_tile_ids is not None:
+        for t in list(new_tiles):
+            if t["id"] in taken_tile_ids:
+                old = t["id"]
+                await _progress("rename", f"Renaming tile '{old}' (id taken)...")
+                new_id = await _rename_tile_id(old, taken_tile_ids, theme)
+                if new_id:
+                    print(f"[GEN] Renamed tile '{old}' -> '{new_id}'")
+                    t["id"] = new_id
+                else:
+                    print(f"[GEN] Could not rename tile '{old}', "
+                          "room will reuse existing definition")
+                    new_tiles.remove(t)
+                    continue
+            taken_tile_ids.add(t["id"])
 
     # --- Step 3: Generate layout ---
     await _progress("layout", "Designing room layout...")

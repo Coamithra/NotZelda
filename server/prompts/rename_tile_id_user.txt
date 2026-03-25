@@ -1,0 +1,9 @@
+The tile id "{{old_id}}" is already taken.
+Theme: {{theme}}
+
+Invent a new unique tile id for this tile. It should still fit the theme.
+
+Already taken (do NOT reuse any of these):
+{{taken_ids}}
+
+Return ONLY valid JSON: {"id": "new_lowercase_snake_case_id"}

@@ -267,12 +267,23 @@ def validate_tile(data: dict) -> list[str]:
 
 
 def register_monster_type(data: dict) -> tuple[bool, list[str]]:
-    """Register a new monster type at runtime. Returns (success, errors)."""
+    """Register a new monster type at runtime. Returns (success, errors).
+
+    Refuses to overwrite an already-registered kind. If the kind already
+    exists the call returns ``(False, ["collision:..."])`` so the caller
+    can decide whether to rename and retry or reuse the existing entry.
+    """
     errors = validate_monster(data)
     if errors:
         return False, errors
 
     kind = data["kind"]
+
+    if kind in game.monster_stats:
+        msg = f"collision: monster kind '{kind}' is already registered"
+        print(f"[REG] {msg}")
+        return False, [msg]
+
     stats = data["stats"]
     sprite = data["sprite"]
 
@@ -306,12 +317,21 @@ def register_monster_type(data: dict) -> tuple[bool, list[str]]:
 
 
 def register_tile_type(data: dict) -> tuple[bool, list[str]]:
-    """Register a new custom tile type at runtime. Returns (success, errors)."""
+    """Register a new custom tile type at runtime. Returns (success, errors).
+
+    Refuses to overwrite an already-registered tile ID.
+    """
     errors = validate_tile(data)
     if errors:
         return False, errors
 
     tile_id = data["id"]
+
+    if tile_id in game.custom_tile_recipes:
+        msg = f"collision: tile id '{tile_id}' is already registered"
+        print(f"[REG] {msg}")
+        return False, [msg]
+
     recipe = {
         "colors": data["colors"],
         "layers": data["layers"],

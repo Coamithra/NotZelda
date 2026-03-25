@@ -1,0 +1,9 @@
+The monster kind "{{old_kind}}" is already taken.
+Theme: {{theme}}
+
+Invent a new unique kind name for this monster. It should still fit the theme.
+
+Already taken (do NOT reuse any of these):
+{{taken_names}}
+
+Return ONLY valid JSON: {"kind": "new_lowercase_snake_case_name"}

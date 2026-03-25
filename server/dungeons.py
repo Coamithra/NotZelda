@@ -1390,6 +1390,12 @@ async def _background_regen(num_rooms, snapshot, type_id):
     tile_count = snapshot["tile_count"]
     tile_cap = snapshot["tile_cap"]
 
+    # Collect all registered names so generate_room can detect collisions.
+    # This is a mutable set — generate_room adds new names as it renames,
+    # so subsequent rooms in this batch also see them.
+    taken_monster_kinds = set(game.monster_stats.keys())
+    taken_tile_ids = set(game.custom_tile_recipes.keys())
+
     for i in range(num_rooms):
         broadcast_debug(f"Regen [{type_id}]: room {i+1}/{num_rooms}...")
         try:
@@ -1406,6 +1412,8 @@ async def _background_regen(num_rooms, snapshot, type_id):
                 tile_library_count=tile_count,
                 tile_library_capacity=tile_cap,
                 progress=on_progress,
+                taken_monster_kinds=taken_monster_kinds,
+                taken_tile_ids=taken_tile_ids,
             )
         except Exception as e:
             print(f"[REGEN] [{type_id}] Room {i+1}/{num_rooms} failed: {type(e).__name__}: {e}")
