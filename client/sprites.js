@@ -412,11 +412,41 @@ function drawItemHeart(ctx, px, py, S) {
   ctx.fillRect(ox+14*S, oy+7*S, S, S);
 }
 
+function drawItemKey(ctx, px, py, S) {
+  // Classic gold small key — circular bow at top, shaft, two teeth
+  const gold = "#d4a830";
+  const dark = "#8a6e10";
+  const bright = "#f0d060";
+  ctx.fillStyle = gold;
+  // Bow (circular ring at top)
+  ctx.fillRect(px+2*S, py, 4*S, S);
+  ctx.fillRect(px+S, py+S, 6*S, S);
+  ctx.fillRect(px+S, py+2*S, 2*S, S);
+  ctx.fillRect(px+5*S, py+2*S, 2*S, S);
+  ctx.fillRect(px+S, py+3*S, 6*S, S);
+  ctx.fillRect(px+2*S, py+4*S, 4*S, S);
+  // Shaft
+  ctx.fillRect(px+3*S, py+5*S, 2*S, 5*S);
+  // Teeth
+  ctx.fillRect(px+5*S, py+8*S, 2*S, S);
+  ctx.fillRect(px+5*S, py+10*S, 2*S, S);
+  // Highlight
+  ctx.fillStyle = bright;
+  ctx.fillRect(px+3*S, py+S, 2*S, S);
+  ctx.fillRect(px+2*S, py+2*S, S, S);
+  // Shadow
+  ctx.fillStyle = dark;
+  ctx.fillRect(px+4*S, py+5*S, S, 5*S);
+  ctx.fillRect(px+6*S, py+8*S, S, S);
+  ctx.fillRect(px+6*S, py+10*S, S, S);
+}
+
 const ITEM_DRAW_FNS = {
   sword: drawItemSword,
   map: drawItemMap,
   compass: drawItemCompass,
   heart: drawItemHeart,
+  key: drawItemKey,
 };
 
 function drawGroundItem(ctx, px, py, itemType, S) {

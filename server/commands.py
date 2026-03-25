@@ -7,7 +7,7 @@ import time
 
 from server.state import game
 from server.constants import (
-    DIRECTIONS, ROOM_COLS, ROOM_ROWS,
+    DIRECTIONS, ROOM_COLS, ROOM_ROWS, DOORWAY_TILES,
     ATTACK_COOLDOWN, HEART_DROP_CHANCE, HEART_RESTORE_HP,
     POSITION_UPDATE_RATE, MAX_MOVE_PER_UPDATE, GUARD_COOLDOWN,
     COLLISION_GRACE_PERIOD,
@@ -34,6 +34,8 @@ def process_player_commands(player, now, msgs):
             _process_attack(player, data, now, msgs)
         elif cmd_type == "chat":
             _process_chat(player, data, msgs)
+        elif cmd_type == "unlock_door":
+            _process_unlock_door(player, data, msgs)
 
 
 # ---------------------------------------------------------------------------
@@ -244,9 +246,14 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
             for item in list(items):
                 if abs(a.x - item["x"]) < 0.75 and abs(a.y - item["y"]) < 0.75:
                     item_type = item["item_type"]
-                    dinst.collected_items.add(item_type)
                     items.remove(item)
-                    item_name = {"map": "Dungeon Map", "compass": "Compass"}.get(item_type, item_type)
+                    if item_type == "key":
+                        # Keys go to the player, not to collected_items
+                        player.keys += 1
+                        item_name = "Small Key"
+                    else:
+                        dinst.collected_items.add(item_type)
+                        item_name = {"map": "Dungeon Map", "compass": "Compass"}.get(item_type, item_type)
                     msgs.append(("send", player, {
                         "type": "item_obtained",
                         "item_type": item_type,
@@ -257,11 +264,17 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
                         "item_type": item_type,
                         "name": player.name,
                     }, player.ws))
-                    broadcast_to_dungeon(dinst, {
+                    collect_msg = {
                         "type": "dungeon_item_collected",
                         "item_type": item_type,
                         "collected_by": player.name,
-                    }, msgs)
+                    }
+                    # Include position for keys (multiple can exist, need precise removal)
+                    if item_type == "key":
+                        collect_msg["x"] = item["x"]
+                        collect_msg["y"] = item["y"]
+                        collect_msg["room_id"] = player.room
+                    broadcast_to_dungeon(dinst, collect_msg, msgs)
                     break
 
     # Guard proximity chat (float-aware)
@@ -548,5 +561,119 @@ def _process_slash_command(player, text, msgs):
             msgs.append(("send", player, {"type": "boss_choir_start", "distance": dist}))
             msgs.append(("send", player, {"type": "info", "text": f"Choir overlay ON (distance={dist})"}))
 
+    elif cmd == "key" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+        player.keys += 1
+        msgs.append(("send", player, {"type": "key_update", "keys": player.keys}))
+        msgs.append(("send", player, {"type": "info", "text": f"Granted key (total: {player.keys})"}))
+
+    elif cmd == "keylayout" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+        dinst = get_dungeon_for_room(player.room)
+        if not dinst or not dinst.zone_cells:
+            msgs.append(("send", player, {"type": "info", "text": "Not in a dungeon with locked doors"}))
+        else:
+            from collections import Counter
+            key_counts = Counter(dinst.key_cells)
+            zone_data = []
+            for zid, cells in dinst.zone_cells.items():
+                keys_in_zone = sum(key_counts.get(c, 0) for c in cells)
+                zone_data.append({
+                    "zone_id": zid,
+                    "cells": [[c[0], c[1]] for c in cells],
+                    "keys": keys_in_zone,
+                })
+            msgs.append(("send", player, {
+                "type": "keylayout",
+                "zones": zone_data,
+            }))
+            msgs.append(("send", player, {"type": "info",
+                "text": f"Key layout: {len(dinst.zone_cells)} zones, "
+                        f"{len(dinst.locked_doors)} doors, {len(dinst.key_cells)} keys"}))
+
     else:
         msgs.append(("send", player, {"type": "info", "text": "Unknown command. Try /help"}))
+
+
+# ---------------------------------------------------------------------------
+# Locked door unlock
+# ---------------------------------------------------------------------------
+
+_UNLOCK_DIR_OFFSETS = {"north": (0, -1), "south": (0, 1), "west": (-1, 0), "east": (1, 0)}
+_OPPOSITE = {"north": "south", "south": "north", "east": "west", "west": "east"}
+
+
+def _process_unlock_door(player, data, msgs):
+    """Handle player walking into a locked door — consume key and open it."""
+    if player.keys <= 0 or player.hp <= 0:
+        return
+    direction = data.get("direction")
+    if direction not in DOORWAY_TILES:
+        return
+
+    dinst = get_dungeon_for_room(player.room)
+    if not dinst:
+        return
+
+    # Map room_id back to cell
+    cell = _room_id_to_cell(player.room, dinst)
+    if not cell:
+        return
+
+    # Check if there's a locked door in this direction
+    dc, dr = _UNLOCK_DIR_OFFSETS[direction]
+    neighbor = (cell[0] + dc, cell[1] + dr)
+    edge = frozenset((cell, neighbor))
+    if edge not in dinst.locked_doors or edge in dinst.unlocked_doors:
+        return
+
+    # Consume key and unlock
+    player.keys -= 1
+    dinst.unlocked_doors.add(edge)
+
+    # Edge data for client minimap update
+    unlocked_edge = [list(cell), list(neighbor)]
+
+    # Restore tiles in this room
+    _unlock_locked_door(player.room, direction, dinst, msgs, unlocked_edge)
+
+    # Restore tiles in neighbor room (if resolved)
+    neighbor_room_id = f"{dinst.dungeon_id}_{neighbor[0]}_{neighbor[1]}"
+    opposite = _OPPOSITE[direction]
+    if neighbor_room_id in game.rooms:
+        _unlock_locked_door(neighbor_room_id, opposite, dinst, msgs, unlocked_edge)
+
+    # Send key count update
+    msgs.append(("send", player, {"type": "key_update", "keys": player.keys}))
+    msgs.append(("send", player, {"type": "info", "text": "Used a Small Key!"}))
+
+    print(f"[DUNGEON] {player.name} unlocked door {direction} in {player.room} "
+          f"(keys remaining: {player.keys})")
+
+
+def _room_id_to_cell(room_id, dinst):
+    """Convert a room_id like 'd1_3_2' back to a (col, row) cell tuple."""
+    for cell, rid in dinst.room_map.items():
+        if rid == room_id:
+            return cell
+    return None
+
+
+def _unlock_locked_door(room_id, direction, dinst, msgs, unlocked_edge=None):
+    """Restore original tiles for a locked doorway in one room."""
+    room = game.rooms.get(room_id)
+    if not room:
+        return
+    tilemap = room["tilemap"]
+    originals = dinst.locked_door_originals.get(room_id, {})
+    tile_changes = []
+    for r, c in DOORWAY_TILES[direction]:
+        original = originals.get((r, c), "DF")
+        tilemap[r][c] = original
+        tile_changes.append([r, c, original])
+    if tile_changes:
+        unlock_msg = {
+            "type": "doors_unlocked",
+            "tile_changes": tile_changes,
+        }
+        if unlocked_edge:
+            unlock_msg["unlocked_edge"] = unlocked_edge
+        msgs.append(("broadcast", room_id, unlock_msg, None))

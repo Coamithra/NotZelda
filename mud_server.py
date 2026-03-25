@@ -168,7 +168,7 @@ async def handle_connection(websocket):
                 msg_type = data.get("type")
                 if msg_type == "ping":
                     await player.ws.send(json.dumps({"type": "pong"}))
-                elif msg_type in ("position_update", "face", "attack", "chat"):
+                elif msg_type in ("position_update", "face", "attack", "chat", "unlock_door"):
                     player.command_queue.append((msg_type, data))
             except json.JSONDecodeError:
                 print(f"[WARN] {name}: bad JSON: {raw[:200]}")

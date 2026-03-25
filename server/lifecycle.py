@@ -270,6 +270,13 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
     if inst:
         msg["dungeon_type"] = inst.dungeon_id
 
+    # Attach key count and locked door edges for minimap
+    if inst:
+        msg["keys"] = player.keys
+        still_locked = inst.locked_doors - inst.unlocked_doors
+        if still_locked:
+            msg["locked_edges"] = [[list(c) for c in edge] for edge in still_locked]
+
     # Attach dungeon debug info for dungeon rooms
     if inst:
         dungeon_id = inst.dungeon_id

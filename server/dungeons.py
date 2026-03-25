@@ -43,6 +43,17 @@ class DungeonInstance:
         self.dungeon_items = {}        # room_id -> [{x, y, item_type}]
         self.collected_items = set()   # "map", "compass"
 
+        # Trap rooms — decided at creation time so key placement can use it
+        self.trap_cells = set()            # cells that will become trap rooms on resolution
+
+        # Locked doors & keys
+        self.locked_doors = set()          # frozensets of cell tuples (locked connections)
+        self.unlocked_doors = set()        # frozensets (doors unlocked by players during this run)
+        self.zone_of = {}                  # cell -> zone_id (for debug visualization)
+        self.zone_cells = {}               # zone_id -> set of cells
+        self.locked_door_originals = {}    # room_id -> {(r,c): original_tile_code}
+        self.key_cells = []                # [(col, row), ...] — cells where keys spawn
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -67,15 +78,17 @@ def broadcast_to_dungeon(instance, msg, msgs, exclude=None):
             msgs.append(("send", p, msg))
 
 
-def _find_item_tile(room_id):
+def _find_item_tile(room_id, exclude=None):
     """Find a random walkable interior tile reachable from a doorway,
-    not occupied by NPCs (which block movement)."""
+    not occupied by NPCs (which block movement).
+    exclude: set of (col, row) positions to avoid (e.g. already-placed items)."""
     room = game.rooms.get(room_id)
     if not room:
         return None
     tilemap = room["tilemap"]
     guards = game.guards.get(room_id, [])
     npc_tiles = {(g["x"], g["y"]) for g in guards}
+    blocked = npc_tiles | (exclude or set())
 
     # Build seeds from active exits + stairs
     exits = room.get("exits", {})
@@ -88,16 +101,21 @@ def _find_item_tile(room_id):
             if tile == "SU":
                 seeds.append((ry, rx))
 
-    if not seeds:
-        return None
-
-    reachable = bfs_reachable(tilemap, game.is_walkable_tile, seeds)
+    reachable = bfs_reachable(tilemap, game.is_walkable_tile, seeds) if seeds else set()
 
     # Filter to interior tiles (avoid exit doorways), skip NPC tiles
     # bfs_reachable returns (row, col); convert to (col, row) for output
     candidates = [(c, r) for (r, c) in reachable
                   if 1 <= r <= 9 and 1 <= c <= 13
-                  and (c, r) not in npc_tiles]
+                  and (c, r) not in blocked]
+
+    # Fallback: if no reachable interior tiles (e.g. all exits locked), scan for any walkable interior tile
+    if not candidates:
+        for r in range(1, ROOM_ROWS - 1):
+            for c in range(1, ROOM_COLS - 1):
+                if game.is_walkable_tile(tilemap[r][c]) and (c, r) not in blocked:
+                    candidates.append((c, r))
+
     if candidates:
         return random.choice(candidates)
     return None
@@ -216,6 +234,167 @@ def _get_cell_exits(cell, connections, entrance_col, entrance_row, dungeon_id, e
 
 
 # ---------------------------------------------------------------------------
+# Locked doors & key placement
+# ---------------------------------------------------------------------------
+
+_DIR_OFFSETS = {"north": (0, -1), "south": (0, 1), "west": (-1, 0), "east": (1, 0)}
+
+
+def _place_locked_doors(connections, active_cells, entrance, boss_cell, treasure_cell,
+                        item_cells_used, min_locks, max_locks, trap_cells=None):
+    """Choose connections to lock and place keys using the constraint solver.
+
+    Returns (locked_doors, key_cells, zone_of, zone_cells).
+    """
+    from tools.key_math.key_solver import solve as solve_keys
+
+    # Step 1: choose which connections to lock
+    # Exclude treasure cell's single connection (dead end, pointless to lock)
+    candidates = [e for e in connections if treasure_cell not in e]
+    effective_max = min(max_locks, len(candidates))
+    num_locks = random.randint(min(min_locks, effective_max), effective_max)
+    if num_locks == 0:
+        zone_of = {c: 0 for c in active_cells}
+        zone_cells = {0: set(active_cells)}
+        return set(), [], zone_of, zone_cells
+
+    locked = set(random.sample(candidates, num_locks))
+    print(f"[LOCKS] Chose {num_locks} locks from {len(candidates)} candidates")
+
+    # Step 2: build zone graph (connected components without locked edges)
+    unlocked_connections = connections - locked
+    cell_set = set(active_cells)
+
+    # BFS to find zones
+    zone_of = {}    # cell -> zone_id
+    zone_cells = {} # zone_id -> set of cells
+    zid = 0
+    for cell in active_cells:
+        if cell in zone_of:
+            continue
+        queue = deque([cell])
+        zone_of[cell] = zid
+        zone_cells[zid] = {cell}
+        while queue:
+            c = queue.popleft()
+            for dc, dr in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
+                nb = (c[0] + dc, c[1] + dr)
+                if nb in cell_set and nb not in zone_of:
+                    edge = frozenset((c, nb))
+                    if edge in unlocked_connections:
+                        zone_of[nb] = zid
+                        zone_cells[zid].add(nb)
+                        queue.append(nb)
+        zid += 1
+
+    entrance_zone = zone_of[entrance]
+
+    # Build zone adjacency — full multigraph sent to solver.
+    # Self-loops (both cells in same zone) = redundant doors the player can walk around.
+    # Remove them from locked set entirely — they don't block anything.
+    # Multi-edges: naturally kept as duplicate entries.
+    redundant = set()
+    zone_adj = {}
+    for edge in locked:
+        cells = list(edge)
+        za, zb = zone_of[cells[0]], zone_of[cells[1]]
+        if za == zb:
+            redundant.add(edge)
+            continue
+        zone_adj.setdefault(za, []).append(zb)
+        zone_adj.setdefault(zb, []).append(za)
+    if redundant:
+        locked -= redundant
+        num_locks = len(locked)
+        print(f"[LOCKS] Removed {len(redundant)} redundant self-loop doors (bypassable)")
+
+    # Ensure entrance zone is in the graph
+    if entrance_zone not in zone_adj:
+        zone_adj[entrance_zone] = []
+
+    solver_edges = sum(len(v) for v in zone_adj.values()) // 2
+    print(f"[LOCKS] Zone graph: {zone_adj}")
+    print(f"[LOCKS] Entrance zone: {entrance_zone}, solver edges: {solver_edges}, "
+          f"total doors: {num_locks}")
+
+    # Step 3: solve for key distribution
+    solutions = solve_keys(zone_adj, entrance_zone, max_keys=2)
+    print(f"[LOCKS] Solver returned {len(solutions)} solutions")
+
+    if not solutions:
+        # Fallback: all keys in entrance zone
+        print(f"[DUNGEON] key_solver found no solutions, falling back to entrance zone")
+        key_cells = []
+        excluded = {boss_cell, treasure_cell} | set(item_cells_used.values())
+        ez_cells = [c for c in zone_cells[entrance_zone] if c not in excluded]
+        for _ in range(num_locks):
+            if ez_cells:
+                pick = random.choice(ez_cells)
+                key_cells.append(pick)
+                ez_cells.remove(pick)
+            elif zone_cells[entrance_zone]:
+                key_cells.append(random.choice(list(zone_cells[entrance_zone])))
+        return locked, key_cells, zone_of, zone_cells
+
+    # Pick a random solution
+    distribution = random.choice(solutions)
+    print(f"[LOCKS] Chosen distribution: {distribution}")
+
+    # Step 4: place keys in rooms within each zone, preferring interesting rooms.
+    # Priority (lower = better): trap rooms > no locked doors > multi locked > single locked.
+    # Within same priority, spread keys across rooms (fewer keys already = better).
+
+    # Precompute per-cell info
+    locked_door_count = {}  # cell -> number of locked edges touching it
+    for edge in locked:
+        for c in edge:
+            locked_door_count[c] = locked_door_count.get(c, 0) + 1
+
+    trap_candidates = trap_cells or set()
+
+    excluded = {boss_cell, treasure_cell} | set(item_cells_used.values())
+    key_cells = []
+    keys_in_cell = {}  # cell -> keys already assigned here
+
+    for zone_id, num_keys in distribution.items():
+        zone_pool = [c for c in zone_cells.get(zone_id, []) if c not in excluded]
+
+        for _ in range(num_keys):
+            if zone_pool:
+                # Sort by priority: (keys_already, category)
+                # Category: 0=trap, 1=no locked doors, 2=multi locked, 3=single locked
+                def _sort_key(c):
+                    already = keys_in_cell.get(c, 0)
+                    ldc = locked_door_count.get(c, 0)
+                    if c in trap_candidates:
+                        cat = 0
+                    elif ldc == 0:
+                        cat = 1
+                    elif ldc >= 2:
+                        cat = 2
+                    else:
+                        cat = 3
+                    return (already, cat)
+
+                zone_pool.sort(key=_sort_key)
+                pick = zone_pool[0]
+                key_cells.append(pick)
+                keys_in_cell[pick] = keys_in_cell.get(pick, 0) + 1
+                # Don't remove from pool — allow multiple keys per room
+                # but the sort will deprioritize it next round
+            elif zone_cells.get(zone_id):
+                pick = random.choice(list(zone_cells[zone_id]))
+                key_cells.append(pick)
+
+    if len(key_cells) != num_locks:
+        print(f"[LOCKS] WARNING: keys={len(key_cells)} != doors={num_locks}!")
+    print(f"[LOCKS] Placed {len(key_cells)} keys for {num_locks} doors "
+          f"({len(zone_adj)} zones, {len(solutions)} solutions)")
+
+    return locked, key_cells, zone_of, zone_cells
+
+
+# ---------------------------------------------------------------------------
 # Trap room (lock-in) support
 # ---------------------------------------------------------------------------
 
@@ -302,13 +481,16 @@ def _apply_trap_room(room_id, tilemap, exits):
 # Room resolution
 # ---------------------------------------------------------------------------
 
-def _resolve_room_from_entry(room_id, entry_data, exits, cell, music_track, is_entrance, biome="dungeon", music_override=None, wall_tile="DW", can_be_trap=False, is_boss=False):
+def _resolve_room_from_entry(room_id, entry_data, exits, cell, music_track, is_entrance, biome="dungeon", music_override=None, wall_tile="DW", is_trap=False, locked_directions=None):
     """Materialize a library entry's data into a live game.rooms[] entry.
 
     entry_data: dict with 'name', 'tilemap' (list[list[str]]), 'monster_placements'
     music_override: if set, use this music instead of the dungeon's track.
     wall_tile: tile code to use for walling off unused exits.
+    locked_directions: set of direction strings whose doorways get LD/KD tiles.
     """
+    if locked_directions is None:
+        locked_directions = set()
     # Deep-copy tilemap (string tile codes)
     tilemap = [list(r) for r in entry_data["tilemap"]]
     if "north" not in exits:
@@ -356,12 +538,24 @@ def _resolve_room_from_entry(room_id, entry_data, exits, cell, music_track, is_e
             for p in placements
         ]
 
-    # Trap room selection — boss always, others 1/3 chance with 3+ monsters
-    if is_boss:
+    # Trap room setup — decided at dungeon creation time, applied here.
+    # Must run BEFORE locked door tiles so _apply_trap_room reads real floor tiles.
+    if is_trap:
         _apply_trap_room(room_id, tilemap, exits)
-    elif can_be_trap and len(placements) >= TRAP_ROOM_MIN_MONSTERS:
-        if random.random() < TRAP_ROOM_CHANCE:
-            _apply_trap_room(room_id, tilemap, exits)
+
+    # Place locked door tiles (LD KD LD) AFTER trap room setup
+    # so _apply_trap_room doesn't copy LD/KD into the inner ring
+    locked_originals = {}
+    for direction in locked_directions:
+        if direction not in DOORWAY_TILES:
+            continue
+        tiles = DOORWAY_TILES[direction]
+        # tiles is 3 positions: [side, center, side]
+        for i, (r, c) in enumerate(tiles):
+            locked_originals[(r, c)] = tilemap[r][c]
+            tilemap[r][c] = "KD" if i == 1 else "LD"
+
+    return locked_originals
 
 
 def create_dungeon(type_id) -> DungeonInstance | None:
@@ -423,20 +617,7 @@ def create_dungeon(type_id) -> DungeonInstance | None:
         num_custom = 0
     custom_cell_set = set(non_entrance[:num_custom])
 
-    perm_idx = 0
-    for cell in active_cells:
-        room_id = f"{type_id}_{cell[0]}_{cell[1]}"
-        active_rooms.add(room_id)
-        room_map[cell] = room_id
-
-        if cell in custom_cell_set:
-            cell_assignments[cell] = {"source": "custom", "resolved": False}
-        else:
-            entry = permanent_entries[perm_idx % len(permanent_entries)]
-            perm_idx += 1
-            cell_assignments[cell] = {"source": "precreated", "entry": entry, "resolved": False}
-
-    # Build custom slot pool: pre-fill with existing custom library entries, rest need generation
+    # Build custom slot pool: pre-fill with existing custom library entries, rest are placeholders
     if has_placeholders:
         num_slots = max_custom_slots
     else:
@@ -448,6 +629,31 @@ def create_dungeon(type_id) -> DungeonInstance | None:
         else:
             custom_slots.append(None)
     random.shuffle(custom_slots)
+
+    # Assign rooms to cells — custom cells get a slot from the pool upfront.
+    # If the slot is empty/placeholder, fall back to precreated immediately.
+    perm_idx = 0
+    for cell in active_cells:
+        room_id = f"{type_id}_{cell[0]}_{cell[1]}"
+        active_rooms.add(room_id)
+        room_map[cell] = room_id
+
+        if cell in custom_cell_set:
+            slot = custom_slots.pop() if custom_slots else None
+            if slot is not None and slot.get("data") is not None:
+                cell_assignments[cell] = {
+                    "source": "custom", "entry": slot.get("entry"),
+                    "slot_data": slot["data"], "resolved": False,
+                }
+            else:
+                # Empty slot or pool exhausted — fall back to precreated
+                entry = permanent_entries[perm_idx % len(permanent_entries)]
+                perm_idx += 1
+                cell_assignments[cell] = {"source": "precreated", "entry": entry, "resolved": False}
+        else:
+            entry = permanent_entries[perm_idx % len(permanent_entries)]
+            perm_idx += 1
+            cell_assignments[cell] = {"source": "precreated", "entry": entry, "resolved": False}
 
     # Build dungeon path — spanning tree with extra edges, find boss/treasure
     entrance = (entrance_col, entrance_row)
@@ -485,6 +691,28 @@ def create_dungeon(type_id) -> DungeonInstance | None:
     elif len(item_candidates) == 1:
         item_cells["map"] = item_candidates[0]
 
+    # Decide trap rooms upfront (boss always; others: 3+ monsters, 1/3 chance).
+    # All cells now have entry data assigned at creation time.
+    trap_cells = {boss_cell}
+    for cell, assignment in cell_assignments.items():
+        if cell in (entrance, boss_cell, treasure_cell):
+            continue
+        # Get monster placements from entry data or slot_data (custom rooms)
+        entry = assignment.get("entry")
+        data = assignment.get("slot_data") or (entry.data if entry and hasattr(entry, "data") else None)
+        if data:
+            n_monsters = len(data.get("monster_placements", []))
+            if n_monsters >= TRAP_ROOM_MIN_MONSTERS and random.random() < TRAP_ROOM_CHANCE:
+                trap_cells.add(cell)
+
+    # Place locked doors & keys
+    lock_min = type_config.get("min_locks", 0)
+    lock_max = type_config.get("max_locks", 3)
+    locked_doors, key_cells, lock_zone_of, lock_zone_cells = _place_locked_doors(
+        connections, active_cells, entrance, boss_cell, treasure_cell,
+        item_cells, lock_min, lock_max, trap_cells=trap_cells,
+    )
+
     instance = DungeonInstance(
         dungeon_id=type_id,
         layout=layout,
@@ -500,6 +728,11 @@ def create_dungeon(type_id) -> DungeonInstance | None:
     instance.boss_cell = boss_cell
     instance.treasure_cell = treasure_cell
     instance.item_cells = item_cells
+    instance.trap_cells = trap_cells
+    instance.locked_doors = locked_doors
+    instance.key_cells = key_cells
+    instance.zone_of = lock_zone_of
+    instance.zone_cells = lock_zone_cells
 
     game.active_dungeons[type_id] = instance
     for room_id in active_rooms:
@@ -518,14 +751,86 @@ def create_dungeon(type_id) -> DungeonInstance | None:
           f"rooms={len(active_rooms)} ({precreated_count}p/{custom_count}c/{special_count}s), "
           f"slots={num_slots} ({filled_slots}filled/{empty_slots}empty), "
           f"entrance={entrance_room_id}, boss={boss_id}, treasure={treasure_id}, "
-          f"music={music_track}, boss_music={boss_track}, connections={len(connections)}")
+          f"music={music_track}, boss_music={boss_track}, connections={len(connections)}, "
+          f"locked_doors={len(locked_doors)}, keys={len(key_cells)}")
     broadcast_debug(f"Dungeon {type_id} created: {layout['name']} ({len(active_rooms)} rooms, "
                     f"boss={boss_id}, treasure={treasure_id})")
+
+    # Dump dungeon layout to file for debugging
+    _dump_dungeon_debug(instance, active_cells, connections, locked_doors,
+                        key_cells, item_cells, entrance, boss_cell, treasure_cell)
 
     # Resolve the entrance room immediately (always precreated, so instant)
     resolve_dungeon_room(instance, (entrance_col, entrance_row))
 
     return instance
+
+
+def _dump_dungeon_debug(instance, active_cells, connections, locked_doors,
+                        key_cells, item_cells, entrance, boss_cell, treasure_cell):
+    """Write a human-readable dungeon layout to dungeon.txt for debugging."""
+    lines = []
+    lines.append(f"=== Dungeon: {instance.dungeon_id} ===")
+    lines.append(f"Entrance: {entrance}  Boss: {boss_cell}  Treasure: {treasure_cell}")
+    lines.append(f"Locked doors: {len(locked_doors)}  Keys: {len(key_cells)}")
+    lines.append("")
+
+    # Build cell labels
+    labels = {}
+    for c in active_cells:
+        tag = []
+        if c == entrance:
+            tag.append("ENT")
+        if c == boss_cell:
+            tag.append("BOSS")
+        if c == treasure_cell:
+            tag.append("TREA")
+        for itype, icell in item_cells.items():
+            if c == icell:
+                tag.append(itype.upper())
+        key_count = sum(1 for k in key_cells if k == c)
+        if key_count:
+            tag.append(f"KEY x{key_count}")
+        labels[c] = ", ".join(tag) if tag else ""
+
+    # Grid display
+    cols = sorted(set(c[0] for c in active_cells))
+    rows = sorted(set(c[1] for c in active_cells))
+    cell_set = set(active_cells)
+
+    lines.append("Grid (rooms marked with contents):")
+    for r in rows:
+        row_str = ""
+        for c in cols:
+            if (c, r) in cell_set:
+                label = labels.get((c, r), "")
+                row_str += f"[{c},{r} {label}]".ljust(22)
+            else:
+                row_str += " " * 22
+        lines.append(row_str.rstrip())
+    lines.append("")
+
+    # Connections
+    lines.append("Connections:")
+    for edge in sorted(connections, key=lambda e: tuple(sorted(e))):
+        cells = sorted(edge)
+        locked_tag = " ** LOCKED **" if edge in locked_doors else ""
+        lines.append(f"  {cells[0]} <-> {cells[1]}{locked_tag}")
+    lines.append("")
+
+    # Key placement summary
+    lines.append("Key cells:")
+    from collections import Counter
+    for cell, count in Counter(key_cells).items():
+        lines.append(f"  {cell} x{count}")
+    lines.append("")
+
+    try:
+        with open("dungeon.txt", "w") as f:
+            f.write("\n".join(lines))
+        print(f"[DUNGEON] Debug layout written to dungeon.txt")
+    except Exception as e:
+        print(f"[DUNGEON] Failed to write dungeon.txt: {e}")
 
 
 def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
@@ -555,90 +860,73 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
 
     exits = _get_cell_exits(cell, instance.connections, entrance_col, entrance_row, dungeon_id, exit_room)
 
-    if assignment["source"] in ("precreated", "special"):
-        entry_data = assignment["entry"].data
-        source_label = f"{assignment['source']}:{assignment['entry'].id}"
-    else:
-        # Custom cell — pick a random slot from the shared pool
-        entry_data, source_label = _resolve_custom_slot(
-            instance, assignment, room_id)
+    if assignment["source"] == "custom":
+        # Custom cell — slot pre-assigned at creation time
+        entry_data = assignment.get("slot_data")
+        entry = assignment.get("entry")
+        entry_id = entry.id if entry else "unknown"
+        source_label = f"custom:{entry_id}"
         if entry_data is None:
             return False
+    else:
+        # Precreated or special — entry always available
+        entry_data = assignment["entry"].data
+        source_label = f"{assignment['source']}:{assignment['entry'].id}"
 
     # Boss room uses boss music instead of the dungeon's random track
     music_override = None
     if cell == instance.boss_cell:
         music_override = instance.boss_track
 
-    # Normal rooms can be trap rooms; boss/treasure/entrance rooms cannot
-    is_boss = cell == instance.boss_cell
-    is_treasure = cell == instance.treasure_cell
-    can_be_trap = not is_entrance and not is_boss and not is_treasure
+    is_trap = cell in instance.trap_cells
 
-    _resolve_room_from_entry(room_id, entry_data, exits, cell, instance.music_track, is_entrance,
-                             biome=biome, music_override=music_override, wall_tile=wall_tile,
-                             can_be_trap=can_be_trap, is_boss=is_boss)
+    # Compute which directions have locked doors (still locked at resolution time)
+    locked_directions = set()
+    still_locked = instance.locked_doors - instance.unlocked_doors
+    for direction, (dc, dr) in _DIR_OFFSETS.items():
+        neighbor = (col + dc, row + dr)
+        edge = frozenset((cell, neighbor))
+        if edge in still_locked:
+            locked_directions.add(direction)
+
+    locked_originals = _resolve_room_from_entry(
+        room_id, entry_data, exits, cell, instance.music_track, is_entrance,
+        biome=biome, music_override=music_override, wall_tile=wall_tile,
+        is_trap=is_trap, locked_directions=locked_directions)
+
+    if locked_originals:
+        instance.locked_door_originals[room_id] = locked_originals
 
     assignment["resolved"] = True
     instance.resolved_rooms.add(room_id)
 
-    # Place dungeon items if this cell holds one
+    # Place dungeon items — track used positions to avoid overlap
+    used_positions = set()
+
     for item_type, item_cell in instance.item_cells.items():
         if cell == item_cell and item_type not in instance.collected_items:
-            pos = _find_item_tile(room_id)
+            pos = _find_item_tile(room_id, exclude=used_positions)
             if pos:
+                used_positions.add(pos)
                 instance.dungeon_items.setdefault(room_id, []).append(
                     {"x": pos[0], "y": pos[1], "item_type": item_type}
                 )
                 print(f"[DUNGEON] Placed {item_type} in {room_id} at ({pos[0]},{pos[1]})")
 
+    for key_cell in instance.key_cells:
+        if cell == key_cell:
+            pos = _find_item_tile(room_id, exclude=used_positions)
+            if pos:
+                used_positions.add(pos)
+                instance.dungeon_items.setdefault(room_id, []).append(
+                    {"x": pos[0], "y": pos[1], "item_type": "key"}
+                )
+                print(f"[DUNGEON] Placed key in {room_id} at ({pos[0]},{pos[1]})")
+
     print(f"[DUNGEON] Resolved {room_id} ({source_label})")
     return True
 
 
-def _resolve_custom_slot(instance, assignment, room_id):
-    """Pop a slot from the custom pool and use its content.
-
-    Each cell gets a unique slot (popped, not shared).
-    Falls back to a precreated room if the pool is exhausted or the slot
-    was a placeholder (empty). Background regen fills placeholders later.
-    Returns (entry_data, source_label) on success, or (None, None) on failure.
-    """
-    # Pop a slot from the pool (already shuffled at dungeon creation)
-    if instance.custom_slots:
-        slot = instance.custom_slots.pop()
-    else:
-        slot = None  # pool exhausted
-
-    # Slot has existing content — use it directly
-    if slot is not None and slot.get("data") is not None:
-        entry = slot.get("entry")
-        entry_id = entry.id if entry else "unknown"
-        assignment["entry"] = entry
-        return slot["data"], f"custom:{entry_id}"
-
-    # Pool exhausted or empty slot — fall back to a precreated room
-    reason = "pool exhausted" if slot is None else "empty slot"
-    type_id = instance.dungeon_id
-    libs = game.content_libraries.get(type_id, {})
-    room_library = libs.get("rooms")
-
-    if room_library:
-        used_ids = {a.get("entry").id for a in instance.cell_assignments.values()
-                    if a.get("entry") is not None}
-        available = [e for e in room_library.real_entries
-                     if e.permanent and e.id not in used_ids]
-        if not available:
-            # All permanent rooms used — allow duplicates as last resort
-            available = [e for e in room_library.real_entries if e.permanent]
-        if available:
-            pick = random.choice(available)
-            assignment["entry"] = pick
-            print(f"[DUNGEON] {reason} for {room_id}, using precreated '{pick.id}'")
-            broadcast_debug(f"Room {room_id}: {reason}, using precreated '{pick.id}'")
-            return pick.data, f"precreated-overflow:{pick.id}"
-
-    return None, None
 
 
 # ---------------------------------------------------------------------------

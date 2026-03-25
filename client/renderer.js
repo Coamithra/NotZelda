@@ -818,6 +818,29 @@ function renderHeartsHUD() {
   }
 }
 
+function renderKeyHUD() {
+  if (!G.dungeonState || G.keyCount <= 0) return;
+  const ctx = G.ctx;
+  const x = 8, y = 34;
+  // Background
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillRect(x, y, 52, 20);
+  // Tiny key icon
+  const ks = SCALE * 0.2;
+  ctx.fillStyle = "#d4a830";
+  ctx.fillRect(x+4+2*ks, y+4, 4*ks, ks);
+  ctx.fillRect(x+4+ks, y+4+ks, 6*ks, ks);
+  ctx.fillRect(x+4+ks, y+4+2*ks, 2*ks, ks);
+  ctx.fillRect(x+4+5*ks, y+4+2*ks, 2*ks, ks);
+  ctx.fillRect(x+4+ks, y+4+3*ks, 6*ks, ks);
+  ctx.fillRect(x+4+3*ks, y+4+4*ks, 2*ks, 4*ks);
+  ctx.fillRect(x+4+5*ks, y+4+6*ks, 2*ks, ks);
+  // Count text
+  ctx.font = "bold 12px monospace";
+  ctx.fillStyle = "#e6b422";
+  ctx.fillText("x" + G.keyCount, x + 26, y + 15);
+}
+
 function getExitDirs() {
   if (!G.currentRoom || !G.currentRoom.room_id) return new Set();
   const tm = G.currentRoom.tilemap;
@@ -1196,6 +1219,36 @@ function renderDungeonMinimap() {
     G.ctx.lineWidth = 1;
   }
 
+  // Draw locked door indicators (red bars between cells)
+  const lockedEdges = (ds && ds.lockedEdges) || [];
+  if ((hasMap || isDebug) && lockedEdges.length > 0) {
+    G.ctx.strokeStyle = "#cc3333";
+    G.ctx.lineWidth = 3;
+    for (const edge of lockedEdges) {
+      // edge = [[c1,r1], [c2,r2]]
+      const a = cellCenter(edge[0][0], edge[0][1]);
+      const b = cellCenter(edge[1][0], edge[1][1]);
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      // Draw a short perpendicular bar at the midpoint
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len = 4;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        // Horizontal connection — vertical bar
+        G.ctx.beginPath();
+        G.ctx.moveTo(mx, my - len);
+        G.ctx.lineTo(mx, my + len);
+        G.ctx.stroke();
+      } else {
+        // Vertical connection — horizontal bar
+        G.ctx.beginPath();
+        G.ctx.moveTo(mx - len, my);
+        G.ctx.lineTo(mx + len, my);
+        G.ctx.stroke();
+      }
+    }
+    G.ctx.lineWidth = 1;
+  }
+
   // Compass-only: fill entire bounding box so layout is hidden
   if (!isDebug && hasCompass && !hasMap) {
     for (let r = minR; r <= maxR; r++) {
@@ -1208,12 +1261,58 @@ function renderDungeonMinimap() {
     }
   }
 
+  // Key layout debug overlay (from /keylayout command)
+  const keyLayout = ds && ds.keyLayout;
+  if (keyLayout) {
+    const zoneColors = [
+      "rgba(220, 80, 80, 0.7)",   "rgba(80, 180, 220, 0.7)",
+      "rgba(80, 220, 120, 0.7)",  "rgba(220, 180, 40, 0.7)",
+      "rgba(180, 80, 220, 0.7)",  "rgba(220, 140, 60, 0.7)",
+      "rgba(60, 220, 200, 0.7)",  "rgba(220, 80, 180, 0.7)",
+      "rgba(140, 220, 60, 0.7)",  "rgba(100, 100, 220, 0.7)",
+      "rgba(220, 220, 80, 0.7)",  "rgba(80, 140, 140, 0.7)",
+    ];
+    // Build cell→zone lookup
+    const cellZone = {};
+    for (const zone of keyLayout) {
+      for (const [c, r] of zone.cells) {
+        cellZone[c + "," + r] = zone;
+      }
+    }
+    // Draw zone-colored cells
+    for (const cell of cells) {
+      const cx = mapX + pad + (cell.c - minC) * step;
+      const cy = mapY + pad + (cell.r - minR) * step;
+      const zone = cellZone[cell.c + "," + cell.r];
+      if (zone) {
+        G.ctx.fillStyle = zoneColors[zone.zone_id % zoneColors.length];
+        G.ctx.fillRect(cx, cy, cellSize, cellSize);
+      }
+    }
+    // Draw key count on the first cell of each zone
+    G.ctx.font = "bold 8px monospace";
+    G.ctx.textAlign = "center";
+    G.ctx.textBaseline = "middle";
+    for (const zone of keyLayout) {
+      if (zone.cells.length === 0) continue;
+      const [fc, fr] = zone.cells[0];
+      const cx = mapX + pad + (fc - minC) * step + cellSize / 2;
+      const cy = mapY + pad + (fr - minR) * step + cellSize / 2;
+      G.ctx.fillStyle = "#fff";
+      G.ctx.fillText(String(zone.keys), cx, cy);
+    }
+    G.ctx.textAlign = "start";
+    G.ctx.textBaseline = "alphabetic";
+  }
+
   // Draw each cell
   for (const cell of cells) {
     const cx = mapX + pad + (cell.c - minC) * step;
     const cy = mapY + pad + (cell.r - minR) * step;
 
-    if (isDebug) {
+    if (keyLayout) {
+      // Skip normal cell rendering when keylayout overlay is active
+    } else if (isDebug) {
       // Debug mode — color by room type and state
       if (cell.boss) {
         G.ctx.fillStyle = cell.res ? "rgba(220, 60, 60, 0.8)" : "rgba(220, 60, 60, 0.3)";
