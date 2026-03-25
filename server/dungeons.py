@@ -1085,6 +1085,42 @@ def _cleanup_tile(tid, type_id=None):
             dep.get("tiles", set()).discard(tid)
 
 
+def _sweep_orphaned_content():
+    """Remove registry entries not tracked by any library or referenced by any room.
+
+    Catches orphaned entries from background regen that couldn't fit in a
+    full library. Built-in content (loaded at startup) is always preserved.
+    """
+    keep_monsters = set(game.builtin_monster_ids)
+    keep_tiles = set(game.builtin_tile_ids)
+
+    for type_id, libs in game.content_libraries.items():
+        m_lib = libs.get("monsters")
+        t_lib = libs.get("tiles")
+        r_lib = libs.get("rooms")
+
+        if m_lib:
+            keep_monsters.update(e.id for e in m_lib.real_entries)
+        if t_lib:
+            keep_tiles.update(e.id for e in t_lib.real_entries)
+        if r_lib:
+            ref_m, ref_t = _get_referenced_ids(r_lib)
+            keep_monsters.update(ref_m)
+            keep_tiles.update(ref_t)
+
+    orphan_m = [k for k in list(game.custom_sprites) if k not in keep_monsters]
+    for mid in orphan_m:
+        _cleanup_monster(mid)
+
+    orphan_t = [k for k in list(game.custom_tile_recipes) if k not in keep_tiles]
+    for tid in orphan_t:
+        _cleanup_tile(tid)
+
+    if orphan_m or orphan_t:
+        print(f"[SWEEP] Removed {len(orphan_m)} orphaned monster(s), {len(orphan_t)} orphaned tile(s)")
+        broadcast_debug(f"Sweep: removed {len(orphan_m)}M {len(orphan_t)}T orphans")
+
+
 # ---------------------------------------------------------------------------
 # Dungeon teardown
 # ---------------------------------------------------------------------------
@@ -1148,6 +1184,9 @@ def _maybe_run_deprecation():
 
     game.last_deprecation_time = now
     _save_deprecation_timestamp()
+
+    # Sweep orphaned entries from registries (not tracked by any library)
+    _sweep_orphaned_content()
 
     # Start background regen for types with expired slots (skip in debug mode — use /regen)
     is_debug = os.environ.get("DEBUG_MODE", "").lower() in ("1", "true")

@@ -21,6 +21,10 @@ class GameState:
         self.custom_death_sprites = {}   # kind -> death sprite data dict
         self.custom_tile_recipes = {}    # tile_id -> recipe dict {colors, layers, walkable}
 
+        # Built-in IDs (loaded at startup, protected from registry sweeps)
+        self.builtin_tile_ids = set()    # tile IDs from data/tiles.json
+        self.builtin_monster_ids = set() # monster kinds from data/monsters.json + startup
+
         # NPC sprite data (loaded from data/npc_sprites.json)
         self.npc_sprites = {}
 
@@ -70,6 +74,7 @@ class GameState:
         tiles = json.loads(path.read_text(encoding="utf-8"))
         for tile_id, recipe in tiles.items():
             self.custom_tile_recipes[tile_id] = recipe
+        self.builtin_tile_ids = set(tiles.keys())
         print(f"[STATE] Loaded {len(tiles)} tile recipes")
 
     def load_monsters(self):
@@ -84,6 +89,7 @@ class GameState:
             mdata.setdefault("kind", kind)
             ok, errors = register_monster_type(mdata)
             if ok:
+                self.builtin_monster_ids.add(kind)
                 print(f"[STATE] Registered monster: {kind}")
             else:
                 print(f"[STATE] WARNING: Failed to register {kind}: {errors}")
