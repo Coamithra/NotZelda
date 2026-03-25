@@ -8,6 +8,7 @@ Then open http://localhost:8080 in your browser.
 import asyncio
 import json
 import os
+import re
 import time
 import sys
 from http import HTTPStatus
@@ -102,6 +103,30 @@ if os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
 
 
 # ---------------------------------------------------------------------------
+# Login name validation
+# ---------------------------------------------------------------------------
+
+# Allow unicode letters, digits, underscores, spaces, hyphens, apostrophes.
+# Reject control chars, HTML-special chars, emoji, and other symbols.
+_VALID_NAME_RE = re.compile(r"^[\w '-]+$", re.UNICODE)
+# \w matches [a-zA-Z0-9_] plus unicode letters/digits.
+# We also allow space, apostrophe, and hyphen for names like "O'Brien" or "Mary Jane".
+
+def _validate_login_name(name: str) -> str | None:
+    """Return an error message if the name is invalid, or None if it's OK."""
+    if not name:
+        return "Name cannot be empty."
+    if len(name) < 2:
+        return "Name must be at least 2 characters."
+    if not _VALID_NAME_RE.match(name):
+        return "Name can only contain letters, numbers, spaces, hyphens, apostrophes, and underscores."
+    if name.startswith((" ", "-", "'")) or name.endswith((" ", "-", "'")):
+        return "Name cannot start or end with a space, hyphen, or apostrophe."
+    if "  " in name:
+        return "Name cannot contain consecutive spaces."
+    return None
+
+# ---------------------------------------------------------------------------
 # Connection lifecycle
 # ---------------------------------------------------------------------------
 
@@ -126,8 +151,9 @@ async def handle_connection(websocket):
         name = data.get("name", "").strip()[:20]
         desc = data.get("description", "").strip()[:80]
 
-        if not name:
-            await websocket.send(json.dumps({"type": "error", "text": "Name cannot be empty."}))
+        name_error = _validate_login_name(name)
+        if name_error:
+            await websocket.send(json.dumps({"type": "error", "text": name_error}))
             return
 
         if any(p.name.lower() == name.lower() for p in game.players.values()):
