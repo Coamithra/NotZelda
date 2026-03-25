@@ -59,7 +59,8 @@ def _send_reconcile(player, msgs, reason=""):
 # Movement — half-tile free movement
 # ---------------------------------------------------------------------------
 
-# Exit zone ranges derived from DOORWAY_TILES (± 0.5 for hitbox overlap margin)
+# Exit zone ranges derived from DOORWAY_TILES (± 0.5 for hitbox overlap margin).
+# North/south share columns; west/east share rows (standard room layout).
 _ns_cols = [c for _, c in DOORWAY_TILES["north"]]
 _ew_rows = [r for r, _ in DOORWAY_TILES["west"]]
 _EXIT_X_MIN, _EXIT_X_MAX = min(_ns_cols) - 0.5, max(_ns_cols) + 0.5
