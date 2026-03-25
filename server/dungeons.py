@@ -78,15 +78,17 @@ def broadcast_to_dungeon(instance, msg, msgs, exclude=None):
             msgs.append(("send", p, msg))
 
 
-def _find_item_tile(room_id):
+def _find_item_tile(room_id, exclude=None):
     """Find a random walkable interior tile reachable from a doorway,
-    not occupied by NPCs (which block movement)."""
+    not occupied by NPCs (which block movement).
+    exclude: set of (col, row) positions to avoid (e.g. already-placed items)."""
     room = game.rooms.get(room_id)
     if not room:
         return None
     tilemap = room["tilemap"]
     guards = game.guards.get(room_id, [])
     npc_tiles = {(g["x"], g["y"]) for g in guards}
+    blocked = npc_tiles | (exclude or set())
 
     # Build seeds from active exits + stairs
     exits = room.get("exits", {})
@@ -105,13 +107,13 @@ def _find_item_tile(room_id):
     # bfs_reachable returns (row, col); convert to (col, row) for output
     candidates = [(c, r) for (r, c) in reachable
                   if 1 <= r <= 9 and 1 <= c <= 13
-                  and (c, r) not in npc_tiles]
+                  and (c, r) not in blocked]
 
     # Fallback: if no reachable interior tiles (e.g. all exits locked), scan for any walkable interior tile
     if not candidates:
         for r in range(1, ROOM_ROWS - 1):
             for c in range(1, ROOM_COLS - 1):
-                if game.is_walkable_tile(tilemap[r][c]) and (c, r) not in npc_tiles:
+                if game.is_walkable_tile(tilemap[r][c]) and (c, r) not in blocked:
                     candidates.append((c, r))
 
     if candidates:
@@ -244,7 +246,7 @@ def _place_locked_doors(connections, active_cells, entrance, boss_cell, treasure
 
     Returns (locked_doors, key_cells, zone_of, zone_cells).
     """
-    from KeyMath.key_solver import solve as solve_keys
+    from tools.key_math.key_solver import solve as solve_keys
 
     # Step 1: choose which connections to lock
     # Exclude treasure cell's single connection (dead end, pointless to lock)
@@ -898,21 +900,24 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
     assignment["resolved"] = True
     instance.resolved_rooms.add(room_id)
 
-    # Place dungeon items if this cell holds one (map/compass)
+    # Place dungeon items — track used positions to avoid overlap
+    used_positions = set()
+
     for item_type, item_cell in instance.item_cells.items():
         if cell == item_cell and item_type not in instance.collected_items:
-            pos = _find_item_tile(room_id)
+            pos = _find_item_tile(room_id, exclude=used_positions)
             if pos:
+                used_positions.add(pos)
                 instance.dungeon_items.setdefault(room_id, []).append(
                     {"x": pos[0], "y": pos[1], "item_type": item_type}
                 )
                 print(f"[DUNGEON] Placed {item_type} in {room_id} at ({pos[0]},{pos[1]})")
 
-    # Place key items if this cell holds any
     for key_cell in instance.key_cells:
         if cell == key_cell:
-            pos = _find_item_tile(room_id)
+            pos = _find_item_tile(room_id, exclude=used_positions)
             if pos:
+                used_positions.add(pos)
                 instance.dungeon_items.setdefault(room_id, []).append(
                     {"x": pos[0], "y": pos[1], "item_type": "key"}
                 )
