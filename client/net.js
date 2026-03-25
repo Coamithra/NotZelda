@@ -325,13 +325,16 @@ function handleMessage(msg) {
             cells: mm ? mm.cells : [],
             bossCell: msg.dungeon_boss_cell,
             currentCell: currentCell,
+            lockedEdges: msg.locked_edges || [],
           };
         } else {
           G.dungeonState.collected = new Set(msg.dungeon_collected);
           G.dungeonState.cells = mm ? mm.cells : G.dungeonState.cells;
           G.dungeonState.currentCell = currentCell;
           G.dungeonState.bossCell = msg.dungeon_boss_cell || G.dungeonState.bossCell;
+          G.dungeonState.lockedEdges = msg.locked_edges || G.dungeonState.lockedEdges || [];
         }
+        if (msg.keys !== undefined) G.keyCount = msg.keys;
       } else {
         // Left the dungeon
         G.dungeonState = null;
@@ -643,7 +646,7 @@ function handleMessage(msg) {
     }
 
     case "doors_unlocked": {
-      // Trap room cleared — restore doorway tiles
+      // Restore doorway tiles (trap room cleared OR key-locked door opened)
       if (G.currentRoom && G.currentRoom.tilemap && msg.tile_changes) {
         for (const [r, c, tile] of msg.tile_changes) {
           G.currentRoom.tilemap[r][c] = tile;
@@ -652,6 +655,15 @@ function handleMessage(msg) {
       // Reveal dungeon items that were hidden during the trap
       if (msg.dungeon_items) {
         G.dungeonGroundItems = msg.dungeon_items;
+      }
+      // Remove unlocked edge from minimap
+      if (msg.unlocked_edge && G.dungeonState && G.dungeonState.lockedEdges) {
+        const [a, b] = msg.unlocked_edge;
+        G.dungeonState.lockedEdges = G.dungeonState.lockedEdges.filter(e => {
+          const match1 = e[0][0]===a[0] && e[0][1]===a[1] && e[1][0]===b[0] && e[1][1]===b[1];
+          const match2 = e[0][0]===b[0] && e[0][1]===b[1] && e[1][0]===a[0] && e[1][1]===a[1];
+          return !match1 && !match2;
+        });
       }
       G.infoMessages.push({ text: "The doors have opened!", expires: Date.now() + 3000 });
       break;
@@ -845,9 +857,23 @@ function handleMessage(msg) {
           y: G.displayY,
         };
         // Remove from ground items (dungeon items only)
-        G.dungeonGroundItems = G.dungeonGroundItems.filter(
-          it => it.item_type !== msg.item_type
-        );
+        if (msg.item_type === "key") {
+          // Keys: remove by position (multiple keys can exist)
+          const kx = G.displayX, ky = G.displayY;
+          let removed = false;
+          G.dungeonGroundItems = G.dungeonGroundItems.filter(it => {
+            if (!removed && it.item_type === "key" && Math.abs(it.x - kx) < 1 && Math.abs(it.y - ky) < 1) {
+              removed = true;
+              return false;
+            }
+            return true;
+          });
+          G.keyCount++;
+        } else {
+          G.dungeonGroundItems = G.dungeonGroundItems.filter(
+            it => it.item_type !== msg.item_type
+          );
+        }
         // Grant gameplay flag after animation starts
         if (msg.item_type === "sword") {
           setTimeout(() => { G.playerFlags.add("has_sword"); }, 500);
@@ -882,15 +908,39 @@ function handleMessage(msg) {
 
     case "dungeon_item_collected": {
       // Any player collected a dungeon item — update minimap state
-      if (G.dungeonState) {
+      if (G.dungeonState && msg.item_type !== "key") {
         G.dungeonState.collected.add(msg.item_type);
       }
       // Remove from ground items (in case we're in the same room)
-      G.dungeonGroundItems = G.dungeonGroundItems.filter(
-        it => it.item_type !== msg.item_type
-      );
+      if (msg.x !== undefined && msg.y !== undefined) {
+        // Position-based removal (keys — multiple can exist)
+        let removed = false;
+        G.dungeonGroundItems = G.dungeonGroundItems.filter(it => {
+          if (!removed && it.item_type === msg.item_type &&
+              Math.abs(it.x - msg.x) < 0.1 && Math.abs(it.y - msg.y) < 0.1) {
+            removed = true;
+            return false;
+          }
+          return true;
+        });
+      } else {
+        G.dungeonGroundItems = G.dungeonGroundItems.filter(
+          it => it.item_type !== msg.item_type
+        );
+      }
       break;
     }
+
+    case "key_update":
+      G.keyCount = msg.keys;
+      break;
+
+    case "keylayout":
+      // Store zone debug data for minimap overlay
+      if (G.dungeonState) {
+        G.dungeonState.keyLayout = msg.zones;
+      }
+      break;
 
     case "debug_state":
       G.serverState = msg;

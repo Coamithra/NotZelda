@@ -16,6 +16,8 @@ DUNGEON_TYPES = {
         "entrance_exit": "d1_entrance",
         "boss_template": "d1_boss",
         "treasure_template": "d1_treasure",
+        "min_locks": 1,
+        "max_locks": 6,
     },
     "d2": {
         "name": "Water Temple",
@@ -33,6 +35,8 @@ DUNGEON_TYPES = {
         "room_capacity": 12,
         "monster_capacity": 3,
         "tile_capacity": 4,
+        "min_locks": 0,
+        "max_locks": 3,
     },
 }
 

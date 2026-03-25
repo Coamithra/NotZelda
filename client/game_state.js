@@ -100,8 +100,9 @@ const G = {
   // Dungeon items
   itemPickupActive: null,     // {item_type, item_name, startTime, x, y}
   itemPickupEffects: {},      // name -> {item_type, startTime, x, y}
-  dungeonState: null,         // {collected: Set, cells, bossCell, currentCell}
+  dungeonState: null,         // {collected: Set, cells, bossCell, currentCell, lockedEdges}
   dungeonGroundItems: [],     // [{x, y, item_type}]
+  keyCount: 0,                // dungeon keys held by this player
 
   // Health
   myHp: 6,

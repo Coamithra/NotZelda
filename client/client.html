@@ -424,6 +424,39 @@ function canMoveToPosition(x, y) {
   return true;
 }
 
+function getBlockingTile(x, y) {
+  /** Same hitbox logic as canMoveToPosition, but returns the first
+      non-walkable tile code instead of a boolean. */
+  if (!G.currentRoom) return null;
+  const tilemap = G.currentRoom.tilemap;
+  const checkYStart = y + 0.5;
+  const minTx = Math.floor(x + 0.001);
+  const maxTx = Math.floor(x + 1.0 - 0.001);
+  const minTy = Math.floor(checkYStart + 0.001);
+  const maxTy = Math.floor(y + 1.0 - 0.001);
+  for (let ty = minTy; ty <= maxTy; ty++) {
+    for (let tx = minTx; tx <= maxTx; tx++) {
+      if (tx < 0 || tx >= COLS || ty < 0 || ty >= ROWS) continue;
+      const tile = tilemap[ty][tx];
+      if (!WALKABLE.has(tile)) return tile;
+    }
+  }
+  return null;
+}
+
+let _lastUnlockAttempt = 0;
+function checkLockedDoor(checkX, checkY, dir) {
+  const now = Date.now();
+  if (now - _lastUnlockAttempt < 500) return;
+  if (!G.dungeonState) return;
+  const tile = getBlockingTile(checkX, checkY);
+  if (tile === "LD" || tile === "KD") {
+    _lastUnlockAttempt = now;
+    const dirMap = { up: "north", down: "south", left: "west", right: "east" };
+    sendToServer({ type: "unlock_door", direction: dirMap[dir] });
+  }
+}
+
 function maybeReportPosition() {
   /** Round to nearest half-tile; report when it changes.
       At y=5.0, report fires when y crosses 4.75 (reports 4.5) or 5.25 (reports 5.5).
@@ -503,6 +536,9 @@ function playerTick() {
         G.preciseX = newX;
       } else if (!isHorizontal && canMoveToPosition(G.preciseX, newY)) {
         G.preciseY = newY;
+      } else {
+        // Blocked — check if the actual blocking tile is a locked door
+        checkLockedDoor(checkX, checkY, dir);
       }
 
       G.displayX = G.preciseX;
@@ -708,6 +744,7 @@ function gameLoop(timestamp) {
     if (G.dyingPlayerSelf) renderDeathAnimation();
   }
   renderHeartsHUD();
+  renderKeyHUD();
   applyScreenShake();
 }
 </script>

@@ -9516,5 +9516,67 @@
       ["highlight", 0, 4, 16, 1],
       ["highlight", 0, 11, 16, 1]
     ]
+  },
+  "LD": {
+    "name": "locked_door",
+    "walkable": false,
+    "colors": {
+      "base": "#1a1a2a",
+      "bar": "#6a4a3a",
+      "highlight": "#8a6a5a",
+      "shadow": "#0e0e1a",
+      "rust": "#5a3020"
+    },
+    "layers": [
+      ["bar", 2, 0, 2, 16],
+      ["bar", 6, 0, 2, 16],
+      ["bar", 10, 0, 2, 16],
+      ["bar", 14, 0, 2, 16],
+      ["highlight", 2, 0, 1, 16],
+      ["highlight", 6, 0, 1, 16],
+      ["highlight", 10, 0, 1, 16],
+      ["highlight", 14, 0, 1, 16],
+      ["shadow", 4, 0, 1, 16],
+      ["shadow", 8, 0, 1, 16],
+      ["shadow", 12, 0, 1, 16],
+      ["rust", 0, 4, 16, 2],
+      ["rust", 0, 11, 16, 2],
+      ["highlight", 0, 4, 16, 1],
+      ["highlight", 0, 11, 16, 1]
+    ]
+  },
+  "KD": {
+    "name": "keyhole_door",
+    "walkable": false,
+    "colors": {
+      "base": "#1a1a2a",
+      "bar": "#6a4a3a",
+      "highlight": "#8a6a5a",
+      "shadow": "#0e0e1a",
+      "rust": "#5a3020",
+      "keyhole": "#d4a830",
+      "keyhole_dark": "#8a6e10"
+    },
+    "layers": [
+      ["bar", 2, 0, 2, 16],
+      ["bar", 6, 0, 2, 16],
+      ["bar", 10, 0, 2, 16],
+      ["bar", 14, 0, 2, 16],
+      ["highlight", 2, 0, 1, 16],
+      ["highlight", 6, 0, 1, 16],
+      ["highlight", 10, 0, 1, 16],
+      ["highlight", 14, 0, 1, 16],
+      ["shadow", 4, 0, 1, 16],
+      ["shadow", 8, 0, 1, 16],
+      ["shadow", 12, 0, 1, 16],
+      ["rust", 0, 4, 16, 2],
+      ["rust", 0, 11, 16, 2],
+      ["highlight", 0, 4, 16, 1],
+      ["highlight", 0, 11, 16, 1],
+      ["keyhole", 6, 5, 4, 4],
+      ["keyhole_dark", 7, 6, 2, 2],
+      ["keyhole", 7, 9, 2, 3],
+      ["keyhole_dark", 7, 9, 1, 3]
+    ]
   }
 }
