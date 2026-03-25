@@ -12,3 +12,4 @@ data/*
 !data/npc_sprites.json
 tmp_prompts/
 desktop.ini
+.trees/
