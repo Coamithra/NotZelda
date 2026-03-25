@@ -189,7 +189,7 @@ SYSTEM_PROMPT_MONSTER_DESIGN = _load_prompt("monster_design_system.txt")
 SYSTEM_PROMPT_MONSTER_SPRITE = _load_prompt("monster_sprite_system.txt")
 SYSTEM_PROMPT_TILES = _load_prompt("tiles_system.txt")
 SYSTEM_PROMPT_LAYOUT = _load_prompt("layout_system.txt")
-SYSTEM_PROMPT_RENAME = "You rename game content to avoid name collisions. Return ONLY valid JSON."
+SYSTEM_PROMPT_RENAME = _load_prompt("rename_system.txt")
 
 
 # ---------------------------------------------------------------------------
@@ -1315,12 +1315,11 @@ async def _rename_monster_kind(old_kind: str, taken_names: set[str],
 
     Returns the new kind string, or None if all attempts collide.
     """
-    taken_list = ", ".join(sorted(taken_names))
-    prompt = _load_prompt("rename_kind_user.txt",
-                          old_kind=old_kind, theme=theme,
-                          taken_names=taken_list)
-
     for attempt in range(3):
+        taken_list = ", ".join(sorted(taken_names))
+        prompt = _load_prompt("rename_kind_user.txt",
+                              old_kind=old_kind, theme=theme,
+                              taken_names=taken_list)
         result = await _call_ai(
             system_prompt=SYSTEM_PROMPT_RENAME,
             user_prompt=prompt,
@@ -1347,12 +1346,11 @@ async def _rename_tile_id(old_id: str, taken_ids: set[str],
 
     Returns the new id string, or None if all attempts collide.
     """
-    taken_list = ", ".join(sorted(taken_ids))
-    prompt = _load_prompt("rename_tile_id_user.txt",
-                          old_id=old_id, theme=theme,
-                          taken_ids=taken_list)
-
     for attempt in range(3):
+        taken_list = ", ".join(sorted(taken_ids))
+        prompt = _load_prompt("rename_tile_id_user.txt",
+                              old_id=old_id, theme=theme,
+                              taken_ids=taken_list)
         result = await _call_ai(
             system_prompt=SYSTEM_PROMPT_RENAME,
             user_prompt=prompt,
