@@ -6,7 +6,7 @@ Step-by-step workflow for picking up and completing any card from the [Legends o
 
 ## Before You Start: Create a Tracker Doc
 
-**This is mandatory.** Before doing anything else, create a file `docs/tracker_<branch-name>.md` with every step from this runbook as a checkbox list. Example:
+**This is mandatory.** Before doing anything else, create a file `docs/tracker_<branch>.md` with every step from this runbook as a checkbox list. Example:
 
 ```markdown
 # Tracker: fix/room-transition-race
@@ -55,11 +55,11 @@ All work happens in an isolated **git worktree** under `.trees/`. This lets mult
     - Features: `feat/card-name` (e.g. `feat/bump-animation`)
     - Refactoring: `refactor/card-name` (e.g. `refactor/walk-state-dataclass`)
     ```
-    git worktree add .trees/<branch-name> -b <branch> master
-    cd .trees/<branch-name>
+    git worktree add .trees/<branch> -b <branch> master
+    cd .trees/<branch>
     git push -u origin <branch>
     ```
-5. **All subsequent work happens inside `.trees/<branch-name>/`**
+5. **All subsequent work happens inside `.trees/<branch>/`**
 
 ## Phase 2: Research
 
@@ -108,17 +108,18 @@ Dig into the problem before proposing solutions. Use `/research` for topics that
 23. **Peer review** — Spawn a fresh agent to review the branch diff (`git diff master...<branch>`). The agent has no prior context, so it catches things we've gone blind to: logic errors, missed edge cases, convention violations, naming issues. Act on any valid feedback before proceeding
 24. **Pull master into the branch** — `git pull origin master` into the feature branch to pick up any changes that landed while we worked. Resolve conflicts if any
 25. **Re-run smoke tests** — Make sure the merge didn't break anything: `python -c "import mud_server"` + `python tools/test_api_leak.py`
-26. **Merge to master** — `git checkout master && git merge <branch> && git push`
-27. **Clean up** — Remove the worktree, then delete the branch:
+26. **Return to the root checkout** — `cd` back to the project root (where `master` is checked out). All remaining steps run from here, not from inside the worktree
+27. **Merge to master** — `git merge <branch> && git push`
+28. **Clean up** — Remove the worktree, then delete the branch:
     ```
-    git worktree remove .trees/<branch-name>
+    git worktree remove .trees/<branch>
     git worktree prune
     git branch -d <branch>
     git push origin --delete <branch>
     ```
-28. **Move card to Done** — `move_card` to the "Done" list
-29. **Comment on the card** — Add a fix/feature summary to the Trello card: what changed, which files, what it fixes/adds, commit hash, and what needs manual testing. This leaves a paper trail for future debugging
-30. **Deploy (if requested)** — `ssh root@46.225.218.207` → `cd /opt/NotZelda && git pull && systemctl restart notzelda`
+29. **Move card to Done** — `move_card` to the "Done" list
+30. **Comment on the card** — Add a fix/feature summary to the Trello card: what changed, which files, what it fixes/adds, commit hash, and what needs manual testing. This leaves a paper trail for future debugging
+31. **Deploy (if requested)** — `ssh root@46.225.218.207` → `cd /opt/NotZelda && git pull && systemctl restart notzelda`
 
 ---
 
