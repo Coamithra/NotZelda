@@ -62,9 +62,10 @@ function drawNPC(ctx, px, py, sprite, S) {
 function drawMonsterSprite(ctx, px, py, kind, hopFrame, S) {
   const sprite = customMonsterSprites[kind];
   if (!sprite) return;
+  const eS = sprite.resolution ? S / sprite.resolution : S;
   const frame = hopFrame % sprite.frames.length;
-  const yOffset = sprite.yOff ? sprite.yOff[frame] * S : 0;
-  drawLayers(ctx, px, py + yOffset, sprite.frames[frame], S, sprite.colors);
+  const yOffset = sprite.yOff ? sprite.yOff[frame] * eS : 0;
+  drawLayers(ctx, px, py + yOffset, sprite.frames[frame], eS, sprite.colors);
 }
 
 function drawMonsterDeath(ctx, px, py, kind, deathFrame, S) {
@@ -90,13 +91,15 @@ function drawMonsterDeath(ctx, px, py, kind, deathFrame, S) {
     }
     return;
   }
+  const mainSprite = customMonsterSprites[kind];
+  const eS = mainSprite?.resolution ? S / mainSprite.resolution : S;
   const frame = sprite.frames[Math.min(deathFrame, sprite.frames.length - 1)];
   if (frame.alpha != null) {
     ctx.globalAlpha = frame.alpha;
-    drawLayers(ctx, px, py, frame.layers, S, sprite.colors);
+    drawLayers(ctx, px, py, frame.layers, eS, sprite.colors);
     ctx.globalAlpha = 1;
   } else {
-    drawLayers(ctx, px, py, frame, S, sprite.colors);
+    drawLayers(ctx, px, py, frame, eS, sprite.colors);
   }
 }
 
@@ -453,11 +456,18 @@ function drawGroundItem(ctx, px, py, itemType, S) {
   const bounce = Math.sin(Date.now() / 300) * 2 * S;
   const drawFn = ITEM_DRAW_FNS[itemType];
   if (!drawFn) return;
-  // Golden glow
-  ctx.globalAlpha = 0.3 + 0.1 * Math.sin(Date.now() / 400);
-  ctx.fillStyle = "#e6b422";
-  ctx.fillRect(px + S, py + S + bounce, 14*S, 14*S);
-  ctx.globalAlpha = 1;
+  // Golden radial glow
+  const t = performance.now() / 1000;
+  const flicker = 0.4 + 0.15 * Math.sin(t * 6.2) + 0.1 * Math.sin(t * 11.4);
+  const cx = px + 8*S;
+  const cy = py + 8*S + bounce;
+  const radius = 10*S + S * Math.sin(t * 4.3);
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+  grad.addColorStop(0, `rgba(255, 200, 50, ${flicker})`);
+  grad.addColorStop(0.5, `rgba(230, 150, 30, ${flicker * 0.4})`);
+  grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
   drawFn(ctx, px + 4*S, py + 3*S + bounce, S);
 }
 
@@ -467,14 +477,20 @@ function drawItemPickupOverlay(ctx, px, py, itemType, progress, S) {
   const riseY = progress * 8 * S;
   const itemX = px + 4*S;
   const itemY = py - 6*S - riseY;
-  // Golden glow behind item
-  ctx.globalAlpha = 0.4 + 0.2 * Math.sin(Date.now() / 150);
-  ctx.fillStyle = "#e6b422";
-  ctx.fillRect(itemX - S, itemY - S, 10*S, 12*S);
-  ctx.globalAlpha = 1;
+  // Golden radial glow behind item
+  const t = performance.now() / 1000;
+  const flicker = 0.5 + 0.2 * Math.sin(t * 8.5);
+  const gcx = itemX + 4*S;
+  const gcy = itemY + 5*S;
+  const gr = 9*S;
+  const grad = ctx.createRadialGradient(gcx, gcy, 0, gcx, gcy, gr);
+  grad.addColorStop(0, `rgba(255, 200, 50, ${flicker})`);
+  grad.addColorStop(0.5, `rgba(230, 150, 30, ${flicker * 0.4})`);
+  grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(gcx - gr, gcy - gr, gr * 2, gr * 2);
   drawFn(ctx, itemX, itemY, S);
   // Sparkles
-  const t = Date.now() / 1000;
   for (let i = 0; i < 6; i++) {
     const angle = (i / 6) * Math.PI * 2 + t * 3;
     const dist = (4 + 2 * Math.sin(t * 2 + i)) * S;

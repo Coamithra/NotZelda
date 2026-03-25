@@ -198,14 +198,16 @@ function renderCorpses() {
     const deathSprite = customDeathSprites[c.kind];
     if (deathSprite && deathSprite.frames && deathSprite.frames.length > 0) {
       // Draw the last death frame as the corpse
+      const mainSprite = customMonsterSprites[c.kind];
+      const eS = mainSprite?.resolution ? dmScale / mainSprite.resolution : dmScale;
       const lastIdx = deathSprite.frames.length - 1;
       const frame = deathSprite.frames[lastIdx];
       if (frame.alpha != null) {
         ctx.globalAlpha = frame.alpha;
-        drawLayers(ctx, c.x * TS, c.y * TS, frame.layers, dmScale, deathSprite.colors);
+        drawLayers(ctx, c.x * TS, c.y * TS, frame.layers, eS, deathSprite.colors);
         ctx.globalAlpha = 1;
       } else {
-        drawLayers(ctx, c.x * TS, c.y * TS, frame, dmScale, deathSprite.colors);
+        drawLayers(ctx, c.x * TS, c.y * TS, frame, eS, deathSprite.colors);
       }
     } else {
       // Fallback: simple colored splat for monsters without death sprites

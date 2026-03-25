@@ -83,6 +83,8 @@ def validate_monster(data: dict) -> list[str]:
             for k, v in colors.items():
                 if not _is_hex_color(v):
                     errors.append(f"sprite.colors.{k} must be #RRGGBB, got {v!r}")
+        resolution = sprite.get("resolution", 1)
+        grid = 16 * resolution
         frames = sprite.get("frames")
         if not isinstance(frames, list) or len(frames) < 1:
             errors.append("sprite.frames must be a non-empty list")
@@ -98,8 +100,8 @@ def validate_monster(data: dict) -> list[str]:
                     _, x, y, w, h = layer
                     if not all(isinstance(v, (int, float)) for v in (x, y, w, h)):
                         errors.append(f"sprite.frames[{fi}][{li}] x/y/w/h must be numbers")
-                    elif x < 0 or y < 0 or x + w > 16 or y + h > 16:
-                        errors.append(f"sprite.frames[{fi}][{li}] out of 16x16 bounds")
+                    elif x < 0 or y < 0 or x + w > grid or y + h > grid:
+                        errors.append(f"sprite.frames[{fi}][{li}] out of {grid}x{grid} bounds")
 
     # -- behavior (optional) --
     behavior = data.get("behavior")
