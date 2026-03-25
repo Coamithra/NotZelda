@@ -116,8 +116,6 @@ def _validate_login_name(name: str) -> str | None:
     """Return an error message if the name is invalid, or None if it's OK."""
     if not name:
         return "Name cannot be empty."
-    if len(name) < 2:
-        return "Name must be at least 2 characters."
     if not _VALID_NAME_RE.match(name):
         return "Name can only contain letters, numbers, spaces, hyphens, apostrophes, and underscores."
     if name.startswith((" ", "-", "'")) or name.endswith((" ", "-", "'")):
