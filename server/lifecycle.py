@@ -17,6 +17,28 @@ from server.dungeons import (
 )
 
 
+def _on_state_exited(monster, old_state, room_id, monster_idx, msgs):
+    """Broadcast cleanup messages when a monster exits a non-idle state."""
+    if old_state in ("charging", "area"):
+        msgs.append(("broadcast", room_id, {
+            "type": "warmup_cancel", "id": monster_idx,
+        }, None))
+    elif old_state == "teleporting":
+        msgs.append(("broadcast", room_id, {
+            "type": "monster_fade_in", "id": monster_idx,
+        }, None))
+
+
+def set_monster_idle(monster, room_id, monster_idx, msgs):
+    """Transition a monster to idle with proper state exit cleanup."""
+    old_state = monster.state
+    if old_state != "idle":
+        _on_state_exited(monster, old_state, room_id, monster_idx, msgs)
+    monster.state = "idle"
+    monster.state_data = {}
+    monster.last_action_time = time.monotonic()
+
+
 def _lock_room(room_id: str):
     """Close all doorways in a trap room by replacing doorway tiles with CD."""
     room = game.rooms.get(room_id)

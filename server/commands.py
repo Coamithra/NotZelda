@@ -16,7 +16,7 @@ from server.net import log_event
 from server.lifecycle import (
     do_room_transition, get_room_monsters,
     broadcast_choir_start, broadcast_choir_stop,
-    unlock_room,
+    unlock_room, set_monster_idle,
 )
 from server.dungeons import get_dungeon_for_room, _run_content_deprecation, start_background_regen, broadcast_to_dungeon
 from server.npc_chat import find_adjacent_npc
@@ -371,11 +371,9 @@ def _process_attack(player, data, now, msgs):
                         monster.y = ky
                         knock_x = kx
                         knock_y = ky
-                        # Cancel any in-progress walk so it doesn't overwrite the knockback position
-                        if monster.state == "walking":
-                            monster.state = "idle"
-                            monster.state_data = {}
-                            monster.last_action_time = time.monotonic()
+                        # Reset to idle so the monster doesn't continue its interrupted action
+                        if monster.state != "idle":
+                            set_monster_idle(monster, player.room, i, msgs)
             # Boss engagement — start choir overlay if boss survives this hit
             dinst = get_dungeon_for_room(player.room)
             is_boss = monster.is_boss and dinst is not None

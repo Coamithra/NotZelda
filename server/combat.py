@@ -17,6 +17,7 @@ from server.constants import (
 )
 from server.models import Projectile
 from server.net import send_to, broadcast_to_room, avatars_in_room, player_info
+from server.lifecycle import set_monster_idle
 
 _debug = os.environ.get("DEBUG_MODE", "").lower() in ("1", "true")
 
@@ -782,8 +783,7 @@ def _tick_monster_state(monster, room_id, i, now, msgs):
             handler = EXEC_HANDLERS.get(action_name)
             if handler:
                 handler(monster, room_id, i, action, msgs)
-            monster.state = "idle"
-            monster.state_data = {}
+            set_monster_idle(monster, room_id, i, msgs)
         return
 
     # state == "idle" — decision timer runs continuously (even during other states)

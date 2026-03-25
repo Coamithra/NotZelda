@@ -768,10 +768,8 @@ function handleMessage(msg) {
         chargedMon.y = msg.y;
         chargedMon.displayX = msg.x;
         chargedMon.displayY = msg.y;
-        chargedMon.chargePrep = null;
         chargedMon.walkState = null;
       }
-      G.chargePreps = G.chargePreps.filter(p => p.id !== msg.id);
       G.chargeTrails.push({ path: msg.path, startTime: Date.now() });
       break;
     }
@@ -803,17 +801,7 @@ function handleMessage(msg) {
         tpEndMon.y = msg.y;
         tpEndMon.displayX = msg.x;
         tpEndMon.displayY = msg.y;
-        tpEndMon.teleportAlpha = 0;
         tpEndMon.walkState = null;
-        const fadeIn = () => {
-          if (tpEndMon.teleportAlpha < 1) {
-            tpEndMon.teleportAlpha += 0.1;
-            setTimeout(fadeIn, 30);
-          } else {
-            tpEndMon.teleportAlpha = 1;
-          }
-        };
-        fadeIn();
       }
       break;
     }
@@ -825,6 +813,29 @@ function handleMessage(msg) {
     case "area_attack":
       G.monsterAttackFlashes.push({ x: msg.x, y: msg.y, startTime: Date.now() });
       break;
+
+    case "warmup_cancel": {
+      const cancelMon = G.monsters.find(m => m.id === msg.id);
+      if (cancelMon) cancelMon.chargePrep = null;
+      G.chargePreps = G.chargePreps.filter(p => p.id !== msg.id);
+      break;
+    }
+
+    case "monster_fade_in": {
+      const fadeMon = G.monsters.find(m => m.id === msg.id);
+      if (fadeMon && fadeMon.teleportAlpha < 1) {
+        const fadeIn = () => {
+          if (fadeMon.teleportAlpha < 1) {
+            fadeMon.teleportAlpha += 0.1;
+            setTimeout(fadeIn, 30);
+          } else {
+            fadeMon.teleportAlpha = 1;
+          }
+        };
+        fadeIn();
+      }
+      break;
+    }
 
     case "music_change":
       if (msg.music === null || msg.music === "silence") {
