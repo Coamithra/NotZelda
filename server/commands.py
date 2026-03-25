@@ -59,16 +59,23 @@ def _send_reconcile(player, msgs, reason=""):
 # Movement — half-tile free movement
 # ---------------------------------------------------------------------------
 
+# Exit zone ranges derived from DOORWAY_TILES (± 0.5 for hitbox overlap margin)
+_ns_cols = [c for _, c in DOORWAY_TILES["north"]]
+_ew_rows = [r for r, _ in DOORWAY_TILES["west"]]
+_EXIT_X_MIN, _EXIT_X_MAX = min(_ns_cols) - 0.5, max(_ns_cols) + 0.5
+_EXIT_Y_MIN, _EXIT_Y_MAX = min(_ew_rows) - 0.5, max(_ew_rows) + 0.5
+
+
 def _check_edge_exit_float(x, y, direction, room):
     """Check if a float position at room edge corresponds to an exit."""
     exits = room["exits"]
-    if direction == "up" and y < 0 and "north" in exits and 5.5 <= x <= 8.5:
+    if direction == "up" and y < 0 and "north" in exits and _EXIT_X_MIN <= x <= _EXIT_X_MAX:
         return "north"
-    if direction == "down" and y > 10 and "south" in exits and 5.5 <= x <= 8.5:
+    if direction == "down" and y > ROOM_ROWS - 1 and "south" in exits and _EXIT_X_MIN <= x <= _EXIT_X_MAX:
         return "south"
-    if direction == "left" and x < 0 and "west" in exits and 3.5 <= y <= 6.5:
+    if direction == "left" and x < 0 and "west" in exits and _EXIT_Y_MIN <= y <= _EXIT_Y_MAX:
         return "west"
-    if direction == "right" and x > 14 and "east" in exits and 3.5 <= y <= 6.5:
+    if direction == "right" and x > ROOM_COLS - 1 and "east" in exits and _EXIT_Y_MIN <= y <= _EXIT_Y_MAX:
         return "east"
     return None
 
