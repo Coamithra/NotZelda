@@ -384,9 +384,8 @@ def _process_attack(player, data, now, msgs):
                 dinst.boss_engaged = True
                 broadcast_choir_start(player.room, msgs)
             if monster.hp <= 0:
+                set_monster_idle(monster, player.room, i, msgs)
                 monster.alive = False
-                monster.state = "idle"
-                monster.state_data = {}
                 msg_killed = {
                     "type": "monster_killed",
                     "id": i,

@@ -29,8 +29,8 @@
 - [x] Flag what needs manual testing
 
 ## Phase 6: Review & Ship
-- [ ] Update CLAUDE.md
-- [ ] Commit & push
+- [x] Update CLAUDE.md (not needed — bug fix, no new conventions)
+- [x] Commit & push
 - [ ] Peer review
 - [ ] Pull master into the branch
 - [ ] Re-run smoke tests

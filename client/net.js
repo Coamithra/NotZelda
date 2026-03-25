@@ -789,7 +789,7 @@ function handleMessage(msg) {
         fadeOut();
       }
       if (msg.target_x !== undefined) {
-        G.areaWarnings.push({ x: msg.target_x, y: msg.target_y, range: msg.damage_radius || 0, startTime: Date.now(), duration: (msg.delay || 0.5) * 1000 });
+        G.areaWarnings.push({ id: msg.id, x: msg.target_x, y: msg.target_y, range: msg.damage_radius || 0, startTime: Date.now(), duration: (msg.delay || 0.5) * 1000 });
       }
       break;
     }
@@ -807,7 +807,7 @@ function handleMessage(msg) {
     }
 
     case "area_warning":
-      G.areaWarnings.push({ x: msg.x, y: msg.y, range: msg.range, startTime: Date.now(), duration: (msg.duration || 0.75) * 1000 });
+      G.areaWarnings.push({ id: msg.id, x: msg.x, y: msg.y, range: msg.range, startTime: Date.now(), duration: (msg.duration || 0.75) * 1000 });
       break;
 
     case "area_attack":
@@ -818,10 +818,12 @@ function handleMessage(msg) {
       const cancelMon = G.monsters.find(m => m.id === msg.id);
       if (cancelMon) cancelMon.chargePrep = null;
       G.chargePreps = G.chargePreps.filter(p => p.id !== msg.id);
+      G.areaWarnings = G.areaWarnings.filter(w => w.id !== msg.id);
       break;
     }
 
     case "monster_fade_in": {
+      G.areaWarnings = G.areaWarnings.filter(w => w.id !== msg.id);
       const fadeMon = G.monsters.find(m => m.id === msg.id);
       if (fadeMon && fadeMon.teleportAlpha < 1) {
         const fadeIn = () => {
