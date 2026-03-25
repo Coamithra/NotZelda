@@ -462,8 +462,8 @@ def _build_library_icons(type_id):
 def _send_choir_update(player, msgs: list):
     """If boss is engaged, send choir start/stop based on player's current room."""
     inst = get_dungeon_for_room(player.room)
-    if not inst or not inst.boss_engaged:
-        # Not in a dungeon or boss not engaged — stop any active choir
+    if not inst or not inst.boss_engaged or not inst.boss_cell:
+        # Not in a dungeon, boss not engaged, or no boss cell — stop any active choir
         msgs.append(("send", player, {"type": "boss_choir_stop"}))
         return
     boss_room = f"{inst.dungeon_id}_{inst.boss_cell[0]}_{inst.boss_cell[1]}"
