@@ -106,7 +106,7 @@ Dig into the problem before proposing solutions. Use `/research` for topics that
 21. **Update CLAUDE.md** — If the change introduces new conventions, gotchas, or modifies documented behavior, update `CLAUDE.md` before committing (project rule)
 22. **Commit & push** — Descriptive message, reference the card number if useful. Push to the feature branch
 23. **Peer review** — Spawn a fresh agent to review the branch diff (`git diff master...<branch>`). The agent has no prior context, so it catches things we've gone blind to: logic errors, missed edge cases, convention violations, naming issues. Act on any valid feedback before proceeding
-24. **Pull master into the branch** — `git pull origin master` into the feature branch to pick up any changes that landed while we worked. Resolve conflicts if any
+24. **Pull master into the branch** — `git pull origin master` into the feature branch to pick up any changes that landed while we worked. Resolve conflicts if any — see **Merge Conflict Rules** below
 25. **Re-run smoke tests** — Make sure the merge didn't break anything: `python -c "import mud_server"` + `python tools/test_api_leak.py`
 26. **Return to the root checkout** — `cd` back to the project root (where `master` is checked out). All remaining steps run from here, not from inside the worktree
 27. **Merge to master** — `git merge <branch> && git push`
@@ -120,6 +120,18 @@ Dig into the problem before proposing solutions. Use `/research` for topics that
 29. **Move card to Done** — `move_card` to the "Done" list
 30. **Comment on the card** — Add a fix/feature summary to the Trello card: what changed, which files, what it fixes/adds, commit hash, and what needs manual testing. This leaves a paper trail for future debugging
 31. **Deploy (if requested)** — `ssh root@46.225.218.207` → `cd /opt/NotZelda && git pull && systemctl restart notzelda`
+
+---
+
+## Merge Conflict Rules
+
+When pulling master into your branch (step 24), conflicts mean someone else landed changes while you worked. Follow these principles:
+
+1. **Default to master's version.** If a conflict is in code you didn't intentionally change, accept master's side. Someone else fixed a bug or added a feature — don't silently revert their work.
+2. **Assume incoming changes are important.** Treat every conflict as "master has a critical fix" until you've read the diff and confirmed otherwise. Be very careful about overwriting new code with your version.
+3. **Only keep your side for lines you specifically wrote.** If you changed a function and master also changed it, read both versions carefully. Merge surgically — keep their fixes, layer your feature on top.
+4. **If the merge is messy, restart from master.** When conflicts are widespread or hard to reason about, it's safer to take master wholesale and reimplement your changes on top of the updated code. A clean re-apply is better than a botched merge.
+5. **Re-read the final result.** After resolving, read through every conflicted file in full. Make sure the merged code actually makes sense — don't just trust the conflict markers.
 
 ---
 

@@ -183,6 +183,7 @@ def register_town_guard():
     from server.validation import register_monster_type
     ok, errors = register_monster_type(TOWN_GUARD_MONSTER)
     if ok:
+        game.builtin_monster_ids.add("town_guard")
         print("[CONTENT] Registered monster type: town_guard")
     else:
         print(f"[CONTENT] WARNING: Failed to register town_guard: {errors}")
