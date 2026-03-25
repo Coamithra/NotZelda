@@ -1359,6 +1359,23 @@ function renderDungeonMinimap() {
     }
   }
 
+  // Other players — colored blinking dots (compass or debug only)
+  const otherPlayers = (hasCompass || isDebug) && ds ? ds.otherPlayers : null;
+  if (otherPlayers && otherPlayers.length > 0) {
+    const blink = Math.sin(Date.now() / 300) > 0; // slightly slower blink than self
+    if (blink) {
+      for (const op of otherPlayers) {
+        const opx = mapX + pad + (op.c - minC) * step + cellSize / 2;
+        const opy = mapY + pad + (op.r - minR) * step + cellSize / 2;
+        const color = SHIRT_COLORS[op.color_index % SHIRT_COLORS.length];
+        G.ctx.fillStyle = color;
+        G.ctx.beginPath();
+        G.ctx.arc(opx, opy, 2, 0, Math.PI * 2);
+        G.ctx.fill();
+      }
+    }
+  }
+
   // Player position — pulsing indicator
   if (pc) {
     const px = mapX + pad + (pc[0] - minC) * step;

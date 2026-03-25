@@ -30,12 +30,15 @@ from server.constants import STARTING_ROOM, PLAYER_MAX_HP, ROOM_COLS, ROOM_ROWS
 from server.models import Player
 from server.net import send_to, avatars_in_room, player_info, log_event
 from server.rooms import load_room_files, load_dungeon_templates
-from server.lifecycle import on_player_enter_room, on_player_leave_room, send_room_enter
+from server.lifecycle import (
+    on_player_enter_room, on_player_leave_room, send_room_enter,
+    broadcast_dungeon_player_positions,
+)
 from server.combat import game_tick, flush_messages
 from server.debug_monsters import auto_register_debug_monsters
 from server.npc_chat import clear_player_history, register_town_guard, warmup_ollama
 from server.dungeon_content import register_precreated_types, load_precreated_content
-from server.dungeons import load_deprecation_timestamp, load_deprecated_sets
+from server.dungeons import load_deprecation_timestamp, load_deprecated_sets, get_dungeon_for_room
 from server.dungeon_types import DUNGEON_TYPES
 from server.content_library import ContentLibrary, MONSTER_LIBRARY_CAPACITY, TILE_LIBRARY_CAPACITY, ROOM_LIBRARY_CAPACITY
 from server.validation import register_monster_type, register_tile_type
@@ -199,6 +202,10 @@ async def handle_connection(websocket):
             disc_msgs.append(("broadcast", leaving_room,
                               {"type": "player_left", "name": player.name}, None))
             on_player_leave_room(leaving_room, disc_msgs)
+            # Update compass minimap for remaining dungeon players
+            dungeon_inst = get_dungeon_for_room(leaving_room)
+            if dungeon_inst:
+                broadcast_dungeon_player_positions(dungeon_inst, player, disc_msgs)
             await flush_messages(disc_msgs)
 
 

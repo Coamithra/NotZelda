@@ -177,6 +177,49 @@ def on_player_leave_room(room_id: str, msgs: list, skip_dungeon_teardown: bool =
             destroy_dungeon(inst)
 
 
+def _dungeon_room_to_cell(inst):
+    """Build a room_id -> (col, row) lookup for a dungeon instance."""
+    did = inst.dungeon_id
+    return {f"{did}_{c}_{r}": (c, r) for (c, r) in inst.cell_assignments}
+
+
+def _dungeon_other_players(inst, exclude_player=None):
+    """Build list of other players in a dungeon for the compass minimap."""
+    room_to_cell = _dungeon_room_to_cell(inst)
+    players = []
+    for p in game.players.values():
+        if p is exclude_player:
+            continue
+        cell = room_to_cell.get(p.room)
+        if cell:
+            players.append({"c": cell[0], "r": cell[1],
+                            "color_index": p.color_index, "name": p.name})
+    return players
+
+
+def broadcast_dungeon_player_positions(inst, moved_player, msgs):
+    """Notify all players in a dungeon about updated player positions (for compass)."""
+    room_to_cell = _dungeon_room_to_cell(inst)
+    # Build full list of all players in the dungeon
+    all_players = []
+    for p in game.players.values():
+        cell = room_to_cell.get(p.room)
+        if cell:
+            all_players.append({"c": cell[0], "r": cell[1],
+                                "color_index": p.color_index, "name": p.name})
+    # Send each player a list excluding themselves
+    for p in game.players.values():
+        if p is moved_player:
+            continue  # moved player already got updated data via send_room_enter
+        cell = room_to_cell.get(p.room)
+        if cell:
+            others = [dp for dp in all_players if dp["name"] != p.name]
+            msgs.append(("send", p, {
+                "type": "dungeon_player_positions",
+                "players": others,
+            }))
+
+
 def send_room_enter(player, msgs: list, exit_direction: str = None):
     """Build and append the room_enter message with all room data."""
     room = game.rooms.get(player.room)
@@ -346,6 +389,7 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
         debug["minimap"] = {
             "cells": cells,
             "player": player_cell,
+            "other_players": _dungeon_other_players(inst, exclude_player=player),
         }
         if is_debug:
             # Serialize connections as [[c1,r1,c2,r2], ...]
@@ -549,6 +593,16 @@ def do_room_transition(player, exit_direction: str, msgs: list):
         send_room_enter(player, msgs, exit_direction=exit_direction)
         msgs.append(("broadcast", new_room_id,
                       {"type": "player_entered", **player_info(player)}, player.ws))
+
+        # Update compass minimap for other players in the dungeon
+        new_inst = get_dungeon_for_room(new_room_id)
+        old_inst = get_dungeon_for_room(old_room) if not new_inst or old_room not in new_inst.active_rooms else None
+        # Player moved within a dungeon or entered one — notify others
+        if new_inst:
+            broadcast_dungeon_player_positions(new_inst, player, msgs)
+        # Player left a dungeon (old room was dungeon, new room is not) — notify remaining
+        if old_inst and old_inst is not new_inst:
+            broadcast_dungeon_player_positions(old_inst, player, msgs)
     except Exception:
         # If anything fails mid-transition, restore avatar at spawn so the
         # player isn't permanently stuck as a ghost.

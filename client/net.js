@@ -319,6 +319,7 @@ function handleMessage(msg) {
         // In a dungeon room — initialize or update dungeon state
         const mm = msg.dungeon_debug && msg.dungeon_debug.minimap;
         const currentCell = mm && mm.player;
+        const otherPlayers = mm ? (mm.other_players || []) : [];
         if (!G.dungeonState) {
           G.dungeonState = {
             collected: new Set(msg.dungeon_collected),
@@ -326,6 +327,7 @@ function handleMessage(msg) {
             bossCell: msg.dungeon_boss_cell,
             currentCell: currentCell,
             lockedEdges: msg.locked_edges || [],
+            otherPlayers: otherPlayers,
           };
         } else {
           G.dungeonState.collected = new Set(msg.dungeon_collected);
@@ -333,6 +335,7 @@ function handleMessage(msg) {
           G.dungeonState.currentCell = currentCell;
           G.dungeonState.bossCell = msg.dungeon_boss_cell || G.dungeonState.bossCell;
           G.dungeonState.lockedEdges = msg.locked_edges || G.dungeonState.lockedEdges || [];
+          G.dungeonState.otherPlayers = otherPlayers;
         }
         if (msg.keys !== undefined) G.keyCount = msg.keys;
       } else {
@@ -952,6 +955,13 @@ function handleMessage(msg) {
       // Store zone debug data for minimap overlay
       if (G.dungeonState) {
         G.dungeonState.keyLayout = msg.zones;
+      }
+      break;
+
+    case "dungeon_player_positions":
+      // Another player moved rooms in the dungeon — update compass dots
+      if (G.dungeonState) {
+        G.dungeonState.otherPlayers = msg.players || [];
       }
       break;
 
