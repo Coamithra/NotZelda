@@ -56,7 +56,6 @@ const G = {
   keysDown: {},
   dirStack: [],            // direction key press order — last entry = active direction
   lastMoveTime: 0,
-  lastDirTime: 0,          // timestamp of last frame with a valid dirStack direction
 
   // Player state machine
   state: "idle",           // "idle" | "attacking" | "dying"

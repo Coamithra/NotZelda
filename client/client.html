@@ -484,17 +484,7 @@ function playerTick() {
   const dt = Math.min((now - (G.lastTickTime || now)) / 1000, 0.05);
   G.lastTickTime = now;
 
-  let dir = getActiveDirection();
-
-  // Grace period for rapid tapping: if no key is held but one was
-  // released very recently (within 80ms), keep moving in that direction.
-  // This prevents stuttery stop-start when rapidly tapping the same key.
-  const WALK_CHAIN_GRACE_MS = 80;
-  if (dir) {
-    G.lastDirTime = now;
-  } else if (G.isMoving && G.lastMoveDir && now - G.lastDirTime < WALK_CHAIN_GRACE_MS) {
-    dir = G.lastMoveDir;
-  }
+  const dir = getActiveDirection();
 
   switch (G.state) {
     case "idle": {
