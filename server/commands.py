@@ -561,12 +561,12 @@ def _process_slash_command(player, text, msgs):
             msgs.append(("send", player, {"type": "boss_choir_start", "distance": dist}))
             msgs.append(("send", player, {"type": "info", "text": f"Choir overlay ON (distance={dist})"}))
 
-    elif cmd == "key":
+    elif cmd == "key" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
         player.keys += 1
         msgs.append(("send", player, {"type": "key_update", "keys": player.keys}))
         msgs.append(("send", player, {"type": "info", "text": f"Granted key (total: {player.keys})"}))
 
-    elif cmd == "keylayout":
+    elif cmd == "keylayout" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
         dinst = get_dungeon_for_room(player.room)
         if not dinst or not dinst.zone_cells:
             msgs.append(("send", player, {"type": "info", "text": "Not in a dungeon with locked doors"}))

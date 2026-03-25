@@ -99,16 +99,21 @@ def _find_item_tile(room_id):
             if tile == "SU":
                 seeds.append((ry, rx))
 
-    if not seeds:
-        return None
-
-    reachable = bfs_reachable(tilemap, game.is_walkable_tile, seeds)
+    reachable = bfs_reachable(tilemap, game.is_walkable_tile, seeds) if seeds else set()
 
     # Filter to interior tiles (avoid exit doorways), skip NPC tiles
     # bfs_reachable returns (row, col); convert to (col, row) for output
     candidates = [(c, r) for (r, c) in reachable
                   if 1 <= r <= 9 and 1 <= c <= 13
                   and (c, r) not in npc_tiles]
+
+    # Fallback: if no reachable interior tiles (e.g. all exits locked), scan for any walkable interior tile
+    if not candidates:
+        for r in range(1, ROOM_ROWS - 1):
+            for c in range(1, ROOM_COLS - 1):
+                if game.is_walkable_tile(tilemap[r][c]) and (c, r) not in npc_tiles:
+                    candidates.append((c, r))
+
     if candidates:
         return random.choice(candidates)
     return None
@@ -283,14 +288,24 @@ def _place_locked_doors(connections, active_cells, entrance, boss_cell, treasure
     entrance_zone = zone_of[entrance]
 
     # Build zone adjacency — full multigraph sent to solver.
-    # Self-loops: add both "directions" (A→A, A→A) so edges_within counts correctly.
+    # Self-loops (both cells in same zone) = redundant doors the player can walk around.
+    # Remove them from locked set entirely — they don't block anything.
     # Multi-edges: naturally kept as duplicate entries.
+    redundant = set()
     zone_adj = {}
     for edge in locked:
         cells = list(edge)
         za, zb = zone_of[cells[0]], zone_of[cells[1]]
+        if za == zb:
+            redundant.add(edge)
+            continue
         zone_adj.setdefault(za, []).append(zb)
         zone_adj.setdefault(zb, []).append(za)
+    if redundant:
+        locked -= redundant
+        num_locks = len(locked)
+        print(f"[LOCKS] Removed {len(redundant)} redundant self-loop doors (bypassable)")
+
     # Ensure entrance zone is in the graph
     if entrance_zone not in zone_adj:
         zone_adj[entrance_zone] = []
@@ -907,49 +922,6 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
     return True
 
 
-def _resolve_custom_slot(instance, assignment, room_id):
-    """Pop a slot from the custom pool and use its content.
-
-    Each cell gets a unique slot (popped, not shared).
-    Falls back to a precreated room if the pool is exhausted or the slot
-    was a placeholder (empty). Background regen fills placeholders later.
-    Returns (entry_data, source_label) on success, or (None, None) on failure.
-    """
-    # Pop a slot from the pool (already shuffled at dungeon creation)
-    if instance.custom_slots:
-        slot = instance.custom_slots.pop()
-    else:
-        slot = None  # pool exhausted
-
-    # Slot has existing content — use it directly
-    if slot is not None and slot.get("data") is not None:
-        entry = slot.get("entry")
-        entry_id = entry.id if entry else "unknown"
-        assignment["entry"] = entry
-        return slot["data"], f"custom:{entry_id}"
-
-    # Pool exhausted or empty slot — fall back to a precreated room
-    reason = "pool exhausted" if slot is None else "empty slot"
-    type_id = instance.dungeon_id
-    libs = game.content_libraries.get(type_id, {})
-    room_library = libs.get("rooms")
-
-    if room_library:
-        used_ids = {a.get("entry").id for a in instance.cell_assignments.values()
-                    if a.get("entry") is not None}
-        available = [e for e in room_library.real_entries
-                     if e.permanent and e.id not in used_ids]
-        if not available:
-            # All permanent rooms used — allow duplicates as last resort
-            available = [e for e in room_library.real_entries if e.permanent]
-        if available:
-            pick = random.choice(available)
-            assignment["entry"] = pick
-            print(f"[DUNGEON] {reason} for {room_id}, using precreated '{pick.id}'")
-            broadcast_debug(f"Room {room_id}: {reason}, using precreated '{pick.id}'")
-            return pick.data, f"precreated-overflow:{pick.id}"
-
-    return None, None
 
 
 # ---------------------------------------------------------------------------
