@@ -596,11 +596,11 @@ def do_room_transition(player, exit_direction: str, msgs: list):
 
         # Update compass minimap for other players in the dungeon
         new_inst = get_dungeon_for_room(new_room_id)
-        old_inst = get_dungeon_for_room(old_room) if not new_inst or old_room not in new_inst.active_rooms else None
-        # Player moved within a dungeon or entered one — notify others
+        old_inst = get_dungeon_for_room(old_room)
+        # Player moved within or entered a dungeon — notify others
         if new_inst:
             broadcast_dungeon_player_positions(new_inst, player, msgs)
-        # Player left a dungeon (old room was dungeon, new room is not) — notify remaining
+        # Player left a dungeon for a different area — notify remaining
         if old_inst and old_inst is not new_inst:
             broadcast_dungeon_player_positions(old_inst, player, msgs)
     except Exception:

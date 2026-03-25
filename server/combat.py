@@ -184,6 +184,12 @@ def _respawn_player(player, msgs):
         "type": "player_left", "name": player.name,
     }, None))
     on_player_leave_room(old_room_id, msgs)
+    # Update compass minimap for remaining dungeon players
+    from server.dungeons import get_dungeon_for_room
+    from server.lifecycle import broadcast_dungeon_player_positions
+    dungeon_inst = get_dungeon_for_room(old_room_id)
+    if dungeon_inst:
+        broadcast_dungeon_player_positions(dungeon_inst, player, msgs)
     on_player_enter_room(STARTING_ROOM)
     send_room_enter(player, msgs)
     msgs.append(("broadcast", STARTING_ROOM,
