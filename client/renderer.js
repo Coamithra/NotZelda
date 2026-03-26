@@ -136,7 +136,7 @@ function updateDyingMonsters() {
 
 function updateSwordPickups() {
   const now = Date.now();
-  G.player.swordPickups = G.player.swordPickups.filter(sp => {
+  G.room.swordPickups = G.room.swordPickups.filter(sp => {
     if (now >= sp.nextTime) {
       sp.frame++;
       sp.nextTime = now + SWORD_PICKUP_FRAME_MS;
@@ -639,7 +639,7 @@ function renderNpcThinking() {
 }
 
 function renderSwordPickups() {
-  for (const sp of G.player.swordPickups) {
+  for (const sp of G.room.swordPickups) {
     drawSwordPickup(G.ui.ctx, sp.x * TS, sp.y * TS, sp.frame, SCALE);
   }
 }

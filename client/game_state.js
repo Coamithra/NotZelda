@@ -73,7 +73,6 @@ const G = {
     // Progression
     playerFlags: new Set(),
     keyCount: 0,                // dungeon keys held by this player
-    swordPickups: [],      // [{x, y, frame, nextTime}]
     itemPickupActive: null,     // {item_type, item_name, startTime, x, y}
     itemPickupEffects: {},      // name -> {item_type, startTime, x, y}
   },
@@ -103,6 +102,7 @@ const G = {
 
     // Items
     heartPickups: [],      // [{id, x, y}]
+    swordPickups: [],      // [{x, y, frame, nextTime}]
 
     // Dungeon
     dungeonState: null,         // {collected: Set, cells, bossCell, currentCell, lockedEdges}
