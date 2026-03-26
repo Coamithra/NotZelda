@@ -28,6 +28,7 @@ Return ONLY valid JSON (no markdown, no explanation).
 - `walk_time` (0.1-5.0): Seconds for the walk animation between tiles. Lower = faster walk. Default: 0.25 (same speed as player). This is how fast the monster physically moves — a low value makes it zip between tiles.
 - `decision_time` (0.2-10.0): Seconds between behavior evaluations (the "think" interval). The decision timer runs continuously — when it fires, the monster evaluates its rules and acts. Default: 2.0 (slow thinker). When `decision_time <= walk_time`, the monster moves continuously with no pause between steps (great for restless creatures like slimes or wolves). When `decision_time > walk_time`, the monster pauses between actions (the idle gap = decision_time - walk_time). This is a powerful difficulty lever: a fast decision_time with a fast walk_time creates a relentless pursuer.
 - `damage` (1-20): Contact damage only — dealt when monster walks onto a player or vice versa. Attack actions have their own separate damage.
+- `knockback` (bool, optional): Whether the monster gets pushed back 1 tile when hit by a sword. Default: true. Set to false for heavy, armored, or immovable monsters — they shrug off hits and continue their current action uninterrupted.
 
 ## BEHAVIOR RULES
 
@@ -88,8 +89,8 @@ Each rule: `{"if": "<condition>", ...params, "do": "<action>", ...params}`
 ## DIFFICULTY GUIDELINES
 - Easy (1-3): hp 1-2, damage 1, walk_time 0.25-0.4, decision_time 2.0-3.0 (slow), just movement rules
 - Medium (4-6): hp 2-4, damage 1-2, walk_time 0.2-0.3, decision_time 1.0-2.0, 1 attack rule with cooldown
-- Hard (7-9): hp 3-6, damage 2-3, walk_time 0.2-0.25, decision_time 0.5-1.0 (fast), 1-2 attack rules, interesting behavior
-- Boss (10): hp 6-10, damage 3-4, walk_time 0.2-0.25, decision_time 0.3-0.7 (very fast), 2-3 attack rules, complex behavior
+- Hard (7-9): hp 3-6, damage 2-3, walk_time 0.2-0.25, decision_time 0.5-1.0 (fast), 1-2 attack rules, interesting behavior. Consider knockback: false for tanky or armored monsters
+- Boss (10): hp 6-10, damage 3-4, walk_time 0.2-0.25, decision_time 0.3-0.7 (very fast), 2-3 attack rules, complex behavior, knockback: false
 
 Design interesting, varied behavior — not just "chase and hit".
 
