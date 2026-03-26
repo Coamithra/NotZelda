@@ -844,12 +844,21 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
     from server.dungeon_types import DUNGEON_TYPES
 
     assignment = instance.cell_assignments.get(cell)
-    if not assignment or assignment["resolved"]:
-        return True  # already resolved
+    if not assignment:
+        return False  # no assignment for this cell
 
     col, row = cell
+    room_id = f"{instance.dungeon_id}_{col}_{row}"
+
+    if assignment["resolved"]:
+        # Verify room data still exists — should always be true, but guard
+        # against corrupted state so callers don't crash on a missing room.
+        if room_id in game.rooms:
+            return True
+        print(f"[DUNGEON] WARNING: {room_id} marked resolved but missing from game.rooms — re-resolving")
+        assignment["resolved"] = False
+        instance.resolved_rooms.discard(room_id)
     dungeon_id = instance.dungeon_id
-    room_id = f"{dungeon_id}_{col}_{row}"
     entrance_col, entrance_row = instance.layout["entrance"]
     is_entrance = (col == entrance_col and row == entrance_row)
 
@@ -901,6 +910,8 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
     instance.resolved_rooms.add(room_id)
 
     # Place dungeon items — track used positions to avoid overlap
+    # Clear any prior items for this room (guards against duplicate placement on re-resolve)
+    instance.dungeon_items.pop(room_id, None)
     used_positions = set()
 
     for item_type, item_cell in instance.item_cells.items():
