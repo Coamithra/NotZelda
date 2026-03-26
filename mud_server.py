@@ -259,6 +259,8 @@ STATIC_FILES = {
     "/fx.js":       ("client/fx.js",       "application/javascript; charset=utf-8"),
     "/net.js":      ("client/net.js",      "application/javascript; charset=utf-8"),
     "/input.js":    ("client/input.js",    "application/javascript; charset=utf-8"),
+    # Menu music
+    "/music_menu.mp3":         ("music/other/menu.mp3", "audio/mpeg"),
     # Overworld music
     "/music.mp3":              ("music/overworld/village.mp3", "audio/mpeg"),
     "/music_tavern.mp3":       ("music/overworld/tavern.mp3", "audio/mpeg"),
