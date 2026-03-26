@@ -5,7 +5,7 @@ import math
 import time
 import traceback
 
-from server import behavior_engine
+from server import behavior_engine, log
 from server.state import game
 from server.constants import (
     DEBUG_MODE,
@@ -576,8 +576,8 @@ def _tick_all_monsters(now, msgs):
                 # State machine (behavior eval, warmup countdown)
                 _tick_monster_state(monster, room_id, i, now, msgs)
             except Exception as e:
-                print(f"[MONSTER TICK ERROR] monster {i} ({monster.kind}) in {room_id} "
-                      f"state={monster.state}: {e}")
+                log.debug(f"[MONSTER TICK ERROR] monster {i} ({monster.kind}) in {room_id} "
+                          f"state={monster.state}: {e}")
                 traceback.print_exc()
                 # Reset to safe state so the monster doesn't stay corrupted.
                 # Snap position to nearest tile in case we crashed mid-walk

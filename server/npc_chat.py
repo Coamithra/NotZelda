@@ -19,7 +19,8 @@ from collections import defaultdict
 from pathlib import Path
 
 from server.state import game
-from server.net import broadcast_to_room, avatars_in_room, log_event, send_to
+from server.net import broadcast_to_room, avatars_in_room, send_to
+from server import log
 
 # ---------------------------------------------------------------------------
 # Prompt loading — templates live in server/prompts/*.txt
@@ -81,9 +82,9 @@ def warmup_ollama():
                 method="POST",
             )
             urllib.request.urlopen(req, timeout=OLLAMA_TIMEOUT)
-            print("[NPC_CHAT] Ollama model warmed up")
+            log.debug("[NPC_CHAT] Ollama model warmed up")
         except Exception as e:
-            print(f"[NPC_CHAT] Ollama warmup failed: {e}")
+            log.debug(f"[NPC_CHAT] Ollama warmup failed: {e}")
     loop = asyncio.get_running_loop()
     loop.run_in_executor(None, _ping)
 
@@ -184,9 +185,9 @@ def register_town_guard():
     ok, errors = register_monster_type(TOWN_GUARD_MONSTER)
     if ok:
         game.builtin_monster_ids.add("town_guard")
-        print("[CONTENT] Registered monster type: town_guard")
+        log.debug("[CONTENT] Registered monster type: town_guard")
     else:
-        print(f"[CONTENT] WARNING: Failed to register town_guard: {errors}")
+        log.debug(f"[CONTENT] WARNING: Failed to register town_guard: {errors}")
 
 # ---------------------------------------------------------------------------
 # World context (shared across all NPCs)
@@ -260,10 +261,10 @@ async def _call_npc_llm(static_prompt: str, dynamic_prompt: str,
         else:
             return await _call_cli(static_prompt, dynamic_prompt, messages)
     except asyncio.TimeoutError:
-        print("[NPC_CHAT] Timeout waiting for LLM response")
+        log.debug("[NPC_CHAT] Timeout waiting for LLM response")
         return None
     except Exception as e:
-        print(f"[NPC_CHAT] LLM call failed: {type(e).__name__}: {e}")
+        log.debug(f"[NPC_CHAT] LLM call failed: {type(e).__name__}: {e}")
         return None
 
 
@@ -444,7 +445,7 @@ async def handle_npc_chat(player, guard: dict, text: str):
         if _hourly_chat_count >= NPC_CHATS_PER_HOUR:
             # Budget exhausted — fall back to static dialog
             response = guard.get("dialog") or "..."
-            log_event("NPC_CHAT", f"BUDGET — {npc_name} used static dialog for {player.name}")
+            log.event("NPC_CHAT", f"BUDGET — {npc_name} used static dialog for {player.name}")
             await asyncio.sleep(1.0)
             _last_chat_time[player.name] = time.monotonic()
             await broadcast_to_room(player.room, {
@@ -537,12 +538,12 @@ async def handle_npc_chat(player, guard: dict, text: str):
     room_name = game.rooms.get(player.room, {}).get("name", player.room)
     _backend = AI_BACKEND if AI_BACKEND in ("ollama", "api") else "cli"
     _model = OLLAMA_MODEL if _backend == "ollama" else NPC_MODEL
-    log_event("NPC_CHAT", f"[{_backend}:{_model}] {npc_name} -> {player.name} ({room_name}): {response}")
+    log.event("NPC_CHAT", f"[{_backend}:{_model}] {npc_name} -> {player.name} ({room_name}): {response}")
     if raw_response != response:
-        log_event("NPC_RAW", f"{npc_name}: {raw_response}")
+        log.event("NPC_RAW", f"{npc_name}: {raw_response}")
     # Print raw response to sidelog (encode-safe for Windows cp1252 console)
     safe_raw = raw_response.encode("ascii", errors="replace").decode("ascii")
-    print(f"[NPC_RAW] [{_backend}:{_model}] {npc_name}: {safe_raw}")
+    log.server(f"[NPC_RAW] [{_backend}:{_model}] {npc_name}: {safe_raw}")
     await broadcast_to_room(player.room, {
         "type": "chat",
         "from": npc_name,
@@ -580,7 +581,7 @@ async def _grant_npc_gift(player, guard: dict):
     player.grant_flag(flag)
     if gameplay_flag:
         player.grant_flag(gameplay_flag)
-    log_event("NPC_GIFT", f"{guard['name']} gave {display_name} to {player.name}")
+    log.event("NPC_GIFT", f"{guard['name']} gave {display_name} to {player.name}")
 
     if effect in ("sword", "heart"):
         # Use item pickup animation (golden glow + sparkles + hold pose)
@@ -657,8 +658,8 @@ async def _spawn_summoned_guards(room_id: str, npc_x: int, npc_y: int, npc_name:
         game.room_monsters[room_id] = []
     monster_list = game.room_monsters[room_id]
 
-    log_event("GUARD_SUMMON", f"{npc_name} called {len(spawn_points)} guards in {room_id}")
-    print(f"[GUARDS] {npc_name} summoned {len(spawn_points)} town guards in {room_id}")
+    log.event("GUARD_SUMMON", f"{npc_name} called {len(spawn_points)} guards in {room_id}")
+    log.debug(f"[GUARDS] {npc_name} summoned {len(spawn_points)} town guards in {room_id}")
 
     for sx, sy in spawn_points:
         monster = Monster(sx, sy, "town_guard")

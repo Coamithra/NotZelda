@@ -29,7 +29,8 @@ from server import behavior_engine
 from server.state import game
 from server.constants import DEBUG_MODE, STARTING_ROOM, PLAYER_MAX_HP, ROOM_COLS, ROOM_ROWS
 from server.models import Player
-from server.net import send_to, avatars_in_room, player_info, log_event
+from server import log
+from server.net import send_to, avatars_in_room, player_info
 from server.rooms import load_room_files, load_dungeon_templates
 from server.lifecycle import (
     on_player_enter_room, on_player_leave_room, send_room_enter,
@@ -46,7 +47,8 @@ from server.validation import register_monster_type, register_tile_type
 
 
 # ---------------------------------------------------------------------------
-# Stdout capture — tees print() output to connected debug clients
+# Stdout capture — safety net for stray print() from libraries/tracebacks.
+# All intentional logging goes through server.log; this catches the rest.
 # ---------------------------------------------------------------------------
 
 _log_tasks = set()  # prevent GC of fire-and-forget log-broadcast tasks
@@ -61,7 +63,8 @@ async def _safe_log_send(ws, msg):
 
 
 class _LogBroadcaster:
-    """Wraps sys.stdout to broadcast lines to debug-mode WebSocket clients."""
+    """Wraps sys.stdout to broadcast stray print() output to debug clients
+    and write it to the server log file."""
 
     def __init__(self, original):
         self._original = original
@@ -74,6 +77,14 @@ class _LogBroadcaster:
             line, self._buf = self._buf.split("\n", 1)
             if line.strip():
                 self._broadcast(line)
+                self._write_file(line)
+
+    def _write_file(self, line):
+        """Append stray stdout lines to the server log file."""
+        try:
+            log._write_file(f"[{log._timestamp()}] [STDOUT] {line}")
+        except Exception:
+            pass
 
     def _broadcast(self, line):
         if not game.players:
@@ -138,12 +149,12 @@ async def handle_connection(websocket):
     real_ip = headers.get("X-Forwarded-For", addr)
     user_agent = headers.get("User-Agent", "unknown")
     ua_short = user_agent[:80]
-    print(f"[CONN] New connection from {real_ip} (UA: {ua_short})")
+    log.debug(f"[CONN] New connection from {real_ip} (UA: {ua_short})")
     try:
         raw = await websocket.recv()
         data = json.loads(raw)
         if data.get("type") != "login":
-            print(f"[CONN] {addr} sent non-login first message, dropping")
+            log.debug(f"[CONN] {addr} sent non-login first message, dropping")
             return
 
         name = data.get("name", "").strip()[:20]
@@ -167,8 +178,7 @@ async def handle_connection(websocket):
         player.avatar.last_reported_x = player.avatar.x
         player.avatar.last_reported_y = player.avatar.y
         game.players[websocket] = player
-        log_event("JOIN", f"{name} ({player.description})")
-        print(f"[JOIN] {name} from {addr}")
+        log.event("JOIN", f"{name} ({player.description}) from {addr}")
         warmup_ollama()
 
         login_msg = {"type": "login_ok", "color_index": color_index, "hp": PLAYER_MAX_HP, "max_hp": PLAYER_MAX_HP}
@@ -198,29 +208,26 @@ async def handle_connection(websocket):
                 elif msg_type in ("position_update", "face", "attack", "chat", "unlock_door"):
                     player.command_queue.append((msg_type, data))
             except json.JSONDecodeError:
-                print(f"[WARN] {name}: bad JSON: {raw[:200]}")
+                log.debug(f"[WARN] {name}: bad JSON: {raw[:200]}")
             except websockets.ConnectionClosed:
                 raise  # re-raise so the outer handler logs it
             except Exception as e:
-                print(f"[ERROR] {name}: message handler error: {type(e).__name__}: {e}")
+                log.debug(f"[ERROR] {name}: message handler error: {type(e).__name__}: {e}")
 
     except websockets.ConnectionClosed as e:
         reason = f"code={e.code} reason='{e.reason}'" if e.code else "no close frame"
         who = player.name if player else addr
         duration = time.time() - connect_time
-        print(f"[DISC] {who} disconnected after {duration:.0f}s: {reason} (IP: {real_ip}, UA: {ua_short})")
-        log_event("DISCONNECT", f"{who} — {reason} — {duration:.0f}s")
+        log.event("DISCONNECT", f"{who} — {reason} — {duration:.0f}s (IP: {real_ip}, UA: {ua_short})")
     except Exception as e:
         who = player.name if player else addr
         duration = time.time() - connect_time
-        print(f"[ERROR] {who} error after {duration:.0f}s: {type(e).__name__}: {e}")
-        log_event("ERROR", f"{who} — {type(e).__name__}: {e}")
+        log.event("ERROR", f"{who} — {type(e).__name__}: {e} — {duration:.0f}s")
     finally:
         if player and websocket in game.players:
             leaving_room = player.room
             del game.players[websocket]
-            log_event("LEAVE", player.name)
-            print(f"[LEAVE] {player.name}")
+            log.event("LEAVE", player.name)
             clear_player_history(player.name)
             disc_msgs = []
             disc_msgs.append(("broadcast", leaving_room,
@@ -361,20 +368,20 @@ async def main():
                 if not entry.permanent and entry.id not in game.custom_sprites:
                     ok, errors = register_monster_type(entry.data)
                     if not ok:
-                        print(f"[LIBS] WARNING: Failed to register monster {entry.id}: {errors}")
+                        log.debug(f"[LIBS] WARNING: Failed to register monster {entry.id}: {errors}")
         if tile_lib:
             for entry in tile_lib.real_entries:
                 if not entry.permanent and entry.id not in game.custom_tile_recipes:
                     ok, errors = register_tile_type(entry.data)
                     if not ok:
-                        print(f"[LIBS] WARNING: Failed to register tile {entry.id}: {errors}")
+                        log.debug(f"[LIBS] WARNING: Failed to register tile {entry.id}: {errors}")
 
     for type_id, libs in game.content_libraries.items():
         m = libs.get("monsters")
         t = libs.get("tiles")
         r = libs.get("rooms")
-        print(f"[LIBS] {type_id}: monster {m.real_count}/{m.capacity}, "
-              f"tile {t.real_count}/{t.capacity}, room {r.real_count}/{r.capacity}")
+        log.debug(f"[LIBS] {type_id}: monster {m.real_count}/{m.capacity}, "
+                  f"tile {t.real_count}/{t.capacity}, room {r.real_count}/{r.capacity}")
 
     behavior_engine.init(avatars_in_room, ROOM_COLS, ROOM_ROWS, game.is_walkable_tile, game.guards, game.rooms)
     port = int(os.environ.get("PORT", 8080))
@@ -401,24 +408,24 @@ async def main():
             ping_interval=15,
             ping_timeout=120,
         )
-        print(f"TLS WebSocket on port {tls_port}")
+        log.debug(f"TLS WebSocket on port {tls_port}")
     else:
-        print(f"No TLS cert found at {cert_path} — TLS WebSocket disabled")
+        log.debug(f"No TLS cert found at {cert_path} — TLS WebSocket disabled")
 
     asyncio.create_task(game_tick())
     load_deprecation_timestamp()
     load_deprecated_sets()
-    print("MUD server running!")
-    print(f"Local:  http://localhost:{port}")
+    log.debug("MUD server running!")
+    log.debug(f"Local:  http://localhost:{port}")
 
     try:
         from pyngrok import ngrok
         tunnel = ngrok.connect(port, "http")
-        print(f"Public: {tunnel.public_url}")
-        print("\nShare the public URL with your friends!")
+        log.debug(f"Public: {tunnel.public_url}")
+        log.debug("Share the public URL with your friends!")
     except Exception as e:
-        print(f"\nngrok not available ({e})")
-        print("Friends can still join on your local network.")
+        log.debug(f"ngrok not available ({e})")
+        log.debug("Friends can still join on your local network.")
 
     await asyncio.Future()
 

@@ -8,6 +8,7 @@ from collections import deque
 
 from server.state import game
 from server.constants import EDGE_SPAWN_POINTS, DEFAULT_SPAWN, ROOM_COLS, ROOM_ROWS, DOORWAY_TILES, bfs_reachable
+from server import log
 from server.net import broadcast_debug
 from server.ai_generator import patch_unreachable_doorways, patch_monster_placements
 
@@ -260,7 +261,7 @@ def _place_locked_doors(connections, active_cells, entrance, boss_cell, treasure
         return set(), [], zone_of, zone_cells
 
     locked = set(random.sample(candidates, num_locks))
-    print(f"[LOCKS] Chose {num_locks} locks from {len(candidates)} candidates")
+    log.debug(f"[LOCKS] Chose {num_locks} locks from {len(candidates)} candidates")
 
     # Step 2: build zone graph (connected components without locked edges)
     unlocked_connections = connections - locked
@@ -307,24 +308,24 @@ def _place_locked_doors(connections, active_cells, entrance, boss_cell, treasure
     if redundant:
         locked -= redundant
         num_locks = len(locked)
-        print(f"[LOCKS] Removed {len(redundant)} redundant self-loop doors (bypassable)")
+        log.debug(f"[LOCKS] Removed {len(redundant)} redundant self-loop doors (bypassable)")
 
     # Ensure entrance zone is in the graph
     if entrance_zone not in zone_adj:
         zone_adj[entrance_zone] = []
 
     solver_edges = sum(len(v) for v in zone_adj.values()) // 2
-    print(f"[LOCKS] Zone graph: {zone_adj}")
-    print(f"[LOCKS] Entrance zone: {entrance_zone}, solver edges: {solver_edges}, "
-          f"total doors: {num_locks}")
+    log.debug(f"[LOCKS] Zone graph: {zone_adj}")
+    log.debug(f"[LOCKS] Entrance zone: {entrance_zone}, solver edges: {solver_edges}, "
+              f"total doors: {num_locks}")
 
     # Step 3: solve for key distribution
     solutions = solve_keys(zone_adj, entrance_zone, max_keys=2)
-    print(f"[LOCKS] Solver returned {len(solutions)} solutions")
+    log.debug(f"[LOCKS] Solver returned {len(solutions)} solutions")
 
     if not solutions:
         # Fallback: all keys in entrance zone
-        print(f"[DUNGEON] key_solver found no solutions, falling back to entrance zone")
+        log.debug(f"[DUNGEON] key_solver found no solutions, falling back to entrance zone")
         key_cells = []
         excluded = {boss_cell, treasure_cell} | set(item_cells_used.values())
         ez_cells = [c for c in zone_cells[entrance_zone] if c not in excluded]
@@ -339,7 +340,7 @@ def _place_locked_doors(connections, active_cells, entrance, boss_cell, treasure
 
     # Pick a random solution
     distribution = random.choice(solutions)
-    print(f"[LOCKS] Chosen distribution: {distribution}")
+    log.debug(f"[LOCKS] Chosen distribution: {distribution}")
 
     # Step 4: place keys in rooms within each zone, preferring interesting rooms.
     # Priority (lower = better): trap rooms > no locked doors > multi locked > single locked.
@@ -388,9 +389,9 @@ def _place_locked_doors(connections, active_cells, entrance, boss_cell, treasure
                 key_cells.append(pick)
 
     if len(key_cells) != num_locks:
-        print(f"[LOCKS] WARNING: keys={len(key_cells)} != doors={num_locks}!")
-    print(f"[LOCKS] Placed {len(key_cells)} keys for {num_locks} doors "
-          f"({len(zone_adj)} zones, {len(solutions)} solutions)")
+        log.debug(f"[LOCKS] WARNING: keys={len(key_cells)} != doors={num_locks}!")
+    log.debug(f"[LOCKS] Placed {len(key_cells)} keys for {num_locks} doors "
+              f"({len(zone_adj)} zones, {len(solutions)} solutions)")
 
     return locked, key_cells, zone_of, zone_cells
 
@@ -479,7 +480,7 @@ def _apply_trap_room(room_id, tilemap, exits):
     _fix_post_wall_reachability(room_id, tilemap, exits)
 
     game.rooms[room_id]["locked"] = True
-    print(f"[DUNGEON] Room {room_id} is a trap room (locked)")
+    log.debug(f"[DUNGEON] Room {room_id} is a trap room (locked)")
 
 
 # ---------------------------------------------------------------------------
@@ -510,7 +511,7 @@ def _fix_post_wall_reachability(room_id, tilemap, exits):
     # 1. Carve paths to reconnect any open doorways cut off by walling
     patches = patch_unreachable_doorways(data, walkable, doorways=open_doorways)
     for p in patches:
-        print(f"[DUNGEON] {room_id}: {p}")
+        log.debug(f"[DUNGEON] {room_id}: {p}")
 
     # 2. Relocate monsters stranded in unreachable tiles
     templates = game.monster_templates.get(room_id)
@@ -518,7 +519,7 @@ def _fix_post_wall_reachability(room_id, tilemap, exits):
         data["monster_placements"] = templates
         patches = patch_monster_placements(data, walkable)
         for p in patches:
-            print(f"[DUNGEON] {room_id}: {p}")
+            log.debug(f"[DUNGEON] {room_id}: {p}")
         # patch_monster_placements may filter out removed entries
         game.monster_templates[room_id] = data["monster_placements"]
         if not game.monster_templates[room_id]:
@@ -622,7 +623,7 @@ def create_dungeon(type_id) -> DungeonInstance | None:
 
     type_config = DUNGEON_TYPES.get(type_id)
     if not type_config:
-        print(f"[DUNGEON] Unknown dungeon type: {type_id}")
+        log.debug(f"[DUNGEON] Unknown dungeon type: {type_id}")
         return None
 
     layout = random.choice(type_config["layouts"])
@@ -634,7 +635,7 @@ def create_dungeon(type_id) -> DungeonInstance | None:
     room_library = libs.get("rooms")
 
     if not room_library or room_library.real_count == 0:
-        print(f"[DUNGEON] No room library entries for type '{type_id}', cannot create dungeon")
+        log.debug(f"[DUNGEON] No room library entries for type '{type_id}', cannot create dungeon")
         return None
 
     # Find all active cells in layout
@@ -800,12 +801,12 @@ def create_dungeon(type_id) -> DungeonInstance | None:
 
     boss_id = f"{type_id}_{boss_cell[0]}_{boss_cell[1]}"
     treasure_id = f"{type_id}_{treasure_cell[0]}_{treasure_cell[1]}"
-    print(f"[DUNGEON] Created {type_id}: layout={layout['name']}, "
-          f"rooms={len(active_rooms)} ({precreated_count}p/{custom_count}c/{special_count}s), "
-          f"slots={num_slots} ({filled_slots}filled/{empty_slots}empty), "
-          f"entrance={entrance_room_id}, boss={boss_id}, treasure={treasure_id}, "
-          f"music={music_track}, boss_music={boss_track}, connections={len(connections)}, "
-          f"locked_doors={len(locked_doors)}, keys={len(key_cells)}")
+    log.debug(f"[DUNGEON] Created {type_id}: layout={layout['name']}, "
+              f"rooms={len(active_rooms)} ({precreated_count}p/{custom_count}c/{special_count}s), "
+              f"slots={num_slots} ({filled_slots}filled/{empty_slots}empty), "
+              f"entrance={entrance_room_id}, boss={boss_id}, treasure={treasure_id}, "
+              f"music={music_track}, boss_music={boss_track}, connections={len(connections)}, "
+              f"locked_doors={len(locked_doors)}, keys={len(key_cells)}")
     broadcast_debug(f"Dungeon {type_id} created: {layout['name']} ({len(active_rooms)} rooms, "
                     f"boss={boss_id}, treasure={treasure_id})")
 
@@ -881,9 +882,9 @@ def _dump_dungeon_debug(instance, active_cells, connections, locked_doors,
     try:
         with open("dungeon.txt", "w") as f:
             f.write("\n".join(lines))
-        print(f"[DUNGEON] Debug layout written to dungeon.txt")
+        log.debug(f"[DUNGEON] Debug layout written to dungeon.txt")
     except Exception as e:
-        print(f"[DUNGEON] Failed to write dungeon.txt: {e}")
+        log.debug(f"[DUNGEON] Failed to write dungeon.txt: {e}")
 
 
 def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
@@ -908,7 +909,7 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
         # against corrupted state so callers don't crash on a missing room.
         if room_id in game.rooms:
             return True
-        print(f"[DUNGEON] WARNING: {room_id} marked resolved but missing from game.rooms — re-resolving")
+        log.debug(f"[DUNGEON] WARNING: {room_id} marked resolved but missing from game.rooms — re-resolving")
         assignment["resolved"] = False
         instance.resolved_rooms.discard(room_id)
     dungeon_id = instance.dungeon_id
@@ -975,7 +976,7 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
                 instance.dungeon_items.setdefault(room_id, []).append(
                     {"x": pos[0], "y": pos[1], "item_type": item_type}
                 )
-                print(f"[DUNGEON] Placed {item_type} in {room_id} at ({pos[0]},{pos[1]})")
+                log.debug(f"[DUNGEON] Placed {item_type} in {room_id} at ({pos[0]},{pos[1]})")
 
     for key_cell in instance.key_cells:
         if cell == key_cell:
@@ -985,9 +986,9 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
                 instance.dungeon_items.setdefault(room_id, []).append(
                     {"x": pos[0], "y": pos[1], "item_type": "key"}
                 )
-                print(f"[DUNGEON] Placed key in {room_id} at ({pos[0]},{pos[1]})")
+                log.debug(f"[DUNGEON] Placed key in {room_id} at ({pos[0]},{pos[1]})")
 
-    print(f"[DUNGEON] Resolved {room_id} ({source_label})")
+    log.debug(f"[DUNGEON] Resolved {room_id} ({source_label})")
     return True
 
 
@@ -1014,7 +1015,7 @@ def _save_libraries(type_id=None):
             libs["rooms"].save(data_dir / f"{tid}_room_library.json")
 
     _save_deprecated_sets()
-    print("[DUNGEON] Libraries saved to disk")
+    log.debug("[DUNGEON] Libraries saved to disk")
 
 
 def _save_deprecation_timestamp():
@@ -1034,7 +1035,7 @@ def load_deprecation_timestamp():
     if path.exists():
         data = json.loads(path.read_text(encoding="utf-8"))
         game.last_deprecation_time = data.get("last_deprecation_time", 0.0)
-        print(f"[DEPRECATION] Last deprecation: {time.strftime('%Y-%m-%d %H:%M', time.localtime(game.last_deprecation_time))}")
+        log.debug(f"[DEPRECATION] Last deprecation: {time.strftime('%Y-%m-%d %H:%M', time.localtime(game.last_deprecation_time))}")
 
 
 def _save_deprecated_sets():
@@ -1076,7 +1077,7 @@ def load_deprecated_sets():
         total_m = sum(len(d.get("monsters", set())) for d in game.deprecated_content.values())
         total_t = sum(len(d.get("tiles", set())) for d in game.deprecated_content.values())
         if total_m or total_t:
-            print(f"[DEPRECATION] Loaded deprecated: {total_m} monsters, {total_t} tiles")
+            log.debug(f"[DEPRECATION] Loaded deprecated: {total_m} monsters, {total_t} tiles")
 
 
 # ---------------------------------------------------------------------------
@@ -1181,7 +1182,7 @@ def _sweep_orphaned_content():
         _cleanup_tile(tid)
 
     if orphan_m or orphan_t:
-        print(f"[SWEEP] Removed {len(orphan_m)} orphaned monster(s), {len(orphan_t)} orphaned tile(s)")
+        log.debug(f"[SWEEP] Removed {len(orphan_m)} orphaned monster(s), {len(orphan_t)} orphaned tile(s)")
         broadcast_debug(f"Sweep: removed {len(orphan_m)}M {len(orphan_t)}T orphans")
 
 
@@ -1207,7 +1208,7 @@ def destroy_dungeon(instance):
     game.active_dungeons.pop(type_id, None)
 
     layout_name = instance.layout['name']
-    print(f"[DUNGEON] Destroyed {type_id}: layout={layout_name}")
+    log.debug(f"[DUNGEON] Destroyed {type_id}: layout={layout_name}")
     broadcast_debug(f"Dungeon {type_id} destroyed ({layout_name})")
 
     # Run daily content deprecation only when no dungeons are active
@@ -1221,7 +1222,7 @@ def destroy_dungeon(instance):
     if not is_debug and room_library:
         num_empty = room_library.placeholder_count
         if num_empty > 0:
-            print(f"[REGEN] Filling {num_empty} empty {type_id} room slot(s)")
+            log.debug(f"[REGEN] Filling {num_empty} empty {type_id} room slot(s)")
             broadcast_debug(f"Regen: filling {num_empty} empty {type_id} room slot(s)")
             start_background_regen(num_empty, type_id)
 
@@ -1237,7 +1238,7 @@ def _maybe_run_deprecation():
         remaining = DEPRECATION_INTERVAL - elapsed
         hours = int(remaining // 3600)
         mins = int((remaining % 3600) // 60)
-        print(f"[DEPRECATION] Skipped — next pass in {hours}h{mins}m")
+        log.debug(f"[DEPRECATION] Skipped — next pass in {hours}h{mins}m")
         broadcast_debug(f"Deprecation: next pass in {hours}h{mins}m")
         return
     broadcast_debug("Deprecation: starting pass...")
@@ -1311,7 +1312,7 @@ def _run_content_deprecation(type_id):
     if room_library:
         expired_rooms = room_library.expire_oldest()
         if expired_rooms:
-            print(f"[DEPRECATION] [{type_id}] Expired rooms: {expired_rooms}")
+            log.debug(f"[DEPRECATION] [{type_id}] Expired rooms: {expired_rooms}")
             broadcast_debug(f"[{type_id}] Expired {len(expired_rooms)} room(s): {', '.join(expired_rooms)}")
 
     # Step 2: Deprecate oldest 10% of custom monsters/tiles
@@ -1320,10 +1321,10 @@ def _run_content_deprecation(type_id):
     newly_dep_m = _deprecate_oldest(monster_library, dep_monsters)
     newly_dep_t = _deprecate_oldest(tile_library, dep_tiles)
     for mid in newly_dep_m:
-        print(f"[DEPRECATION] [{type_id}] Deprecated monster '{mid}'")
+        log.debug(f"[DEPRECATION] [{type_id}] Deprecated monster '{mid}'")
         broadcast_debug(f"[{type_id}] Monster '{mid}' deprecated")
     for tid in newly_dep_t:
-        print(f"[DEPRECATION] [{type_id}] Deprecated tile '{tid}'")
+        log.debug(f"[DEPRECATION] [{type_id}] Deprecated tile '{tid}'")
         broadcast_debug(f"[{type_id}] Tile '{tid}' deprecated")
 
     # Step 3: Scan remaining rooms for referenced monster/tile IDs
@@ -1338,7 +1339,7 @@ def _run_content_deprecation(type_id):
                 monster_library.remove(entry.id)
                 _cleanup_monster(entry.id, type_id)
                 removed_monsters.append(entry.id)
-                print(f"[DEPRECATION] [{type_id}] Removed monster '{entry.id}' (unreferenced)")
+                log.debug(f"[DEPRECATION] [{type_id}] Removed monster '{entry.id}' (unreferenced)")
                 broadcast_debug(f"[{type_id}] Monster '{entry.id}' removed")
 
     removed_tiles = []
@@ -1348,7 +1349,7 @@ def _run_content_deprecation(type_id):
                 tile_library.remove(entry.id)
                 _cleanup_tile(entry.id, type_id)
                 removed_tiles.append(entry.id)
-                print(f"[DEPRECATION] [{type_id}] Removed tile '{entry.id}' (unreferenced)")
+                log.debug(f"[DEPRECATION] [{type_id}] Removed tile '{entry.id}' (unreferenced)")
                 broadcast_debug(f"[{type_id}] Tile '{entry.id}' removed")
 
     # Also clean up deprecated IDs that aren't in the library at all
@@ -1367,14 +1368,14 @@ def _run_content_deprecation(type_id):
     removed_count = len(removed_monsters) + len(removed_tiles) + len(stale_m) + len(stale_t)
     dep_count = len(newly_dep_m) + len(newly_dep_t)
     if expired_rooms or dep_count > 0 or removed_count > 0:
-        print(f"[DEPRECATION] [{type_id}] Complete: {len(expired_rooms)} rooms expired, "
-              f"{len(newly_dep_m)}M {len(newly_dep_t)}T deprecated, "
-              f"{removed_count} removed")
+        log.debug(f"[DEPRECATION] [{type_id}] Complete: {len(expired_rooms)} rooms expired, "
+                  f"{len(newly_dep_m)}M {len(newly_dep_t)}T deprecated, "
+                  f"{removed_count} removed")
         broadcast_debug(f"[{type_id}] Deprecation done: {len(expired_rooms)}R expired, "
                         f"{len(newly_dep_m)}M {len(newly_dep_t)}T deprecated, "
                         f"{removed_count} removed")
     else:
-        print(f"[DEPRECATION] [{type_id}] Nothing to deprecate")
+        log.debug(f"[DEPRECATION] [{type_id}] Nothing to deprecate")
         broadcast_debug(f"[{type_id}] Deprecation: nothing to expire")
 
     return len(expired_rooms)
@@ -1393,7 +1394,7 @@ def start_background_regen(num_rooms, type_id):
     """
     regen_task = game.regen_tasks.get(type_id)
     if regen_task is not None and not regen_task.done():
-        print(f"[REGEN] Already in progress for {type_id}, skipping")
+        log.debug(f"[REGEN] Already in progress for {type_id}, skipping")
         broadcast_debug(f"Regen: already in progress for {type_id}")
         return
     if num_rooms <= 0:
@@ -1437,7 +1438,7 @@ async def _background_regen(num_rooms, snapshot, type_id):
     type_config = DUNGEON_TYPES.get(type_id, {})
     theme = type_config.get("theme", type_config.get("biome", "dungeon"))
 
-    print(f"[REGEN] Starting {type_id} background generation of {num_rooms} room(s)...")
+    log.debug(f"[REGEN] Starting {type_id} background generation of {num_rooms} room(s)...")
     broadcast_debug(f"Regen [{type_id}]: generating {num_rooms} room(s)...")
     staged = []
 
@@ -1480,12 +1481,12 @@ async def _background_regen(num_rooms, snapshot, type_id):
                 taken_tile_ids=taken_tile_ids,
             )
         except Exception as e:
-            print(f"[REGEN] [{type_id}] Room {i+1}/{num_rooms} failed: {type(e).__name__}: {e}")
+            log.debug(f"[REGEN] [{type_id}] Room {i+1}/{num_rooms} failed: {type(e).__name__}: {e}")
             broadcast_debug(f"Regen [{type_id}] {i+1}/{num_rooms}: FAILED ({type(e).__name__})")
             continue
 
         if result is None:
-            print(f"[REGEN] [{type_id}] Room {i+1}/{num_rooms} returned None, skipping")
+            log.debug(f"[REGEN] [{type_id}] Room {i+1}/{num_rooms} returned None, skipping")
             broadcast_debug(f"Regen [{type_id}] {i+1}/{num_rooms}: empty result, skipped")
             continue
 
@@ -1511,13 +1512,13 @@ async def _background_regen(num_rooms, snapshot, type_id):
             detail += f" +{','.join(new_m)}"
         if new_t:
             detail += f" +{','.join(new_t)}"
-        print(f"[REGEN] [{type_id}] Room {i+1}/{num_rooms} generated: \"{result.get('name', '?')}\"")
+        log.debug(f"[REGEN] [{type_id}] Room {i+1}/{num_rooms} generated: \"{result.get('name', '?')}\"")
         broadcast_debug(f"Regen [{type_id}] {i+1}/{num_rooms}: {detail}")
 
     if staged:
         _apply_staged_content(staged, type_id)
     else:
-        print(f"[REGEN] [{type_id}] No rooms generated successfully")
+        log.debug(f"[REGEN] [{type_id}] No rooms generated successfully")
         broadcast_debug(f"Regen [{type_id}]: no rooms generated")
 
     game.regen_tasks.pop(type_id, None)
@@ -1552,7 +1553,7 @@ def _apply_staged_content(results, type_id):
                 if added:
                     total_monsters += 1
             elif not ok:
-                print(f"[REGEN] Monster registration failed for {m.get('kind')}: {errors}")
+                log.debug(f"[REGEN] Monster registration failed for {m.get('kind')}: {errors}")
 
         # Register new tiles
         for t in result.get("new_tiles", []):
@@ -1565,7 +1566,7 @@ def _apply_staged_content(results, type_id):
                 if added:
                     total_tiles += 1
             elif not ok:
-                print(f"[REGEN] Tile registration failed for {t.get('id')}: {errors}")
+                log.debug(f"[REGEN] Tile registration failed for {t.get('id')}: {errors}")
 
         # Add room to library (deduplicate ID)
         room_name = result.get("name", "Unknown Room")
@@ -1585,8 +1586,8 @@ def _apply_staged_content(results, type_id):
                 total_rooms += 1
 
     _save_libraries(type_id)
-    print(f"[REGEN] [{type_id}] Applied staged content: {total_rooms} rooms, "
-          f"{total_monsters} monsters, {total_tiles} tiles")
+    log.debug(f"[REGEN] [{type_id}] Applied staged content: {total_rooms} rooms, "
+              f"{total_monsters} monsters, {total_tiles} tiles")
     broadcast_debug(f"Regen [{type_id}] done: {total_rooms}R {total_monsters}M {total_tiles}T added")
 
 
@@ -1608,7 +1609,7 @@ def get_boss_distances(instance: DungeonInstance) -> dict:
     for conn in connections:
         cells = list(conn)
         if len(cells) != 2:
-            print(f"[DUNGEON] WARNING: malformed connection (len={len(cells)}): {conn}")
+            log.debug(f"[DUNGEON] WARNING: malformed connection (len={len(cells)}): {conn}")
             continue
         a, b = cells
         adj.setdefault(a, []).append(b)

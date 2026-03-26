@@ -2,6 +2,7 @@
 
 import time
 
+from server import log
 from server.state import game
 from server.constants import ROOM_COLS, ROOM_ROWS
 from server.models import Monster
@@ -538,9 +539,9 @@ async def handle_debug_spawn(player, args: str):
 
         kind = variant["kind"]
         tier_used = tier if tier is not None else "random"
-        print(f"[VARIANT] Created {kind} (tier {tier_used}) from {base_kind}: "
-              f"HP {variant['stats']['hp']}, DMG {variant['stats']['damage']}, "
-              f"walk_time {variant['stats']['walk_time']}")
+        log.server(f"[VARIANT] Created {kind} (tier {tier_used}) from {base_kind}: "
+                   f"HP {variant['stats']['hp']}, DMG {variant['stats']['damage']}, "
+                   f"walk_time {variant['stats']['walk_time']}")
 
     # If it's a debug monster that isn't registered yet, register it
     elif kind in DEBUG_MONSTERS and kind not in game.monster_stats:

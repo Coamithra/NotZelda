@@ -21,6 +21,7 @@ import asyncio
 import re as _re
 from collections import deque
 from server.constants import ROOM_COLS, ROOM_ROWS, ALL_DOORWAY_TILES, bfs_reachable
+from server import log
 from pathlib import Path
 from dataclasses import dataclass, field
 
@@ -341,19 +342,19 @@ def validate_monster_sprite(sprite_data: dict) -> list[str]:
     death_sprite = sprite_data.get("death_sprite")
     if death_sprite is not None:
         if not isinstance(death_sprite, dict):
-            print("[VALIDATE] death_sprite not a dict, ignoring")
+            log.server("[VALIDATE] death_sprite not a dict, ignoring")
             del sprite_data["death_sprite"]
         else:
             dcolors = death_sprite.get("colors")
             dframes = death_sprite.get("frames")
             if not isinstance(dcolors, dict) or not isinstance(dframes, list) or len(dframes) < 1:
-                print("[VALIDATE] death_sprite malformed, ignoring")
+                log.server("[VALIDATE] death_sprite malformed, ignoring")
                 del sprite_data["death_sprite"]
             else:
                 # Validate color hex values
                 for k, v in list(dcolors.items()):
                     if not _is_hex_color(v):
-                        print(f"[VALIDATE] death_sprite.colors.{k} invalid: {v!r}, ignoring death_sprite")
+                        log.server(f"[VALIDATE] death_sprite.colors.{k} invalid: {v!r}, ignoring death_sprite")
                         del sprite_data["death_sprite"]
                         break
 
@@ -796,7 +797,7 @@ def _dump_text(text: str, prefix: str, label: str = "") -> str:
     filepath = _PROMPT_DIR / filename
     filepath.write_text(text, encoding="utf-8")
     suffix = f" ({label})" if label else ""
-    print(f"[GEN] Saved {filepath.name}{suffix}")
+    log.server(f"[GEN] Saved {filepath.name}{suffix}")
     return filename
 
 
@@ -834,7 +835,7 @@ async def _call_cli(system_prompt: str, user_prompt: str) -> tuple[str, int, int
 
     combined_prompt = f"{system_prompt}\n\nUser: {user_prompt}"
 
-    print(f"[GEN] Calling Claude CLI ({len(combined_prompt)} chars)...")
+    log.server(f"[GEN] Calling Claude CLI ({len(combined_prompt)} chars)...")
 
     env = {k: v for k, v in os.environ.items() if k not in ("CLAUDECODE", "ANTHROPIC_API_KEY")}
 
@@ -860,7 +861,7 @@ async def _call_cli(system_prompt: str, user_prompt: str) -> tuple[str, int, int
         input_tokens = usage.get("input_tokens", 0) + usage.get("cache_creation_input_tokens", 0) + usage.get("cache_read_input_tokens", 0)
         output_tokens = usage.get("output_tokens", 0)
         if input_tokens or output_tokens:
-            print(f"[GEN] CLI tokens: {input_tokens} in + {output_tokens} out (cost: ${cli_output.get('total_cost_usd', 0):.4f})")
+            log.server(f"[GEN] CLI tokens: {input_tokens} in + {output_tokens} out (cost: ${cli_output.get('total_cost_usd', 0):.4f})")
         text = cli_output.get("result", proc.stdout)
     except json.JSONDecodeError:
         text = proc.stdout
@@ -896,9 +897,9 @@ async def _call_api(system_prompt: str, user_prompt: str) -> tuple[str, int, int
     cache_write = getattr(usage, "cache_creation_input_tokens", 0) or 0
     cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
     if cache_read:
-        print(f"[GEN] Cache hit: {cache_read} tokens read from cache")
+        log.server(f"[GEN] Cache hit: {cache_read} tokens read from cache")
     elif cache_write:
-        print(f"[GEN] Cache miss: {cache_write} tokens written to cache")
+        log.server(f"[GEN] Cache miss: {cache_write} tokens written to cache")
     return (response.content[0].text.strip(),
             usage.input_tokens,
             usage.output_tokens,
@@ -931,14 +932,14 @@ async def _call_ai(
     Returns the validated dict, or None on failure.
     """
     if not rate_limiter.can_call():
-        print(f"[GEN] Rate limit reached — skipping {label}")
+        log.debug(f"[GEN] Rate limit reached — skipping {label}")
         return None
 
     validation_error = None
     total_attempts = 1 + max_retries
 
     for attempt in range(total_attempts):
-        print(f"[GEN] {label} try {attempt + 1}/{total_attempts}...")
+        log.server(f"[GEN] {label} try {attempt + 1}/{total_attempts}...")
 
         prompt = user_prompt
         if validation_error:
@@ -963,7 +964,7 @@ async def _call_ai(
 
             elapsed = time.time() - start_time
             raw_text = raw_text.strip()
-            print(f"[GEN] {label} responded in {elapsed:.1f}s ({len(raw_text)} chars)")
+            log.server(f"[GEN] {label} responded in {elapsed:.1f}s ({len(raw_text)} chars)")
 
             # Strip markdown code fences if present
             if raw_text.startswith("```"):
@@ -981,32 +982,32 @@ async def _call_ai(
             if patch_fn:
                 patch_log = patch_fn(data)
                 if patch_log:
-                    print(f"[GEN] {label} auto-patched {len(patch_log)} issues:")
+                    log.server(f"[GEN] {label} auto-patched {len(patch_log)} issues:")
                     for p in patch_log:
-                        print(f"[GEN]   {p}")
+                        log.server(f"[GEN]   {p}")
 
             # Validate
             errors = validate_fn(data)
             if errors:
                 validation_error = "\n".join(f"- {e}" for e in errors)
-                print(f"[GEN] {label} try {attempt + 1} FAILED — {len(errors)} errors:")
+                log.debug(f"[GEN] {label} try {attempt + 1} FAILED — {len(errors)} errors:")
                 for e in errors:
-                    print(f"[GEN]   {e}")
+                    log.server(f"[GEN]   {e}")
                 _dump_ai_output(raw_text, f"{label} validation failed")
                 if attempt < max_retries:
-                    print(f"[GEN] Retrying {label}...")
+                    log.server(f"[GEN] Retrying {label}...")
                     continue
                 return None
 
-            print(f"[GEN] {label} try {attempt + 1} SUCCESS ({elapsed:.1f}s)")
+            log.server(f"[GEN] {label} try {attempt + 1} SUCCESS ({elapsed:.1f}s)")
             return data
 
         except asyncio.TimeoutError:
             timeout_val = CLI_TIMEOUT if AI_BACKEND == "cli" else GENERATION_TIMEOUT
-            print(f"[GEN] {label} FAILED — timeout after {timeout_val}s")
+            log.debug(f"[GEN] {label} FAILED — timeout after {timeout_val}s")
             return None
         except json.JSONDecodeError as e:
-            print(f"[GEN] {label} FAILED — parse error: {e}")
+            log.debug(f"[GEN] {label} FAILED — parse error: {e}")
             if raw_text:
                 _dump_ai_output(raw_text, f"{label} JSON parse error")
             if attempt < max_retries:
@@ -1014,7 +1015,7 @@ async def _call_ai(
                 continue
             return None
         except Exception as e:
-            print(f"[GEN] {label} FAILED — {type(e).__name__}: {e}")
+            log.debug(f"[GEN] {label} FAILED — {type(e).__name__}: {e}")
             if raw_text:
                 _dump_ai_output(raw_text, f"{label} {type(e).__name__}")
             return None
@@ -1053,7 +1054,7 @@ async def generate_monster_design(
     Returns: {"kind", "tags", "stats", "behavior"} or None.
     """
     if AI_BACKEND == "api" and not os.environ.get("ANTHROPIC_API_KEY"):
-        print("[GEN] No ANTHROPIC_API_KEY set — skipping monster design generation")
+        log.debug("[GEN] No ANTHROPIC_API_KEY set — skipping monster design generation")
         return None
 
     prompt = _build_monster_design_prompt(theme, difficulty, existing_monsters or [])
@@ -1105,7 +1106,7 @@ async def generate_monster_sprite(
     Returns: {"sprite": {"colors": {...}, "frames": [...]}} or None.
     """
     if AI_BACKEND == "api" and not os.environ.get("ANTHROPIC_API_KEY"):
-        print("[GEN] No ANTHROPIC_API_KEY set — skipping monster sprite generation")
+        log.debug("[GEN] No ANTHROPIC_API_KEY set — skipping monster sprite generation")
         return None
 
     prompt = _build_monster_sprite_prompt(kind, tags or [], attack_types or [], theme)
@@ -1152,7 +1153,7 @@ async def generate_tiles(
     Returns: list of tile dicts [{id, walkable, tags, colors, layers}], or None.
     """
     if AI_BACKEND == "api" and not os.environ.get("ANTHROPIC_API_KEY"):
-        print("[GEN] No ANTHROPIC_API_KEY set — skipping tile generation")
+        log.debug("[GEN] No ANTHROPIC_API_KEY set — skipping tile generation")
         return None
 
     prompt = _build_tiles_prompt(theme, difficulty, existing_tiles or [], count)
@@ -1238,7 +1239,7 @@ async def generate_layout(
     Returns: {"name", "tilemap", "monster_placements"} or None.
     """
     if AI_BACKEND == "api" and not os.environ.get("ANTHROPIC_API_KEY"):
-        print("[GEN] No ANTHROPIC_API_KEY set — skipping layout generation")
+        log.debug("[GEN] No ANTHROPIC_API_KEY set — skipping layout generation")
         return None
 
     available_tiles = available_tiles or []
@@ -1337,8 +1338,8 @@ async def _rename_monster_kind(old_kind: str, taken_names: set[str],
             return result["kind"]
         if result:
             taken_names.add(result["kind"])
-            print(f"[GEN] Rename attempt {attempt+1} for '{old_kind}' "
-                  f"returned '{result['kind']}' which is also taken")
+            log.server(f"[GEN] Rename attempt {attempt+1} for '{old_kind}' "
+                       f"returned '{result['kind']}' which is also taken")
     return None
 
 
@@ -1368,8 +1369,8 @@ async def _rename_tile_id(old_id: str, taken_ids: set[str],
             return result["id"]
         if result:
             taken_ids.add(result["id"])
-            print(f"[GEN] Rename attempt {attempt+1} for '{old_id}' "
-                  f"returned '{result['id']}' which is also taken")
+            log.server(f"[GEN] Rename attempt {attempt+1} for '{old_id}' "
+                       f"returned '{result['id']}' which is also taken")
     return None
 
 
@@ -1406,11 +1407,11 @@ async def generate_room(
             await progress(step, detail)
 
     if AI_BACKEND == "api" and not os.environ.get("ANTHROPIC_API_KEY"):
-        print("[GEN] No ANTHROPIC_API_KEY set — skipping generation")
+        log.debug("[GEN] No ANTHROPIC_API_KEY set — skipping generation")
         return None
 
     if not rate_limiter.can_call():
-        print("[GEN] Rate limit reached — skipping generation")
+        log.debug("[GEN] Rate limit reached — skipping generation")
         return None
 
     existing_monsters = existing_monsters or []
@@ -1419,7 +1420,7 @@ async def generate_room(
     # --- Step 1: Roll and generate new monsters ---
     num_new_monsters = _roll_new_count(
         monster_library_full, monster_library_count, monster_library_capacity)
-    print(f"[GEN] Rolling {num_new_monsters} new monster(s) for theme \"{theme}\", difficulty {difficulty}")
+    log.server(f"[GEN] Rolling {num_new_monsters} new monster(s) for theme \"{theme}\", difficulty {difficulty}")
 
     new_monsters = []
     for i in range(num_new_monsters):
@@ -1430,7 +1431,7 @@ async def generate_room(
             existing_monsters + [{"kind": m["kind"], "tags": m.get("tags", [])} for m in new_monsters],
         )
         if design is None:
-            print(f"[GEN] Monster design {i+1}/{num_new_monsters} failed, continuing...")
+            log.debug(f"[GEN] Monster design {i+1}/{num_new_monsters} failed, continuing...")
             continue
 
         # Step 2: Generate sprite for this design
@@ -1447,18 +1448,18 @@ async def generate_room(
             design["sprite"] = sprite_data["sprite"]
             if isinstance(sprite_data.get("death_sprite"), dict):
                 design["death_sprite"] = sprite_data["death_sprite"]
-                print(f"[GEN] Death sprite included for {design['kind']}")
+                log.server(f"[GEN] Death sprite included for {design['kind']}")
         else:
-            print(f"[GEN] Sprite generation failed for {design['kind']}, skipping monster")
+            log.debug(f"[GEN] Sprite generation failed for {design['kind']}, skipping monster")
             continue
 
         new_monsters.append(design)
-        print(f"[GEN] Created monster: {design['kind']}")
+        log.server(f"[GEN] Created monster: {design['kind']}")
 
     # --- Step 2: Roll and generate new tiles ---
     num_new_tiles = _roll_new_count(
         tile_library_full, tile_library_count, tile_library_capacity)
-    print(f"[GEN] Rolling {num_new_tiles} new tile(s)")
+    log.server(f"[GEN] Rolling {num_new_tiles} new tile(s)")
 
     new_tiles = []
     if num_new_tiles > 0:
@@ -1467,9 +1468,9 @@ async def generate_room(
             theme, difficulty, existing_tiles, count=num_new_tiles)
         if tile_result:
             new_tiles = tile_result
-            print(f"[GEN] Created {len(new_tiles)} tile(s): {[t.get('id') for t in new_tiles]}")
+            log.server(f"[GEN] Created {len(new_tiles)} tile(s): {[t.get('id') for t in new_tiles]}")
         else:
-            print("[GEN] Tile generation failed, continuing with existing tiles only")
+            log.debug("[GEN] Tile generation failed, continuing with existing tiles only")
 
     # --- Step 2b: Resolve name collisions before layout sees the names ---
     if taken_monster_kinds is not None:
@@ -1479,11 +1480,11 @@ async def generate_room(
                 await _progress("rename", f"Renaming monster '{old}' (name taken)...")
                 new_kind = await _rename_monster_kind(old, taken_monster_kinds, theme)
                 if new_kind:
-                    print(f"[GEN] Renamed monster '{old}' -> '{new_kind}'")
+                    log.server(f"[GEN] Renamed monster '{old}' -> '{new_kind}'")
                     m["kind"] = new_kind
                 else:
-                    print(f"[GEN] Could not rename monster '{old}', "
-                          "room will reuse existing definition")
+                    log.debug(f"[GEN] Could not rename monster '{old}', "
+                              "room will reuse existing definition")
                     new_monsters.remove(m)
                     continue
             taken_monster_kinds.add(m["kind"])
@@ -1495,11 +1496,11 @@ async def generate_room(
                 await _progress("rename", f"Renaming tile '{old}' (id taken)...")
                 new_id = await _rename_tile_id(old, taken_tile_ids, theme)
                 if new_id:
-                    print(f"[GEN] Renamed tile '{old}' -> '{new_id}'")
+                    log.server(f"[GEN] Renamed tile '{old}' -> '{new_id}'")
                     t["id"] = new_id
                 else:
-                    print(f"[GEN] Could not rename tile '{old}', "
-                          "room will reuse existing definition")
+                    log.debug(f"[GEN] Could not rename tile '{old}', "
+                              "room will reuse existing definition")
                     new_tiles.remove(t)
                     continue
             taken_tile_ids.add(t["id"])
@@ -1525,7 +1526,7 @@ async def generate_room(
         existing_room_names=existing_room_names,
     )
     if layout is None:
-        print("[GEN] Layout generation failed — giving up")
+        log.debug("[GEN] Layout generation failed — giving up")
         return None
 
     # Assemble final result (same format as before)
@@ -1537,9 +1538,9 @@ async def generate_room(
         "monster_placements": layout["monster_placements"],
     }
     await _progress("done", f"Room complete: \"{result['name']}\"")
-    print(f"[GEN] Room complete: \"{result['name']}\" "
-          f"({len(new_monsters)} new monsters, {len(new_tiles)} new tiles, "
-          f"{len(result['monster_placements'])} placements)")
+    log.debug(f"[GEN] Room complete: \"{result['name']}\" "
+               f"({len(new_monsters)} new monsters, {len(new_tiles)} new tiles, "
+               f"{len(result['monster_placements'])} placements)")
     return result
 
 
@@ -1550,7 +1551,7 @@ async def generate_room(
 def init():
     """Load persisted usage data on startup."""
     usage_tracker.load()
-    print(f"[GEN] Backend: {AI_BACKEND}" + (" (Claude CLI — uses subscription)" if AI_BACKEND == "cli" else " (Anthropic API)"))
+    log.server(f"[GEN] Backend: {AI_BACKEND}" + (" (Claude CLI — uses subscription)" if AI_BACKEND == "cli" else " (Anthropic API)"))
 
 
 # ---------------------------------------------------------------------------

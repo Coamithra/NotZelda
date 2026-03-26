@@ -78,13 +78,21 @@ When pushing to git make sure to update CLAUDE.md first!
 - **Item pickup animation**: all item grants (sword, map, compass, heart) use the same `item_obtained`/`item_effect` message flow with `drawItemPickupOverlay` (golden glow + sparkles). Player is frozen during the 2.5s animation. `ITEM_DRAW_FNS` in `sprites.js` maps item_type to draw functions. Heart container uses a larger hand-crafted 18x13 sprite (`drawBigHeartSolid`) with gold container border.
 - **NPC gifts**: defined in `.room` files (`| Gift Name:condition`). Server-side effects keyed by display name in `GIFT_EFFECTS` dict in `npc_chat.py`. Tags like `[GIVE_ITEM]` and `[CALL_GUARDS]` are extracted from AI output *before* response cleanup (emoji/action stripping, truncation).
 - **NPC prompt tuning**: small models (gemma2:2b) are very sensitive to prompt wording. Keep NPC personalities short. Avoid words like "gruff" or "stern" — the model reads them as hostile. Tags like `[CALL_GUARDS]` need emphatic instructions (e.g. "EXTREMELY RUDE") or the model uses them on every response.
+- **Logging — 3 destinations** via `server/log.py` (`from server import log`). Never use bare `print()` in server code — use the log module:
+  - `log.debug(msg)` → debug sidebar + `event_log.txt` + stdout. For operational events visible in the debug panel.
+  - `log.server(msg)` → `event_log.txt` + stdout only. For verbose output that would flood the sidebar (AI generation, registration details).
+  - `log.event(kind, text)` → `event_log.txt` + stdout. For structured lifecycle events (JOIN, DISCONNECT, NPC_CHAT, etc.). Written as `[timestamp] KIND: text`.
+  - Chat window messages are a separate system (WebSocket game messages, not logging).
+  - `broadcast_debug()` in `net.py` is for the canvas overlay HUD (12-line `G.debugLog` buffer), not the sidebar — keep using it where needed.
+  - `_LogBroadcaster` in `mud_server.py` is a safety net that catches stray `print()` from libraries/tracebacks → sidebar + file.
+  - Exception: `state.py` startup prints stay as `print()` (runs before game exists). `ai_generator.py` `__main__` block stays as `print()` (standalone test).
 - **Debug /viewserver**: sends full `debug_state` snapshot every tick to subscribed players (toggled via `/viewserver` chat command, debug-only). Renders semi-transparent red shapes for server-side entity positions.
 - **Room geometry constants** live in `server/constants.py`: `DOORWAY_TILES`, `ALL_DOORWAY_TILES`, `bfs_reachable()`. Use `bfs_reachable()` instead of inline BFS for tile reachability checks.
 
 ## Key Gotchas
 
 - **Client script load order matters**: `game_state.js` → `title.js` → `tiles.js` → `sprite_data.js` → `sprites.js` → `music.js` → `renderer.js` → `fx.js` → `net.js` → inline init/gameLoop → `input.js`
-- **Import order** avoids circular deps: `constants` → `state` → `models` → `net` → `rooms` → `validation` → `dungeon_types` → `dungeons` → `quests` → `lifecycle` → `commands` → `combat` → `debug_monsters` → `mud_server`. Combat uses lazy imports for commands; commands imports from lifecycle.
+- **Import order** avoids circular deps: `constants` → `state` → `log` → `models` → `net` → `rooms` → `validation` → `dungeon_types` → `dungeons` → `quests` → `lifecycle` → `commands` → `combat` → `debug_monsters` → `mud_server`. Combat uses lazy imports for commands; commands imports from lifecycle.
 - **Command queue**: websocket messages are never processed inline — handler appends to `player.command_queue`, drained by `game_tick()`. Only `ping` is handled directly.
 - **game_tick() is synchronous** with message batching — no `await` mid-tick. Messages collected as tuples, flushed after the full tick. This prevents dungeon teardown crashes.
 - **Room transitions**: player's avatar is set to `None` during `do_room_transition()`, then a new avatar is created at the spawn point. `avatars_in_room()` naturally excludes avatar-less players so monsters can't target them mid-transition. Player stays in `game.players` throughout.

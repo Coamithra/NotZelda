@@ -11,6 +11,7 @@ content library, and handles populating those libraries at startup.
 
 from server.content_library import LibraryEntry, ContentLibrary
 from server.state import game
+from server import log
 
 # ---------------------------------------------------------------------------
 # Per-dungeon permanent content IDs
@@ -43,21 +44,21 @@ def register_precreated_types() -> None:
     for type_id, content in PRECREATED_CONTENT.items():
         for kind in content["monsters"]:
             if kind in game.monster_stats:
-                print(f"[CONTENT] Registered monster type: {kind}")
+                log.server(f"[CONTENT] Registered monster type: {kind}")
             else:
-                print(f"[CONTENT] WARNING: Monster '{kind}' not found in data/monsters.json")
+                log.debug(f"[CONTENT] WARNING: Monster '{kind}' not found in data/monsters.json")
 
         boss_kind = content["boss"]
         if boss_kind in game.monster_stats:
-            print(f"[CONTENT] Registered boss type: {boss_kind}")
+            log.server(f"[CONTENT] Registered boss type: {boss_kind}")
         else:
-            print(f"[CONTENT] WARNING: Boss '{boss_kind}' not found in data/monsters.json")
+            log.debug(f"[CONTENT] WARNING: Boss '{boss_kind}' not found in data/monsters.json")
 
         for tile_id in content["tiles"]:
             if tile_id in game.custom_tile_recipes:
-                print(f"[CONTENT] Registered tile type: {tile_id}")
+                log.server(f"[CONTENT] Registered tile type: {tile_id}")
             else:
-                print(f"[CONTENT] WARNING: Tile '{tile_id}' not found in data/tiles.json")
+                log.debug(f"[CONTENT] WARNING: Tile '{tile_id}' not found in data/tiles.json")
 
 
 def _template_to_room_data(template: dict) -> dict:
@@ -166,8 +167,8 @@ def load_precreated_content(
             permanent=True,
         )
         monster_lib.add(entry)
-    print(f"[CONTENT] [{type_id}] Loaded {len(monster_ids)} permanent monsters: "
-          f"{monster_ids}")
+    log.server(f"[CONTENT] [{type_id}] Loaded {len(monster_ids)} permanent monsters: "
+               f"{monster_ids}")
 
     # --- Tiles ---
     for tile_id in tile_ids:
@@ -182,8 +183,8 @@ def load_precreated_content(
             permanent=True,
         )
         tile_lib.add(entry)
-    print(f"[CONTENT] [{type_id}] Loaded {len(tile_ids)} permanent tiles: "
-          f"{tile_ids}")
+    log.server(f"[CONTENT] [{type_id}] Loaded {len(tile_ids)} permanent tiles: "
+               f"{tile_ids}")
 
     # --- Rooms (from dungeon templates) ---
     room_count = 0
@@ -212,5 +213,5 @@ def load_precreated_content(
         room_lib.add(entry)
         room_count += 1
 
-    print(f"[CONTENT] Loaded {room_count} permanent rooms from dungeon templates")
-    print(f"[CONTENT] Libraries: {monster_lib}, {tile_lib}, {room_lib}")
+    log.server(f"[CONTENT] Loaded {room_count} permanent rooms from dungeon templates")
+    log.server(f"[CONTENT] Libraries: {monster_lib}, {tile_lib}, {room_lib}")

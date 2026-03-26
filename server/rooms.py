@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from server import log
 from server.state import game
 from server.constants import EDGE_SPAWN_POINTS, DEFAULT_SPAWN
 
@@ -10,7 +11,7 @@ def load_room_files(directory: str = "rooms"):
     """Load all .room files and merge into game.rooms, game.guards, game.monster_templates."""
     rooms_dir = Path(__file__).parent.parent / directory
     if not rooms_dir.exists():
-        print(f"[ROOMS] No '{directory}/' directory found, skipping room file loading")
+        log.debug(f"[ROOMS] No '{directory}/' directory found, skipping room file loading")
         return
 
     count = 0
@@ -19,12 +20,12 @@ def load_room_files(directory: str = "rooms"):
         try:
             text = room_file.read_text(encoding="utf-8")
         except Exception as e:
-            print(f"[ROOMS] Error reading {room_file.name}: {e}")
+            log.debug(f"[ROOMS] Error reading {room_file.name}: {e}")
             continue
 
         parts = text.split("---")
         if len(parts) < 2:
-            print(f"[ROOMS] Skipping {room_file.name}: missing --- separator")
+            log.debug(f"[ROOMS] Skipping {room_file.name}: missing --- separator")
             continue
 
         # Parse header
@@ -144,15 +145,15 @@ def load_room_files(directory: str = "rooms"):
 
         count += 1
 
-    print(f"[ROOMS] Loaded {count} room files from {directory}/")
-    print(f"[ROOMS] Total rooms: {len(game.rooms)}")
+    log.debug(f"[ROOMS] Loaded {count} room files from {directory}/")
+    log.debug(f"[ROOMS] Total rooms: {len(game.rooms)}")
 
 
 def load_dungeon_templates(directory: str = "rooms/dungeon1", type_id: str = "d1"):
     """Load dungeon room templates from .room files for a dungeon type (no exits parsed)."""
     rooms_dir = Path(__file__).parent.parent / directory
     if not rooms_dir.exists():
-        print(f"[DUNGEON] No '{directory}/' directory found, skipping")
+        log.debug(f"[DUNGEON] No '{directory}/' directory found, skipping")
         return
 
     if type_id not in game.dungeon_templates:
@@ -164,7 +165,7 @@ def load_dungeon_templates(directory: str = "rooms/dungeon1", type_id: str = "d1
         try:
             text = room_file.read_text(encoding="utf-8")
         except Exception as e:
-            print(f"[DUNGEON] Error reading {room_file.name}: {e}")
+            log.debug(f"[DUNGEON] Error reading {room_file.name}: {e}")
             continue
 
         parts = text.split("---")
@@ -226,4 +227,4 @@ def load_dungeon_templates(directory: str = "rooms/dungeon1", type_id: str = "d1
         }
         count += 1
 
-    print(f"[DUNGEON] Loaded {count} dungeon templates from {directory}/ for type '{type_id}'")
+    log.debug(f"[DUNGEON] Loaded {count} dungeon templates from {directory}/ for type '{type_id}'")

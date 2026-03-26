@@ -2,6 +2,7 @@
 
 import re
 
+from server import log
 from server.state import game
 
 _HEX_COLOR_RE = re.compile(r'^#[0-9a-fA-F]{6}$')
@@ -283,7 +284,7 @@ def register_monster_type(data: dict) -> tuple[bool, list[str]]:
 
     if kind in game.monster_stats:
         msg = f"collision: monster kind '{kind}' is already registered"
-        print(f"[REG] {msg}")
+        log.server(f"[REG] {msg}")
         return False, [msg]
 
     stats = data["stats"]
@@ -313,8 +314,8 @@ def register_monster_type(data: dict) -> tuple[bool, list[str]]:
     if behavior:
         game.monster_behaviors[kind] = behavior
 
-    print(f"[REG] Monster type registered: {kind} "
-          f"(hp={stats['hp']}, dmg={stats['damage']}, walk_time={stats['walk_time']})")
+    log.server(f"[REG] Monster type registered: {kind} "
+               f"(hp={stats['hp']}, dmg={stats['damage']}, walk_time={stats['walk_time']})")
     return True, []
 
 
@@ -331,7 +332,7 @@ def register_tile_type(data: dict) -> tuple[bool, list[str]]:
 
     if tile_id in game.custom_tile_recipes:
         msg = f"collision: tile id '{tile_id}' is already registered"
-        print(f"[REG] {msg}")
+        log.server(f"[REG] {msg}")
         return False, [msg]
 
     recipe = {
@@ -343,5 +344,5 @@ def register_tile_type(data: dict) -> tuple[bool, list[str]]:
         recipe["bright"] = True
     game.custom_tile_recipes[tile_id] = recipe
 
-    print(f"[REG] Tile type registered: {tile_id} (walkable={data.get('walkable', False)})")
+    log.server(f"[REG] Tile type registered: {tile_id} (walkable={data.get('walkable', False)})")
     return True, []

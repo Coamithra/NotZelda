@@ -4,6 +4,7 @@ import os
 import random
 import time
 
+from server import log
 from server.state import game
 from server.constants import (
     ROOM_RESET_COOLDOWN, ENTRY_DIR, EDGE_SPAWN_POINTS, DEFAULT_SPAWN,
@@ -224,7 +225,7 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
     """Build and append the room_enter message with all room data."""
     room = game.rooms.get(player.room)
     if not room:
-        print(f"[BUG] send_room_enter: room {player.room} missing for {player.name}! Redirecting to spawn.")
+        log.debug(f"[BUG] send_room_enter: room {player.room} missing for {player.name}! Redirecting to spawn.")
         assert os.environ.get("DEBUG_MODE", "").lower() not in ("1", "true"), \
             f"send_room_enter called with destroyed room {player.room} — this should never happen"
         player.room = STARTING_ROOM
@@ -563,7 +564,7 @@ def do_room_transition(player, exit_direction: str, msgs: list):
 
         # Defensive: verify destination room wasn't destroyed by dungeon teardown.
         if new_room_id not in game.rooms:
-            print(f"[BUG] Room {new_room_id} destroyed mid-transition for {player.name}! Redirecting to spawn.")
+            log.debug(f"[BUG] Room {new_room_id} destroyed mid-transition for {player.name}! Redirecting to spawn.")
             assert os.environ.get("DEBUG_MODE", "").lower() not in ("1", "true"), \
                 f"Room {new_room_id} destroyed during do_room_transition — this should never happen"
             new_room_id = STARTING_ROOM

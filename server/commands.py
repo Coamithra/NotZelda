@@ -12,7 +12,7 @@ from server.constants import (
     POSITION_UPDATE_RATE, MAX_MOVE_PER_UPDATE, GUARD_COOLDOWN,
     COLLISION_GRACE_PERIOD,
 )
-from server.net import log_event
+from server import log
 from server.lifecycle import (
     do_room_transition, get_room_monsters,
     broadcast_choir_start, broadcast_choir_stop,
@@ -46,7 +46,7 @@ def _send_reconcile(player, msgs, reason=""):
     """Append a reconcile message for the player."""
     a = player.avatar
     if reason:
-        print(f"[RECONCILE] {player.name}: {reason} -> snap to ({a.x}, {a.y})")
+        log.server(f"[RECONCILE] {player.name}: {reason} -> snap to ({a.x}, {a.y})")
     msgs.append(("send", player, {
         "type": "reconcile",
         "x": a.x,
@@ -427,7 +427,7 @@ def _process_attack(player, data, now, msgs):
                             unlock_room(player.room, msgs)
                         # Boss defeated — silence music + stop choir
                         if is_boss:
-                            print(f"[BOSS] Boss defeated in {player.room}, silencing music")
+                            log.debug(f"[BOSS] Boss defeated in {player.room}, silencing music")
                             dinst.boss_engaged = False
                             msgs.append(("broadcast", player.room, {
                                 "type": "music_change", "music": None,
@@ -464,7 +464,7 @@ def _process_chat(player, data, msgs):
 
     # Normal chat — broadcast to room
     room_name = game.rooms[player.room]["name"]
-    log_event("CHAT", f"{player.name} ({room_name}): {text}")
+    log.event("CHAT", f"{player.name} ({room_name}): {text}")
     msgs.append(("broadcast", player.room, {
         "type": "chat",
         "from": player.name,
@@ -652,8 +652,8 @@ def _process_unlock_door(player, data, msgs):
     msgs.append(("send", player, {"type": "key_update", "keys": player.keys}))
     msgs.append(("send", player, {"type": "info", "text": "Used a Small Key!"}))
 
-    print(f"[DUNGEON] {player.name} unlocked door {direction} in {player.room} "
-          f"(keys remaining: {player.keys})")
+    log.debug(f"[DUNGEON] {player.name} unlocked door {direction} in {player.room} "
+              f"(keys remaining: {player.keys})")
 
 
 def _room_id_to_cell(room_id, dinst):

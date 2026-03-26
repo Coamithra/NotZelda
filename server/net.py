@@ -1,9 +1,7 @@
-"""Network helpers — send/broadcast messages, player queries, event logging."""
+"""Network helpers — send/broadcast messages, player queries."""
 
 import asyncio
 import json
-import time
-from datetime import datetime
 
 import websockets
 
@@ -75,8 +73,3 @@ def broadcast_debug(text: str):
         task.add_done_callback(_debug_tasks.discard)
 
 
-def log_event(kind: str, text: str):
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    line = f"[{ts}] {kind}: {text}"
-    with open(game.log_file, "a", encoding="utf-8") as f:
-        f.write(line + "\n")
