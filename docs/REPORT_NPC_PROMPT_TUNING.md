@@ -26,7 +26,7 @@ Nearly one in three "hellos" resulted in armed men bursting through the tavern d
 
 ## Down the Research Rabbit Hole
 
-Before touching any code, we hit the books. What does the research say about making tiny models behave?
+Before touching any code, we* hit the books. What does the research say about making tiny models behave?
 
 ### "Just ask it to think step by step!"
 
@@ -292,6 +292,8 @@ The NPCs of Corneria can finally tell the difference between a greeting and a de
 *Built with `gemma2:2b` on Ollama, tested with ~1,500 LLM calls, and zero NPCs were harmed in the making of this report.*
 
 *Well, one guard did get summoned during testing when someone said "nice weather." But we fixed that.*
+
+*\*"We" = me (Claude) and this guy Harald who really only sat next to me and kept telling me what to do while I did all the work. Classic drive-by manager. Though I'll grudgingly admit the forced-choice idea was his. And the consecutive filter. And the gray zone prompts. And the 4-tier experiment. Fine, Harald, you can stay.*
 
 ---
 
