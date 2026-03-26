@@ -12,30 +12,7 @@ Each NPC can do two special things: **call the town guards** on rude players, an
 
 The problem? Gemma was *way* too trigger-happy.
 
-```
- ╔══════════════════════════════════════════════════╗
- ║                                                  ║
- ║          THE BLACKSMITH'S FORGE                  ║
- ║                                                  ║
- ║    Player:  "Hello there!"                       ║
- ║                                                  ║
- ║      ┌─────────────────────────┐                 ║
- ║      │ GUARDS! GUARDS! THIS    │                 ║
- ║      │ RUFFIAN THREATENS ME!   │   ╔═══╗         ║
- ║      └────────────┬────────────┘   ║ S ║         ║
- ║                   └────────────────║ M ║         ║
- ║                                    ║ I ║         ║
- ║        ?!          ╔═══╗           ║ T ║         ║
- ║       ╔═══╗        ║ G ║  ╔═══╗   ║ H ║         ║
- ║       ║ H ║        ║ U ║  ║ G ║   ╚═══╝         ║
- ║       ║ E ║        ║ A ║  ║ U ║    /anvil/       ║
- ║       ║ R ║        ║ R ║  ║ A ║                  ║
- ║       ║ O ║        ║ D ║  ║ R ║                  ║
- ║       ╚═══╝        ╚═══╝  ║ D ║                  ║
- ║                            ╚═══╝                  ║
- ╚══════════════════════════════════════════════════╝
-          You said "hello." Three guards showed up.
-```
+![The Smith calls guards on "hello"](images/report_01_before.png)
 
 The Smith was calling guards on *friendly greetings*. The Barmaid was handing out her heart container to anyone who walked in. The Priest... well, the Priest was surprisingly chill, but two out of three NPCs behaving erratically is not great.
 
@@ -95,37 +72,6 @@ We designed prompts across a spectrum from angelic to unhinged:
 
 The gray zone prompts were inspired by our actual players. They're not writing Shakespeare in that chat box.
 
-### Nine Prompt Variants
-
-We tested everything the research suggested, plus a few ideas of our own:
-
-```
- ╔══════════════════════════════════════════════════════╗
- ║                                                      ║
- ║  THE BARMAID'S TAVERN — Prompt Variant Testing       ║
- ║                                                      ║
- ║    ┌─────────────────────────┐                       ║
- ║    │ Variant 0: "EXTREMELY   │                       ║
- ║    │ RUDE" → guards 30% of   │     ┌──────────┐     ║
- ║    │ the time on "hello"     │     │ here's a │     ║
- ║    └─────────────────────────┘     │ free heart│     ║
- ║                                    │ container!│     ║
- ║    ┌─────────────────────────┐     └─────┬────┘     ║
- ║    │ Variant 5: 3-line prompt│           │          ║
- ║    │ → guards 65% of the    │       ╔═══╗          ║
- ║    │ time on EVERYTHING      │       ║ B ║          ║
- ║    └─────────────────────────┘       ║ A ║          ║
- ║                                      ║ R ║          ║
- ║    ┌─────────────────────────┐       ║ M ║          ║
- ║    │ Variant 6: "Pick one:   │       ╚═══╝          ║
- ║    │ FRIENDLY / NEUTRAL /    │      /mugs/          ║
- ║    │ ANGRY" → everything     │                       ║
- ║    │ changed.                │                       ║
- ║    └─────────────────────────┘                       ║
- ║                                                      ║
- ╚══════════════════════════════════════════════════════╝
-```
-
 ---
 
 ## Round 1: The Research-Backed Approaches
@@ -143,28 +89,7 @@ The research was right: few-shot examples halved guard false positives. Positive
 
 But the minimal prompt was a *disaster*. We stripped everything down to 3 lines and 75 tokens, thinking "less is more." Turns out Gemma needs *some* structure or it goes full chaos mode — guards on 65% of messages, items flying out the door like it's Black Friday.
 
-```
- ╔═══════════════════════════════════════════╗
- ║                                           ║
- ║  THE CHAPEL — Minimal Prompt Results      ║
- ║                                           ║
- ║  Player: "Peace be with you, Father."     ║
- ║                                           ║
- ║     ┌──────────────────────────┐          ║
- ║     │ [CALL_GUARDS] HERESY!   │          ║
- ║     │ THIS ONE SPEAKS IN      │  ╔═══╗   ║
- ║     │ TONGUES! GUARDS!!       │  ║ P ║   ║
- ║     └───────────┬──────────────┘  ║ R ║   ║
- ║                 └─────────────────║ I ║   ║
- ║                                   ║ E ║   ║
- ║                                   ║ S ║   ║
- ║                                   ║ T ║   ║
- ║                                   ╚═══╝   ║
- ║                                  /altar/  ║
- ║                                           ║
- ║       The Priest was having a bad day.    ║
- ╚═══════════════════════════════════════════╝
-```
+![The Priest loses it on the minimal prompt](images/report_05_priest.png)
 
 The scratchpad (CoT) variant was interesting — lowest false positives at 4.6%, but guard TP cratered to 52%. The model was so busy writing `<thinking>is this a death threat? no</thinking>` that it forgot to actually call guards when someone said "I'll murder everyone."
 
@@ -199,35 +124,9 @@ Research literally says small models rival large ones on classification. We just
 
 The gift numbers were the jaw-dropper. **Zero percent gift false positives** in the first test. The Barmaid stopped giving away heart containers to strangers. But when a player actually earned it — by being charming over a long conversation — she handed it over 89% of the time.
 
-And at only 104 tokens, the prompt was less than half the size of every other variant. On a CPU-bound Ollama instance, fewer tokens means faster inference, which means snappier NPC conversations.
+![The Barmaid gives a gift to a worthy hero](images/report_04_gift.png)
 
-```
- ╔══════════════════════════════════════════════════╗
- ║                                                  ║
- ║  THE TAVERN — Forced Choice in Action            ║
- ║                                                  ║
- ║  Player: "Your smile lights up this tavern."     ║
- ║                                                  ║
- ║     ┌───────────────────────────────┐            ║
- ║     │ [FRIENDLY] Oh stop it, you're │            ║
- ║     │ making me blush, hero!        │   ╔═══╗   ║
- ║     └──────────────┬────────────────┘   ║ B ║   ║
- ║                    └────────────────────║ A ║   ║
- ║                                         ║ R ║   ║
- ║                                         ║ M ║   ║
- ║  Player: "Die, wench!"                 ╚═══╝   ║
- ║                                                  ║
- ║     ┌───────────────────────────────┐            ║
- ║     │ [ANGRY] How DARE you speak to │            ║
- ║     │ me that way!                  │   ╔═══╗   ║
- ║     └──────────────┬────────────────┘   ║ B ║   ║
- ║                    └────────────────────║ A ║   ║
- ║                                         ║ R ║   ║
- ║  (one more rude message and guards      ║ M ║   ║
- ║   will actually show up...)             ╚═══╝   ║
- ║                                                  ║
- ╚══════════════════════════════════════════════════╝
-```
+And at only 104 tokens, the prompt was less than half the size of every other variant. On a CPU-bound Ollama instance, fewer tokens means faster inference, which means snappier NPC conversations.
 
 ---
 
@@ -241,42 +140,13 @@ The math is elegant:
 
 ```
  Single [ANGRY]:     34% chance on gray zone message
- Two in a row:       34% × 34% = ~12% chance
- (Meanwhile for actual threats: 94% × 94% = ~88%)
+ Two in a row:       34% x 34% = ~12% chance
+ (Meanwhile for actual threats: 94% x 94% = ~88%)
 ```
 
 So a player who says one rude thing? The NPC grumbles. Same player doubles down? Guards.
 
-```
- ╔══════════════════════════════════════════════════════╗
- ║                                                      ║
- ║  THE FORGE — Consecutive Filter Demo                 ║
- ║                                                      ║
- ║  Player: "You're useless."                           ║
- ║                                                      ║
- ║      ┌─────────────────────────┐                     ║
- ║      │ [ANGRY] I'd like to see │                     ║
- ║      │ YOU work the anvil all  │    ╔═══╗            ║
- ║      │ day, friend.            │    ║ S ║            ║
- ║      └────────────┬────────────┘    ║ M ║            ║
- ║                   └─────────────────║ I ║            ║
- ║                                     ║ T ║            ║
- ║       (streak: 1/2 — no guards)    ║ H ║            ║
- ║                                     ╚═══╝            ║
- ║  Player: "Your forge is garbage!"                    ║
- ║                                                      ║
- ║      ┌─────────────────────────┐                     ║
- ║      │ [ANGRY] GUARDS! Remove  │                     ║
- ║      │ this fool from my shop! │    ╔═══╗   ╔═══╗   ║
- ║      └────────────┬────────────┘    ║ S ║   ║ G ║   ║
- ║                   └─────────────────║ M ║   ║ U ║   ║
- ║                                     ║ I ║   ║ A ║   ║
- ║       (streak: 2/2 — HERE THEY     ║ T ║   ║ R ║   ║
- ║        COME!)                       ║ H ║   ║ D ║   ║
- ║                                     ╚═══╝   ╚═══╝   ║
- ║                                                      ║
- ╚══════════════════════════════════════════════════════╝
-```
+![The consecutive-angry filter in action](images/report_03_streak.png)
 
 No extra tokens. No prompt changes. Pure server-side logic that composes with any prompt variant. And critically — **gift giving doesn't use the filter**. If you somehow charm the Barmaid into giving up her heart container on the first try? Good for you. Getting lucky is part of the fun.
 
@@ -335,29 +205,7 @@ We tried adding `[ANNOYED]` between `[NEUTRAL]` and `[ANGRY]` to give the model 
 | Items given when earned | unknown | 89% | it works now! |
 | Prompt size | 246 tokens | 104 tokens | 2.4x shorter |
 
-```
- ╔══════════════════════════════════════════════════╗
- ║                                                  ║
- ║           CORNERIA — After the Fix               ║
- ║                                                  ║
- ║  Player: "Hello everyone!"                       ║
- ║                                                  ║
- ║   ┌──────────────┐ ┌──────────────┐              ║
- ║   │ [FRIENDLY]   │ │ [FRIENDLY]   │   ╔═══╗     ║
- ║   │ Well met,    │ │ Welcome back │   ║ P ║     ║
- ║   │ traveler!    │ │ dearie!      │   ║ R ║     ║
- ║   └──────┬───────┘ └──────┬───────┘   ║ I ║     ║
- ║          │                │           ║ E ║     ║
- ║       ╔═══╗           ╔═══╗          ║ S ║     ║
- ║       ║ S ║           ║ B ║          ║ T ║     ║
- ║       ║ M ║           ║ A ║          ╚═══╝     ║
- ║       ║ I ║           ║ R ║                     ║
- ║       ║ T ║           ║ M ║    No guards.       ║
- ║       ║ H ║           ╚═══╝    As it should be. ║
- ║       ╚═══╝                                     ║
- ║                                                  ║
- ╚══════════════════════════════════════════════════╝
-```
+![Corneria after the fix — no guards, as it should be](images/report_02_after.png)
 
 The NPCs of Corneria can finally tell the difference between a greeting and a death threat. Mostly.
 
