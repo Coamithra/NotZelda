@@ -524,7 +524,7 @@ def do_room_transition(player, exit_direction: str, msgs: list):
         did = dungeon_inst.dungeon_id
         for cell, assignment in dungeon_inst.cell_assignments.items():
             room_id_check = f"{did}_{cell[0]}_{cell[1]}"
-            if room_id_check == new_room_id and not assignment["resolved"]:
+            if room_id_check == new_room_id:
                 resolved = resolve_dungeon_room(dungeon_inst, cell)
                 if not resolved:
                     msgs.append(("send", player, {"type": "info", "text": "The way is blocked."}))

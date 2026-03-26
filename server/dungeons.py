@@ -910,6 +910,8 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
     instance.resolved_rooms.add(room_id)
 
     # Place dungeon items — track used positions to avoid overlap
+    # Clear any prior items for this room (guards against duplicate placement on re-resolve)
+    instance.dungeon_items.pop(room_id, None)
     used_positions = set()
 
     for item_type, item_cell in instance.item_cells.items():
