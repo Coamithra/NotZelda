@@ -719,12 +719,12 @@ TITLE._drawText = function (dc, t) {
 };
 
 // ---------------------------------------------------------------------------
-// Title music (chapel track)
+// Title music (dedicated menu theme)
 // ---------------------------------------------------------------------------
 TITLE.startMusic = function () {
   if (this.musicStarted) return;
   this.musicStarted = true;
-  this.titleMusic = new Audio("music_chapel.mp3");
+  this.titleMusic = new Audio("music_menu.mp3");
   this.titleMusic.loop = true;
   this.titleMusic.volume = 0;
   var self = this;
