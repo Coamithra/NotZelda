@@ -31,7 +31,7 @@ def _on_state_exited(monster, old_state, room_id, monster_idx, msgs):
     elif old_state == "walking":
         msgs.append(("broadcast", room_id, {
             "type": "monster_walk_complete", "id": monster_idx,
-            "seq": monster.move_seq,
+            "seq": monster.state_data.seq,
         }, None))
 
 

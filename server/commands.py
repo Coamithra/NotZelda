@@ -2,7 +2,6 @@
 
 import math
 import random
-import time
 
 from server.state import game
 from server.constants import (
@@ -361,7 +360,7 @@ def _process_attack(player, data, now, msgs):
             # Knockback: push surviving non-boss monster 1 tile in attack direction
             knock_x = None
             knock_y = None
-            if monster.hp > 0 and not monster.is_boss:
+            if monster.hp > 0 and monster.knockbackable:
                 room = game.rooms.get(player.room)
                 if room:
                     kx = round(monster.x + dx)
@@ -389,7 +388,7 @@ def _process_attack(player, data, now, msgs):
                 if monster.state != "idle":
                     set_monster_idle(monster, player.room, i, msgs)
                 else:
-                    monster.last_action_time = time.monotonic()
+                    monster.last_action_time = now
             # Boss engagement — start choir overlay if boss survives this hit
             dinst = get_dungeon_for_room(player.room)
             is_boss = monster.is_boss and dinst is not None
