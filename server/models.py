@@ -61,6 +61,7 @@ class Player:
         self.death_time = 0.0         # time.monotonic() when death occurred
         self.death_room = None        # room_id where the player died
         self.keys = 0                 # dungeon keys held (persists across dungeon exits)
+        self.active_attack = None     # dict {direction, start_time, room, hit_monsters} or None
         self.avatar = Avatar(8.0, 5.0, "down")
 
     def quest(self, qid: str) -> int:

@@ -321,47 +321,35 @@ def _process_face(player, data, msgs):
 # Attack
 # ---------------------------------------------------------------------------
 
-def _process_attack(player, data, now, msgs):
-    """Handle a player's sword attack."""
-    if player.hp <= 0:
-        return
-    if not player.has_flag("has_sword"):
-        msgs.append(("send", player, {"type": "info", "text": "You don't have a weapon."}))
-        return
-    if now - player.last_attack_time < ATTACK_COOLDOWN:
-        return
-    player.last_attack_time = now
+def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs):
+    """Check sword AABB against all monsters in the room, damaging new targets.
+
+    Called on the initial attack tick and on each subsequent tick while the
+    sword is active.  ``hit_monsters`` is a *set* of monster indices already
+    damaged by this swing — updated in-place so each monster is only hit once.
+    """
     a = player.avatar
-    a.dancing = False
-
-    # Use client-supplied direction so quick turn+attack works without waiting
-    # for the server to process the direction change first
-    direction = data.get("direction")
-    if direction in DIRECTIONS:
-        a.direction = direction
-
-    msgs.append(("broadcast", player.room, {
-        "type": "attack",
-        "name": player.name,
-        "direction": a.direction,
-    }, None))
-
-    # Hit detection — AABB overlap, 1.5 tiles in attack dir (covers half player tile + full sword tile)
-    dx, dy = DIRECTIONS.get(a.direction, (0, 0))
+    if a is None:
+        return
+    dx, dy = DIRECTIONS.get(direction, (0, 0))
     sword_x = a.x + (0.5 if dx > 0 else -1.0 if dx < 0 else 0)
     sword_y = a.y + (0.5 if dy > 0 else -1.0 if dy < 0 else 0)
     sword_w = 1.5 if dx != 0 else 1.0
     sword_h = 1.5 if dy != 0 else 1.0
-    for i, monster in enumerate(get_room_monsters(player.room)):
+    for i, monster in enumerate(get_room_monsters(room_id)):
+        mid = id(monster)
+        if mid in hit_monsters:
+            continue
         if monster.alive and not monster.intangible and (
             sword_x < monster.x + monster.width and sword_x + sword_w > monster.x and
             sword_y < monster.y + monster.height and sword_y + sword_h > monster.y):
+            hit_monsters.add(mid)
             monster.hp -= 1
             # Knockback: push surviving non-boss monster 1 tile in attack direction
             knock_x = None
             knock_y = None
             if monster.hp > 0 and monster.knockbackable:
-                room = game.rooms.get(player.room)
+                room = game.rooms.get(room_id)
                 if room:
                     kx = round(monster.x + dx)
                     ky = round(monster.y + dy)
@@ -386,20 +374,20 @@ def _process_attack(player, data, now, msgs):
                         monster.move_seq += 1
                 # Always interrupt current action and reset decision timer on hit
                 if monster.state != "idle":
-                    set_monster_idle(monster, player.room, i, msgs)
+                    set_monster_idle(monster, room_id, i, msgs)
                 else:
                     monster.last_action_time = now
             # Boss engagement — start choir overlay if boss survives this hit
-            dinst = get_dungeon_for_room(player.room)
+            dinst = get_dungeon_for_room(room_id)
             is_boss = monster.is_boss and dinst is not None
             if (monster.hp > 0
                     and is_boss
                     and dinst
                     and not dinst.boss_engaged):
                 dinst.boss_engaged = True
-                broadcast_choir_start(player.room, msgs)
+                broadcast_choir_start(room_id, msgs)
             if monster.hp <= 0:
-                set_monster_idle(monster, player.room, i, msgs)
+                set_monster_idle(monster, room_id, i, msgs)
                 monster.alive = False
                 msg_killed = {
                     "type": "monster_killed",
@@ -410,14 +398,14 @@ def _process_attack(player, data, now, msgs):
                 if knock_x is not None:
                     msg_killed["knock_x"] = knock_x
                     msg_killed["knock_y"] = knock_y
-                msgs.append(("broadcast", player.room, msg_killed, None))
+                msgs.append(("broadcast", room_id, msg_killed, None))
                 # Heart drop
                 if random.random() < HEART_DROP_CHANCE:
                     hid = game.next_heart_id
                     game.next_heart_id += 1
                     heart = {"x": monster.x, "y": monster.y, "id": hid}
-                    game.room_hearts.setdefault(player.room, []).append(heart)
-                    msgs.append(("broadcast", player.room, {
+                    game.room_hearts.setdefault(room_id, []).append(heart)
+                    msgs.append(("broadcast", room_id, {
                         "type": "heart_spawned",
                         "id": hid,
                         "x": monster.x,
@@ -425,20 +413,20 @@ def _process_attack(player, data, now, msgs):
                     }, None))
                 # Mark dungeon room as cleared if all monsters dead
                 if dinst:
-                    alive = [m for m in game.room_monsters[player.room] if m.alive]
+                    alive = [m for m in game.room_monsters[room_id] if m.alive]
                     if not alive:
-                        dinst.cleared_rooms.add(player.room)
+                        dinst.cleared_rooms.add(room_id)
                         # Unlock trap room doors
-                        if player.room in game.locked_rooms:
-                            unlock_room(player.room, msgs)
+                        if room_id in game.locked_rooms:
+                            unlock_room(room_id, msgs)
                         # Boss defeated — silence music + stop choir
                         if is_boss:
-                            log.debug(f"[BOSS] Boss defeated in {player.room}, silencing music")
+                            log.debug(f"[BOSS] Boss defeated in {room_id}, silencing music")
                             dinst.boss_engaged = False
-                            msgs.append(("broadcast", player.room, {
+                            msgs.append(("broadcast", room_id, {
                                 "type": "music_change", "music": None,
                             }, None))
-                            broadcast_choir_stop(player.room, msgs)
+                            broadcast_choir_stop(room_id, msgs)
             else:
                 msg_hit = {
                     "type": "monster_hit",
@@ -451,7 +439,45 @@ def _process_attack(player, data, now, msgs):
                 if knock_x is not None:
                     msg_hit["knock_x"] = knock_x
                     msg_hit["knock_y"] = knock_y
-                msgs.append(("broadcast", player.room, msg_hit, None))
+                msgs.append(("broadcast", room_id, msg_hit, None))
+
+
+def _process_attack(player, data, now, msgs):
+    """Handle a player's sword attack — initiate swing + first hit scan."""
+    if player.hp <= 0:
+        return
+    if not player.has_flag("has_sword"):
+        msgs.append(("send", player, {"type": "info", "text": "You don't have a weapon."}))
+        return
+    if now - player.last_attack_time < ATTACK_COOLDOWN:
+        return
+    player.last_attack_time = now
+    a = player.avatar
+    a.dancing = False
+
+    # Use client-supplied direction so quick turn+attack works without waiting
+    # for the server to process the direction change first
+    direction = data.get("direction")
+    if direction in DIRECTIONS:
+        a.direction = direction
+
+    msgs.append(("broadcast", player.room, {
+        "type": "attack",
+        "name": player.name,
+        "direction": a.direction,
+    }, None))
+
+    # Set up active attack for multi-frame hit detection
+    hit_monsters = set()
+    player.active_attack = {
+        "direction": a.direction,
+        "start_time": now,
+        "room": player.room,
+        "hit_monsters": hit_monsters,
+    }
+
+    # First hit scan — instant hits still register with zero delay
+    sword_hit_scan(player, a.direction, player.room, hit_monsters, now, msgs)
 
 
 # ---------------------------------------------------------------------------

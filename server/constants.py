@@ -51,6 +51,7 @@ WALK_TIME = 0.250          # seconds — monster tile-to-tile walk duration (kep
 CANCEL_TIME = 0.090        # seconds — legacy (kept for backward compat)
 LATENCY_COMP = 0.066       # seconds — legacy (kept for backward compat)
 ATTACK_COOLDOWN = 0.4
+SWORD_ACTIVE_DURATION = 0.2   # seconds — sword hitbox stays active after swing (multi-frame damage)
 
 # Half-tile free movement (NES Zelda-style)
 HALF_TILE = 0.5

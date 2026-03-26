@@ -10,7 +10,7 @@ from server.constants import (
     DEBUG_MODE,
     ROOM_COLS, ROOM_ROWS, DIRECTIONS, DIRECTION_OPPOSITES,
     INVINCIBILITY_DURATION, PLAYER_RESPAWN_DELAY, STARTING_ROOM,
-    PROJECTILE_TICK_RATE,
+    PROJECTILE_TICK_RATE, SWORD_ACTIVE_DURATION,
     GUARD_DESPAWN_TIMEOUT, GUARD_DESPAWN_DISTANCE, GUARD_DESPAWN_GRACE,
     TICK_INTERVAL, COLLISION_GRACE_PERIOD,
 )
@@ -164,6 +164,7 @@ def _respawn_player(player, msgs):
     spawn = game.rooms[STARTING_ROOM]["spawn_points"]["default"]
     player.avatar = Avatar(float(spawn[0]), float(spawn[1]), "down")
     player.command_queue.clear()
+    player.active_attack = None
 
     # Despawn summoned town guards — their job is done
     if old_room_id in game.room_monsters:
@@ -200,6 +201,24 @@ def _tick_players(now, msgs):
     for player in list(game.players.values()):
         if player.dead and now - player.death_time >= PLAYER_RESPAWN_DELAY:
             _respawn_player(player, msgs)
+
+
+def _tick_active_attacks(now, msgs):
+    """Continue hit-scanning for players with an active sword swing."""
+    from server.commands import sword_hit_scan
+    for player in list(game.players.values()):
+        atk = player.active_attack
+        if atk is None:
+            continue
+        # Expire if duration elapsed, player died, or left the room
+        if (now - atk["start_time"] >= SWORD_ACTIVE_DURATION
+                or player.hp <= 0
+                or player.avatar is None
+                or player.room != atk["room"]):
+            player.active_attack = None
+            continue
+        sword_hit_scan(player, atk["direction"], atk["room"],
+                       atk["hit_monsters"], now, msgs)
 
 
 def _tick_all_monsters(now, msgs):
@@ -458,6 +477,7 @@ async def game_tick():
                 except Exception:
                     traceback.print_exc()
             _tick_players(now, msgs)
+            _tick_active_attacks(now, msgs)
             _tick_all_monsters(now, msgs)
             _resolve_pending_collisions(now, msgs)
             if now - last_projectile_tick >= PROJECTILE_TICK_RATE:
