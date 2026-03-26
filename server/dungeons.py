@@ -474,6 +474,10 @@ def _apply_trap_room(room_id, tilemap, exits):
                         break
             break
 
+    # Re-check monster reachability after relocation — a random offset
+    # could have pushed a monster into a walkable but disconnected pocket.
+    _fix_post_wall_reachability(room_id, tilemap, exits)
+
     game.rooms[room_id]["locked"] = True
     print(f"[DUNGEON] Room {room_id} is a trap room (locked)")
 
