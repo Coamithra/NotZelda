@@ -593,8 +593,9 @@ def patch_monster_placements(data: dict, walkable: set[str]) -> list[str]:
     return patches
 
 
-def patch_unreachable_doorways(data: dict, walkable: set[str]) -> list[str]:
+def patch_unreachable_doorways(data: dict, walkable: set[str], doorways=None) -> list[str]:
     """Carve walkable paths to connect unreachable doorways.
+    doorways: list of (row, col) positions to check. Defaults to ALL_DOORWAY_TILES.
     Returns list of patch descriptions."""
     patches = []
     tilemap = data.get("tilemap")
@@ -603,7 +604,8 @@ def patch_unreachable_doorways(data: dict, walkable: set[str]) -> list[str]:
     if not all(isinstance(r, list) and len(r) == 15 for r in tilemap):
         return patches
 
-    doorways = list(ALL_DOORWAY_TILES)
+    if doorways is None:
+        doorways = list(ALL_DOORWAY_TILES)
 
     is_walk = lambda t: t in walkable
     reachable = bfs_reachable(tilemap, is_walk)

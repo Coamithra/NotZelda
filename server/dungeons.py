@@ -9,6 +9,7 @@ from collections import deque
 from server.state import game
 from server.constants import EDGE_SPAWN_POINTS, DEFAULT_SPAWN, ROOM_COLS, ROOM_ROWS, DOORWAY_TILES, bfs_reachable
 from server.net import broadcast_debug
+from server.ai_generator import patch_unreachable_doorways, patch_monster_placements
 
 
 class DungeonInstance:
@@ -478,6 +479,49 @@ def _apply_trap_room(room_id, tilemap, exits):
 
 
 # ---------------------------------------------------------------------------
+# Post-wall reachability fix
+# ---------------------------------------------------------------------------
+
+def _fix_post_wall_reachability(room_id, tilemap, exits):
+    """After walling off unused exits, ensure open doorways are connected
+    and relocate any monsters stranded in unreachable pockets.
+
+    Reuses patch_unreachable_doorways (carve paths) and
+    patch_monster_placements (relocate/remove monsters) from ai_generator.
+    """
+    walkable = {t for t, r in game.custom_tile_recipes.items()
+                if r.get("walkable", False)}
+
+    # Only check doorways that are still open
+    open_doorways = []
+    for direction in exits:
+        if direction in DOORWAY_TILES:
+            open_doorways.extend(DOORWAY_TILES[direction])
+    if not open_doorways:
+        return
+
+    # Wrap tilemap for the patching functions' data-dict interface
+    data = {"tilemap": tilemap}
+
+    # 1. Carve paths to reconnect any open doorways cut off by walling
+    patches = patch_unreachable_doorways(data, walkable, doorways=open_doorways)
+    for p in patches:
+        print(f"[DUNGEON] {room_id}: {p}")
+
+    # 2. Relocate monsters stranded in unreachable tiles
+    templates = game.monster_templates.get(room_id)
+    if templates:
+        data["monster_placements"] = templates
+        patches = patch_monster_placements(data, walkable)
+        for p in patches:
+            print(f"[DUNGEON] {room_id}: {p}")
+        # patch_monster_placements may filter out removed entries
+        game.monster_templates[room_id] = data["monster_placements"]
+        if not game.monster_templates[room_id]:
+            game.monster_templates.pop(room_id, None)
+
+
+# ---------------------------------------------------------------------------
 # Room resolution
 # ---------------------------------------------------------------------------
 
@@ -537,6 +581,11 @@ def _resolve_room_from_entry(room_id, entry_data, exits, cell, music_track, is_e
             {"kind": p["kind"], "x": p["x"], "y": p["y"]}
             for p in placements
         ]
+
+    # After walling off exits, fix room connectivity and monster reachability.
+    # AI rooms assume all 4 exits open — walling unused ones can disconnect
+    # doorways or strand monsters in unreachable pockets.
+    _fix_post_wall_reachability(room_id, tilemap, exits)
 
     # Trap room setup — decided at dungeon creation time, applied here.
     # Must run BEFORE locked door tiles so _apply_trap_room reads real floor tiles.
