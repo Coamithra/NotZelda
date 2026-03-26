@@ -832,7 +832,7 @@ function handleMessage(msg) {
     }
 
     case "area_warning":
-      G.areaWarnings.push({ id: msg.id, x: msg.x, y: msg.y, range: msg.range, startTime: Date.now(), duration: (msg.duration || 0.75) * 1000 });
+      G.areaWarnings.push({ id: msg.id, x: msg.x, y: msg.y, width: msg.width || 1, height: msg.height || 1, range: msg.range, startTime: Date.now(), duration: (msg.duration || 0.75) * 1000 });
       break;
 
     case "area_attack":

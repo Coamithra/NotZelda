@@ -462,15 +462,12 @@ def _resolve_teleport(rule, monster, room_id):
 
 def _resolve_area(rule, monster, room_id):
     """Resolve area attack action. Returns action dict."""
-    # Center on middle of footprint for multi-tile monsters
-    w = getattr(monster, "width", 1)
-    h = getattr(monster, "height", 1)
-    cx = monster.x + (w - 1) // 2
-    cy = monster.y + (h - 1) // 2
     return {
         "action": "area",
-        "x": cx,
-        "y": cy,
+        "x": monster.x,
+        "y": monster.y,
+        "width": getattr(monster, "width", 1),
+        "height": getattr(monster, "height", 1),
         "range": rule.get("range", 2),
         "damage": rule.get("damage", monster.damage),
     }

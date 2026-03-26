@@ -186,9 +186,13 @@ function renderAreaWarnings() {
     const pulse = 0.15 + 0.15 * Math.sin(elapsed / 80);
     G.ctx.globalAlpha = pulse;
     G.ctx.fillStyle = progress > 0.85 ? "#ff4400" : "#ff8800";
-    for (let dy = -w.range; dy <= w.range; dy++) {
-      for (let dx = -w.range; dx <= w.range; dx++) {
-        if (Math.abs(dx) + Math.abs(dy) <= w.range) {
+    const aw = w.width || 1, ah = w.height || 1;
+    for (let dy = -w.range; dy <= w.range + ah - 1; dy++) {
+      for (let dx = -w.range; dx <= w.range + aw - 1; dx++) {
+        // Manhattan distance from nearest tile in the boss footprint
+        const nearX = Math.max(0, Math.min(dx, aw - 1));
+        const nearY = Math.max(0, Math.min(dy, ah - 1));
+        if (Math.abs(dx - nearX) + Math.abs(dy - nearY) <= w.range) {
           const tx = w.x + dx, ty = w.y + dy;
           if (tx >= 0 && tx < COLS && ty >= 0 && ty < ROWS) {
             G.ctx.fillRect(tx * TS, ty * TS, TS, TS);

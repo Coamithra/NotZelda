@@ -302,13 +302,20 @@ def warmup_charge(monster, room_id, monster_idx, action, msgs):
     max_range = action.get("range", 3)
 
     lane = []
+    seen = set()
     nx, ny = monster.x, monster.y
     for _ in range(max_range):
         nx += dx
         ny += dy
         if not behavior_engine._can_move_to(monster, nx, ny, room_id):
             break
-        lane.append([nx, ny])
+        # Expand to full footprint for multi-tile monsters
+        for ox in range(monster.width):
+            for oy in range(monster.height):
+                tile = (nx + ox, ny + oy)
+                if tile not in seen:
+                    seen.add(tile)
+                    lane.append([nx + ox, ny + oy])
 
     msgs.append(("broadcast", room_id, {
         "type": "charge_prep",
@@ -343,17 +350,31 @@ def exec_charge(monster, room_id, monster_idx, action, msgs):
     monster.y = end_y
     monster.move_seq += 1
 
+    # Expand path to full footprint for the visual charge trail
+    w, h = monster.width, monster.height
+    trail = []
+    if w == 1 and h == 1:
+        trail = path
+    else:
+        seen = set()
+        for px, py in path:
+            for ox in range(w):
+                for oy in range(h):
+                    tile = (px + ox, py + oy)
+                    if tile not in seen:
+                        seen.add(tile)
+                        trail.append([px + ox, py + oy])
+
     msgs.append(("broadcast", room_id, {
         "type": "monster_charged",
         "id": monster_idx,
-        "path": path,
+        "path": trail,
         "x": end_x,
         "y": end_y,
         "seq": monster.move_seq,
     }, None))
 
     # Check if player was hit — AABB overlap with charge path
-    w, h = monster.width, monster.height
     for p, a in avatars_in_room(room_id):
         if p.hp > 0 and any(
             a.x < px + w and a.x + 1 > px and a.y < py + h and a.y + 1 > py
@@ -402,14 +423,19 @@ def exec_teleport(monster, room_id, monster_idx, action, msgs):
 
 def warmup_area(monster, room_id, monster_idx, action, msgs):
     """Send area warning visuals when warmup starts."""
-    msgs.append(("broadcast", room_id, {
+    msg = {
         "type": "area_warning",
         "id": monster_idx,
         "x": action["x"],
         "y": action["y"],
         "range": action["range"],
         "duration": action.get("ticks", 1) * monster.decision_time,
-    }, None))
+    }
+    if action.get("width", 1) > 1:
+        msg["width"] = action["width"]
+    if action.get("height", 1) > 1:
+        msg["height"] = action["height"]
+    msgs.append(("broadcast", room_id, msg, None))
 
 
 def exec_area(monster, room_id, monster_idx, action, msgs):
@@ -419,6 +445,8 @@ def exec_area(monster, room_id, monster_idx, action, msgs):
     # Use locked-in position from warmup
     ax = action.get("x", monster.x)
     ay = action.get("y", monster.y)
+    aw = action.get("width", 1)
+    ah = action.get("height", 1)
 
     msgs.append(("broadcast", room_id, {
         "type": "area_attack",
@@ -430,7 +458,10 @@ def exec_area(monster, room_id, monster_idx, action, msgs):
 
     for p, a in avatars_in_room(room_id):
         if p.hp > 0:
-            dist = abs(a.x - ax) + abs(a.y - ay)
+            # Manhattan distance from nearest tile in the boss footprint
+            nearest_x = max(ax, min(a.x, ax + aw - 1))
+            nearest_y = max(ay, min(a.y, ay + ah - 1))
+            dist = abs(a.x - nearest_x) + abs(a.y - nearest_y)
             if dist <= range_val:
                 _apply_damage(p, damage, room_id, msgs, ax, ay)
 
