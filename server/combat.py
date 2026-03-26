@@ -416,9 +416,13 @@ def exec_teleport(monster, room_id, monster_idx, action, msgs):
     # Damage players within damage_radius of landing position
     damage_radius = action.get("damage_radius", 1)
     if damage > 0 and damage_radius >= 0:
+        w, h = monster.width, monster.height
         for p, a in avatars_in_room(room_id):
-            if p.hp > 0 and abs(a.x - monster.x) + abs(a.y - monster.y) <= damage_radius:
-                _apply_damage(p, damage, room_id, msgs, monster.x, monster.y)
+            if p.hp > 0:
+                nearest_x = max(monster.x, min(a.x, monster.x + w - 1))
+                nearest_y = max(monster.y, min(a.y, monster.y + h - 1))
+                if abs(a.x - nearest_x) + abs(a.y - nearest_y) <= damage_radius:
+                    _apply_damage(p, damage, room_id, msgs, monster.x, monster.y)
 
 
 def warmup_area(monster, room_id, monster_idx, action, msgs):
