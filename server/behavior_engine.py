@@ -338,21 +338,28 @@ _PATROL_DIRS = {"U": (0, -1), "D": (0, 1), "L": (-1, 0), "R": (1, 0)}
 
 
 def _resolve_patrol_move(rule, monster, room_id):
-    """Move 1 step along a patrol route string (e.g. 'RRDDLLUU'). Falls back to random wander."""
+    """Move 1 step along a patrol route string (e.g. 'RRDDLLUU').
+
+    Skips blocked steps within the same tick so the monster doesn't stall
+    at walls.  Falls back to random wander if no route or all steps blocked.
+    """
     route = rule.get("patrol_route", "")
     if not route:
         return _resolve_move({"direction": "random"}, monster, room_id)
 
-    idx = getattr(monster, "_patrol_index", 0) % len(route)
-    step = route[idx].upper()
-    d = _PATROL_DIRS.get(step)
-    if not d:
-        monster._patrol_index = (idx + 1) % len(route)
-        return None
-    nx, ny = monster.x + d[0], monster.y + d[1]
-    monster._patrol_index = (idx + 1) % len(route)
-    if _can_move_to(monster, nx, ny, room_id):
-        return {"action": "move", "x": nx, "y": ny}
+    start_idx = getattr(monster, "_patrol_index", 0) % len(route)
+    for i in range(len(route)):
+        idx = (start_idx + i) % len(route)
+        step = route[idx].upper()
+        d = _PATROL_DIRS.get(step)
+        if not d:
+            continue
+        nx, ny = monster.x + d[0], monster.y + d[1]
+        if _can_move_to(monster, nx, ny, room_id):
+            monster._patrol_index = (idx + 1) % len(route)
+            return {"action": "move", "x": nx, "y": ny}
+    # All steps blocked — advance index so we don't retry the same start next tick
+    monster._patrol_index = (start_idx + 1) % len(route)
     return None
 
 
