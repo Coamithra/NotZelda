@@ -293,7 +293,11 @@ def exec_projectile(monster, room_id, monster_idx, action, msgs):
 
 
 def warmup_charge(monster, room_id, monster_idx, action, msgs):
-    """Send charge prep visuals when warmup starts."""
+    """Send charge prep visuals when warmup starts.
+
+    Does NOT increment move_seq — charge_prep is visual-only (no position
+    change).  The seq sent here lets the client detect staleness without
+    advancing the counter past the preceding walk/idle state."""
     dx, dy = action["dx"], action["dy"]
     max_range = action.get("range", 3)
 

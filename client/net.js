@@ -283,7 +283,6 @@ function handleMessage(msg) {
           spawnTime: Date.now() + idx * 40,  // Juice: staggered spawn pop
         };
         if (m.walking) {
-          mon.stateSeq = m.seq || 0;
           mon.walkState = {
             fromX: m.walk_from.x, fromY: m.walk_from.y,
             toX: m.walk_to.x, toY: m.walk_to.y,
