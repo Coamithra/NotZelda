@@ -61,7 +61,7 @@ All work happens in an isolated **git worktree** under `.trees/`. This lets mult
     ```
 5. **Copy `.env` into the worktree** — Gitignored files don't carry over to new worktrees. Copy it so the server picks up `DEBUG_MODE`, `AI_BACKEND`, etc.:
     ```
-    cp ../../.env .env
+    copy_env.sh <branch>
     ```
 6. **All subsequent work happens inside `.trees/<branch>/`**
 
@@ -123,7 +123,8 @@ Dig into the problem before proposing solutions. Use `/research` for topics that
     ```
 29. **Move card to Done** — `move_card` to the "Done" list
 30. **Comment on the card** — Add a fix/feature summary to the Trello card: what changed, which files, what it fixes/adds, commit hash, and what needs manual testing. This leaves a paper trail for future debugging
-31. **Deploy (if requested)** — `ssh root@46.225.218.207` → `cd /opt/NotZelda && git pull && systemctl restart notzelda`
+31. **Create follow-up tickets** — If the peer review, implementation, or testing surfaced issues that are out of scope for this card (pre-existing bugs, minor improvements, edge cases deferred as too risky to bundle), create new Trello cards in the appropriate list (Bugs, Future Features, or Refactoring). Reference the original card so there's a trail. Don't let follow-up work disappear into commit messages — if it's worth noting, it's worth tracking
+32. **Deploy (if requested)** — `ssh root@46.225.218.207` → `cd /opt/NotZelda && git pull && systemctl restart notzelda`
 
 ---
 
