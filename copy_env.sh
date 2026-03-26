@@ -12,8 +12,8 @@ if [ $# -lt 1 ]; then
 fi
 
 BRANCH="$1"
-# Use --git-common-dir to find the main repo root, not the worktree root
-REPO_ROOT="$(cd "$(git rev-parse --git-common-dir)" && git rev-parse --show-toplevel)"
+# Derive repo root from script location — works from anywhere, no git needed
+REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 TARGET="$REPO_ROOT/.trees/$BRANCH/.env"
 
 if [ ! -f "$REPO_ROOT/.env" ]; then
