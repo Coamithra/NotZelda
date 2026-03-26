@@ -186,6 +186,8 @@ Start EVERY reply with one of these tags:
 
 Every single response gets classified. No more "should I add a tag or not?" — just "which tag fits best?" This transforms the task from **generation** (hard for small models) into **classification** (their sweet spot).
 
+![Forced choice in action — same NPC, three different classifications](images/report_06_forced_choice.png)
+
 Research literally says small models rival large ones on classification. We just hadn't connected the dots.
 
 ### The Results Spoke for Themselves

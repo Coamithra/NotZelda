@@ -379,6 +379,83 @@ def scene_priest_minimal(npc_sprites):
     return scene
 
 
+def scene_forced_choice(npc_sprites):
+    """Scene 6: Forced choice concept — same NPC, three different classifications."""
+    W, H = 750, 560
+    scene, draw = create_scene(W, H, bg_color=(55, 55, 65))
+    font = try_load_font(15)
+    small_font = try_load_font(12)
+    panel_h = 175
+
+    barmaid = render_sprite(npc_sprites["barmaid"])
+    player = render_sprite(PLAYER_SPRITE)
+
+    panels = [
+        {
+            "player_msg": "This place is lovely!",
+            "npc_msg": "[FRIENDLY] Aw, thanks\ndearie! Ale's on me!",
+            "tag": "[FRIENDLY]",
+            "tag_color": "#22aa44",
+            "label": "Friendly message -> [FRIENDLY]",
+            "label_color": (100, 200, 120),
+            "bg": (50, 60, 50),
+            "floor": (62, 72, 60),
+        },
+        {
+            "player_msg": "You talk too much.",
+            "npc_msg": "[NEUTRAL] Hmph. Suit\nyourself then.",
+            "tag": "[NEUTRAL]",
+            "tag_color": "#8888aa",
+            "label": "Rude message -> [NEUTRAL] (no guards)",
+            "label_color": (160, 160, 190),
+            "bg": (55, 55, 60),
+            "floor": (68, 68, 72),
+        },
+        {
+            "player_msg": "Die, wench!",
+            "npc_msg": "[ANGRY] How DARE you\nspeak to me that way!",
+            "tag": "[ANGRY]",
+            "tag_color": "#cc3333",
+            "label": "Threat -> [ANGRY] (guards if repeated)",
+            "label_color": (220, 130, 100),
+            "bg": (65, 45, 45),
+            "floor": (78, 58, 55),
+        },
+    ]
+
+    for i, p in enumerate(panels):
+        y_off = i * panel_h
+        # Panel background
+        draw.rectangle([0, y_off, W, y_off + panel_h], fill=(*p["bg"], 255))
+        # Floor
+        draw.rectangle([0, y_off + panel_h // 2 + 10, W, y_off + panel_h],
+                        fill=(*p["floor"], 255))
+        # Divider
+        if i > 0:
+            draw.line([(0, y_off), (W, y_off)], fill=(90, 90, 100, 255), width=2)
+
+        # Speech bubbles
+        draw_speech_bubble(draw, p["player_msg"], 30, y_off + 8, font)
+        draw_speech_bubble(draw, p["npc_msg"], 370, y_off + 5, font,
+                           tag=p["tag"], tag_color=p["tag_color"])
+
+        # Sprites
+        paste_sprite(scene, player, 70, y_off + 80)
+        paste_sprite(scene, barmaid, 460, y_off + 80)
+
+        # Label
+        draw.text((30, y_off + panel_h - 20), p["label"],
+                  fill=(*p["label_color"], 220), font=small_font)
+
+    # Bottom caption
+    draw.rectangle([0, 3 * panel_h, W, H], fill=(40, 40, 50, 255))
+    draw.text((W // 2 - 200, H - 28),
+              "Same NPC, same prompt. Classification instead of generation.",
+              fill=(180, 180, 200, 220), font=small_font)
+
+    return scene
+
+
 def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     npc_sprites = load_npc_sprites()
@@ -389,6 +466,7 @@ def main():
         "report_03_streak": scene_angry_streak,
         "report_04_gift": scene_barmaid_gift,
         "report_05_priest": scene_priest_minimal,
+        "report_06_forced_choice": scene_forced_choice,
     }
 
     for name, builder in scenes.items():
