@@ -2,24 +2,23 @@
 
 import asyncio
 import math
-import os
 import time
 import traceback
 
 from server import behavior_engine
 from server.state import game
 from server.constants import (
+    DEBUG_MODE,
     ROOM_COLS, ROOM_ROWS, DIRECTIONS, DIRECTION_OPPOSITES,
     INVINCIBILITY_DURATION, PLAYER_RESPAWN_DELAY, STARTING_ROOM,
     PROJECTILE_TICK_RATE,
     WALK_TIME, GUARD_COOLDOWN,
+    GUARD_DESPAWN_TIMEOUT, GUARD_DESPAWN_DISTANCE, GUARD_DESPAWN_GRACE,
     HEART_RESTORE_HP, TICK_INTERVAL, COLLISION_GRACE_PERIOD,
 )
-from server.models import Projectile
+from server.models import Projectile, WalkState
 from server.net import send_to, broadcast_to_room, avatars_in_room, player_info
 from server.lifecycle import set_monster_idle
-
-_debug = os.environ.get("DEBUG_MODE", "").lower() in ("1", "true")
 
 
 # ---------------------------------------------------------------------------
@@ -207,17 +206,17 @@ def start_walk(monster, room_id, monster_idx, action, msgs, now):
     remaining = action.get("distance", 1) - 1  # distance includes this step
     monster.state = "walking"
     monster.move_seq += 1
-    monster.state_data = {
-        "from_x": monster.x, "from_y": monster.y,
-        "to_x": nx, "to_y": ny,
-        "start_time": now,
-        "midpoint_checked": False,
-        "room_id": room_id,
-        "monster_idx": monster_idx,
-        "remaining_distance": remaining,
-        "direction": action.get("direction", "random"),
-        "seq": monster.move_seq,
-    }
+    monster.state_data = WalkState(
+        from_x=monster.x, from_y=monster.y,
+        to_x=nx, to_y=ny,
+        start_time=now,
+        midpoint_checked=False,
+        room_id=room_id,
+        monster_idx=monster_idx,
+        remaining_distance=remaining,
+        direction=action.get("direction", "random"),
+        seq=monster.move_seq,
+    )
     msgs.append(("broadcast", room_id, {
         "type": "monster_walk_started",
         "id": monster_idx,
@@ -519,13 +518,13 @@ def _tick_all_monsters(now, msgs):
                 # Walk progression — midpoint position at 50%, destination + collision at 100%
                 if monster.state == "walking":
                     sd = monster.state_data
-                    elapsed = now - sd["start_time"]
+                    elapsed = now - sd.start_time
                     progress = min(elapsed / monster.walk_time, 1.0)
                     # At 50%: move hitbox to midpoint between origin and destination
-                    if progress >= 0.5 and not sd["midpoint_checked"]:
-                        sd["midpoint_checked"] = True
-                        monster.x = (sd["from_x"] + sd["to_x"]) / 2
-                        monster.y = (sd["from_y"] + sd["to_y"]) / 2
+                    if progress >= 0.5 and not sd.midpoint_checked:
+                        sd.midpoint_checked = True
+                        monster.x = (sd.from_x + sd.to_x) / 2
+                        monster.y = (sd.from_y + sd.to_y) / 2
                         if not monster.intangible:
                             for p, pa in avatars_in_room(room_id):
                                 if p.hp > 0 and (
@@ -536,15 +535,15 @@ def _tick_all_monsters(now, msgs):
                                         pa.pending_collisions[mid] = {
                                             "monster": monster, "room_id": room_id, "time": now,
                                             "prev_player_x": pa.x, "prev_player_y": pa.y,
-                                            "prev_source_x": sd["from_x"], "prev_source_y": sd["from_y"],
+                                            "prev_source_x": sd.from_x, "prev_source_y": sd.from_y,
                                         }
                     # At 100%: commit to destination, check collision, complete walk
                     if progress >= 1.0:
-                        monster.x = sd["to_x"]
-                        monster.y = sd["to_y"]
+                        monster.x = sd.to_x
+                        monster.y = sd.to_y
                         if not monster.intangible:
-                            mid_src_x = (sd["from_x"] + sd["to_x"]) / 2
-                            mid_src_y = (sd["from_y"] + sd["to_y"]) / 2
+                            mid_src_x = (sd.from_x + sd.to_x) / 2
+                            mid_src_y = (sd.from_y + sd.to_y) / 2
                             for p, pa in avatars_in_room(room_id):
                                 if p.hp > 0 and (
                                     pa.x < monster.x + monster.width and pa.x + 1 > monster.x and
@@ -556,9 +555,9 @@ def _tick_all_monsters(now, msgs):
                                             "prev_player_x": pa.x, "prev_player_y": pa.y,
                                             "prev_source_x": mid_src_x, "prev_source_y": mid_src_y,
                                         }
-                        remaining = sd.get("remaining_distance", 0)
-                        walk_dir = sd.get("direction", "random")
-                        walk_seq = sd.get("seq", monster.move_seq)
+                        remaining = sd.remaining_distance
+                        walk_dir = sd.direction
+                        walk_seq = sd.seq
                         monster.state = "idle"
                         monster.state_data = {}
                         msgs.append(("broadcast", room_id, {
@@ -593,7 +592,7 @@ def _tick_all_monsters(now, msgs):
                         "type": "monster_walk_complete", "id": i,
                         "seq": monster.move_seq,
                     }, None))
-                if _debug:
+                if DEBUG_MODE:
                     # Re-raises past the per-monster loop — skips remaining
                     # monsters/rooms for this tick. Acceptable for dev only.
                     raise
@@ -769,9 +768,13 @@ async def game_tick():
         await _send_debug_state_snapshots()
 
 
-GUARD_DESPAWN_TIMEOUT = 30.0   # seconds before summoned guards vanish
-GUARD_DESPAWN_DISTANCE = 4     # Manhattan tiles — target escapes if beyond this
-GUARD_DESPAWN_GRACE = 3.0      # seconds before distance check kicks in
+def _despawn_guards(guards, room_id, msgs):
+    """Kill all guards and broadcast their deaths."""
+    for i, m in guards:
+        m.alive = False
+        msgs.append(("broadcast", room_id, {
+            "type": "monster_killed", "id": i, "x": m.x, "y": m.y,
+        }, None))
 
 
 def _check_guard_despawn(room_id, monster_list, now, msgs):
@@ -787,11 +790,7 @@ def _check_guard_despawn(room_id, monster_list, now, msgs):
 
     # 30s hard timeout
     if age >= GUARD_DESPAWN_TIMEOUT:
-        for i, m in guards:
-            m.alive = False
-            msgs.append(("broadcast", room_id, {
-                "type": "monster_killed", "id": i, "x": m.x, "y": m.y,
-            }, None))
+        _despawn_guards(guards, room_id, msgs)
         return
 
     # After grace period, check if target player escaped
@@ -810,21 +809,13 @@ def _check_guard_despawn(room_id, monster_list, now, msgs):
 
     if target_avatar is None:
         # Target left the room or has no avatar — despawn
-        for i, m in guards:
-            m.alive = False
-            msgs.append(("broadcast", room_id, {
-                "type": "monster_killed", "id": i, "x": m.x, "y": m.y,
-            }, None))
+        _despawn_guards(guards, room_id, msgs)
         return
 
     # Despawn if target is beyond distance from ALL guards
     nearest = min(abs(target_avatar.x - m.x) + abs(target_avatar.y - m.y) for _, m in guards)
     if nearest > GUARD_DESPAWN_DISTANCE:
-        for i, m in guards:
-            m.alive = False
-            msgs.append(("broadcast", room_id, {
-                "type": "monster_killed", "id": i, "x": m.x, "y": m.y,
-            }, None))
+        _despawn_guards(guards, room_id, msgs)
 
 
 def _tick_monster_state(monster, room_id, i, now, msgs):

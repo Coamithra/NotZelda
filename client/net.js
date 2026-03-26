@@ -117,10 +117,13 @@ function handleMessage(msg) {
       const conjureCtx = conjureCanvas.getContext("2d");
       const savedCtx2 = G.ctx;
       G.ctx = conjureCtx;
-      renderRoom();
-      renderPlayers();
-      renderUI();
-      G.ctx = savedCtx2;
+      try {
+        renderRoom();
+        renderPlayers();
+        renderUI();
+      } finally {
+        G.ctx = savedCtx2;
+      }
       G.conjuring = { startTime: Date.now(), progressSteps: [], oldCanvas: conjureCanvas };
       break;
     }

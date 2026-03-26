@@ -249,11 +249,11 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
             # Include walk state if mid-walk so client can interpolate
             if m.state == "walking":
                 sd = m.state_data
-                elapsed = now - sd["start_time"]
+                elapsed = now - sd.start_time
                 progress = min(elapsed / m.walk_time, 1.0)
                 mdata["walking"] = True
-                mdata["walk_from"] = {"x": sd["from_x"], "y": sd["from_y"]}
-                mdata["walk_to"] = {"x": sd["to_x"], "y": sd["to_y"]}
+                mdata["walk_from"] = {"x": sd.from_x, "y": sd.from_y}
+                mdata["walk_to"] = {"x": sd.to_x, "y": sd.to_y}
                 mdata["walk_progress"] = progress
             monsters.append(mdata)
     exits = room["exits"]

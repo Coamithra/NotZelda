@@ -2,9 +2,26 @@
 
 import time
 from collections import deque
+from dataclasses import dataclass
 
 from server.state import game
 from server.constants import PLAYER_MAX_HP, STARTING_ROOM
+
+
+@dataclass
+class WalkState:
+    """State data for a monster mid-walk. Assigned to monster.state_data when state == 'walking'."""
+    from_x: float
+    from_y: float
+    to_x: float
+    to_y: float
+    start_time: float
+    midpoint_checked: bool
+    room_id: str
+    monster_idx: int
+    remaining_distance: int
+    direction: str
+    seq: int
 
 
 class Avatar:
@@ -36,9 +53,9 @@ class Player:
         self.last_damage_time = 0.0
         self.last_attack_time = 0.0
         self.last_pos_update_time = 0.0   # anti-cheat: last accepted position_update timestamp
-        self.guard_cooldowns = {}  # guard_key -> last_trigger_time
-        self.quests = {}   # quest_id (str) -> stage (int)
-        self.flags = set() # string flags, e.g. {"has_sword"}
+        self.guard_cooldowns: dict[str, float] = {}  # guard_key -> last_trigger_time
+        self.quests: dict[str, int] = {}              # quest_id -> stage
+        self.flags: set[str] = set()                  # e.g. {"has_sword"}
         self.command_queue = deque()  # (msg_type, data) tuples — drained by game_tick
         self.dead = False             # True while waiting for respawn
         self.death_time = 0.0         # time.monotonic() when death occurred

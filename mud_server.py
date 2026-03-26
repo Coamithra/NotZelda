@@ -27,7 +27,7 @@ import websockets
 
 from server import behavior_engine
 from server.state import game
-from server.constants import STARTING_ROOM, PLAYER_MAX_HP, ROOM_COLS, ROOM_ROWS
+from server.constants import DEBUG_MODE, STARTING_ROOM, PLAYER_MAX_HP, ROOM_COLS, ROOM_ROWS
 from server.models import Player
 from server.net import send_to, avatars_in_room, player_info, log_event
 from server.rooms import load_room_files, load_dungeon_templates
@@ -98,7 +98,7 @@ class _LogBroadcaster:
     def __getattr__(self, name):
         return getattr(self._original, name)
 
-if os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+if DEBUG_MODE:
     sys.stdout = _LogBroadcaster(sys.stdout)
 
 
@@ -172,12 +172,12 @@ async def handle_connection(websocket):
         warmup_ollama()
 
         login_msg = {"type": "login_ok", "color_index": color_index, "hp": PLAYER_MAX_HP, "max_hp": PLAYER_MAX_HP}
-        if os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+        if DEBUG_MODE:
             login_msg["debug_mode"] = True
             player.grant_flag("has_sword")
             player.grant_flag("invulnerable")
         await send_to(player, login_msg)
-        if os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+        if DEBUG_MODE:
             await send_to(player, {"type": "item_obtained", "item_type": "sword", "item_name": "Sword"})
 
         # Room entry — use sync lifecycle with message batching

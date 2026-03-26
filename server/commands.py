@@ -1,12 +1,12 @@
 """Command processing — drains player command queues during game_tick."""
 
 import math
-import os
 import random
 import time
 
 from server.state import game
 from server.constants import (
+    DEBUG_MODE,
     DIRECTIONS, ROOM_COLS, ROOM_ROWS, DOORWAY_TILES,
     ATTACK_COOLDOWN, HEART_DROP_CHANCE, HEART_RESTORE_HP,
     POSITION_UPDATE_RATE, MAX_MOVE_PER_UPDATE, GUARD_COOLDOWN,
@@ -193,11 +193,11 @@ def _get_monster_visual_pos(monster, now):
     """Get interpolated monster position during walks, actual position otherwise."""
     if monster.state == "walking":
         sd = monster.state_data
-        elapsed = now - sd["start_time"]
+        elapsed = now - sd.start_time
         progress = min(elapsed / monster.walk_time, 1.0)
-        fx = sd["from_x"]
-        fy = sd["from_y"]
-        return fx + (sd["to_x"] - fx) * progress, fy + (sd["to_y"] - fy) * progress
+        fx = sd.from_x
+        fy = sd.from_y
+        return fx + (sd.to_x - fx) * progress, fy + (sd.to_y - fy) * progress
     return monster.x, monster.y
 
 
@@ -222,8 +222,8 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
                     if mid not in a.pending_collisions:
                         prev_mx, prev_my = monster.x, monster.y
                         if monster.state == "walking":
-                            prev_mx = monster.state_data.get("from_x", monster.x)
-                            prev_my = monster.state_data.get("from_y", monster.y)
+                            prev_mx = monster.state_data.from_x
+                            prev_my = monster.state_data.from_y
                         a.pending_collisions[mid] = {
                             "monster": monster, "room_id": player.room, "time": now,
                             "prev_player_x": prev_player_x, "prev_player_y": prev_player_y,
@@ -514,7 +514,7 @@ def _process_slash_command(player, text, msgs):
                 "type": "chat", "from": player.name, "text": f"*{action}*",
             }, None))
 
-    elif cmd == "cheat" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+    elif cmd == "cheat" and DEBUG_MODE:
         if player.has_flag("invulnerable"):
             player.flags.discard("invulnerable")
             msgs.append(("send", player, {"type": "info", "text": "Cheat mode off: vulnerable again"}))
@@ -526,15 +526,15 @@ def _process_slash_command(player, text, msgs):
             msgs.append(("send", player, {"type": "hp_update", "hp": player.hp, "max_hp": player.max_hp}))
             msgs.append(("send", player, {"type": "info", "text": "Cheat mode: sword + invulnerability"}))
 
-    elif cmd == "debug_spawn" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+    elif cmd == "debug_spawn" and DEBUG_MODE:
         msgs.append(("debug_spawn", player, parts[1] if len(parts) > 1 else ""))
 
-    elif cmd == "deprecate" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+    elif cmd == "deprecate" and DEBUG_MODE:
         for _tid in list(game.content_libraries.keys()):
             _run_content_deprecation(_tid)
         msgs.append(("send", player, {"type": "info", "text": "Forced deprecation pass — see ~ debug log"}))
 
-    elif cmd == "regen" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+    elif cmd == "regen" and DEBUG_MODE:
         regen_inst = get_dungeon_for_room(player.room)
         regen_type = regen_inst.dungeon_id if regen_inst else "d1"
         regen_libs = game.content_libraries.get(regen_type, {})
@@ -546,12 +546,12 @@ def _process_slash_command(player, text, msgs):
             start_background_regen(count, regen_type)
             msgs.append(("send", player, {"type": "info", "text": f"Regen started: {count} {regen_type} room(s) — see ~ debug log"}))
 
-    elif cmd == "viewserver" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+    elif cmd == "viewserver" and DEBUG_MODE:
         enabled = not getattr(player, '_viewserver', False)
         player._viewserver = enabled
         msgs.append(("send", player, {"type": "viewserver_toggle", "enabled": enabled}))
 
-    elif cmd == "choir" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+    elif cmd == "choir" and DEBUG_MODE:
         debug_on = getattr(player, '_debug_choir', False)
         choir_inst = get_dungeon_for_room(player.room)
         if debug_on:
@@ -568,12 +568,12 @@ def _process_slash_command(player, text, msgs):
             msgs.append(("send", player, {"type": "boss_choir_start", "distance": dist}))
             msgs.append(("send", player, {"type": "info", "text": f"Choir overlay ON (distance={dist})"}))
 
-    elif cmd == "key" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+    elif cmd == "key" and DEBUG_MODE:
         player.keys += 1
         msgs.append(("send", player, {"type": "key_update", "keys": player.keys}))
         msgs.append(("send", player, {"type": "info", "text": f"Granted key (total: {player.keys})"}))
 
-    elif cmd == "keylayout" and os.environ.get("DEBUG_MODE", "").lower() in ("1", "true"):
+    elif cmd == "keylayout" and DEBUG_MODE:
         dinst = get_dungeon_for_room(player.room)
         if not dinst or not dinst.zone_cells:
             msgs.append(("send", player, {"type": "info", "text": "Not in a dungeon with locked doors"}))

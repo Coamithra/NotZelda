@@ -1,6 +1,13 @@
 """Shared constants and room geometry utilities for the MUD server."""
 
+import os
 from collections import deque
+
+# ---------------------------------------------------------------------------
+# Debug
+# ---------------------------------------------------------------------------
+
+DEBUG_MODE = os.environ.get("DEBUG_MODE", "").lower() in ("1", "true")
 
 # ---------------------------------------------------------------------------
 # Directions
@@ -55,6 +62,9 @@ HEART_RESTORE_HP = 2
 PLAYER_MAX_HP = 6
 PLAYER_RESPAWN_DELAY = 5.5
 GUARD_COOLDOWN = 10
+GUARD_DESPAWN_TIMEOUT = 30.0   # seconds before summoned guards vanish
+GUARD_DESPAWN_DISTANCE = 4     # Manhattan tiles — target escapes if beyond this
+GUARD_DESPAWN_GRACE = 3.0      # seconds before distance check kicks in
 HEART_DROP_CHANCE = 0.1
 INVINCIBILITY_DURATION = 1.5
 COLLISION_GRACE_PERIOD = 0.1  # seconds before contact damage triggers (corner-scrape forgiveness)
