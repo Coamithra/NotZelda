@@ -102,7 +102,6 @@ const G = {
 
     // Items
     heartPickups: [],      // [{id, x, y}]
-    swordPickups: [],      // [{x, y, frame, nextTime}]
 
     // Dungeon
     dungeonState: null,         // {collected: Set, cells, bossCell, currentCell, lockedEdges}

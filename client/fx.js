@@ -127,8 +127,8 @@ function renderSlashArcs() {
   for (const s of G.fx.slashArcs) {
     const progress = (now - s.startTime) / SLASH_ARC_DURATION;
     const alpha = (1 - progress) * 0.7;
-    const cx = s.x * TS + TS / 2;
-    const cy = s.y * TS + TS / 2;
+    const cx = tileCenterX(s.x);
+    const cy = tileCenterY(s.y);
     const angles = ARC_ANGLES[s.direction] || ARC_ANGLES.down;
     const radius = TS * 0.5;
     ctx.globalAlpha = alpha;
@@ -262,8 +262,8 @@ function getSpawnPopScale(spawnTime) {
 
 function spawnDustPuff(px, py, dir) {
   const vec = DIR_VECTORS[dir] || { x: 0, y: 0 };
-  const cx = px * TS + TS / 2 - vec.x * TS * 0.3;
-  const cy = (py + 0.5) * TS + TS / 2 - vec.y * TS * 0.3;
+  const cx = tileCenterX(px) - vec.x * TS * 0.3;
+  const cy = tileCenterY(py + 0.5) - vec.y * TS * 0.3;
   const dustColors = ["#c8b898", "#a09068", "#d0c0a0"];
   spawnBurst(cx, cy, 2, 1.2, 200, dustColors, [2 * SCALE, 3 * SCALE], { shrink: true });
 }

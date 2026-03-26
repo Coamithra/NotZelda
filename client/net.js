@@ -76,6 +76,38 @@ function scheduleReconnect() {
   }, delay);
 }
 
+function createOtherPlayer(x, y, direction, color_index) {
+  return { x, y, displayX: x, displayY: y, direction, color_index, moving: false, walkState: null };
+}
+
+function registerCustomContent(msg) {
+  if (msg.custom_sprites) {
+    for (const [kind, spriteData] of Object.entries(msg.custom_sprites)) {
+      if (!customMonsterSprites[kind]) customMonsterSprites[kind] = spriteData;
+    }
+  }
+  if (msg.custom_death_sprites) {
+    for (const [kind, spriteData] of Object.entries(msg.custom_death_sprites)) {
+      if (!customDeathSprites[kind]) customDeathSprites[kind] = spriteData;
+    }
+  }
+  if (msg.npc_sprites) {
+    for (const [key, spriteData] of Object.entries(msg.npc_sprites)) {
+      if (!customNPCSprites[key]) customNPCSprites[key] = spriteData;
+    }
+  }
+  if (msg.custom_tiles) {
+    for (const [tileId, recipe] of Object.entries(msg.custom_tiles)) {
+      if (!customTiles[tileId]) {
+        customTiles[tileId] = recipe;
+        delete tileCanvases[tileId];
+      }
+      // Register walkable custom tiles so client-side prediction works
+      if (recipe.walkable) WALKABLE.add(tileId);
+    }
+  }
+}
+
 function guessTransitionDir(fromId, toId, exitDir, fromExits) {
   if (exitDir) return exitDir;
   if (fromExits) {
@@ -193,7 +225,6 @@ function handleMessage(msg) {
         renderMonsterAttackFlashes();
         renderNpcThinking();
         renderSpeechBubbles();
-        renderSwordPickups();
         renderItemPickups();
         G.ui.ctx = savedCtx;
       }
@@ -216,38 +247,7 @@ function handleMessage(msg) {
 
       MusicPlayer.setRoom(msg.room_id, msg.biome, msg.music);
 
-      // Register any custom sprites/tiles/NPC data sent with this room
-      if (msg.custom_sprites) {
-        for (const [kind, spriteData] of Object.entries(msg.custom_sprites)) {
-          if (!customMonsterSprites[kind]) {
-            customMonsterSprites[kind] = spriteData;
-          }
-        }
-      }
-      if (msg.custom_death_sprites) {
-        for (const [kind, spriteData] of Object.entries(msg.custom_death_sprites)) {
-          if (!customDeathSprites[kind]) {
-            customDeathSprites[kind] = spriteData;
-          }
-        }
-      }
-      if (msg.npc_sprites) {
-        for (const [key, spriteData] of Object.entries(msg.npc_sprites)) {
-          if (!customNPCSprites[key]) {
-            customNPCSprites[key] = spriteData;
-          }
-        }
-      }
-      if (msg.custom_tiles) {
-        for (const [tileId, recipe] of Object.entries(msg.custom_tiles)) {
-          if (!customTiles[tileId]) {
-            customTiles[tileId] = recipe;
-            delete tileCanvases[tileId];
-          }
-          // Register walkable custom tiles so client-side prediction works
-          if (recipe.walkable) WALKABLE.add(tileId);
-        }
-      }
+      registerCustomContent(msg);
 
       if (msg.hp !== undefined) { G.player.myHp = msg.hp; G.player.myMaxHp = msg.max_hp; }
 
@@ -299,15 +299,7 @@ function handleMessage(msg) {
         return mon;
       });
       for (const p of msg.players) {
-        const op = {
-          x: p.x, y: p.y,
-          displayX: p.x, displayY: p.y,
-          direction: p.direction,
-          color_index: p.color_index,
-          moving: false,
-          walkState: null,
-        };
-        G.room.otherPlayers[p.name] = op;
+        G.room.otherPlayers[p.name] = createOtherPlayer(p.x, p.y, p.direction, p.color_index);
         if (p.dancing) startDance(p.name);
       }
       G.player.preciseX = G.player.myPlayer.x;
@@ -422,15 +414,7 @@ function handleMessage(msg) {
 
     case "player_entered":
       if (msg.name !== G.player.myName) {
-        const ep = {
-          x: msg.x, y: msg.y,
-          displayX: msg.x, displayY: msg.y,
-          direction: msg.direction,
-          color_index: msg.color_index,
-          moving: false,
-          walkState: null,
-        };
-        G.room.otherPlayers[msg.name] = ep;
+        G.room.otherPlayers[msg.name] = createOtherPlayer(msg.x, msg.y, msg.direction, msg.color_index);
         if (msg.dancing) startDance(msg.name);
         appendChatLog(`<span class="chat-system">${escHtml(msg.name)} entered the room</span>`);
       }
@@ -480,7 +464,7 @@ function handleMessage(msg) {
         if (msg.knockback) {
           const oldX = G.player.preciseX, oldY = G.player.preciseY;
           for (let t = 0.33; t <= 0.66; t += 0.33) {
-            const dustX = (oldX + (msg.x - oldX) * t) * TS + TS / 2;
+            const dustX = tileCenterX(oldX + (msg.x - oldX) * t);
             const dustY = (oldY + (msg.y - oldY) * t + 0.5) * TS;
             spawnBurst(dustX, dustY, 2, 1.0, 250, ["#c8b898", "#a09068"], [2 * SCALE, 3 * SCALE], { shrink: true });
           }
@@ -572,8 +556,8 @@ function handleMessage(msg) {
       // Juice: sparkle particles at pickup point
       const collectedHeart = G.room.heartPickups.find(h => h.id === msg.id);
       if (collectedHeart) {
-        const hx = collectedHeart.x * TS + TS / 2;
-        const hy = collectedHeart.y * TS + TS / 2;
+        const hx = tileCenterX(collectedHeart.x);
+        const hy = tileCenterY(collectedHeart.y);
         spawnBurst(hx, hy, 4, 2, 300, ["#ff6060", "#fff", "#ffaaaa"], [2 * SCALE, 4 * SCALE]);
       }
       G.room.heartPickups = G.room.heartPickups.filter(h => h.id !== msg.id);
@@ -714,20 +698,7 @@ function handleMessage(msg) {
     }
 
     case "monster_spawned":
-      if (msg.custom_sprites) {
-        for (const [kind, spriteData] of Object.entries(msg.custom_sprites)) {
-          if (!customMonsterSprites[kind]) {
-            customMonsterSprites[kind] = spriteData;
-          }
-        }
-      }
-      if (msg.custom_death_sprites) {
-        for (const [kind, spriteData] of Object.entries(msg.custom_death_sprites)) {
-          if (!customDeathSprites[kind]) {
-            customDeathSprites[kind] = spriteData;
-          }
-        }
-      }
+      registerCustomContent(msg);
       G.room.monsters.push({ id: msg.id, kind: msg.kind, x: msg.x, y: msg.y, displayX: msg.x, displayY: msg.y, width: msg.width || 1, height: msg.height || 1, walkTime: (msg.walk_time || 2.0) * 1000, walkState: null, stateSeq: 0, spawnTime: Date.now() });
       break;
 
@@ -757,8 +728,8 @@ function handleMessage(msg) {
       // Juice: dust particles at impact point (read position before removing)
       const deadProj = G.fx.projectiles.find(p => p.id === msg.id);
       if (deadProj) {
-        const px = deadProj.displayX * TS + TS / 2;
-        const py = deadProj.displayY * TS + TS / 2;
+        const px = tileCenterX(deadProj.displayX);
+        const py = tileCenterY(deadProj.displayY);
         spawnBurst(px, py, 4, 1.5, 250, ["#aaa", "#888", "#666"], [2 * SCALE, 3 * SCALE], { shrink: true });
       }
       G.fx.projectiles = G.fx.projectiles.filter(p => p.id !== msg.id);

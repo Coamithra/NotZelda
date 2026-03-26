@@ -2,11 +2,23 @@
 
 const DANCE_FRAME_MS = 200;
 const DYING_MONSTER_FRAME_MS = 150;
-const SWORD_PICKUP_FRAME_MS = 200;
-const SWORD_PICKUP_FRAMES = 4;
 const ATTACK_FRAME_MS = 150;
 const ATTACK_FRAMES = 2;
 const DYING_PLAYER_FRAME_MS = 200;
+
+// Advance a frame-based animation: returns true if the frame advanced
+function advanceFrame(obj, duration, now) {
+  if (now >= obj.nextTime) {
+    obj.frame++;
+    obj.nextTime = now + duration;
+    return true;
+  }
+  return false;
+}
+
+// Tile-to-screen: center of a tile
+function tileCenterX(x) { return x * TS + TS / 2; }
+function tileCenterY(y) { return y * TS + TS / 2; }
 
 // Walkable set — populated from server tile data on room enter
 const WALKABLE = new Set();
@@ -36,8 +48,8 @@ function renderBrightTiles() {
     for (let c = 0; c < COLS; c++) {
       const recipe = customTiles[tm[r][c]];
       if (!recipe || !recipe.bright) continue;
-      const cx = c * TS + TS / 2;
-      const cy = r * TS + TS / 2;
+      const cx = tileCenterX(c);
+      const cy = tileCenterY(r);
       // Organic flicker from two sine waves at different frequencies
       const flicker = 0.3 + 0.15 * Math.sin(t * 8.3 + c * 2.1) + 0.1 * Math.sin(t * 13.7 + r * 3.3);
       const radius = TS * 1.8 + TS * 0.4 * Math.sin(t * 5.1 + c + r);
@@ -110,38 +122,20 @@ function stopDance(name) {
 
 function updateDances() {
   const now = Date.now();
-  for (const [name, d] of Object.entries(G.room.dancingPlayers)) {
-    if (now >= d.nextTime) {
-      d.frame++;
-      d.nextTime = now + DANCE_FRAME_MS;
-    }
+  for (const d of Object.values(G.room.dancingPlayers)) {
+    advanceFrame(d, DANCE_FRAME_MS, now);
   }
 }
 
 function updateDyingMonsters() {
   const now = Date.now();
   G.room.dyingMonsters = G.room.dyingMonsters.filter(dm => {
-    if (now >= dm.nextTime) {
-      dm.frame++;
-      // Boss monsters have a slower, more dramatic death
-      const isBoss = (dm.width || 1) > 1 || (dm.height || 1) > 1;
-      dm.nextTime = now + (isBoss ? 400 : DYING_MONSTER_FRAME_MS);
-    }
+    const isBoss = (dm.width || 1) > 1 || (dm.height || 1) > 1;
+    advanceFrame(dm, isBoss ? 400 : DYING_MONSTER_FRAME_MS, now);
     // Death sprites have up to 4 frames; last frame lingers as a corpse (rendered by renderCorpses)
     const deathSprite = customDeathSprites[dm.kind];
     const maxFrames = deathSprite && deathSprite.frames ? deathSprite.frames.length : 3;
     return dm.frame < maxFrames;
-  });
-}
-
-function updateSwordPickups() {
-  const now = Date.now();
-  G.room.swordPickups = G.room.swordPickups.filter(sp => {
-    if (now >= sp.nextTime) {
-      sp.frame++;
-      sp.nextTime = now + SWORD_PICKUP_FRAME_MS;
-    }
-    return sp.frame < SWORD_PICKUP_FRAMES;
   });
 }
 
@@ -164,8 +158,8 @@ function updateAttackEffects() {
 
 function renderProjectiles() {
   for (const p of G.fx.projectiles) {
-    const px = p.displayX * TS + TS / 2;
-    const py = p.displayY * TS + TS / 2;
+    const px = tileCenterX(p.displayX);
+    const py = tileCenterY(p.displayY);
     const r = 3 * SCALE;
     // Glow
     G.ui.ctx.globalAlpha = 0.3;
@@ -268,10 +262,7 @@ function renderMonsterAttackFlashes() {
 function updateDyingOtherPlayers() {
   const now = Date.now();
   for (const [name, dp] of Object.entries(G.room.dyingOtherPlayers)) {
-    if (now >= dp.nextTime) {
-      dp.frame++;
-      dp.nextTime = now + DYING_PLAYER_FRAME_MS;
-    }
+    advanceFrame(dp, DYING_PLAYER_FRAME_MS, now);
     if (dp.frame > 5) {
       delete G.room.dyingOtherPlayers[name];
     }
@@ -366,13 +357,8 @@ function startAttack(name, direction) {
 function updateAttacks() {
   const now = Date.now();
   for (const [name, a] of Object.entries(G.room.attackingPlayers)) {
-    if (now >= a.nextTime) {
-      a.frame++;
-      if (a.frame >= ATTACK_FRAMES) {
-        delete G.room.attackingPlayers[name];
-      } else {
-        a.nextTime = now + ATTACK_FRAME_MS;
-      }
+    if (advanceFrame(a, ATTACK_FRAME_MS, now) && a.frame >= ATTACK_FRAMES) {
+      delete G.room.attackingPlayers[name];
     }
   }
 }
@@ -505,16 +491,16 @@ function renderSpeechBubbles() {
   for (const bubble of G.room.speechBubbles) {
     let px, py;
     if (bubble.from === G.player.myName) {
-      px = G.player.displayX * TS + TS / 2;
+      px = tileCenterX(G.player.displayX);
       py = G.player.displayY * TS - 16;
     } else if (G.room.otherPlayers[bubble.from]) {
       const p = G.room.otherPlayers[bubble.from];
-      px = p.displayX * TS + TS / 2;
+      px = tileCenterX(p.displayX);
       py = p.displayY * TS - 16;
     } else {
       const guard = G.room.guards.find(g => g.name === bubble.from);
       if (guard) {
-        px = guard.x * TS + TS / 2;
+        px = tileCenterX(guard.x);
         py = guard.y * TS - 16;
       } else {
         continue;
@@ -598,7 +584,7 @@ function renderNpcThinking() {
     const guard = G.room.guards.find(g => g.name === name);
     if (!guard) continue;
 
-    const px = guard.x * TS + TS / 2;
+    const px = tileCenterX(guard.x);
     const py = guard.y * TS - 16;
 
     // Animate dots: cycle through ".", "..", "..." every 500ms
@@ -635,12 +621,6 @@ function renderNpcThinking() {
     // Dots
     G.ui.ctx.fillStyle = "#666";
     G.ui.ctx.fillText(text, bx + pad, by + pad + 11);
-  }
-}
-
-function renderSwordPickups() {
-  for (const sp of G.room.swordPickups) {
-    drawSwordPickup(G.ui.ctx, sp.x * TS, sp.y * TS, sp.frame, SCALE);
   }
 }
 
@@ -751,10 +731,10 @@ function renderCollisionDebug() {
     const psy = g.prevSourceY != null ? g.prevSourceY : g.sourceY;
     const ppx = g.prevPlayerX != null ? g.prevPlayerX : g.playerX;
     const ppy = g.prevPlayerY != null ? g.prevPlayerY : g.playerY;
-    const fromX = psx * TS + TS / 2;
-    const fromY = psy * TS + TS / 2;
-    const toX = ppx * TS + TS / 2;
-    const toY = ppy * TS + TS / 2;
+    const fromX = tileCenterX(psx);
+    const fromY = tileCenterY(psy);
+    const toX = tileCenterX(ppx);
+    const toY = tileCenterY(ppy);
     ctx.strokeStyle = `rgba(255,128,0,${alpha})`;
     ctx.lineWidth = 3;
     ctx.beginPath();

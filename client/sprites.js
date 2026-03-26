@@ -258,24 +258,6 @@ function drawSwordAttack(ctx, px, py, direction, attackFrame, S) {
 }
 
 // ---------------------------------------------------------------------------
-// Sword pickup animation
-// ---------------------------------------------------------------------------
-function drawSwordPickup(ctx, px, py, frame, S) {
-  const BLADE = "#C0C0C0", HILT = "#8B4513", GUARD = "#DAA520";
-  const riseY = frame * 4 * S;
-  const sx = px + 6*S, sy = py - 4*S - riseY;
-  const alpha = Math.max(0, 1 - frame * 0.2);
-  ctx.globalAlpha = alpha;
-  ctx.fillStyle = "rgba(230, 180, 34, 0.4)";
-  ctx.fillRect(sx - 2*S, sy - S, 6*S, 14*S);
-  ctx.fillStyle = BLADE; ctx.fillRect(sx, sy, 2*S, 6*S);
-  ctx.fillRect(sx + S*0.5, sy - S, S, S);
-  ctx.fillStyle = GUARD; ctx.fillRect(sx - S, sy + 6*S, 4*S, S);
-  ctx.fillStyle = HILT;  ctx.fillRect(sx, sy + 7*S, 2*S, 3*S);
-  ctx.globalAlpha = 1;
-}
-
-// ---------------------------------------------------------------------------
 // Heart sprites
 // ---------------------------------------------------------------------------
 function drawHeart(ctx, px, py, state, S) {
