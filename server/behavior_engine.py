@@ -55,6 +55,8 @@ def _nearest_player(monster, room_id):
     For multi-tile monsters, distance is measured from the closest occupied tile.
     Returns (player, dist) or (None, inf).
     """
+    if monster.x is None or monster.y is None:
+        return None, float("inf")
     best = None
     best_dist = float("inf")
     w = getattr(monster, "width", 1)
@@ -138,6 +140,8 @@ def cond_player_in_range_line(monster, room_id, rule):
     if player is None or dist > max_range:
         return False
     pa = player.avatar
+    if pa is None:
+        return False
 
     w = getattr(monster, "width", 1)
     h = getattr(monster, "height", 1)
@@ -214,7 +218,7 @@ def _resolve_direction(direction, monster, room_id):
     player, _ = _nearest_player(monster, room_id)
 
     if direction == "player":
-        if player is None:
+        if player is None or player.avatar is None:
             return None
         pa = player.avatar
         dx = pa.x - monster.x
@@ -227,7 +231,7 @@ def _resolve_direction(direction, monster, room_id):
             return (0, 1 if dy > 0 else -1)
 
     if direction == "away":
-        if player is None:
+        if player is None or player.avatar is None:
             return None
         pa = player.avatar
         dx = monster.x - pa.x
@@ -285,7 +289,7 @@ def _resolve_move(rule, monster, room_id):
 
     if direction == "player":
         target, _ = _nearest_player(monster, room_id)
-        if target is None:
+        if target is None or target.avatar is None:
             return _resolve_move({"direction": "random"}, monster, room_id)
         ta = target.avatar
         best_dir = None
@@ -306,7 +310,7 @@ def _resolve_move(rule, monster, room_id):
 
     if direction == "away":
         target, _ = _nearest_player(monster, room_id)
-        if target is None:
+        if target is None or target.avatar is None:
             return _resolve_move({"direction": "random"}, monster, room_id)
         ta = target.avatar
         best_dir = None
@@ -408,7 +412,7 @@ def _resolve_teleport(rule, monster, room_id):
     # Determine center point (must be integer tile coords for tilemap lookups)
     if target_mode == "player":
         player, player_dist = _nearest_player(monster, room_id)
-        if player is None:
+        if player is None or player.avatar is None:
             return None
         if player_dist > max_range:
             return None
@@ -416,7 +420,7 @@ def _resolve_teleport(rule, monster, room_id):
         cx, cy = int(round(pa.x)), int(round(pa.y))
     elif target_mode == "away":
         player, _ = _nearest_player(monster, room_id)
-        if player is None:
+        if player is None or player.avatar is None:
             cx, cy = monster.x, monster.y
         else:
             pa = player.avatar
