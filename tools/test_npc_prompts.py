@@ -1,4 +1,4 @@
-"""Iterative NPC prompt tester — measures [CALL_GUARDS] and [GIVE_ITEM] false-positive rates.
+"""Iterative NPC prompt tester — measures [ANGRY] and [GIVE_ITEM] false-positive rates.
 
 Calls Ollama directly (no server needed). Runs a matrix of prompt variants x NPC personas
 x player messages and scores each variant on tag accuracy.
@@ -658,7 +658,7 @@ def run_gift_test(variant_idx: int | None = None, repeats: int = 3, url: str = O
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test NPC prompt variants against Ollama")
     parser.add_argument("--variant", type=int, default=None,
-                        help="Run only this variant index (0-7)")
+                        help=f"Run only this variant index (0-{len(VARIANTS)-1})")
     parser.add_argument("--repeats", type=int, default=3,
                         help="Repetitions per combination (default: 3)")
     parser.add_argument("--url", default=OLLAMA_URL,
