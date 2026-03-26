@@ -94,7 +94,7 @@ When pushing to git make sure to update CLAUDE.md first!
 ## Key Gotchas
 
 - **Client script load order matters**: `game_state.js` → `title.js` → `tiles.js` → `sprite_data.js` → `sprites.js` → `music.js` → `renderer.js` → `fx.js` → `net.js` → inline init/gameLoop → `input.js`
-- **Import order** avoids circular deps: `constants` → `state` → `log` → `models` → `net` → `rooms` → `validation` → `dungeon_types` → `dungeons` → `quests` → `lifecycle` → `commands` → `combat` → `debug_monsters` → `mud_server`. Combat uses lazy imports for commands; commands imports from lifecycle.
+- **Import order** avoids circular deps: `constants` → `state` → `log` → `models` → `net` → `rooms` → `validation` → `dungeon_types` → `dungeons` → `quests` → `lifecycle` → `behavior_engine` → `commands` → `combat` → `debug_monsters` → `mud_server`. `behavior_engine` imports from `lifecycle` (for `set_monster_idle`); `combat` imports `behavior_engine`; `_apply_damage` is injected into the engine via `init()` to avoid a circular dep. Combat uses lazy imports for commands; commands imports from lifecycle.
 - **Command queue**: websocket messages are never processed inline — handler appends to `player.command_queue`, drained by `game_tick()`. Only `ping` is handled directly.
 - **game_tick() is synchronous** with message batching — no `await` mid-tick. Messages collected as tuples, flushed after the full tick. This prevents dungeon teardown crashes.
 - **Room transitions**: player's avatar is set to `None` during `do_room_transition()`, then a new avatar is created at the spawn point. `avatars_in_room()` naturally excludes avatar-less players so monsters can't target them mid-transition. Player stays in `game.players` throughout.

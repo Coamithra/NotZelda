@@ -27,10 +27,10 @@ import websockets
 
 from server import behavior_engine
 from server.state import game
-from server.constants import DEBUG_MODE, STARTING_ROOM, PLAYER_MAX_HP, ROOM_COLS, ROOM_ROWS
+from server.constants import DEBUG_MODE, STARTING_ROOM, PLAYER_MAX_HP
 from server.models import Player
 from server import log
-from server.net import send_to, avatars_in_room, player_info
+from server.net import send_to, player_info
 from server.rooms import load_room_files, load_dungeon_templates
 from server.lifecycle import (
     on_player_enter_room, on_player_leave_room, send_room_enter,
@@ -383,7 +383,8 @@ async def main():
         log.debug(f"[LIBS] {type_id}: monster {m.real_count}/{m.capacity}, "
                   f"tile {t.real_count}/{t.capacity}, room {r.real_count}/{r.capacity}")
 
-    behavior_engine.init(avatars_in_room, ROOM_COLS, ROOM_ROWS, game.is_walkable_tile, game.guards, game.rooms)
+    from server.combat import _apply_damage
+    behavior_engine.init(_apply_damage)
     port = int(os.environ.get("PORT", 8080))
     server = await websockets.serve(
         handle_connection, "0.0.0.0", port,

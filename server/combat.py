@@ -1,7 +1,6 @@
 """Combat system — damage, projectiles, monster AI tick, game loop."""
 
 import asyncio
-import math
 import time
 import traceback
 
@@ -12,13 +11,10 @@ from server.constants import (
     ROOM_COLS, ROOM_ROWS, DIRECTIONS, DIRECTION_OPPOSITES,
     INVINCIBILITY_DURATION, PLAYER_RESPAWN_DELAY, STARTING_ROOM,
     PROJECTILE_TICK_RATE,
-    WALK_TIME, GUARD_COOLDOWN,
     GUARD_DESPAWN_TIMEOUT, GUARD_DESPAWN_DISTANCE, GUARD_DESPAWN_GRACE,
-    HEART_RESTORE_HP, TICK_INTERVAL, COLLISION_GRACE_PERIOD,
+    TICK_INTERVAL, COLLISION_GRACE_PERIOD,
 )
-from server.models import Projectile, WalkState
 from server.net import send_to, broadcast_to_room, avatars_in_room, player_info
-from server.lifecycle import set_monster_idle
 
 
 # ---------------------------------------------------------------------------
@@ -196,300 +192,6 @@ def _respawn_player(player, msgs):
 
 
 # ---------------------------------------------------------------------------
-# Action execution — called by monster_tick when behavior engine returns.
-# All sync — append messages to the batch instead of awaiting sends.
-# ---------------------------------------------------------------------------
-
-def start_walk(monster, room_id, monster_idx, action, msgs, now):
-    """Start a smooth walk — set monster state and broadcast walk_started."""
-    nx, ny = action["x"], action["y"]
-    remaining = action.get("distance", 1) - 1  # distance includes this step
-    monster.state = "walking"
-    monster.move_seq += 1
-    monster.state_data = WalkState(
-        from_x=monster.x, from_y=monster.y,
-        to_x=nx, to_y=ny,
-        start_time=now,
-        midpoint_checked=False,
-        room_id=room_id,
-        monster_idx=monster_idx,
-        remaining_distance=remaining,
-        direction=action.get("direction", "random"),
-        seq=monster.move_seq,
-    )
-    msgs.append(("broadcast", room_id, {
-        "type": "monster_walk_started",
-        "id": monster_idx,
-        "from_x": monster.x, "from_y": monster.y,
-        "to_x": nx, "to_y": ny,
-        "walk_time": monster.walk_time,
-        "seq": monster.move_seq,
-    }, None))
-
-
-def exec_projectile(monster, room_id, monster_idx, action, msgs):
-    """Spawn a projectile from the monster in the resolved direction."""
-    dx, dy = action["dx"], action["dy"]
-    damage = action.get("damage", 1)
-    color = action.get("sprite_color", "#ff0000")
-    speed = action.get("speed", 1)
-    piercing = action.get("piercing", False)
-
-    # For multi-tile monsters, spawn from the edge tile closest to the direction
-    w, h = monster.width, monster.height
-    if dx > 0:
-        spawn_col = monster.x + w - 1  # rightmost column
-    elif dx < 0:
-        spawn_col = monster.x           # leftmost column
-    else:
-        spawn_col = monster.x + w // 2  # center
-    if dy > 0:
-        spawn_row = monster.y + h - 1   # bottom row
-    elif dy < 0:
-        spawn_row = monster.y            # top row
-    else:
-        spawn_row = monster.y + h // 2   # center
-    start_x = spawn_col + dx
-    start_y = spawn_row + dy
-    if start_x < 0 or start_x >= ROOM_COLS or start_y < 0 or start_y >= ROOM_ROWS:
-        return
-    room = game.rooms.get(room_id)
-    if not room:
-        return
-    if not game.is_walkable_tile(room["tilemap"][start_y][start_x]):
-        return
-
-    proj_id = game.next_projectile_id
-    game.next_projectile_id += 1
-    proj = Projectile(start_x, start_y, dx, dy, damage, color, room_id, speed, piercing)
-
-    if room_id not in game.room_projectiles:
-        game.room_projectiles[room_id] = {}
-    game.room_projectiles[room_id][proj_id] = proj
-
-    msgs.append(("broadcast", room_id, {
-        "type": "projectile_spawned",
-        "id": proj_id,
-        "x": start_x,
-        "y": start_y,
-        "dx": dx,
-        "dy": dy,
-        "color": color,
-    }, None))
-
-    # Check if a player is already at the spawn tile (AABB overlap)
-    for p, a in avatars_in_room(room_id):
-        if p.hp > 0 and a.x < start_x + 1 and a.x + 1 > start_x and a.y < start_y + 1 and a.y + 1 > start_y:
-            msgs.append(("broadcast", room_id, {
-                "type": "projectile_hit", "id": proj_id,
-                "x": start_x, "y": start_y,
-            }, None))
-            _apply_damage(p, damage, room_id, msgs, start_x, start_y)
-            proj.hit_entities.add(id(p))
-            if not piercing:
-                game.room_projectiles.get(room_id, {}).pop(proj_id, None)
-                return
-
-
-def warmup_charge(monster, room_id, monster_idx, action, msgs):
-    """Send charge prep visuals when warmup starts.
-
-    Does NOT increment move_seq — charge_prep is visual-only (no position
-    change).  The seq sent here lets the client detect staleness without
-    advancing the counter past the preceding walk/idle state."""
-    dx, dy = action["dx"], action["dy"]
-    max_range = action.get("range", 3)
-
-    lane = []
-    seen = set()
-    nx, ny = monster.x, monster.y
-    for _ in range(max_range):
-        nx += dx
-        ny += dy
-        if not behavior_engine._can_move_to(monster, nx, ny, room_id):
-            break
-        # Expand to full footprint for multi-tile monsters
-        for ox in range(monster.width):
-            for oy in range(monster.height):
-                tile = (nx + ox, ny + oy)
-                if tile not in seen:
-                    seen.add(tile)
-                    lane.append([nx + ox, ny + oy])
-
-    msgs.append(("broadcast", room_id, {
-        "type": "charge_prep",
-        "id": monster_idx,
-        "dx": dx,
-        "dy": dy,
-        "lane": lane,
-        "seq": monster.move_seq,
-    }, None))
-
-
-def exec_charge(monster, room_id, monster_idx, action, msgs):
-    """Execute the charge dash with locked-in direction."""
-    dx, dy = action["dx"], action["dy"]
-    max_range = action.get("range", 3)
-    damage = action.get("damage", monster.damage)
-    path = []
-
-    nx, ny = monster.x, monster.y
-    for _ in range(max_range):
-        nx += dx
-        ny += dy
-        if not behavior_engine._can_move_to(monster, nx, ny, room_id):
-            break
-        path.append([nx, ny])
-
-    if not path:
-        return
-
-    end_x, end_y = path[-1]
-    monster.x = end_x
-    monster.y = end_y
-    monster.move_seq += 1
-
-    # Expand path to full footprint for the visual charge trail
-    w, h = monster.width, monster.height
-    trail = []
-    if w == 1 and h == 1:
-        trail = path
-    else:
-        seen = set()
-        for px, py in path:
-            for ox in range(w):
-                for oy in range(h):
-                    tile = (px + ox, py + oy)
-                    if tile not in seen:
-                        seen.add(tile)
-                        trail.append([px + ox, py + oy])
-
-    msgs.append(("broadcast", room_id, {
-        "type": "monster_charged",
-        "id": monster_idx,
-        "path": trail,
-        "x": end_x,
-        "y": end_y,
-        "seq": monster.move_seq,
-    }, None))
-
-    # Check if player was hit — AABB overlap with charge path
-    for p, a in avatars_in_room(room_id):
-        if p.hp > 0 and any(
-            a.x < px + w and a.x + 1 > px and a.y < py + h and a.y + 1 > py
-            for px, py in path
-        ):
-            _apply_damage(p, damage, room_id, msgs, monster.x, monster.y)
-
-
-def warmup_teleport(monster, room_id, monster_idx, action, msgs):
-    """Send teleport start visuals when warmup starts (monster fades out)."""
-    msgs.append(("broadcast", room_id, {
-        "type": "teleport_start",
-        "id": monster_idx,
-        "target_x": action["target_x"],
-        "target_y": action["target_y"],
-        "delay": action.get("ticks", 1) * monster.decision_time,
-        "damage_radius": action.get("damage_radius", 1),
-    }, None))
-
-
-def exec_teleport(monster, room_id, monster_idx, action, msgs):
-    """Execute teleport — move monster to target and deal damage."""
-    target_x = action["target_x"]
-    target_y = action["target_y"]
-    damage = action.get("damage", monster.damage)
-
-    monster.x = target_x
-    monster.y = target_y
-    monster.move_seq += 1
-
-    msgs.append(("broadcast", room_id, {
-        "type": "teleport_end",
-        "id": monster_idx,
-        "x": target_x,
-        "y": target_y,
-        "seq": monster.move_seq,
-    }, None))
-
-    # Damage players within damage_radius of landing position
-    damage_radius = action.get("damage_radius", 1)
-    if damage > 0 and damage_radius >= 0:
-        w, h = monster.width, monster.height
-        for p, a in avatars_in_room(room_id):
-            if p.hp > 0:
-                nearest_x = max(monster.x, min(a.x, monster.x + w - 1))
-                nearest_y = max(monster.y, min(a.y, monster.y + h - 1))
-                if abs(a.x - nearest_x) + abs(a.y - nearest_y) <= damage_radius:
-                    _apply_damage(p, damage, room_id, msgs, monster.x, monster.y)
-
-
-def warmup_area(monster, room_id, monster_idx, action, msgs):
-    """Send area warning visuals when warmup starts."""
-    msg = {
-        "type": "area_warning",
-        "id": monster_idx,
-        "x": action["x"],
-        "y": action["y"],
-        "range": action["range"],
-        "duration": action.get("ticks", 1) * monster.decision_time,
-    }
-    if action.get("width", 1) > 1:
-        msg["width"] = action["width"]
-    if action.get("height", 1) > 1:
-        msg["height"] = action["height"]
-    msgs.append(("broadcast", room_id, msg, None))
-
-
-def exec_area(monster, room_id, monster_idx, action, msgs):
-    """Execute area attack — damage all players within range."""
-    damage = action.get("damage", monster.damage)
-    range_val = action.get("range", 2)
-    # Use locked-in position from warmup
-    ax = action.get("x", monster.x)
-    ay = action.get("y", monster.y)
-    aw = action.get("width", 1)
-    ah = action.get("height", 1)
-
-    atk_msg = {
-        "type": "area_attack",
-        "id": monster_idx,
-        "x": ax,
-        "y": ay,
-        "range": range_val,
-    }
-    if aw > 1:
-        atk_msg["width"] = aw
-    if ah > 1:
-        atk_msg["height"] = ah
-    msgs.append(("broadcast", room_id, atk_msg, None))
-
-    for p, a in avatars_in_room(room_id):
-        if p.hp > 0:
-            # Manhattan distance from nearest tile in the boss footprint
-            nearest_x = max(ax, min(a.x, ax + aw - 1))
-            nearest_y = max(ay, min(a.y, ay + ah - 1))
-            dist = abs(a.x - nearest_x) + abs(a.y - nearest_y)
-            if dist <= range_val:
-                _apply_damage(p, damage, room_id, msgs, ax, ay)
-
-
-# Dispatch tables for warmup visuals and execution
-WARMUP_HANDLERS = {
-    "charge": warmup_charge,
-    "teleport": warmup_teleport,
-    "area": warmup_area,
-}
-
-EXEC_HANDLERS = {
-    "projectile": exec_projectile,
-    "charge": exec_charge,
-    "teleport": exec_teleport,
-    "area": exec_area,
-}
-
-
-# ---------------------------------------------------------------------------
 # Background tick loops
 # ---------------------------------------------------------------------------
 
@@ -567,14 +269,14 @@ def _tick_all_monsters(now, msgs):
                         }, None))
                         # Chain next walk if distance remains
                         if remaining > 0 and monster.alive:
-                            next_move = behavior_engine._resolve_move(
+                            next_move = behavior_engine.engine.resolve_move(
                                 {"direction": walk_dir}, monster, room_id)
                             if next_move:
                                 next_move["distance"] = remaining
                                 next_move["direction"] = walk_dir
-                                start_walk(monster, room_id, i, next_move, msgs, now)
+                                behavior_engine.engine.start_walk(monster, room_id, i, next_move, msgs, now)
                 # State machine (behavior eval, warmup countdown)
-                _tick_monster_state(monster, room_id, i, now, msgs)
+                behavior_engine.engine.tick_monster_state(monster, room_id, i, now, msgs)
             except Exception as e:
                 log.debug(f"[MONSTER TICK ERROR] monster {i} ({monster.kind}) in {room_id} "
                           f"state={monster.state}: {e}")
@@ -818,70 +520,3 @@ def _check_guard_despawn(room_id, monster_list, now, msgs):
         _despawn_guards(guards, room_id, msgs)
 
 
-def _tick_monster_state(monster, room_id, i, now, msgs):
-    """Process one monster's state machine tick (called from 33ms loop)."""
-    state = monster.state
-
-    if state == "walking":
-        # Walk progression handled by _tick_monster_walks
-        return
-
-    if state in ("charging", "teleporting", "area"):
-        # Warmup — time-based end
-        sd = monster.state_data
-        if now >= sd["end_time"]:
-            action_name = sd["action_name"]
-            action = sd["action"]
-            handler = EXEC_HANDLERS.get(action_name)
-            if handler:
-                handler(monster, room_id, i, action, msgs)
-            set_monster_idle(monster, room_id, i, msgs)
-        return
-
-    # state == "idle" — decision timer runs continuously (even during other states)
-    # so if walk/warmup took longer than decision_time, we evaluate immediately
-    if now - monster.last_action_time < monster.decision_time:
-        return  # not time to decide yet
-
-    # Decision point — reset timer regardless of outcome
-    monster.last_action_time = now
-
-    result = behavior_engine.monster_tick(monster, room_id)
-    if result is None:
-        return
-
-    action_name = result.get("action")
-    warmup = result.get("warmup", 0)
-
-    if action_name == "move":
-        start_walk(monster, room_id, i, result, msgs, now)
-        return
-
-    if action_name == "hold":
-        return
-
-    # Projectile — instant, no state change
-    if action_name == "projectile":
-        handler = EXEC_HANDLERS.get("projectile")
-        if handler:
-            handler(monster, room_id, i, result, msgs)
-        return
-
-    # Warmup actions: charge, teleport, area
-    if warmup > 0 and action_name in WARMUP_HANDLERS:
-        state_name = {"charge": "charging", "teleport": "teleporting", "area": "area"}
-        monster.state = state_name.get(action_name, "idle")
-        monster.state_data = {
-            "end_time": now + warmup * monster.decision_time,
-            "action_name": action_name,
-            "action": result,
-        }
-        handler = WARMUP_HANDLERS.get(action_name)
-        if handler:
-            handler(monster, room_id, i, result, msgs)
-        return
-
-    # No warmup — execute immediately
-    handler = EXEC_HANDLERS.get(action_name)
-    if handler:
-        handler(monster, room_id, i, result, msgs)
