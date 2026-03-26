@@ -3,7 +3,7 @@
 Destinations:
     log.debug(msg)        → debug sidebar + server log file + stdout
     log.server(msg)       → server log file + stdout only (verbose)
-    log.event(kind, text) → server log file + stdout (structured)
+    log.event(kind, text) → debug sidebar + server log file + stdout (structured)
 
 The debug sidebar is the #server-log panel shown to the right of the
 playing field in debug mode.  Messages arrive as ``server_log`` WebSocket
@@ -39,9 +39,12 @@ def _timestamp() -> str:
 
 
 def _write_file(line: str) -> None:
-    """Append a timestamped line to the server log file."""
-    with open(_LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(line + "\n")
+    """Append a pre-formatted line to the server log file."""
+    try:
+        with open(_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
 
 
 def _to_stdout(text: str) -> None:
@@ -68,9 +71,7 @@ def _broadcast_sidebar(text: str) -> None:
     if not players:
         return
     try:
-        loop = asyncio.get_event_loop()
-        if not loop.is_running():
-            return
+        asyncio.get_running_loop()
     except RuntimeError:
         return
     msg = json.dumps({"type": "server_log", "text": text})
@@ -110,11 +111,13 @@ def server(msg: str) -> None:
 
 
 def event(kind: str, text: str) -> None:
-    """Structured event → server log file + stdout.
+    """Structured event → debug sidebar + server log file + stdout.
 
     Written as ``[timestamp] KIND: text``.  Use for discrete lifecycle
     events: JOIN, DISCONNECT, NPC_CHAT, etc.
     """
     ts = _timestamp()
     _write_file(f"[{ts}] {kind}: {text}")
+    if DEBUG_MODE:
+        _broadcast_sidebar(f"[{kind}] {text}")
     _to_stdout(f"[{kind}] {text}")

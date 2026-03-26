@@ -81,7 +81,7 @@ When pushing to git make sure to update CLAUDE.md first!
 - **Logging — 3 destinations** via `server/log.py` (`from server import log`). Never use bare `print()` in server code — use the log module:
   - `log.debug(msg)` → debug sidebar + `event_log.txt` + stdout. For operational events visible in the debug panel.
   - `log.server(msg)` → `event_log.txt` + stdout only. For verbose output that would flood the sidebar (AI generation, registration details).
-  - `log.event(kind, text)` → `event_log.txt` + stdout. For structured lifecycle events (JOIN, DISCONNECT, NPC_CHAT, etc.). Written as `[timestamp] KIND: text`.
+  - `log.event(kind, text)` → debug sidebar + `event_log.txt` + stdout. For structured lifecycle events (JOIN, DISCONNECT, NPC_CHAT, etc.). Written as `[timestamp] KIND: text`.
   - Chat window messages are a separate system (WebSocket game messages, not logging).
   - `broadcast_debug()` in `net.py` is for the canvas overlay HUD (12-line `G.debugLog` buffer), not the sidebar — keep using it where needed.
   - `_LogBroadcaster` in `mud_server.py` is a safety net that catches stray `print()` from libraries/tracebacks → sidebar + file.
