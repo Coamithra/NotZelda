@@ -22,8 +22,8 @@ const DIR_VECTORS = {
 // ── Particle System ──────────────────────────────────────────────
 
 function spawnParticle(x, y, vx, vy, life, color, size, opts) {
-  if (G.particles.length >= PARTICLE_CAP) G.particles.shift();
-  G.particles.push({
+  if (G.fx.particles.length >= PARTICLE_CAP) G.fx.particles.shift();
+  G.fx.particles.push({
     x, y, vx, vy,
     life, maxLife: life,
     color, size,
@@ -44,21 +44,21 @@ function spawnBurst(cx, cy, count, speed, life, colors, sizeRange, opts) {
 }
 
 function updateParticles(dt) {
-  for (let i = G.particles.length - 1; i >= 0; i--) {
-    const p = G.particles[i];
+  for (let i = G.fx.particles.length - 1; i >= 0; i--) {
+    const p = G.fx.particles[i];
     p.x += p.vx;
     p.y += p.vy;
     if (p.gravity) p.vy += p.gravity;
     p.life -= dt;
     if (p.life <= 0) {
-      G.particles.splice(i, 1);
+      G.fx.particles.splice(i, 1);
     }
   }
 }
 
 function renderParticles() {
-  const ctx = G.ctx;
-  for (const p of G.particles) {
+  const ctx = G.ui.ctx;
+  for (const p of G.fx.particles) {
     const alpha = Math.max(0, p.life / p.maxLife);
     const size = p.shrink ? p.size * alpha : p.size;
     ctx.globalAlpha = alpha;
@@ -72,42 +72,42 @@ function renderParticles() {
 
 function triggerShake(intensity, durationMs) {
   // Only override if new shake is stronger or current is done
-  if (G.screenShake) {
-    const elapsed = Date.now() - G.screenShake.startTime;
-    const remaining = G.screenShake.duration - elapsed;
-    const currentIntensity = G.screenShake.intensity * Math.max(0, 1 - elapsed / G.screenShake.duration);
+  if (G.fx.screenShake) {
+    const elapsed = Date.now() - G.fx.screenShake.startTime;
+    const remaining = G.fx.screenShake.duration - elapsed;
+    const currentIntensity = G.fx.screenShake.intensity * Math.max(0, 1 - elapsed / G.fx.screenShake.duration);
     if (remaining > 0 && currentIntensity >= intensity) return;
   }
-  G.screenShake = { startTime: Date.now(), duration: durationMs, intensity };
+  G.fx.screenShake = { startTime: Date.now(), duration: durationMs, intensity };
 }
 
 function applyScreenShake() {
-  if (!G.screenShake) {
-    G.canvas.style.transform = "";
+  if (!G.fx.screenShake) {
+    G.ui.canvas.style.transform = "";
     return;
   }
-  const elapsed = Date.now() - G.screenShake.startTime;
-  if (elapsed > G.screenShake.duration) {
-    G.screenShake = null;
-    G.canvas.style.transform = "";
+  const elapsed = Date.now() - G.fx.screenShake.startTime;
+  if (elapsed > G.fx.screenShake.duration) {
+    G.fx.screenShake = null;
+    G.ui.canvas.style.transform = "";
     return;
   }
-  const decay = 1 - elapsed / G.screenShake.duration;
-  const intensity = G.screenShake.intensity * decay;
+  const decay = 1 - elapsed / G.fx.screenShake.duration;
+  const intensity = G.fx.screenShake.intensity * decay;
   const sx = Math.round(Math.sin(elapsed * 0.05) * intensity) * SCALE;
   const sy = Math.round(Math.cos(elapsed * 0.07) * intensity) * SCALE;
-  G.canvas.style.transform = `translate(${sx}px, ${sy}px)`;
+  G.ui.canvas.style.transform = `translate(${sx}px, ${sy}px)`;
 }
 
 // ── Sword Slash Arc ──────────────────────────────────────────────
 
 function spawnSlashArc(direction) {
-  if (!G.myPlayer) return;
+  if (!G.player.myPlayer) return;
   const dx = DIR_VECTORS[direction] ? DIR_VECTORS[direction].x : 0;
   const dy = DIR_VECTORS[direction] ? DIR_VECTORS[direction].y : 0;
-  G.slashArcs.push({
-    x: G.displayX + dx,
-    y: G.displayY + dy,
+  G.fx.slashArcs.push({
+    x: G.player.displayX + dx,
+    y: G.player.displayY + dy,
     direction,
     startTime: Date.now(),
   });
@@ -122,9 +122,9 @@ const ARC_ANGLES = {
 
 function renderSlashArcs() {
   const now = Date.now();
-  G.slashArcs = G.slashArcs.filter(s => now - s.startTime < SLASH_ARC_DURATION);
-  const ctx = G.ctx;
-  for (const s of G.slashArcs) {
+  G.fx.slashArcs = G.fx.slashArcs.filter(s => now - s.startTime < SLASH_ARC_DURATION);
+  const ctx = G.ui.ctx;
+  for (const s of G.fx.slashArcs) {
     const progress = (now - s.startTime) / SLASH_ARC_DURATION;
     const alpha = (1 - progress) * 0.7;
     const cx = s.x * TS + TS / 2;
@@ -153,17 +153,17 @@ function renderSlashArcs() {
 // ── Floating Damage Numbers ──────────────────────────────────────
 
 function spawnFloatingText(x, y, text, color) {
-  if (G.floatingTexts.length > 10) G.floatingTexts.shift();
-  G.floatingTexts.push({ x, y, text, startTime: Date.now(), color: color || "#fff" });
+  if (G.fx.floatingTexts.length > 10) G.fx.floatingTexts.shift();
+  G.fx.floatingTexts.push({ x, y, text, startTime: Date.now(), color: color || "#fff" });
 }
 
 function renderFloatingTexts() {
   const now = Date.now();
-  G.floatingTexts = G.floatingTexts.filter(t => now - t.startTime < FLOATING_TEXT_DURATION);
-  const ctx = G.ctx;
+  G.fx.floatingTexts = G.fx.floatingTexts.filter(t => now - t.startTime < FLOATING_TEXT_DURATION);
+  const ctx = G.ui.ctx;
   ctx.font = `bold ${10 * SCALE}px monospace`;
   ctx.textAlign = "center";
-  for (const t of G.floatingTexts) {
+  for (const t of G.fx.floatingTexts) {
     const progress = (now - t.startTime) / FLOATING_TEXT_DURATION;
     const alpha = 1 - progress;
     const rise = progress * FLOATING_TEXT_RISE;
@@ -182,18 +182,18 @@ function renderFloatingTexts() {
 // ── Monster Death Persistence (Corpses) ──────────────────────────
 
 function addCorpse(kind, x, y, width, height) {
-  if (G.roomCorpses.length >= CORPSE_CAP) G.roomCorpses.shift();
-  G.roomCorpses.push({ kind, x, y, width: width || 1, height: height || 1 });
+  if (G.room.roomCorpses.length >= CORPSE_CAP) G.room.roomCorpses.shift();
+  G.room.roomCorpses.push({ kind, x, y, width: width || 1, height: height || 1 });
 }
 
 function clearCorpses() {
-  G.roomCorpses = [];
+  G.room.roomCorpses = [];
 }
 
 function renderCorpses() {
-  if (G.roomCorpses.length === 0) return;
-  const ctx = G.ctx;
-  for (const c of G.roomCorpses) {
+  if (G.room.roomCorpses.length === 0) return;
+  const ctx = G.ui.ctx;
+  for (const c of G.room.roomCorpses) {
     const dmScale = SCALE * Math.max(c.width, c.height);
     const deathSprite = customDeathSprites[c.kind];
     if (deathSprite && deathSprite.frames && deathSprite.frames.length > 0) {
@@ -232,10 +232,10 @@ function renderCorpses() {
 // ── Damage Vignette ──────────────────────────────────────────────
 
 function renderDamageVignette() {
-  if (!G.damageVignette || Date.now() > G.damageVignette) return;
-  const remaining = G.damageVignette - Date.now();
+  if (!G.fx.damageVignette || Date.now() > G.fx.damageVignette) return;
+  const remaining = G.fx.damageVignette - Date.now();
   const alpha = (remaining / VIGNETTE_DURATION) * 0.35;
-  const ctx = G.ctx;
+  const ctx = G.ui.ctx;
   const grad = ctx.createRadialGradient(CW / 2, CH / 2, CW * 0.25, CW / 2, CH / 2, CW * 0.65);
   grad.addColorStop(0, "rgba(200,0,0,0)");
   grad.addColorStop(1, `rgba(180,0,0,${alpha})`);

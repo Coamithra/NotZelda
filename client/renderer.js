@@ -11,21 +11,25 @@ const DYING_PLAYER_FRAME_MS = 200;
 // Walkable set — populated from server tile data on room enter
 const WALKABLE = new Set();
 
+// Water mist cache (renderer-internal, not part of G namespace)
+let _mistStrength;
+let _mistRoom;
+
 function renderRoom() {
-  if (!G.currentRoom) return;
-  const tm = G.currentRoom.tilemap;
+  if (!G.room.currentRoom) return;
+  const tm = G.room.currentRoom.tilemap;
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
-      G.ctx.drawImage(getTileCanvas(tm[r][c], TS, TILE, SCALE), c * TS, r * TS);
+      G.ui.ctx.drawImage(getTileCanvas(tm[r][c], TS, TILE, SCALE), c * TS, r * TS);
     }
   }
 }
 
 function renderBrightTiles() {
-  if (!G.currentRoom) return;
-  const tm = G.currentRoom.tilemap;
+  if (!G.room.currentRoom) return;
+  const tm = G.room.currentRoom.tilemap;
   const t = performance.now() / 1000;
-  const ctx = G.ctx;
+  const ctx = G.ui.ctx;
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   for (let r = 0; r < ROWS; r++) {
@@ -49,23 +53,23 @@ function renderBrightTiles() {
 }
 
 function renderWaterMist() {
-  if (!G.currentRoom || !G.currentRoom.tilemap || G.currentRoom.dungeon_type !== "d2") return;
+  if (!G.room.currentRoom || !G.room.currentRoom.tilemap || G.room.currentRoom.dungeon_type !== "d2") return;
   // Count water tiles: WA = 1 point, SH = 0.5 points, max 40 = full strength
-  if (G._mistStrength === undefined || G._mistRoom !== G.currentRoom) {
+  if (_mistStrength === undefined || _mistRoom !== G.room.currentRoom) {
     let score = 0;
-    for (const row of G.currentRoom.tilemap) {
+    for (const row of G.room.currentRoom.tilemap) {
       for (const t of row) {
         if (t === "WA") score += 1;
         else if (t === "SH") score += 0.5;
       }
     }
-    G._mistStrength = Math.min(score / 40, 1.0);
-    G._mistRoom = G.currentRoom;
+    _mistStrength = Math.min(score / 40, 1.0);
+    _mistRoom = G.room.currentRoom;
   }
-  const s = G._mistStrength;
+  const s = _mistStrength;
   if (s <= 0) return;
   const t = performance.now() / 1000;
-  const ctx = G.ctx;
+  const ctx = G.ui.ctx;
   ctx.save();
   // Drifting mist wisps — more wisps with more water, opacity stays constant
   const wispCount = Math.round(8 + 72 * s);
@@ -92,8 +96,8 @@ function renderWaterMist() {
 }
 
 function startDance(name) {
-  G.dancingPlayers[name] = { frame: 0, nextTime: Date.now() };
-  G.speechBubbles.push({
+  G.room.dancingPlayers[name] = { frame: 0, nextTime: Date.now() };
+  G.room.speechBubbles.push({
     from: name,
     text: "* dances *",
     expires: Date.now() + 3000,
@@ -101,12 +105,12 @@ function startDance(name) {
 }
 
 function stopDance(name) {
-  delete G.dancingPlayers[name];
+  delete G.room.dancingPlayers[name];
 }
 
 function updateDances() {
   const now = Date.now();
-  for (const [name, d] of Object.entries(G.dancingPlayers)) {
+  for (const [name, d] of Object.entries(G.room.dancingPlayers)) {
     if (now >= d.nextTime) {
       d.frame++;
       d.nextTime = now + DANCE_FRAME_MS;
@@ -116,7 +120,7 @@ function updateDances() {
 
 function updateDyingMonsters() {
   const now = Date.now();
-  G.dyingMonsters = G.dyingMonsters.filter(dm => {
+  G.room.dyingMonsters = G.room.dyingMonsters.filter(dm => {
     if (now >= dm.nextTime) {
       dm.frame++;
       // Boss monsters have a slower, more dramatic death
@@ -132,7 +136,7 @@ function updateDyingMonsters() {
 
 function updateSwordPickups() {
   const now = Date.now();
-  G.swordPickups = G.swordPickups.filter(sp => {
+  G.player.swordPickups = G.player.swordPickups.filter(sp => {
     if (now >= sp.nextTime) {
       sp.frame++;
       sp.nextTime = now + SWORD_PICKUP_FRAME_MS;
@@ -142,7 +146,7 @@ function updateSwordPickups() {
 }
 
 function updateProjectiles() {
-  for (const p of G.projectiles) {
+  for (const p of G.fx.projectiles) {
     p.displayX += (p.x - p.displayX) * 0.4;
     p.displayY += (p.y - p.displayY) * 0.4;
     if (Math.abs(p.x - p.displayX) < 0.05) p.displayX = p.x;
@@ -152,40 +156,40 @@ function updateProjectiles() {
 
 function updateAttackEffects() {
   const now = Date.now();
-  G.areaWarnings = G.areaWarnings.filter(w => now - w.startTime < w.duration);
-  G.chargeTrails = G.chargeTrails.filter(t => now - t.startTime < 400);
-  G.chargePreps = G.chargePreps.filter(p => now - p.startTime < 2000);
-  G.monsterAttackFlashes = G.monsterAttackFlashes.filter(f => now - f.startTime < 200);
+  G.fx.areaWarnings = G.fx.areaWarnings.filter(w => now - w.startTime < w.duration);
+  G.fx.chargeTrails = G.fx.chargeTrails.filter(t => now - t.startTime < 400);
+  G.fx.chargePreps = G.fx.chargePreps.filter(p => now - p.startTime < 2000);
+  G.fx.monsterAttackFlashes = G.fx.monsterAttackFlashes.filter(f => now - f.startTime < 200);
 }
 
 function renderProjectiles() {
-  for (const p of G.projectiles) {
+  for (const p of G.fx.projectiles) {
     const px = p.displayX * TS + TS / 2;
     const py = p.displayY * TS + TS / 2;
     const r = 3 * SCALE;
     // Glow
-    G.ctx.globalAlpha = 0.3;
-    G.ctx.fillStyle = p.color;
-    G.ctx.beginPath();
-    G.ctx.arc(px, py, r * 2, 0, Math.PI * 2);
-    G.ctx.fill();
+    G.ui.ctx.globalAlpha = 0.3;
+    G.ui.ctx.fillStyle = p.color;
+    G.ui.ctx.beginPath();
+    G.ui.ctx.arc(px, py, r * 2, 0, Math.PI * 2);
+    G.ui.ctx.fill();
     // Core
-    G.ctx.globalAlpha = 1;
-    G.ctx.fillStyle = p.color;
-    G.ctx.beginPath();
-    G.ctx.arc(px, py, r, 0, Math.PI * 2);
-    G.ctx.fill();
+    G.ui.ctx.globalAlpha = 1;
+    G.ui.ctx.fillStyle = p.color;
+    G.ui.ctx.beginPath();
+    G.ui.ctx.arc(px, py, r, 0, Math.PI * 2);
+    G.ui.ctx.fill();
   }
 }
 
 function renderAreaWarnings() {
   const now = Date.now();
-  for (const w of G.areaWarnings) {
+  for (const w of G.fx.areaWarnings) {
     const elapsed = now - w.startTime;
     const progress = elapsed / w.duration;
     const pulse = 0.15 + 0.15 * Math.sin(elapsed / 80);
-    G.ctx.globalAlpha = pulse;
-    G.ctx.fillStyle = progress > 0.85 ? "#ff4400" : "#ff8800";
+    G.ui.ctx.globalAlpha = pulse;
+    G.ui.ctx.fillStyle = progress > 0.85 ? "#ff4400" : "#ff8800";
     const aw = w.width || 1, ah = w.height || 1;
     for (let dy = -w.range; dy <= w.range + ah - 1; dy++) {
       for (let dx = -w.range; dx <= w.range + aw - 1; dx++) {
@@ -195,50 +199,50 @@ function renderAreaWarnings() {
         if (Math.abs(dx - nearX) + Math.abs(dy - nearY) <= w.range) {
           const tx = w.x + dx, ty = w.y + dy;
           if (tx >= 0 && tx < COLS && ty >= 0 && ty < ROWS) {
-            G.ctx.fillRect(tx * TS, ty * TS, TS, TS);
+            G.ui.ctx.fillRect(tx * TS, ty * TS, TS, TS);
           }
         }
       }
     }
-    G.ctx.globalAlpha = 1;
+    G.ui.ctx.globalAlpha = 1;
   }
 }
 
 function renderChargePreps() {
   const now = Date.now();
-  for (const p of G.chargePreps) {
+  for (const p of G.fx.chargePreps) {
     const age = now - p.startTime;
     const pulse = 0.25 + 0.15 * Math.sin(age / 80);
-    G.ctx.globalAlpha = pulse;
-    G.ctx.fillStyle = "#ff4422";
+    G.ui.ctx.globalAlpha = pulse;
+    G.ui.ctx.fillStyle = "#ff4422";
     for (const [tx, ty] of p.lane) {
-      G.ctx.fillRect(tx * TS + 1*SCALE, ty * TS + 1*SCALE, TS - 2*SCALE, TS - 2*SCALE);
+      G.ui.ctx.fillRect(tx * TS + 1*SCALE, ty * TS + 1*SCALE, TS - 2*SCALE, TS - 2*SCALE);
     }
-    G.ctx.globalAlpha = 1;
+    G.ui.ctx.globalAlpha = 1;
   }
 }
 
 function renderChargeTrails() {
   const now = Date.now();
-  for (const t of G.chargeTrails) {
+  for (const t of G.fx.chargeTrails) {
     const age = now - t.startTime;
     const alpha = Math.max(0, 0.5 - age / 800);
-    G.ctx.globalAlpha = alpha;
-    G.ctx.fillStyle = "#ffcc44";
+    G.ui.ctx.globalAlpha = alpha;
+    G.ui.ctx.fillStyle = "#ffcc44";
     for (const [tx, ty] of t.path) {
-      G.ctx.fillRect(tx * TS + 2*SCALE, ty * TS + 2*SCALE, TS - 4*SCALE, TS - 4*SCALE);
+      G.ui.ctx.fillRect(tx * TS + 2*SCALE, ty * TS + 2*SCALE, TS - 4*SCALE, TS - 4*SCALE);
     }
-    G.ctx.globalAlpha = 1;
+    G.ui.ctx.globalAlpha = 1;
   }
 }
 
 function renderMonsterAttackFlashes() {
   const now = Date.now();
-  for (const f of G.monsterAttackFlashes) {
+  for (const f of G.fx.monsterAttackFlashes) {
     const age = now - f.startTime;
     const alpha = Math.max(0, 0.6 - age / 333);
-    G.ctx.globalAlpha = alpha;
-    G.ctx.fillStyle = "#ffffff";
+    G.ui.ctx.globalAlpha = alpha;
+    G.ui.ctx.fillStyle = "#ffffff";
     if (f.range != null) {
       // Area attack flash — render the same footprint-aware diamond as the warning
       const aw = f.width || 1, ah = f.height || 1;
@@ -249,123 +253,123 @@ function renderMonsterAttackFlashes() {
           if (Math.abs(dx - nearX) + Math.abs(dy - nearY) <= f.range) {
             const tx = f.x + dx, ty = f.y + dy;
             if (tx >= 0 && tx < COLS && ty >= 0 && ty < ROWS) {
-              G.ctx.fillRect(tx * TS, ty * TS, TS, TS);
+              G.ui.ctx.fillRect(tx * TS, ty * TS, TS, TS);
             }
           }
         }
       }
     } else {
-      G.ctx.fillRect(f.x * TS, f.y * TS, TS, TS);
+      G.ui.ctx.fillRect(f.x * TS, f.y * TS, TS, TS);
     }
-    G.ctx.globalAlpha = 1;
+    G.ui.ctx.globalAlpha = 1;
   }
 }
 
 function updateDyingOtherPlayers() {
   const now = Date.now();
-  for (const [name, dp] of Object.entries(G.dyingOtherPlayers)) {
+  for (const [name, dp] of Object.entries(G.room.dyingOtherPlayers)) {
     if (now >= dp.nextTime) {
       dp.frame++;
       dp.nextTime = now + DYING_PLAYER_FRAME_MS;
     }
     if (dp.frame > 5) {
-      delete G.dyingOtherPlayers[name];
+      delete G.room.dyingOtherPlayers[name];
     }
   }
 }
 
 function renderHeartPickups() {
-  for (const h of G.heartPickups) {
+  for (const h of G.room.heartPickups) {
     const bounceFrame = Math.floor(Date.now() / 400) % 2;
-    drawHeartPickup(G.ctx, h.x * TS, h.y * TS, bounceFrame, SCALE);
+    drawHeartPickup(G.ui.ctx, h.x * TS, h.y * TS, bounceFrame, SCALE);
   }
 }
 
 const ITEM_PICKUP_DURATION = 2500;
 
 function renderDungeonGroundItems() {
-  for (const item of G.dungeonGroundItems) {
-    drawGroundItem(G.ctx, item.x * TS, item.y * TS, item.item_type, SCALE);
+  for (const item of G.room.dungeonGroundItems) {
+    drawGroundItem(G.ui.ctx, item.x * TS, item.y * TS, item.item_type, SCALE);
   }
 }
 
 function updateItemPickups() {
   const now = Date.now();
-  if (G.itemPickupActive && now - G.itemPickupActive.startTime >= ITEM_PICKUP_DURATION) {
-    G.itemPickupActive = null;
+  if (G.player.itemPickupActive && now - G.player.itemPickupActive.startTime >= ITEM_PICKUP_DURATION) {
+    G.player.itemPickupActive = null;
   }
-  for (const [name, eff] of Object.entries(G.itemPickupEffects)) {
+  for (const [name, eff] of Object.entries(G.player.itemPickupEffects)) {
     if (now - eff.startTime >= ITEM_PICKUP_DURATION) {
-      delete G.itemPickupEffects[name];
+      delete G.player.itemPickupEffects[name];
     }
   }
 }
 
 function renderItemPickups() {
   const now = Date.now();
-  if (G.itemPickupActive) {
-    const pu = G.itemPickupActive;
+  if (G.player.itemPickupActive) {
+    const pu = G.player.itemPickupActive;
     const progress = Math.min((now - pu.startTime) / ITEM_PICKUP_DURATION, 1.0);
-    drawItemPickupOverlay(G.ctx, pu.x * TS, pu.y * TS, pu.item_type, progress, SCALE);
+    drawItemPickupOverlay(G.ui.ctx, pu.x * TS, pu.y * TS, pu.item_type, progress, SCALE);
   }
-  for (const [name, eff] of Object.entries(G.itemPickupEffects)) {
+  for (const [name, eff] of Object.entries(G.player.itemPickupEffects)) {
     const progress = Math.min((now - eff.startTime) / ITEM_PICKUP_DURATION, 1.0);
-    drawItemPickupOverlay(G.ctx, eff.x * TS, eff.y * TS, eff.item_type, progress, SCALE);
+    drawItemPickupOverlay(G.ui.ctx, eff.x * TS, eff.y * TS, eff.item_type, progress, SCALE);
   }
 }
 
 function renderDeathAnimation() {
-  if (!G.dyingPlayerSelf) return;
-  const elapsed = Date.now() - G.dyingPlayerSelf.startTime;
+  if (!G.player.dyingPlayerSelf) return;
+  const elapsed = Date.now() - G.player.dyingPlayerSelf.startTime;
   const duration = 5000;
 
   if (elapsed >= duration) return;
 
-  const px = G.dyingPlayerSelf.x * TS;
-  const py = G.dyingPlayerSelf.y * TS;
+  const px = G.player.dyingPlayerSelf.x * TS;
+  const py = G.player.dyingPlayerSelf.y * TS;
 
   if (elapsed < 1000) {
     const dirs = ["down", "left", "up", "right"];
     const spinDir = dirs[Math.floor(elapsed / 80) % 4];
     const playerAlpha = Math.max(0, 1 - elapsed / 1000);
-    G.ctx.globalAlpha = playerAlpha;
-    drawPlayer(G.ctx, px, py, spinDir, G.myColorIndex, 0, SCALE);
-    G.ctx.globalAlpha = 1;
-    G.ctx.fillStyle = `rgba(0,0,0,${elapsed / 1000 * 0.7})`;
-    G.ctx.fillRect(0, 0, CW, CH);
+    G.ui.ctx.globalAlpha = playerAlpha;
+    drawPlayer(G.ui.ctx, px, py, spinDir, G.player.myColorIndex, 0, SCALE);
+    G.ui.ctx.globalAlpha = 1;
+    G.ui.ctx.fillStyle = `rgba(0,0,0,${elapsed / 1000 * 0.7})`;
+    G.ui.ctx.fillRect(0, 0, CW, CH);
   } else if (elapsed < 1500) {
     const blackAlpha = 0.7 + 0.3 * ((elapsed - 1000) / 500);
-    G.ctx.fillStyle = `rgba(0,0,0,${blackAlpha})`;
-    G.ctx.fillRect(0, 0, CW, CH);
+    G.ui.ctx.fillStyle = `rgba(0,0,0,${blackAlpha})`;
+    G.ui.ctx.fillRect(0, 0, CW, CH);
   } else {
-    G.ctx.fillStyle = "rgba(0,0,0,1)";
-    G.ctx.fillRect(0, 0, CW, CH);
+    G.ui.ctx.fillStyle = "rgba(0,0,0,1)";
+    G.ui.ctx.fillRect(0, 0, CW, CH);
   }
 
   if (elapsed > 800) {
     const textAlpha = Math.min(1, (elapsed - 800) / 500);
-    G.ctx.globalAlpha = textAlpha;
-    G.ctx.font = "bold 28px monospace";
-    G.ctx.fillStyle = "#cc3333";
+    G.ui.ctx.globalAlpha = textAlpha;
+    G.ui.ctx.font = "bold 28px monospace";
+    G.ui.ctx.fillStyle = "#cc3333";
     const txt = "You died!";
-    const tw = G.ctx.measureText(txt).width;
-    G.ctx.fillText(txt, CW/2 - tw/2, CH/2);
-    G.ctx.globalAlpha = 1;
+    const tw = G.ui.ctx.measureText(txt).width;
+    G.ui.ctx.fillText(txt, CW/2 - tw/2, CH/2);
+    G.ui.ctx.globalAlpha = 1;
   }
 }
 
 function startAttack(name, direction) {
   stopDance(name);
-  G.attackingPlayers[name] = { direction, frame: 0, nextTime: Date.now() + ATTACK_FRAME_MS };
+  G.room.attackingPlayers[name] = { direction, frame: 0, nextTime: Date.now() + ATTACK_FRAME_MS };
 }
 
 function updateAttacks() {
   const now = Date.now();
-  for (const [name, a] of Object.entries(G.attackingPlayers)) {
+  for (const [name, a] of Object.entries(G.room.attackingPlayers)) {
     if (now >= a.nextTime) {
       a.frame++;
       if (a.frame >= ATTACK_FRAMES) {
-        delete G.attackingPlayers[name];
+        delete G.room.attackingPlayers[name];
       } else {
         a.nextTime = now + ATTACK_FRAME_MS;
       }
@@ -374,26 +378,26 @@ function updateAttacks() {
 }
 
 function renderPlayers() {
-  if (!G.myPlayer) return;
+  if (!G.player.myPlayer) return;
 
   const all = [];
-  if (!G.dyingPlayerSelf) {
+  if (!G.player.dyingPlayerSelf) {
     let skipSelf = false;
-    if (Date.now() < G.invincibleUntil) {
+    if (Date.now() < G.player.invincibleUntil) {
       skipSelf = Math.floor(Date.now() / 100) % 2 === 1;
     }
     if (!skipSelf) {
       all.push({
-        name: G.myName,
-        x: G.displayX,
-        y: G.displayY,
-        direction: G.myPlayer.direction,
-        color_index: G.myPlayer.color_index,
-        hurtFlash: Date.now() < G.hurtFlash,
+        name: G.player.myName,
+        x: G.player.displayX,
+        y: G.player.displayY,
+        direction: G.player.myPlayer.direction,
+        color_index: G.player.myPlayer.color_index,
+        hurtFlash: Date.now() < G.player.hurtFlash,
       });
     }
   }
-  for (const [name, p] of Object.entries(G.otherPlayers)) {
+  for (const [name, p] of Object.entries(G.room.otherPlayers)) {
     all.push({
       name: name,
       x: p.displayX,
@@ -404,20 +408,20 @@ function renderPlayers() {
     });
   }
 
-  for (const g of G.guards) {
+  for (const g of G.room.guards) {
     all.push({ name: g.name, x: g.x, y: g.y, isGuard: true, sprite: g.sprite || "guard" });
   }
 
-  for (const m of G.monsters) {
+  for (const m of G.room.monsters) {
     all.push({ x: m.displayX, y: m.displayY, isMonster: true, kind: m.kind, hitFlash: m.hitFlash, teleportAlpha: m.teleportAlpha, chargePrep: m.chargePrep, width: m.width || 1, height: m.height || 1, walkHop: m.walkHop, spawnTime: m.spawnTime });
   }
 
   all.sort((a, b) => a.y - b.y);
 
-  for (const dm of G.dyingMonsters) {
+  for (const dm of G.room.dyingMonsters) {
     const dx = dm.x * TS, dy = dm.y * TS;
     const dmScale = SCALE * Math.max(dm.width || 1, dm.height || 1);
-    drawMonsterDeath(G.ctx, dx, dy, dm.kind, dm.frame, dmScale);
+    drawMonsterDeath(G.ui.ctx, dx, dy, dm.kind, dm.frame, dmScale);
   }
 
   for (const p of all) {
@@ -432,83 +436,83 @@ function renderPlayers() {
         shakeX = Math.round(Math.sin(Date.now() / 30) * 2) * SCALE;
       }
       if (p.teleportAlpha !== undefined && p.teleportAlpha < 1) {
-        G.ctx.globalAlpha = Math.max(0, p.teleportAlpha);
+        G.ui.ctx.globalAlpha = Math.max(0, p.teleportAlpha);
       }
       // Spawn pop scale effect
       const popScale = getSpawnPopScale(p.spawnTime);
       if (popScale !== 1) {
         const centerX = px + mw * TS / 2;
         const centerY = py + mh * TS / 2;
-        G.ctx.save();
-        G.ctx.translate(centerX, centerY);
-        G.ctx.scale(popScale, popScale);
-        G.ctx.translate(-centerX, -centerY);
+        G.ui.ctx.save();
+        G.ui.ctx.translate(centerX, centerY);
+        G.ui.ctx.scale(popScale, popScale);
+        G.ui.ctx.translate(-centerX, -centerY);
       }
-      const hopFrame = p.walkHop !== undefined ? p.walkHop : G.monsterHopFrame;
-      drawMonsterSprite(G.ctx, px + shakeX, py, p.kind, hopFrame, mScale);
-      if (popScale !== 1) G.ctx.restore();
-      G.ctx.globalAlpha = 1;
+      const hopFrame = p.walkHop !== undefined ? p.walkHop : G.room.monsterHopFrame;
+      drawMonsterSprite(G.ui.ctx, px + shakeX, py, p.kind, hopFrame, mScale);
+      if (popScale !== 1) G.ui.ctx.restore();
+      G.ui.ctx.globalAlpha = 1;
       if (p.hitFlash && Date.now() < p.hitFlash) {
-        G.ctx.globalAlpha = 0.5;
-        G.ctx.fillStyle = "#ffffff";
-        G.ctx.fillRect(px, py, TS * mw, TS * mh);
-        G.ctx.globalAlpha = 1;
+        G.ui.ctx.globalAlpha = 0.5;
+        G.ui.ctx.fillStyle = "#ffffff";
+        G.ui.ctx.fillRect(px, py, TS * mw, TS * mh);
+        G.ui.ctx.globalAlpha = 1;
       }
       continue;
     } else if (p.isGuard) {
-      drawNPC(G.ctx, px, py, p.sprite, SCALE);
-    } else if ((p.name === G.myName && G.itemPickupActive) || G.itemPickupEffects[p.name]) {
-      drawPlayerHoldItem(G.ctx, px, py, p.color_index, SCALE);
-    } else if (G.attackingPlayers[p.name]) {
-      const atk = G.attackingPlayers[p.name];
-      drawPlayerAttack(G.ctx, px, py, atk.direction, p.color_index, atk.frame, SCALE);
-      drawSwordAttack(G.ctx, px, py, atk.direction, atk.frame, SCALE);
-    } else if (G.dancingPlayers[p.name]) {
-      drawPlayerDance(G.ctx, px, py, p.color_index, G.dancingPlayers[p.name].frame, SCALE);
+      drawNPC(G.ui.ctx, px, py, p.sprite, SCALE);
+    } else if ((p.name === G.player.myName && G.player.itemPickupActive) || G.player.itemPickupEffects[p.name]) {
+      drawPlayerHoldItem(G.ui.ctx, px, py, p.color_index, SCALE);
+    } else if (G.room.attackingPlayers[p.name]) {
+      const atk = G.room.attackingPlayers[p.name];
+      drawPlayerAttack(G.ui.ctx, px, py, atk.direction, p.color_index, atk.frame, SCALE);
+      drawSwordAttack(G.ui.ctx, px, py, atk.direction, atk.frame, SCALE);
+    } else if (G.room.dancingPlayers[p.name]) {
+      drawPlayerDance(G.ui.ctx, px, py, p.color_index, G.room.dancingPlayers[p.name].frame, SCALE);
     } else {
-      const moving = (p.name === G.myName) ? G.isMoving : (G.otherPlayers[p.name]?.moving || false);
-      drawPlayer(G.ctx, px, py, p.direction, p.color_index, moving ? G.animFrame : 0, SCALE);
+      const moving = (p.name === G.player.myName) ? G.player.isMoving : (G.room.otherPlayers[p.name]?.moving || false);
+      drawPlayer(G.ui.ctx, px, py, p.direction, p.color_index, moving ? G.player.animFrame : 0, SCALE);
     }
 
     if (p.hurtFlash) {
-      G.ctx.globalAlpha = 0.4;
-      G.ctx.fillStyle = "#ff0000";
-      G.ctx.fillRect(px + 3*SCALE, py, 10*SCALE, 15*SCALE);
-      G.ctx.globalAlpha = 1;
+      G.ui.ctx.globalAlpha = 0.4;
+      G.ui.ctx.fillStyle = "#ff0000";
+      G.ui.ctx.fillRect(px + 3*SCALE, py, 10*SCALE, 15*SCALE);
+      G.ui.ctx.globalAlpha = 1;
     }
 
-    G.ctx.font = "bold 11px monospace";
-    const tw = G.ctx.measureText(p.name).width;
+    G.ui.ctx.font = "bold 11px monospace";
+    const tw = G.ui.ctx.measureText(p.name).width;
     const labelX = px + TS / 2 - tw / 2;
     const labelY = py - 6;
-    G.ctx.fillStyle = "rgba(0,0,0,0.6)";
-    G.ctx.fillRect(labelX - 3, labelY - 10, tw + 6, 14);
-    G.ctx.fillStyle = "#fff";
-    G.ctx.fillText(p.name, labelX, labelY);
+    G.ui.ctx.fillStyle = "rgba(0,0,0,0.6)";
+    G.ui.ctx.fillRect(labelX - 3, labelY - 10, tw + 6, 14);
+    G.ui.ctx.fillStyle = "#fff";
+    G.ui.ctx.fillText(p.name, labelX, labelY);
   }
 
-  for (const [name, dp] of Object.entries(G.dyingOtherPlayers)) {
+  for (const [name, dp] of Object.entries(G.room.dyingOtherPlayers)) {
     const dpx = dp.x * TS;
     const dpy = dp.y * TS;
-    drawPlayerFallOver(G.ctx, dpx, dpy, dp.color_index, dp.frame, SCALE);
+    drawPlayerFallOver(G.ui.ctx, dpx, dpy, dp.color_index, dp.frame, SCALE);
   }
 }
 
 function renderSpeechBubbles() {
   const now = Date.now();
-  G.speechBubbles = G.speechBubbles.filter(b => now < b.expires);
+  G.room.speechBubbles = G.room.speechBubbles.filter(b => now < b.expires);
 
-  for (const bubble of G.speechBubbles) {
+  for (const bubble of G.room.speechBubbles) {
     let px, py;
-    if (bubble.from === G.myName) {
-      px = G.displayX * TS + TS / 2;
-      py = G.displayY * TS - 16;
-    } else if (G.otherPlayers[bubble.from]) {
-      const p = G.otherPlayers[bubble.from];
+    if (bubble.from === G.player.myName) {
+      px = G.player.displayX * TS + TS / 2;
+      py = G.player.displayY * TS - 16;
+    } else if (G.room.otherPlayers[bubble.from]) {
+      const p = G.room.otherPlayers[bubble.from];
       px = p.displayX * TS + TS / 2;
       py = p.displayY * TS - 16;
     } else {
-      const guard = G.guards.find(g => g.name === bubble.from);
+      const guard = G.room.guards.find(g => g.name === bubble.from);
       if (guard) {
         px = guard.x * TS + TS / 2;
         py = guard.y * TS - 16;
@@ -519,9 +523,9 @@ function renderSpeechBubbles() {
 
     const timeLeft = bubble.expires - now;
     const alpha = timeLeft < 500 ? timeLeft / 500 : 1;
-    G.ctx.globalAlpha = alpha;
+    G.ui.ctx.globalAlpha = alpha;
 
-    G.ctx.font = "11px monospace";
+    G.ui.ctx.font = "11px monospace";
     const maxWidth = 200;
     const maxLines = 3;
     const words = bubble.text.split(" ");
@@ -529,7 +533,7 @@ function renderSpeechBubbles() {
     let line = "";
     for (const word of words) {
       const test = line ? line + " " + word : word;
-      if (G.ctx.measureText(test).width > maxWidth) {
+      if (G.ui.ctx.measureText(test).width > maxWidth) {
         if (line) lines.push(line);
         line = word;
       } else {
@@ -540,10 +544,10 @@ function renderSpeechBubbles() {
     if (lines.length > maxLines) {
       lines.length = maxLines;
       const last = lines[maxLines - 1];
-      if (G.ctx.measureText(last + "...").width > maxWidth) {
+      if (G.ui.ctx.measureText(last + "...").width > maxWidth) {
         // Trim words until "..." fits
         const words2 = last.split(" ");
-        while (words2.length > 1 && G.ctx.measureText(words2.join(" ") + "...").width > maxWidth) words2.pop();
+        while (words2.length > 1 && G.ui.ctx.measureText(words2.join(" ") + "...").width > maxWidth) words2.pop();
         lines[maxLines - 1] = words2.join(" ") + "...";
       } else {
         lines[maxLines - 1] = last + "...";
@@ -552,46 +556,46 @@ function renderSpeechBubbles() {
 
     const lineHeight = 14;
     const pad = 6;
-    const bw = Math.min(maxWidth, Math.max(...lines.map(l => G.ctx.measureText(l).width))) + pad * 2;
+    const bw = Math.min(maxWidth, Math.max(...lines.map(l => G.ui.ctx.measureText(l).width))) + pad * 2;
     const bh = lines.length * lineHeight + pad * 2;
     const bx = px - bw / 2;
     const by = py - bh - 8;
 
-    G.ctx.fillStyle = "rgba(255,255,255,0.95)";
-    G.ctx.beginPath();
-    roundRect(G.ctx, bx, by, bw, bh, 6);
-    G.ctx.fill();
+    G.ui.ctx.fillStyle = "rgba(255,255,255,0.95)";
+    G.ui.ctx.beginPath();
+    roundRect(G.ui.ctx, bx, by, bw, bh, 6);
+    G.ui.ctx.fill();
 
-    G.ctx.beginPath();
-    G.ctx.moveTo(px - 5, by + bh);
-    G.ctx.lineTo(px, by + bh + 6);
-    G.ctx.lineTo(px + 5, by + bh);
-    G.ctx.fill();
+    G.ui.ctx.beginPath();
+    G.ui.ctx.moveTo(px - 5, by + bh);
+    G.ui.ctx.lineTo(px, by + bh + 6);
+    G.ui.ctx.lineTo(px + 5, by + bh);
+    G.ui.ctx.fill();
 
-    G.ctx.strokeStyle = "rgba(0,0,0,0.2)";
-    G.ctx.lineWidth = 1;
-    G.ctx.beginPath();
-    roundRect(G.ctx, bx, by, bw, bh, 6);
-    G.ctx.stroke();
+    G.ui.ctx.strokeStyle = "rgba(0,0,0,0.2)";
+    G.ui.ctx.lineWidth = 1;
+    G.ui.ctx.beginPath();
+    roundRect(G.ui.ctx, bx, by, bw, bh, 6);
+    G.ui.ctx.stroke();
 
-    G.ctx.fillStyle = "#111";
+    G.ui.ctx.fillStyle = "#111";
     for (let i = 0; i < lines.length; i++) {
-      G.ctx.fillText(lines[i], bx + pad, by + pad + 10 + i * lineHeight);
+      G.ui.ctx.fillText(lines[i], bx + pad, by + pad + 10 + i * lineHeight);
     }
 
-    G.ctx.globalAlpha = 1;
+    G.ui.ctx.globalAlpha = 1;
   }
 }
 
 function renderNpcThinking() {
   const now = Date.now();
-  for (const [name, startTime] of Object.entries(G.npcThinking)) {
+  for (const [name, startTime] of Object.entries(G.room.npcThinking)) {
     // Timeout after 60s in case server never clears it
-    if (now - startTime > 60000) { delete G.npcThinking[name]; continue; }
+    if (now - startTime > 60000) { delete G.room.npcThinking[name]; continue; }
     // Don't show thinking bubble if there's already a speech bubble from this NPC
-    if (G.speechBubbles.some(b => b.from === name)) continue;
+    if (G.room.speechBubbles.some(b => b.from === name)) continue;
 
-    const guard = G.guards.find(g => g.name === name);
+    const guard = G.room.guards.find(g => g.name === name);
     if (!guard) continue;
 
     const px = guard.x * TS + TS / 2;
@@ -601,42 +605,42 @@ function renderNpcThinking() {
     const dotCount = (Math.floor((now - startTime) / 500) % 3) + 1;
     const text = ".".repeat(dotCount);
 
-    G.ctx.font = "bold 13px monospace";
+    G.ui.ctx.font = "bold 13px monospace";
     const pad = 6;
-    const bw = G.ctx.measureText("...").width + pad * 2;
+    const bw = G.ui.ctx.measureText("...").width + pad * 2;
     const bh = 14 + pad * 2;
     const bx = px - bw / 2;
     const by = py - bh - 8;
 
     // Bubble background
-    G.ctx.fillStyle = "rgba(255,255,255,0.9)";
-    G.ctx.beginPath();
-    roundRect(G.ctx, bx, by, bw, bh, 6);
-    G.ctx.fill();
+    G.ui.ctx.fillStyle = "rgba(255,255,255,0.9)";
+    G.ui.ctx.beginPath();
+    roundRect(G.ui.ctx, bx, by, bw, bh, 6);
+    G.ui.ctx.fill();
 
     // Tail
-    G.ctx.beginPath();
-    G.ctx.moveTo(px - 5, by + bh);
-    G.ctx.lineTo(px, by + bh + 6);
-    G.ctx.lineTo(px + 5, by + bh);
-    G.ctx.fill();
+    G.ui.ctx.beginPath();
+    G.ui.ctx.moveTo(px - 5, by + bh);
+    G.ui.ctx.lineTo(px, by + bh + 6);
+    G.ui.ctx.lineTo(px + 5, by + bh);
+    G.ui.ctx.fill();
 
     // Border
-    G.ctx.strokeStyle = "rgba(0,0,0,0.2)";
-    G.ctx.lineWidth = 1;
-    G.ctx.beginPath();
-    roundRect(G.ctx, bx, by, bw, bh, 6);
-    G.ctx.stroke();
+    G.ui.ctx.strokeStyle = "rgba(0,0,0,0.2)";
+    G.ui.ctx.lineWidth = 1;
+    G.ui.ctx.beginPath();
+    roundRect(G.ui.ctx, bx, by, bw, bh, 6);
+    G.ui.ctx.stroke();
 
     // Dots
-    G.ctx.fillStyle = "#666";
-    G.ctx.fillText(text, bx + pad, by + pad + 11);
+    G.ui.ctx.fillStyle = "#666";
+    G.ui.ctx.fillText(text, bx + pad, by + pad + 11);
   }
 }
 
 function renderSwordPickups() {
-  for (const sp of G.swordPickups) {
-    drawSwordPickup(G.ctx, sp.x * TS, sp.y * TS, sp.frame, SCALE);
+  for (const sp of G.player.swordPickups) {
+    drawSwordPickup(G.ui.ctx, sp.x * TS, sp.y * TS, sp.frame, SCALE);
   }
 }
 
@@ -653,65 +657,65 @@ function roundRect(ctx, x, y, w, h, r) {
 }
 
 function renderUI() {
-  if (!G.currentRoom) return;
+  if (!G.room.currentRoom) return;
 
-  G.ctx.font = "bold 13px monospace";
-  const name = G.currentRoom.name;
-  const tw = G.ctx.measureText(name).width;
-  G.ctx.fillStyle = "rgba(0,0,0,0.6)";
-  G.ctx.fillRect(8, 8, tw + 16, 22);
-  G.ctx.fillStyle = "#e6b422";
-  G.ctx.fillText(name, 16, 24);
+  G.ui.ctx.font = "bold 13px monospace";
+  const name = G.room.currentRoom.name;
+  const tw = G.ui.ctx.measureText(name).width;
+  G.ui.ctx.fillStyle = "rgba(0,0,0,0.6)";
+  G.ui.ctx.fillRect(8, 8, tw + 16, 22);
+  G.ui.ctx.fillStyle = "#e6b422";
+  G.ui.ctx.fillText(name, 16, 24);
 
   const version = "v0.6";
-  G.ctx.font = "10px monospace";
-  const vw = G.ctx.measureText(version).width;
-  G.ctx.fillStyle = "rgba(255,255,255,0.3)";
-  G.ctx.fillText(version, CW - vw - 10, 20);
+  G.ui.ctx.font = "10px monospace";
+  const vw = G.ui.ctx.measureText(version).width;
+  G.ui.ctx.fillStyle = "rgba(255,255,255,0.3)";
+  G.ui.ctx.fillText(version, CW - vw - 10, 20);
 
   const exits = getExitDirs();
-  G.ctx.font = "bold 20px monospace";
-  G.ctx.fillStyle = "rgba(255,255,255,0.4)";
-  if (exits.has("north")) G.ctx.fillText("\u25B2", CW/2 - 8, 20);
-  if (exits.has("south")) G.ctx.fillText("\u25BC", CW/2 - 8, CH - 6);
-  if (exits.has("west"))  G.ctx.fillText("\u25C0", 4, CH/2 + 6);
-  if (exits.has("east"))  G.ctx.fillText("\u25B6", CW - 18, CH/2 + 6);
+  G.ui.ctx.font = "bold 20px monospace";
+  G.ui.ctx.fillStyle = "rgba(255,255,255,0.4)";
+  if (exits.has("north")) G.ui.ctx.fillText("\u25B2", CW/2 - 8, 20);
+  if (exits.has("south")) G.ui.ctx.fillText("\u25BC", CW/2 - 8, CH - 6);
+  if (exits.has("west"))  G.ui.ctx.fillText("\u25C0", 4, CH/2 + 6);
+  if (exits.has("east"))  G.ui.ctx.fillText("\u25B6", CW - 18, CH/2 + 6);
 
   const now = Date.now();
-  G.infoMessages = G.infoMessages.filter(m => now < m.expires);
-  G.ctx.font = "12px monospace";
-  for (let i = 0; i < G.infoMessages.length; i++) {
-    const msg = G.infoMessages[i];
+  G.ui.infoMessages = G.ui.infoMessages.filter(m => now < m.expires);
+  G.ui.ctx.font = "12px monospace";
+  for (let i = 0; i < G.ui.infoMessages.length; i++) {
+    const msg = G.ui.infoMessages[i];
     const alpha = Math.min(1, (msg.expires - now) / 1000);
-    G.ctx.globalAlpha = alpha;
-    G.ctx.fillStyle = "rgba(0,0,0,0.7)";
-    const mw = G.ctx.measureText(msg.text).width;
-    G.ctx.fillRect(CW/2 - mw/2 - 8, CH - 60 - i*20, mw + 16, 18);
-    G.ctx.fillStyle = "#79c0ff";
-    G.ctx.fillText(msg.text, CW/2 - mw/2, CH - 47 - i*20);
-    G.ctx.globalAlpha = 1;
+    G.ui.ctx.globalAlpha = alpha;
+    G.ui.ctx.fillStyle = "rgba(0,0,0,0.7)";
+    const mw = G.ui.ctx.measureText(msg.text).width;
+    G.ui.ctx.fillRect(CW/2 - mw/2 - 8, CH - 60 - i*20, mw + 16, 18);
+    G.ui.ctx.fillStyle = "#79c0ff";
+    G.ui.ctx.fillText(msg.text, CW/2 - mw/2, CH - 47 - i*20);
+    G.ui.ctx.globalAlpha = 1;
   }
 
 }
 
 function renderCollisionDebug() {
-  if (!G.debugCollision) return;
-  const ctx = G.ctx;
+  if (!G.debug.debugCollision) return;
+  const ctx = G.ui.ctx;
 
   // Draw player AABB (bottom-half hitbox: y+0.5 to y+1)
-  if (G.myPlayer) {
+  if (G.player.myPlayer) {
     ctx.strokeStyle = "lime";
     ctx.lineWidth = 2;
-    ctx.strokeRect(G.preciseX * TS, (G.preciseY + 0.5) * TS, TS, 0.5 * TS);
+    ctx.strokeRect(G.player.preciseX * TS, (G.player.preciseY + 0.5) * TS, TS, 0.5 * TS);
     // Full tile outline (dimmer)
     ctx.strokeStyle = "rgba(0,255,0,0.3)";
-    ctx.strokeRect(G.preciseX * TS, G.preciseY * TS, TS, TS);
+    ctx.strokeRect(G.player.preciseX * TS, G.player.preciseY * TS, TS, TS);
   }
 
   // Draw monster AABBs
   ctx.strokeStyle = "red";
   ctx.lineWidth = 2;
-  for (const m of G.monsters) {
+  for (const m of G.room.monsters) {
     const w = m.width || 1;
     const h = m.height || 1;
     ctx.strokeRect(m.displayX * TS, m.displayY * TS, w * TS, h * TS);
@@ -719,8 +723,8 @@ function renderCollisionDebug() {
 
   // Draw hit ghosts (fade out over 5 seconds)
   const now = Date.now();
-  G.debugGhosts = G.debugGhosts.filter(g => now - g.time < 5000);
-  for (const g of G.debugGhosts) {
+  G.debug.debugGhosts = G.debug.debugGhosts.filter(g => now - g.time < 5000);
+  for (const g of G.debug.debugGhosts) {
     const alpha = 1 - (now - g.time) / 5000;
     // Player ghost box (pre-knockback)
     ctx.strokeStyle = `rgba(0,255,255,${alpha})`;
@@ -770,9 +774,9 @@ function renderCollisionDebug() {
 }
 
 function renderServerDebug() {
-  if (!G.viewServer || !G.serverState) return;
-  const ctx = G.ctx;
-  const s = G.serverState;
+  if (!G.debug.viewServer || !G.debug.serverState) return;
+  const ctx = G.ui.ctx;
+  const s = G.debug.serverState;
   ctx.globalAlpha = 0.45;
 
   // Players — red
@@ -822,7 +826,7 @@ function renderHeartsHUD() {
   const heartScale = SCALE * 0.45;
   const heartW = 12 * heartScale + 2;
   const heartH = 11 * heartScale + 2;
-  const totalHearts = Math.ceil(G.myMaxHp / 2);
+  const totalHearts = Math.ceil(G.player.myMaxHp / 2);
   const maxPerRow = 10;
   const rows = Math.ceil(totalHearts / maxPerRow);
   for (let i = 0; i < totalHearts; i++) {
@@ -831,17 +835,17 @@ function renderHeartsHUD() {
     const heartsInRow = Math.min(maxPerRow, totalHearts - row * maxPerRow);
     const x = CW - heartsInRow * heartW - 14 + col * heartW;
     const y = 8 + row * heartH;
-    const hpForHeart = G.myHp - i * 2;
+    const hpForHeart = G.player.myHp - i * 2;
     let state = "empty";
     if (hpForHeart >= 2) state = "full";
     else if (hpForHeart === 1) state = "half";
-    drawHeart(G.ctx, x, y, state, heartScale);
+    drawHeart(G.ui.ctx, x, y, state, heartScale);
   }
 }
 
 function renderKeyHUD() {
-  if (!G.dungeonState || G.keyCount <= 0) return;
-  const ctx = G.ctx;
+  if (!G.room.dungeonState || G.player.keyCount <= 0) return;
+  const ctx = G.ui.ctx;
   const x = 8, y = 34;
   // Background
   ctx.fillStyle = "rgba(0,0,0,0.55)";
@@ -859,12 +863,12 @@ function renderKeyHUD() {
   // Count text
   ctx.font = "bold 12px monospace";
   ctx.fillStyle = "#e6b422";
-  ctx.fillText("x" + G.keyCount, x + 26, y + 15);
+  ctx.fillText("x" + G.player.keyCount, x + 26, y + 15);
 }
 
 function getExitDirs() {
-  if (!G.currentRoom || !G.currentRoom.room_id) return new Set();
-  const tm = G.currentRoom.tilemap;
+  if (!G.room.currentRoom || !G.room.currentRoom.room_id) return new Set();
+  const tm = G.room.currentRoom.tilemap;
   const dirs = new Set();
   const w = (t) => WALKABLE.has(t);
   if (w(tm[0][6]) || w(tm[0][7]) || w(tm[0][8])) dirs.add("north");
@@ -875,47 +879,47 @@ function getExitDirs() {
 }
 
 function renderTransition(now) {
-  if (!G.transition) return;
-  const elapsed = now - G.transition.startTime;
-  const progress = Math.min(1, elapsed / G.transition.duration);
+  if (!G.ui.transition) return;
+  const elapsed = now - G.ui.transition.startTime;
+  const progress = Math.min(1, elapsed / G.ui.transition.duration);
 
-  if (G.transition.type === "fade") {
+  if (G.ui.transition.type === "fade") {
     if (progress < 0.5) {
-      G.ctx.drawImage(G.transition.oldCanvas, 0, 0);
-      G.ctx.fillStyle = `rgba(0,0,0,${progress * 2})`;
-      G.ctx.fillRect(0, 0, CW, CH);
+      G.ui.ctx.drawImage(G.ui.transition.oldCanvas, 0, 0);
+      G.ui.ctx.fillStyle = `rgba(0,0,0,${progress * 2})`;
+      G.ui.ctx.fillRect(0, 0, CW, CH);
     } else {
       renderRoom();
       renderBrightTiles();
       renderPlayers();
       renderUI();
-      G.ctx.fillStyle = `rgba(0,0,0,${(1 - progress) * 2})`;
-      G.ctx.fillRect(0, 0, CW, CH);
+      G.ui.ctx.fillStyle = `rgba(0,0,0,${(1 - progress) * 2})`;
+      G.ui.ctx.fillRect(0, 0, CW, CH);
     }
   } else {
-    const dir = G.transition.direction;
+    const dir = G.ui.transition.direction;
     let ox = 0, oy = 0;
     if (dir === "north") oy =  CH * progress;
     if (dir === "south") oy = -CH * progress;
     if (dir === "west")  ox =  CW * progress;
     if (dir === "east")  ox = -CW * progress;
 
-    G.ctx.save();
-    if (dir === "north") G.ctx.translate(0, oy - CH);
-    if (dir === "south") G.ctx.translate(0, oy + CH);
-    if (dir === "west")  G.ctx.translate(ox - CW, 0);
-    if (dir === "east")  G.ctx.translate(ox + CW, 0);
+    G.ui.ctx.save();
+    if (dir === "north") G.ui.ctx.translate(0, oy - CH);
+    if (dir === "south") G.ui.ctx.translate(0, oy + CH);
+    if (dir === "west")  G.ui.ctx.translate(ox - CW, 0);
+    if (dir === "east")  G.ui.ctx.translate(ox + CW, 0);
     renderRoom();
     renderBrightTiles();
     renderPlayers();
     renderUI();
-    G.ctx.restore();
+    G.ui.ctx.restore();
 
-    G.ctx.drawImage(G.transition.oldCanvas, ox, oy);
+    G.ui.ctx.drawImage(G.ui.transition.oldCanvas, ox, oy);
   }
 
   if (progress >= 1) {
-    G.transition = null;
+    G.ui.transition = null;
   }
 }
 
@@ -928,22 +932,22 @@ const CONJURE_TEXTS = [
 ];
 
 function renderConjuring(now) {
-  if (!G.conjuring) return false;
-  const elapsed = now - G.conjuring.startTime;
+  if (!G.ui.conjuring) return false;
+  const elapsed = now - G.ui.conjuring.startTime;
   const t = elapsed / 1000; // seconds
 
   // Fade from previous room into the conjuring screen over 500ms
   const FADE_IN_MS = 500;
-  if (elapsed < FADE_IN_MS && G.conjuring.oldCanvas) {
-    G.ctx.drawImage(G.conjuring.oldCanvas, 0, 0);
-    G.ctx.fillStyle = `rgba(10, 10, 18, ${elapsed / FADE_IN_MS})`;
-    G.ctx.fillRect(0, 0, CW, CH);
+  if (elapsed < FADE_IN_MS && G.ui.conjuring.oldCanvas) {
+    G.ui.ctx.drawImage(G.ui.conjuring.oldCanvas, 0, 0);
+    G.ui.ctx.fillStyle = `rgba(10, 10, 18, ${elapsed / FADE_IN_MS})`;
+    G.ui.ctx.fillRect(0, 0, CW, CH);
     return true;
   }
 
   // Dark background
-  G.ctx.fillStyle = "#0a0a12";
-  G.ctx.fillRect(0, 0, CW, CH);
+  G.ui.ctx.fillStyle = "#0a0a12";
+  G.ui.ctx.fillRect(0, 0, CW, CH);
 
   // Flickering torchlight — two torch sources
   const torches = [
@@ -953,54 +957,54 @@ function renderConjuring(now) {
   for (const torch of torches) {
     const flicker = 0.3 + 0.15 * Math.sin(t * 8.3) + 0.1 * Math.sin(t * 13.7);
     const r = 80 + 30 * Math.sin(t * 5.1);
-    const grad = G.ctx.createRadialGradient(torch.x, torch.y, 0, torch.x, torch.y, r);
+    const grad = G.ui.ctx.createRadialGradient(torch.x, torch.y, 0, torch.x, torch.y, r);
     grad.addColorStop(0, `rgba(255, 170, 50, ${flicker * 0.4})`);
     grad.addColorStop(0.6, `rgba(200, 100, 20, ${flicker * 0.15})`);
     grad.addColorStop(1, "rgba(0, 0, 0, 0)");
-    G.ctx.fillStyle = grad;
-    G.ctx.fillRect(0, 0, CW, CH);
+    G.ui.ctx.fillStyle = grad;
+    G.ui.ctx.fillRect(0, 0, CW, CH);
 
     // Torch flame
     const fw = 6 + 2 * Math.sin(t * 9);
     const fh = 12 + 4 * Math.sin(t * 7);
-    G.ctx.fillStyle = `rgba(255, 200, 60, ${0.6 + 0.3 * Math.sin(t * 11)})`;
-    G.ctx.fillRect(torch.x - fw/2, torch.y - fh, fw, fh);
-    G.ctx.fillStyle = `rgba(255, 100, 20, ${0.4 + 0.2 * Math.sin(t * 8)})`;
-    G.ctx.fillRect(torch.x - fw/2 - 1, torch.y - fh * 0.6, fw + 2, fh * 0.6);
+    G.ui.ctx.fillStyle = `rgba(255, 200, 60, ${0.6 + 0.3 * Math.sin(t * 11)})`;
+    G.ui.ctx.fillRect(torch.x - fw/2, torch.y - fh, fw, fh);
+    G.ui.ctx.fillStyle = `rgba(255, 100, 20, ${0.4 + 0.2 * Math.sin(t * 8)})`;
+    G.ui.ctx.fillRect(torch.x - fw/2 - 1, torch.y - fh * 0.6, fw + 2, fh * 0.6);
   }
 
   // Drifting particles
-  const seed = G.conjuring.startTime;
+  const seed = G.ui.conjuring.startTime;
   for (let i = 0; i < 12; i++) {
     const px = ((seed * 7 + i * 137) % CW);
     const py = CH - ((t * 30 + i * 50) % CH);
     const alpha = 0.2 + 0.3 * Math.sin(t * 2 + i);
     const size = 1 + (i % 3);
-    G.ctx.fillStyle = `rgba(180, 160, 120, ${alpha})`;
-    G.ctx.fillRect(px + Math.sin(t * 1.5 + i * 0.7) * 10, py, size, size);
+    G.ui.ctx.fillStyle = `rgba(180, 160, 120, ${alpha})`;
+    G.ui.ctx.fillRect(px + Math.sin(t * 1.5 + i * 0.7) * 10, py, size, size);
   }
 
   // Atmospheric text
   const textIdx = Math.floor(t / 2) % CONJURE_TEXTS.length;
   const textAlpha = 0.5 + 0.3 * Math.sin(t * 2);
-  G.ctx.font = "18px monospace";
-  G.ctx.fillStyle = `rgba(180, 170, 140, ${textAlpha})`;
-  G.ctx.textAlign = "center";
-  G.ctx.fillText(CONJURE_TEXTS[textIdx], CW / 2, CH * 0.65);
+  G.ui.ctx.font = "18px monospace";
+  G.ui.ctx.fillStyle = `rgba(180, 170, 140, ${textAlpha})`;
+  G.ui.ctx.textAlign = "center";
+  G.ui.ctx.fillText(CONJURE_TEXTS[textIdx], CW / 2, CH * 0.65);
 
   // Debug progress steps (sent when DEBUG_MODE is on)
-  const steps = G.conjuring.progressSteps;
+  const steps = G.ui.conjuring.progressSteps;
   if (steps && steps.length > 0) {
     // Backend/model header (from "init" step) — persistent dim text
     const initStep = steps.find(s => s.step === "init");
     if (initStep) {
-      G.ctx.font = "10px monospace";
-      G.ctx.fillStyle = "rgba(120, 120, 100, 0.5)";
-      G.ctx.fillText(initStep.detail, CW / 2, CH * 0.73);
+      G.ui.ctx.font = "10px monospace";
+      G.ui.ctx.fillStyle = "rgba(120, 120, 100, 0.5)";
+      G.ui.ctx.fillText(initStep.detail, CW / 2, CH * 0.73);
     }
 
     // Generation steps (skip "init")
-    G.ctx.font = "12px monospace";
+    G.ui.ctx.font = "12px monospace";
     const work = steps.filter(s => s.step !== "init");
     const visible = work.slice(-5);
     for (let i = 0; i < visible.length; i++) {
@@ -1010,22 +1014,22 @@ function renderConjuring(now) {
       // Latest step pulses, older steps are dim
       const a = isLatest ? 0.5 + 0.3 * Math.sin(t * 3) : Math.max(0.15, 0.4 - age * 0.03);
       const prefix = isLatest ? "> " : "  ";
-      G.ctx.fillStyle = isLatest
+      G.ui.ctx.fillStyle = isLatest
         ? `rgba(120, 220, 160, ${a})`
         : `rgba(140, 140, 120, ${a})`;
-      G.ctx.fillText(prefix + s.detail, CW / 2, CH * 0.77 + i * 16);
+      G.ui.ctx.fillText(prefix + s.detail, CW / 2, CH * 0.77 + i * 16);
     }
   }
 
-  G.ctx.textAlign = "start";
+  G.ui.ctx.textAlign = "start";
 
   return true; // signal that conjuring is active
 }
 
 function renderDungeonDebug() {
-  if (!G.showDebug) return;
-  const d = G.dungeonDebug;
-  const hasLog = G.debugLog.length > 0;
+  if (!G.debug.showDebug) return;
+  const d = G.debug.dungeonDebug;
+  const hasLog = G.debug.debugLog.length > 0;
   const lines = [];
   if (d) {
     if (d.room_source) lines.push("src: " + d.room_source);
@@ -1035,35 +1039,35 @@ function renderDungeonDebug() {
   }
   if (lines.length === 0 && !hasLog) return;
 
-  G.ctx.font = "9px monospace";
+  G.ui.ctx.font = "9px monospace";
   const lineH = 12;
   const padding = 4;
   const boxW = 200;
 
   // Dungeon info lines + separator + debugLog lines
-  const logLines = hasLog ? G.debugLog : [];
+  const logLines = hasLog ? G.debug.debugLog : [];
   const totalLines = lines.length + (lines.length > 0 && hasLog ? 1 : 0) + logLines.length;
   const boxH = totalLines * lineH + padding * 2;
   const boxX = CW - boxW - 4;
   const boxY = 24;
 
-  G.ctx.fillStyle = "rgba(0,0,0,0.75)";
-  G.ctx.fillRect(boxX, boxY, boxW, boxH);
-  G.ctx.fillStyle = "#8af";
+  G.ui.ctx.fillStyle = "rgba(0,0,0,0.75)";
+  G.ui.ctx.fillRect(boxX, boxY, boxW, boxH);
+  G.ui.ctx.fillStyle = "#8af";
   let row = 0;
   for (let i = 0; i < lines.length; i++, row++) {
-    G.ctx.fillText(lines[i], boxX + padding, boxY + padding + (row + 1) * lineH - 2);
+    G.ui.ctx.fillText(lines[i], boxX + padding, boxY + padding + (row + 1) * lineH - 2);
   }
   if (lines.length > 0 && hasLog) {
     // Dim separator line
-    G.ctx.fillStyle = "rgba(255,255,255,0.15)";
+    G.ui.ctx.fillStyle = "rgba(255,255,255,0.15)";
     const sepY = boxY + padding + row * lineH + 2;
-    G.ctx.fillRect(boxX + padding, sepY, boxW - padding * 2, 1);
+    G.ui.ctx.fillRect(boxX + padding, sepY, boxW - padding * 2, 1);
     row++;
   }
-  G.ctx.fillStyle = "#0f0";
+  G.ui.ctx.fillStyle = "#0f0";
   for (let i = 0; i < logLines.length; i++, row++) {
-    G.ctx.fillText(logLines[i], boxX + padding, boxY + padding + (row + 1) * lineH - 2);
+    G.ui.ctx.fillText(logLines[i], boxX + padding, boxY + padding + (row + 1) * lineH - 2);
   }
 
   // Library icons with actual sprites/tiles (just below the room name)
@@ -1086,72 +1090,72 @@ function renderDungeonDebug() {
     function drawIconGrid(items, emptyCount, label, drawIcon) {
       const total = items.length + emptyCount;
       if (total === 0) return;
-      G.ctx.font = "8px monospace";
-      G.ctx.fillStyle = "rgba(180, 180, 160, 0.7)";
-      G.ctx.fillText(label, lx, nextY);
+      G.ui.ctx.font = "8px monospace";
+      G.ui.ctx.fillStyle = "rgba(180, 180, 160, 0.7)";
+      G.ui.ctx.fillText(label, lx, nextY);
       nextY += 3;
       let idx = 0;
       for (let i = 0; i < items.length; i++, idx++) {
         const col = idx % perRow, row = Math.floor(idx / perRow);
         const ix = lx + (iconS + iconG) * col;
         const iy = nextY + (iconS + iconG) * row;
-        G.ctx.fillStyle = "#0a0a12";
-        G.ctx.fillRect(ix, iy, iconS, iconS);
+        G.ui.ctx.fillStyle = "#0a0a12";
+        G.ui.ctx.fillRect(ix, iy, iconS, iconS);
         drawIcon(items[i], ix, iy);
-        G.ctx.strokeStyle = statusBorder[items[i].s] || "#888";
-        G.ctx.lineWidth = 1.5;
-        G.ctx.strokeRect(ix + 0.5, iy + 0.5, iconS - 1, iconS - 1);
+        G.ui.ctx.strokeStyle = statusBorder[items[i].s] || "#888";
+        G.ui.ctx.lineWidth = 1.5;
+        G.ui.ctx.strokeRect(ix + 0.5, iy + 0.5, iconS - 1, iconS - 1);
       }
       for (let i = 0; i < emptyCount; i++, idx++) {
         const col = idx % perRow, row = Math.floor(idx / perRow);
         const ix = lx + (iconS + iconG) * col;
         const iy = nextY + (iconS + iconG) * row;
-        G.ctx.fillStyle = "#0a0a12";
-        G.ctx.fillRect(ix, iy, iconS, iconS);
-        G.ctx.strokeStyle = "#333";
-        G.ctx.lineWidth = 1;
-        G.ctx.setLineDash([2, 2]);
-        G.ctx.strokeRect(ix + 0.5, iy + 0.5, iconS - 1, iconS - 1);
-        G.ctx.setLineDash([]);
+        G.ui.ctx.fillStyle = "#0a0a12";
+        G.ui.ctx.fillRect(ix, iy, iconS, iconS);
+        G.ui.ctx.strokeStyle = "#333";
+        G.ui.ctx.lineWidth = 1;
+        G.ui.ctx.setLineDash([2, 2]);
+        G.ui.ctx.strokeRect(ix + 0.5, iy + 0.5, iconS - 1, iconS - 1);
+        G.ui.ctx.setLineDash([]);
       }
-      G.ctx.lineWidth = 1;
+      G.ui.ctx.lineWidth = 1;
       const rows = Math.ceil((items.length + emptyCount) / perRow);
       nextY += rows * (iconS + iconG) + rowG - iconG;
     }
 
     // Monster icons
     drawIconGrid(libs.monsters || [], libs.monster_empty || 0, "monsters", (m, ix, iy) => {
-      drawMonsterSprite(G.ctx, ix, iy, m.id, 0, 1);
+      drawMonsterSprite(G.ui.ctx, ix, iy, m.id, 0, 1);
     });
 
     // Tile icons
     drawIconGrid(libs.tiles || [], libs.tile_empty || 0, "tiles", (ti, ix, iy) => {
       const tc = getTileCanvas(ti.id, TS, TILE, SCALE);
       if (tc) {
-        G.ctx.imageSmoothingEnabled = false;
-        G.ctx.drawImage(tc, 0, 0, tc.width, tc.height, ix, iy, iconS, iconS);
-        G.ctx.imageSmoothingEnabled = true;
+        G.ui.ctx.imageSmoothingEnabled = false;
+        G.ui.ctx.drawImage(tc, 0, 0, tc.width, tc.height, ix, iy, iconS, iconS);
+        G.ui.ctx.imageSmoothingEnabled = true;
       } else {
-        G.ctx.fillStyle = ti.color;
-        G.ctx.fillRect(ix, iy, iconS, iconS);
+        G.ui.ctx.fillStyle = ti.color;
+        G.ui.ctx.fillRect(ix, iy, iconS, iconS);
       }
     });
   }
 }
 
 function renderBossDeathEffect() {
-  if (!G.bossDeathEffect) return;
-  const elapsed = Date.now() - G.bossDeathEffect.startTime;
-  if (elapsed > G.bossDeathEffect.duration) {
-    G.bossDeathEffect = null;
+  if (!G.fx.bossDeathEffect) return;
+  const elapsed = Date.now() - G.fx.bossDeathEffect.startTime;
+  if (elapsed > G.fx.bossDeathEffect.duration) {
+    G.fx.bossDeathEffect = null;
     return;
   }
 
   // Phase 1 (0-400ms): bright white flash
   if (elapsed < 400) {
     const flashAlpha = Math.max(0, 0.7 * (1 - elapsed / 400));
-    G.ctx.fillStyle = `rgba(255, 255, 255, ${flashAlpha})`;
-    G.ctx.fillRect(0, 0, CW, CH);
+    G.ui.ctx.fillStyle = `rgba(255, 255, 255, ${flashAlpha})`;
+    G.ui.ctx.fillRect(0, 0, CW, CH);
   }
 
   // Phase 2: screen shake now handled by triggerShake() in net.js monster_killed handler
@@ -1168,22 +1172,22 @@ function renderBossDeathEffect() {
       const alpha = Math.max(0, 1 - t);
       const size = (3 - (i % 3)) * SCALE;
       const colors = ["#ff6644", "#cc33ff", "#ffcc33", "#ff2200"];
-      G.ctx.fillStyle = colors[i % colors.length];
-      G.ctx.globalAlpha = alpha * 0.8;
-      G.ctx.fillRect(px - size / 2, py - size / 2, size, size);
+      G.ui.ctx.fillStyle = colors[i % colors.length];
+      G.ui.ctx.globalAlpha = alpha * 0.8;
+      G.ui.ctx.fillRect(px - size / 2, py - size / 2, size, size);
     }
-    G.ctx.globalAlpha = 1;
+    G.ui.ctx.globalAlpha = 1;
   }
 }
 
 function renderDungeonMinimap() {
-  const mm = G.dungeonDebug && G.dungeonDebug.minimap;
+  const mm = G.debug.dungeonDebug && G.debug.dungeonDebug.minimap;
   if (!mm || !mm.cells || mm.cells.length === 0) return;
 
-  const ds = G.dungeonState;
+  const ds = G.room.dungeonState;
   const hasMap = ds && ds.collected.has("map");
   const hasCompass = ds && ds.collected.has("compass");
-  const isDebug = G.showDebug;
+  const isDebug = G.debug.showDebug;
 
   // In non-debug mode, minimap shows when map or compass is collected
   if (!isDebug && !hasMap && !hasCompass) return;
@@ -1214,10 +1218,10 @@ function renderDungeonMinimap() {
   const mapY = CH - mapH - 6;
 
   // Semi-transparent background
-  G.ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
-  G.ctx.beginPath();
-  roundRect(G.ctx, mapX, mapY, mapW, mapH, 4);
-  G.ctx.fill();
+  G.ui.ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+  G.ui.ctx.beginPath();
+  roundRect(G.ui.ctx, mapX, mapY, mapW, mapH, 4);
+  G.ui.ctx.fill();
 
   // Helper: get center of a cell on the minimap
   const cellCenter = (c, r) => ({
@@ -1227,24 +1231,24 @@ function renderDungeonMinimap() {
 
   // Draw connections between cells (debug only)
   if (isDebug) {
-    G.ctx.strokeStyle = "rgba(160, 160, 160, 0.5)";
-    G.ctx.lineWidth = 2;
+    G.ui.ctx.strokeStyle = "rgba(160, 160, 160, 0.5)";
+    G.ui.ctx.lineWidth = 2;
     for (const conn of conns) {
       const a = cellCenter(conn[0], conn[1]);
       const b = cellCenter(conn[2], conn[3]);
-      G.ctx.beginPath();
-      G.ctx.moveTo(a.x, a.y);
-      G.ctx.lineTo(b.x, b.y);
-      G.ctx.stroke();
+      G.ui.ctx.beginPath();
+      G.ui.ctx.moveTo(a.x, a.y);
+      G.ui.ctx.lineTo(b.x, b.y);
+      G.ui.ctx.stroke();
     }
-    G.ctx.lineWidth = 1;
+    G.ui.ctx.lineWidth = 1;
   }
 
   // Draw locked door indicators (red bars between cells)
   const lockedEdges = (ds && ds.lockedEdges) || [];
   if ((hasMap || isDebug) && lockedEdges.length > 0) {
-    G.ctx.strokeStyle = "#cc3333";
-    G.ctx.lineWidth = 3;
+    G.ui.ctx.strokeStyle = "#cc3333";
+    G.ui.ctx.lineWidth = 3;
     for (const edge of lockedEdges) {
       // edge = [[c1,r1], [c2,r2]]
       const a = cellCenter(edge[0][0], edge[0][1]);
@@ -1255,19 +1259,19 @@ function renderDungeonMinimap() {
       const len = 4;
       if (Math.abs(dx) > Math.abs(dy)) {
         // Horizontal connection — vertical bar
-        G.ctx.beginPath();
-        G.ctx.moveTo(mx, my - len);
-        G.ctx.lineTo(mx, my + len);
-        G.ctx.stroke();
+        G.ui.ctx.beginPath();
+        G.ui.ctx.moveTo(mx, my - len);
+        G.ui.ctx.lineTo(mx, my + len);
+        G.ui.ctx.stroke();
       } else {
         // Vertical connection — horizontal bar
-        G.ctx.beginPath();
-        G.ctx.moveTo(mx - len, my);
-        G.ctx.lineTo(mx + len, my);
-        G.ctx.stroke();
+        G.ui.ctx.beginPath();
+        G.ui.ctx.moveTo(mx - len, my);
+        G.ui.ctx.lineTo(mx + len, my);
+        G.ui.ctx.stroke();
       }
     }
-    G.ctx.lineWidth = 1;
+    G.ui.ctx.lineWidth = 1;
   }
 
   // Compass-only: fill entire bounding box so layout is hidden
@@ -1276,8 +1280,8 @@ function renderDungeonMinimap() {
       for (let c = minC; c <= maxC; c++) {
         const cx = mapX + pad + (c - minC) * step;
         const cy = mapY + pad + (r - minR) * step;
-        G.ctx.fillStyle = "rgba(30, 35, 50, 0.45)";
-        G.ctx.fillRect(cx, cy, cellSize, cellSize);
+        G.ui.ctx.fillStyle = "rgba(30, 35, 50, 0.45)";
+        G.ui.ctx.fillRect(cx, cy, cellSize, cellSize);
       }
     }
   }
@@ -1306,24 +1310,24 @@ function renderDungeonMinimap() {
       const cy = mapY + pad + (cell.r - minR) * step;
       const zone = cellZone[cell.c + "," + cell.r];
       if (zone) {
-        G.ctx.fillStyle = zoneColors[zone.zone_id % zoneColors.length];
-        G.ctx.fillRect(cx, cy, cellSize, cellSize);
+        G.ui.ctx.fillStyle = zoneColors[zone.zone_id % zoneColors.length];
+        G.ui.ctx.fillRect(cx, cy, cellSize, cellSize);
       }
     }
     // Draw key count on the first cell of each zone
-    G.ctx.font = "bold 8px monospace";
-    G.ctx.textAlign = "center";
-    G.ctx.textBaseline = "middle";
+    G.ui.ctx.font = "bold 8px monospace";
+    G.ui.ctx.textAlign = "center";
+    G.ui.ctx.textBaseline = "middle";
     for (const zone of keyLayout) {
       if (zone.cells.length === 0) continue;
       const [fc, fr] = zone.cells[0];
       const cx = mapX + pad + (fc - minC) * step + cellSize / 2;
       const cy = mapY + pad + (fr - minR) * step + cellSize / 2;
-      G.ctx.fillStyle = "#fff";
-      G.ctx.fillText(String(zone.keys), cx, cy);
+      G.ui.ctx.fillStyle = "#fff";
+      G.ui.ctx.fillText(String(zone.keys), cx, cy);
     }
-    G.ctx.textAlign = "start";
-    G.ctx.textBaseline = "alphabetic";
+    G.ui.ctx.textAlign = "start";
+    G.ui.ctx.textBaseline = "alphabetic";
   }
 
   // Draw each cell
@@ -1336,47 +1340,47 @@ function renderDungeonMinimap() {
     } else if (isDebug) {
       // Debug mode — color by room type and state
       if (cell.boss) {
-        G.ctx.fillStyle = cell.res ? "rgba(220, 60, 60, 0.8)" : "rgba(220, 60, 60, 0.3)";
-        G.ctx.fillRect(cx, cy, cellSize, cellSize);
+        G.ui.ctx.fillStyle = cell.res ? "rgba(220, 60, 60, 0.8)" : "rgba(220, 60, 60, 0.3)";
+        G.ui.ctx.fillRect(cx, cy, cellSize, cellSize);
       } else if (cell.treasure) {
-        G.ctx.fillStyle = cell.res ? "rgba(255, 200, 40, 0.8)" : "rgba(255, 200, 40, 0.3)";
-        G.ctx.fillRect(cx, cy, cellSize, cellSize);
+        G.ui.ctx.fillStyle = cell.res ? "rgba(255, 200, 40, 0.8)" : "rgba(255, 200, 40, 0.3)";
+        G.ui.ctx.fillRect(cx, cy, cellSize, cellSize);
       } else if (!cell.res && !cell.gen) {
-        G.ctx.strokeStyle = "rgba(100, 100, 100, 0.6)";
-        G.ctx.setLineDash([2, 2]);
-        G.ctx.strokeRect(cx + 0.5, cy + 0.5, cellSize - 1, cellSize - 1);
-        G.ctx.setLineDash([]);
+        G.ui.ctx.strokeStyle = "rgba(100, 100, 100, 0.6)";
+        G.ui.ctx.setLineDash([2, 2]);
+        G.ui.ctx.strokeRect(cx + 0.5, cy + 0.5, cellSize - 1, cellSize - 1);
+        G.ui.ctx.setLineDash([]);
       } else if (!cell.res) {
-        G.ctx.strokeStyle = "rgba(140, 140, 100, 0.7)";
-        G.ctx.strokeRect(cx + 0.5, cy + 0.5, cellSize - 1, cellSize - 1);
+        G.ui.ctx.strokeStyle = "rgba(140, 140, 100, 0.7)";
+        G.ui.ctx.strokeRect(cx + 0.5, cy + 0.5, cellSize - 1, cellSize - 1);
       } else if (cell.src === "precreated") {
-        G.ctx.fillStyle = "rgba(80, 140, 220, 0.7)";
-        G.ctx.fillRect(cx, cy, cellSize, cellSize);
+        G.ui.ctx.fillStyle = "rgba(80, 140, 220, 0.7)";
+        G.ui.ctx.fillRect(cx, cy, cellSize, cellSize);
       } else {
-        G.ctx.fillStyle = "rgba(80, 200, 120, 0.7)";
-        G.ctx.fillRect(cx, cy, cellSize, cellSize);
+        G.ui.ctx.fillStyle = "rgba(80, 200, 120, 0.7)";
+        G.ui.ctx.fillRect(cx, cy, cellSize, cellSize);
       }
     } else if (hasMap) {
       // Map — reveals which cells are actual rooms
-      G.ctx.fillStyle = "rgba(100, 120, 160, 0.65)";
-      G.ctx.fillRect(cx, cy, cellSize, cellSize);
+      G.ui.ctx.fillStyle = "rgba(100, 120, 160, 0.65)";
+      G.ui.ctx.fillRect(cx, cy, cellSize, cellSize);
     }
     // Compass-only: cells already drawn as full grid above
 
     // Entrance marker (map only, non-debug)
     if (cell.ent && (isDebug || hasMap)) {
-      G.ctx.fillStyle = "rgba(80, 220, 80, 0.9)";
+      G.ui.ctx.fillStyle = "rgba(80, 220, 80, 0.9)";
       const mx = cx + cellSize / 2, my = cy + cellSize / 2;
-      G.ctx.beginPath();
-      G.ctx.arc(mx, my, 2, 0, Math.PI * 2);
-      G.ctx.fill();
+      G.ui.ctx.beginPath();
+      G.ui.ctx.arc(mx, my, 2, 0, Math.PI * 2);
+      G.ui.ctx.fill();
     }
 
     // Boss room marker (compass collected, non-debug only)
     if (!isDebug && hasCompass && ds.bossCell &&
         cell.c === ds.bossCell[0] && cell.r === ds.bossCell[1]) {
-      G.ctx.fillStyle = "rgba(220, 40, 40, 0.9)";
-      G.ctx.fillRect(cx + 3, cy + 3, cellSize - 6, cellSize - 6);
+      G.ui.ctx.fillStyle = "rgba(220, 40, 40, 0.9)";
+      G.ui.ctx.fillRect(cx + 3, cy + 3, cellSize - 6, cellSize - 6);
     }
   }
 
@@ -1389,10 +1393,10 @@ function renderDungeonMinimap() {
         const opx = mapX + pad + (op.c - minC) * step + cellSize / 2;
         const opy = mapY + pad + (op.r - minR) * step + cellSize / 2;
         const color = SHIRT_COLORS[op.color_index % SHIRT_COLORS.length];
-        G.ctx.fillStyle = color;
-        G.ctx.beginPath();
-        G.ctx.arc(opx, opy, 2, 0, Math.PI * 2);
-        G.ctx.fill();
+        G.ui.ctx.fillStyle = color;
+        G.ui.ctx.beginPath();
+        G.ui.ctx.arc(opx, opy, 2, 0, Math.PI * 2);
+        G.ui.ctx.fill();
       }
     }
   }
@@ -1405,19 +1409,19 @@ function renderDungeonMinimap() {
       // Compass/debug: blinking yellow dot showing current room
       const blink = Math.sin(Date.now() / 200) > 0;
       if (blink) {
-        G.ctx.fillStyle = "rgba(255, 230, 50, 0.9)";
+        G.ui.ctx.fillStyle = "rgba(255, 230, 50, 0.9)";
         const mx = px + cellSize / 2, my = py + cellSize / 2;
-        G.ctx.beginPath();
-        G.ctx.arc(mx, my, 2.5, 0, Math.PI * 2);
-        G.ctx.fill();
+        G.ui.ctx.beginPath();
+        G.ui.ctx.arc(mx, my, 2.5, 0, Math.PI * 2);
+        G.ui.ctx.fill();
       }
     }
   }
 
   // Layout name (debug only)
   if (isDebug && mm.layout) {
-    G.ctx.font = "7px monospace";
-    G.ctx.fillStyle = "rgba(180, 180, 180, 0.6)";
-    G.ctx.fillText(mm.layout, mapX + pad, mapY + mapH + 8);
+    G.ui.ctx.font = "7px monospace";
+    G.ui.ctx.fillStyle = "rgba(180, 180, 180, 0.6)";
+    G.ui.ctx.fillText(mm.layout, mapX + pad, mapY + mapH + 8);
   }
 }

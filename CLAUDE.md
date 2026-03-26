@@ -51,7 +51,7 @@ When pushing to git make sure to update CLAUDE.md first!
 
 ## Key Conventions
 
-- **Client state**: all mutable state lives on the shared `G` namespace object (`game_state.js`).
+- **Client state**: all mutable state lives on the shared `G` namespace object (`game_state.js`), organized into sub-objects: `G.conn` (connection/session), `G.player` (local player state), `G.room` (current room & entities), `G.ui` (DOM refs & screens), `G.fx` (visual effects), `G.debug` (dev tools).
 - **Server state**: all mutable state lives on the `GameState` singleton (`from server.state import game`).
 - **Player vs Avatar**: `Player` holds session/identity state (name, hp, quests, flags, room, color_index). `Avatar` holds physical-world state (x, y, direction, dancing, pending_collisions). Access position via `player.avatar.x` or use `avatars_in_room()` which returns `(player, avatar)` tuples. `player.avatar` is `None` during room transitions — monsters can't target avatar-less players. `player.room` stays on Player so dungeon tracking works even without an avatar.
 - **Room queries**: `players_in_room(room_id)` returns all players in a room (for broadcasting, player lookup). `avatars_in_room(room_id)` returns `(player, avatar)` tuples for players with physical presence (for combat, collision, targeting).
@@ -72,7 +72,7 @@ When pushing to git make sure to update CLAUDE.md first!
 - **Monster walk collision**: server checks collision at two points during a walk — at 50% (hitbox at the midpoint between origin and destination) and at 100% (hitbox at destination). This gives players a dodge window since the monster doesn't reach the target tile until the walk completes.
 - **Monster knockback**: non-boss monsters get knocked back 1 tile in the attack direction when hit (if they survive). Server cancels any in-progress walk state. Client uses a separate `knockbackSlide` state (not `walkState`) for a 200ms easeOutQuad slide animation.
 - **Sword hitbox**: 1.5 tiles in the attack direction (extends 0.5 tiles back into the player's own tile), 1 tile perpendicular. This lets players hit monsters overlapping their position.
-- **Player knockback slide**: `G.knockbackSlide` in `client.html` game loop — 200ms easeOutQuad, separate from walk interpolation. Other players and monsters each use their own `knockbackSlide` object.
+- **Player knockback slide**: `G.player.knockbackSlide` in `client.html` game loop — 200ms easeOutQuad, separate from walk interpolation. Other players and monsters each use their own `knockbackSlide` object.
 - **Water mist** (d2 only): `renderWaterMist()` in `renderer.js` scales wisp count by water tile coverage (WA=1pt, SH=0.5pt, max 40). Opacity stays constant; density increases with more water.
 - **Dungeon map vs compass**: map reveals room layout but does NOT show current position. Compass adds blinking yellow dot for current room.
 - **Item pickup animation**: all item grants (sword, map, compass, heart) use the same `item_obtained`/`item_effect` message flow with `drawItemPickupOverlay` (golden glow + sparkles). Player is frozen during the 2.5s animation. `ITEM_DRAW_FNS` in `sprites.js` maps item_type to draw functions. Heart container uses a larger hand-crafted 18x13 sprite (`drawBigHeartSolid`) with gold container border.
@@ -85,7 +85,7 @@ When pushing to git make sure to update CLAUDE.md first!
   - `log.server(msg)` → `event_log.txt` + stdout only. For verbose output that would flood the sidebar (AI generation, registration details).
   - `log.event(kind, text)` → debug sidebar + `event_log.txt` + stdout. For structured lifecycle events (JOIN, DISCONNECT, NPC_CHAT, etc.). Written as `[timestamp] KIND: text`.
   - Chat window messages are a separate system (WebSocket game messages, not logging).
-  - `broadcast_debug()` in `net.py` is for the canvas overlay HUD (12-line `G.debugLog` buffer), not the sidebar — keep using it where needed.
+  - `broadcast_debug()` in `net.py` is for the canvas overlay HUD (12-line `G.debug.debugLog` buffer), not the sidebar — keep using it where needed.
   - `_LogBroadcaster` in `mud_server.py` is a safety net that catches stray `print()` from libraries/tracebacks → sidebar + file.
   - Exception: `state.py` startup prints stay as `print()` (runs before game exists). `ai_generator.py` `__main__` block stays as `print()` (standalone test).
 - **Debug /viewserver**: sends full `debug_state` snapshot every tick to subscribed players (toggled via `/viewserver` chat command, debug-only). Renders semi-transparent red shapes for server-side entity positions.

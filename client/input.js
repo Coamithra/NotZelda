@@ -11,77 +11,77 @@ const DIR_KEY_MAP = {
 // Keyboard
 // ---------------------------------------------------------------------------
 document.addEventListener("keydown", (e) => {
-  if (e.target === G.nameInput || e.target === G.descInput) return;
+  if (e.target === G.ui.nameInput || e.target === G.ui.descInput) return;
   if (typeof TITLE !== "undefined" && TITLE.phase !== "done") return;
 
-  G.keysDown[e.code] = true;
+  G.player.keysDown[e.code] = true;
 
   // Track direction key press order so most-recent direction wins
   const dir = DIR_KEY_MAP[e.code];
-  if (dir && !G.chatFocused && !e.repeat) {
-    G.dirStack = G.dirStack.filter(d => d !== dir);
-    G.dirStack.push(dir);
+  if (dir && !G.ui.chatFocused && !e.repeat) {
+    G.player.dirStack = G.player.dirStack.filter(d => d !== dir);
+    G.player.dirStack.push(dir);
   }
 
-  if (e.key === "Enter" && !G.chatFocused) {
+  if (e.key === "Enter" && !G.ui.chatFocused) {
     e.preventDefault();
-    G.chatInput.focus();
-    G.chatFocused = true;
-    G.chatBar.classList.add("focused");
+    G.ui.chatInput.focus();
+    G.ui.chatFocused = true;
+    G.ui.chatBar.classList.add("focused");
     return;
   }
 
-  if (e.key === "Escape" && G.chatFocused) {
+  if (e.key === "Escape" && G.ui.chatFocused) {
     e.preventDefault();
-    G.chatInput.blur();
-    G.chatFocused = false;
-    G.chatBar.classList.remove("focused");
+    G.ui.chatInput.blur();
+    G.ui.chatFocused = false;
+    G.ui.chatBar.classList.remove("focused");
     return;
   }
 
-  if (e.key === "m" && !G.chatFocused) {
+  if (e.key === "m" && !G.ui.chatFocused) {
     const on = MusicPlayer.toggle();
-    G.infoMessages.push({ text: on ? "Music on" : "Music off", expires: Date.now() + 2000 });
+    G.ui.infoMessages.push({ text: on ? "Music on" : "Music off", expires: Date.now() + 2000 });
     return;
   }
 
-  if (e.key === "`" && !G.chatFocused && G.debugMode) {
-    G.showDebug = !G.showDebug;
-    G.debugCollision = !G.debugCollision;
+  if (e.key === "`" && !G.ui.chatFocused && G.debug.debugMode) {
+    G.debug.showDebug = !G.debug.showDebug;
+    G.debug.debugCollision = !G.debug.debugCollision;
     return;
   }
 
-  if (e.code === "Space" && !e.repeat && !G.chatFocused && G.state !== "attacking" && G.state !== "dying") {
+  if (e.code === "Space" && !e.repeat && !G.ui.chatFocused && G.player.state !== "attacking" && G.player.state !== "dying") {
     e.preventDefault();
-    if (!G.playerFlags.has("has_sword")) {
-      G.infoMessages.push({ text: "You don't have a weapon.", expires: Date.now() + 2000 });
+    if (!G.player.playerFlags.has("has_sword")) {
+      G.ui.infoMessages.push({ text: "You don't have a weapon.", expires: Date.now() + 2000 });
       return;
     }
-    if (G.state === "idle") {
-      sendToServer({ type: "attack", direction: G.myPlayer.direction });
-      startAttack(G.myName, G.myPlayer.direction);
-      spawnSlashArc(G.myPlayer.direction);
+    if (G.player.state === "idle") {
+      sendToServer({ type: "attack", direction: G.player.myPlayer.direction });
+      startAttack(G.player.myName, G.player.myPlayer.direction);
+      spawnSlashArc(G.player.myPlayer.direction);
       setState("attacking", { startTime: performance.now() });
     }
     return;
   }
 
-  if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key) && !G.chatFocused) {
+  if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key) && !G.ui.chatFocused) {
     e.preventDefault();
   }
 });
 
 document.addEventListener("keyup", (e) => {
-  delete G.keysDown[e.code];
+  delete G.player.keysDown[e.code];
 
   // Remove direction from stack if no other key for the same direction is held
   const dir = DIR_KEY_MAP[e.code];
   if (dir) {
     const stillHeld = Object.entries(DIR_KEY_MAP).some(
-      ([k, d]) => d === dir && k !== e.code && G.keysDown[k]
+      ([k, d]) => d === dir && k !== e.code && G.player.keysDown[k]
     );
     if (!stillHeld) {
-      G.dirStack = G.dirStack.filter(d => d !== dir);
+      G.player.dirStack = G.player.dirStack.filter(d => d !== dir);
     }
   }
 });
@@ -89,44 +89,44 @@ document.addEventListener("keyup", (e) => {
 // ---------------------------------------------------------------------------
 // Chat input
 // ---------------------------------------------------------------------------
-G.chatInput.addEventListener("focus", () => {
-  G.chatFocused = true;
-  G.chatBar.classList.add("focused");
+G.ui.chatInput.addEventListener("focus", () => {
+  G.ui.chatFocused = true;
+  G.ui.chatBar.classList.add("focused");
 });
 
-G.chatInput.addEventListener("blur", () => {
-  G.chatFocused = false;
-  G.chatBar.classList.remove("focused");
+G.ui.chatInput.addEventListener("blur", () => {
+  G.ui.chatFocused = false;
+  G.ui.chatBar.classList.remove("focused");
 });
 
-G.chatInput.addEventListener("keydown", (e) => {
+G.ui.chatInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
-    const text = G.chatInput.value.trim();
+    const text = G.ui.chatInput.value.trim();
     // Client-side commands
     if (text === "/networklog") {
-      G.networkLog = !G.networkLog;
-      G.infoMessages.push({ text: `Network log: ${G.networkLog ? "ON" : "OFF"}`, expires: Date.now() + 2000 });
-      G.chatInput.value = "";
-      G.chatInput.blur();
-      G.chatFocused = false;
-      G.chatBar.classList.remove("focused");
+      G.conn.networkLog = !G.conn.networkLog;
+      G.ui.infoMessages.push({ text: `Network log: ${G.conn.networkLog ? "ON" : "OFF"}`, expires: Date.now() + 2000 });
+      G.ui.chatInput.value = "";
+      G.ui.chatInput.blur();
+      G.ui.chatFocused = false;
+      G.ui.chatBar.classList.remove("focused");
       e.preventDefault();
       e.stopPropagation();
       return;
     }
-    if (text && G.ws && G.ws.readyState === WebSocket.OPEN) {
-      G.ws.send(JSON.stringify({ type: "chat", text }));
+    if (text && G.conn.ws && G.conn.ws.readyState === WebSocket.OPEN) {
+      G.conn.ws.send(JSON.stringify({ type: "chat", text }));
     }
-    G.chatInput.value = "";
-    G.chatInput.blur();
-    G.chatFocused = false;
-    G.chatBar.classList.remove("focused");
+    G.ui.chatInput.value = "";
+    G.ui.chatInput.blur();
+    G.ui.chatFocused = false;
+    G.ui.chatBar.classList.remove("focused");
     e.preventDefault();
   }
   if (e.key === "Escape") {
-    G.chatInput.blur();
-    G.chatFocused = false;
-    G.chatBar.classList.remove("focused");
+    G.ui.chatInput.blur();
+    G.ui.chatFocused = false;
+    G.ui.chatBar.classList.remove("focused");
     e.preventDefault();
   }
   e.stopPropagation();
@@ -135,21 +135,21 @@ G.chatInput.addEventListener("keydown", (e) => {
 // ---------------------------------------------------------------------------
 // Login
 // ---------------------------------------------------------------------------
-G.connectBtn.addEventListener("click", () => {
-  const name = G.nameInput.value.trim();
+G.ui.connectBtn.addEventListener("click", () => {
+  const name = G.ui.nameInput.value.trim();
   if (!name) {
-    G.loginError.textContent = "Please enter a name.";
+    G.ui.loginError.textContent = "Please enter a name.";
     return;
   }
-  G.myName = name;
-  G.loginError.textContent = "";
+  G.player.myName = name;
+  G.ui.loginError.textContent = "";
   MusicPlayer.start();
-  connect(name, G.descInput.value.trim());
+  connect(name, G.ui.descInput.value.trim());
 });
 
-[G.nameInput, G.descInput].forEach(el => {
+[G.ui.nameInput, G.ui.descInput].forEach(el => {
   el.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") G.connectBtn.click();
+    if (e.key === "Enter") G.ui.connectBtn.click();
     e.stopPropagation();
   });
 });
@@ -158,14 +158,14 @@ G.connectBtn.addEventListener("click", () => {
 // Visibility change (reconnect on tab resume)
 // ---------------------------------------------------------------------------
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && G.loginScreen.classList.contains("hidden")) {
-    G.keysDown = {};
-    G.dirStack = [];
-    dbg(`Tab visible, ws.readyState=${G.ws ? G.ws.readyState : 'null'}`);
-    if (!G.ws || G.ws.readyState !== WebSocket.OPEN) {
+  if (document.visibilityState === "visible" && G.ui.loginScreen.classList.contains("hidden")) {
+    G.player.keysDown = {};
+    G.player.dirStack = [];
+    dbg(`Tab visible, ws.readyState=${G.conn.ws ? G.conn.ws.readyState : 'null'}`);
+    if (!G.conn.ws || G.conn.ws.readyState !== WebSocket.OPEN) {
       dbg(`Connection dead on resume, reconnecting`);
-      G.infoMessages.push({ text: "Reconnecting...", expires: Date.now() + 3000 });
-      connect(G.lastLoginName, G.lastLoginDesc);
+      G.ui.infoMessages.push({ text: "Reconnecting...", expires: Date.now() + 3000 });
+      connect(G.conn.lastLoginName, G.conn.lastLoginDesc);
     }
   }
 });
@@ -173,23 +173,23 @@ document.addEventListener("visibilitychange", () => {
 // ---------------------------------------------------------------------------
 // Mobile D-pad controls
 // ---------------------------------------------------------------------------
-if (G.isMobile) {
+if (G.ui.isMobile) {
   let activeDir = null;
   const DPAD_KEY_MAP = { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" };
 
   function startDpad(dir) {
     if (activeDir === dir) return;
     stopDpad();
-    stopDance(G.myName);
+    stopDance(G.player.myName);
     activeDir = dir;
-    G.keysDown[DPAD_KEY_MAP[dir]] = true;
-    G.dirStack = [dir];
+    G.player.keysDown[DPAD_KEY_MAP[dir]] = true;
+    G.player.dirStack = [dir];
   }
 
   function stopDpad() {
     if (activeDir) {
-      delete G.keysDown[DPAD_KEY_MAP[activeDir]];
-      G.dirStack = [];
+      delete G.player.keysDown[DPAD_KEY_MAP[activeDir]];
+      G.player.dirStack = [];
     }
     activeDir = null;
     document.querySelectorAll(".dpad-btn").forEach(b => b.classList.remove("active"));
@@ -216,19 +216,19 @@ if (G.isMobile) {
   });
 
   document.getElementById("mobile-chat-btn").addEventListener("click", () => {
-    G.chatInput.focus();
-    G.chatFocused = true;
-    G.chatBar.classList.add("focused");
+    G.ui.chatInput.focus();
+    G.ui.chatFocused = true;
+    G.ui.chatBar.classList.add("focused");
   });
 
   document.getElementById("mobile-sword-btn").addEventListener("touchstart", (e) => {
     e.preventDefault();
-    if (!G.ws || !G.myName || G.attackingPlayers[G.myName]) return;
-    if (!G.playerFlags.has("has_sword")) return;
-    if (G.state !== "idle" && G.state !== "attacking") return;
-    sendToServer({ type: "attack", direction: G.myPlayer.direction });
-    startAttack(G.myName, G.myPlayer.direction);
-    spawnSlashArc(G.myPlayer.direction);
+    if (!G.conn.ws || !G.player.myName || G.room.attackingPlayers[G.player.myName]) return;
+    if (!G.player.playerFlags.has("has_sword")) return;
+    if (G.player.state !== "idle" && G.player.state !== "attacking") return;
+    sendToServer({ type: "attack", direction: G.player.myPlayer.direction });
+    startAttack(G.player.myName, G.player.myPlayer.direction);
+    spawnSlashArc(G.player.myPlayer.direction);
     setState("attacking", { startTime: performance.now() });
   });
 
@@ -244,5 +244,5 @@ if (G.isMobile) {
 
 // Debug overlay toggle (only works when server has DEBUG_MODE on)
 document.getElementById("debug-btn").addEventListener("click", () => {
-  if (G.debugMode) G.showDebug = !G.showDebug;
+  if (G.debug.debugMode) G.debug.showDebug = !G.debug.showDebug;
 });

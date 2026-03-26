@@ -712,7 +712,7 @@ TITLE._drawText = function (dc, t) {
     dc.globalAlpha = pulse;
     dc.fillStyle = "#ffffff";
     dc.font = "bold 24px monospace";
-    var isMobile = typeof G !== "undefined" && G.isMobile;
+    var isMobile = typeof G !== "undefined" && G.ui.isMobile;
     dc.fillText(isMobile ? "- TAP TO START -" : "- PRESS ENTER -", this.W / 2 * S, 166 * S);
     dc.globalAlpha = 1;
   }
@@ -803,7 +803,7 @@ TITLE.showLogin = function () {
     card.classList.remove("hidden");
     setTimeout(function () {
       card.classList.add("visible");
-      G.nameInput.focus();
+      G.ui.nameInput.focus();
     }, 50);
   }
 };

@@ -311,15 +311,15 @@
 // ---------------------------------------------------------------------------
 
 // Mobile detection
-G.isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+G.ui.isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
   || (navigator.maxTouchPoints > 1 && window.innerWidth < 1024);
 
-if (G.isMobile) {
+if (G.ui.isMobile) {
   document.body.classList.add("mobile");
 }
 
 function scaleForMobile() {
-  if (!G.isMobile) return;
+  if (!G.ui.isMobile) return;
   const gameCanvas = document.getElementById("game");
   const vw = window.innerWidth;
   const vh = window.innerHeight - 180;
@@ -330,25 +330,25 @@ function scaleForMobile() {
   gameCanvas.style.height = (CH * s) + "px";
 }
 
-if (G.isMobile) {
+if (G.ui.isMobile) {
   window.addEventListener("resize", scaleForMobile);
   scaleForMobile();
 }
 
 // Bind DOM refs
-G.loginScreen = document.getElementById("login-screen");
-G.gameScreen  = document.getElementById("game-screen");
-G.loginError  = document.getElementById("login-error");
-G.nameInput   = document.getElementById("name-input");
-G.descInput   = document.getElementById("desc-input");
-G.connectBtn  = document.getElementById("connect-btn");
-G.canvas      = document.getElementById("game");
-G.ctx         = G.canvas.getContext("2d");
-G.chatInput   = document.getElementById("chat-input");
-G.chatBar     = document.getElementById("chat-bar");
-G.chatHint    = document.getElementById("chat-hint");
-G.chatLog     = document.getElementById("chat-log");
-G.serverLog   = document.getElementById("server-log");
+G.ui.loginScreen = document.getElementById("login-screen");
+G.ui.gameScreen  = document.getElementById("game-screen");
+G.ui.loginError  = document.getElementById("login-error");
+G.ui.nameInput   = document.getElementById("name-input");
+G.ui.descInput   = document.getElementById("desc-input");
+G.ui.connectBtn  = document.getElementById("connect-btn");
+G.ui.canvas      = document.getElementById("game");
+G.ui.ctx         = G.ui.canvas.getContext("2d");
+G.ui.chatInput   = document.getElementById("chat-input");
+G.ui.chatBar     = document.getElementById("chat-bar");
+G.ui.chatHint    = document.getElementById("chat-hint");
+G.ui.chatLog     = document.getElementById("chat-log");
+G.ui.serverLog   = document.getElementById("server-log");
 
 // ---------------------------------------------------------------------------
 // Title screen
@@ -376,21 +376,21 @@ const DIR_DX = { up: 0, down: 0, left: -1, right: 1 };
 const DIR_DY = { up: -1, down: 1, left: 0, right: 0 };
 
 function getActiveDirection() {
-  return G.dirStack.length > 0 ? G.dirStack[G.dirStack.length - 1] : null;
+  return G.player.dirStack.length > 0 ? G.player.dirStack[G.player.dirStack.length - 1] : null;
 }
 
 function setState(newState, data) {
-  G.state = newState;
-  G.stateData = data || {};
+  G.player.state = newState;
+  G.player.stateData = data || {};
 }
 
 function sendToServer(msg) {
-  if (G.ws && G.ws.readyState === WebSocket.OPEN) {
-    if (G.networkLog && (msg.type === "position_update" || msg.type === "face" || msg.type === "attack")) {
+  if (G.conn.ws && G.conn.ws.readyState === WebSocket.OPEN) {
+    if (G.conn.networkLog && (msg.type === "position_update" || msg.type === "face" || msg.type === "attack")) {
       const t = performance.now().toFixed(1);
-      console.log(`[NET OUT t=${t}] ${msg.type} ${msg.direction||""} x=${msg.x} y=${msg.y} [${G.state}]`);
+      console.log(`[NET OUT t=${t}] ${msg.type} ${msg.direction||""} x=${msg.x} y=${msg.y} [${G.player.state}]`);
     }
-    G.ws.send(JSON.stringify(msg));
+    G.conn.ws.send(JSON.stringify(msg));
   }
 }
 
@@ -398,8 +398,8 @@ function canMoveToPosition(x, y) {
   /** Check if a 1x1 hitbox at (x,y) can exist — wall + guard collision.
       Only checks bottom half of hitbox for Y (NES Zelda style — sprite
       top half can overlap walls regardless of direction). */
-  if (!G.currentRoom) return false;
-  const tilemap = G.currentRoom.tilemap;
+  if (!G.room.currentRoom) return false;
+  const tilemap = G.room.currentRoom.tilemap;
 
   const checkYStart = y + 0.5;
 
@@ -417,7 +417,7 @@ function canMoveToPosition(x, y) {
   }
 
   // Guard AABB overlap
-  for (const guard of G.guards) {
+  for (const guard of G.room.guards) {
     if (x < guard.x + 1 && x + 1 > guard.x &&
         y < guard.y + 1 && y + 1 > guard.y) return false;
   }
@@ -427,8 +427,8 @@ function canMoveToPosition(x, y) {
 function getBlockingTile(x, y) {
   /** Same hitbox logic as canMoveToPosition, but returns the first
       non-walkable tile code instead of a boolean. */
-  if (!G.currentRoom) return null;
-  const tilemap = G.currentRoom.tilemap;
+  if (!G.room.currentRoom) return null;
+  const tilemap = G.room.currentRoom.tilemap;
   const checkYStart = y + 0.5;
   const minTx = Math.floor(x + 0.001);
   const maxTx = Math.floor(x + 1.0 - 0.001);
@@ -448,7 +448,7 @@ let _lastUnlockAttempt = 0;
 function checkLockedDoor(checkX, checkY, dir) {
   const now = Date.now();
   if (now - _lastUnlockAttempt < 500) return;
-  if (!G.dungeonState) return;
+  if (!G.room.dungeonState) return;
   const tile = getBlockingTile(checkX, checkY);
   if (tile === "LD" || tile === "KD") {
     _lastUnlockAttempt = now;
@@ -461,116 +461,116 @@ function maybeReportPosition() {
   /** Round to nearest half-tile; report when it changes.
       At y=5.0, report fires when y crosses 4.75 (reports 4.5) or 5.25 (reports 5.5).
       Symmetric in all directions — triggers at the midpoint of each half-tile segment. */
-  const reportX = Math.round(G.preciseX * 2) / 2;
-  const reportY = Math.round(G.preciseY * 2) / 2;
+  const reportX = Math.round(G.player.preciseX * 2) / 2;
+  const reportY = Math.round(G.player.preciseY * 2) / 2;
 
-  if (reportX !== G.lastReportedX || reportY !== G.lastReportedY) {
+  if (reportX !== G.player.lastReportedX || reportY !== G.player.lastReportedY) {
     sendToServer({
       type: "position_update",
       x: reportX,
       y: reportY,
-      direction: G.myPlayer.direction,
+      direction: G.player.myPlayer.direction,
     });
-    G.lastReportedX = reportX;
-    G.lastReportedY = reportY;
+    G.player.lastReportedX = reportX;
+    G.player.lastReportedY = reportY;
   }
 }
 
 function playerTick() {
-  if (G.itemPickupActive) return;
-  if (G.stunUntil && performance.now() < G.stunUntil) { G.isMoving = false; return; }
+  if (G.player.itemPickupActive) return;
+  if (G.player.stunUntil && performance.now() < G.player.stunUntil) { G.player.isMoving = false; return; }
 
   const now = performance.now();
-  const dt = Math.min((now - (G.lastTickTime || now)) / 1000, 0.05);
-  G.lastTickTime = now;
+  const dt = Math.min((now - (G.player.lastTickTime || now)) / 1000, 0.05);
+  G.player.lastTickTime = now;
 
   const dir = getActiveDirection();
 
-  switch (G.state) {
+  switch (G.player.state) {
     case "idle": {
-      if (!dir) { G.isMoving = false; G.lastMoveDir = null; break; }
+      if (!dir) { G.player.isMoving = false; G.player.lastMoveDir = null; break; }
 
-      stopDance(G.myName);
+      stopDance(G.player.myName);
       // Juice: dust puff on movement start or direction change
-      if (!G.isMoving || G.lastMoveDir !== dir) {
-        spawnDustPuff(G.preciseX, G.preciseY, dir);
+      if (!G.player.isMoving || G.player.lastMoveDir !== dir) {
+        spawnDustPuff(G.player.preciseX, G.player.preciseY, dir);
       }
-      if (G.myPlayer.direction !== dir) {
+      if (G.player.myPlayer.direction !== dir) {
         sendToServer({ type: "face", direction: dir });
       }
-      G.lastMoveDir = dir;
-      G.myPlayer.direction = dir;
-      G.isMoving = true;
+      G.player.lastMoveDir = dir;
+      G.player.myPlayer.direction = dir;
+      G.player.isMoving = true;
 
       const isHorizontal = (dir === "left" || dir === "right");
       const speed = MOVE_SPEED * dt;
 
-      let newX = G.preciseX + DIR_DX[dir] * speed;
-      let newY = G.preciseY + DIR_DY[dir] * speed;
+      let newX = G.player.preciseX + DIR_DX[dir] * speed;
+      let newY = G.player.preciseY + DIR_DY[dir] * speed;
 
       // Axis alignment: snap perpendicular coord toward nearest half-tile
       if (isHorizontal) {
-        const targetY = Math.round(G.preciseY * 2) / 2;
-        if (Math.abs(G.preciseY - targetY) > 0.01) {
-          const alignDelta = Math.sign(targetY - G.preciseY) * Math.min(speed, Math.abs(G.preciseY - targetY));
-          newY = G.preciseY + alignDelta;
+        const targetY = Math.round(G.player.preciseY * 2) / 2;
+        if (Math.abs(G.player.preciseY - targetY) > 0.01) {
+          const alignDelta = Math.sign(targetY - G.player.preciseY) * Math.min(speed, Math.abs(G.player.preciseY - targetY));
+          newY = G.player.preciseY + alignDelta;
         }
       } else {
-        const targetX = Math.round(G.preciseX * 2) / 2;
-        if (Math.abs(G.preciseX - targetX) > 0.01) {
-          const alignDelta = Math.sign(targetX - G.preciseX) * Math.min(speed, Math.abs(G.preciseX - targetX));
-          newX = G.preciseX + alignDelta;
+        const targetX = Math.round(G.player.preciseX * 2) / 2;
+        if (Math.abs(G.player.preciseX - targetX) > 0.01) {
+          const alignDelta = Math.sign(targetX - G.player.preciseX) * Math.min(speed, Math.abs(G.player.preciseX - targetX));
+          newX = G.player.preciseX + alignDelta;
         }
       }
 
       // Collision: use aligned perpendicular position for wall checks.
       // The player is snapping to the nearest half-tile lane — check if
       // that lane is clear so they can slip through gaps (NES Zelda style).
-      const checkX = isHorizontal ? newX : Math.round(G.preciseX * 2) / 2;
-      const checkY = isHorizontal ? Math.round(G.preciseY * 2) / 2 : newY;
+      const checkX = isHorizontal ? newX : Math.round(G.player.preciseX * 2) / 2;
+      const checkY = isHorizontal ? Math.round(G.player.preciseY * 2) / 2 : newY;
 
       if (canMoveToPosition(checkX, checkY)) {
-        G.preciseX = newX;
-        G.preciseY = newY;
-      } else if (isHorizontal && canMoveToPosition(newX, G.preciseY)) {
-        G.preciseX = newX;
-      } else if (!isHorizontal && canMoveToPosition(G.preciseX, newY)) {
-        G.preciseY = newY;
+        G.player.preciseX = newX;
+        G.player.preciseY = newY;
+      } else if (isHorizontal && canMoveToPosition(newX, G.player.preciseY)) {
+        G.player.preciseX = newX;
+      } else if (!isHorizontal && canMoveToPosition(G.player.preciseX, newY)) {
+        G.player.preciseY = newY;
       } else {
         // Blocked — check if the actual blocking tile is a locked door
         checkLockedDoor(checkX, checkY, dir);
       }
 
-      G.displayX = G.preciseX;
-      G.displayY = G.preciseY;
-      G.myPlayer.x = G.preciseX;
-      G.myPlayer.y = G.preciseY;
+      G.player.displayX = G.player.preciseX;
+      G.player.displayY = G.player.preciseY;
+      G.player.myPlayer.x = G.player.preciseX;
+      G.player.myPlayer.y = G.player.preciseY;
 
       maybeReportPosition();
       break;
     }
 
     case "attacking": {
-      const attackDone = now - G.stateData.startTime >= ATTACK_FRAME_MS * ATTACK_FRAMES;
+      const attackDone = now - G.player.stateData.startTime >= ATTACK_FRAME_MS * ATTACK_FRAMES;
       if (attackDone) {
-        if (G.keysDown["Space"] && G.playerFlags.has("has_sword")) {
-          sendToServer({ type: "attack", direction: G.myPlayer.direction });
-          startAttack(G.myName, G.myPlayer.direction);
-          spawnSlashArc(G.myPlayer.direction);
+        if (G.player.keysDown["Space"] && G.player.playerFlags.has("has_sword")) {
+          sendToServer({ type: "attack", direction: G.player.myPlayer.direction });
+          startAttack(G.player.myName, G.player.myPlayer.direction);
+          spawnSlashArc(G.player.myPlayer.direction);
           setState("attacking", { startTime: performance.now() });
         } else if (dir) {
-          stopDance(G.myName);
+          stopDance(G.player.myName);
           setState("idle", {});
         } else {
           setState("idle", {});
         }
       }
-      G.isMoving = false;
+      G.player.isMoving = false;
       break;
     }
 
     case "dying":
-      G.isMoving = false;
+      G.player.isMoving = false;
       break;
   }
 }
@@ -579,17 +579,17 @@ function gameLoop(timestamp) {
   requestAnimationFrame(gameLoop);
 
   // Hit pause — freeze updates but keep rendering the frozen frame
-  const frozen = G.hitPause && Date.now() < G.hitPause;
+  const frozen = G.fx.hitPause && Date.now() < G.fx.hitPause;
 
   if (!frozen) {
     // Animation timer
-    G.animTimer++;
-    if (G.animTimer % 10 === 0) {
-      G.animFrame = (G.animFrame + 1) % 2;
+    G.player.animTimer++;
+    if (G.player.animTimer % 10 === 0) {
+      G.player.animFrame = (G.player.animFrame + 1) % 2;
     }
 
     // Player state machine tick
-    if (!G.chatFocused && !G.transition && !G.conjuring) {
+    if (!G.ui.chatFocused && !G.ui.transition && !G.ui.conjuring) {
       playerTick();
     }
 
@@ -605,37 +605,37 @@ function gameLoop(timestamp) {
     updateParticles(16.67); // ~60fps dt
 
     // Toggle monster hop frame every ~500ms
-    G.monsterHopTimer++;
-    if (G.monsterHopTimer % 30 === 0) {
-      G.monsterHopFrame = (G.monsterHopFrame + 1) % 2;
+    G.room.monsterHopTimer++;
+    if (G.room.monsterHopTimer % 30 === 0) {
+      G.room.monsterHopFrame = (G.room.monsterHopFrame + 1) % 2;
     }
 
     // Interpolate positions — lerp for reconciliation snaps
     function easeOutQuad(t) { return t * (2 - t); }
-    if (G.knockbackSlide) {
+    if (G.player.knockbackSlide) {
       // Smooth knockback slide for local player
-      const ks = G.knockbackSlide;
+      const ks = G.player.knockbackSlide;
       const elapsed = performance.now() - ks.startTime;
       const t = Math.min(elapsed / ks.duration, 1.0);
       const progress = easeOutQuad(t);
-      G.displayX = ks.fromX + (ks.toX - ks.fromX) * progress;
-      G.displayY = ks.fromY + (ks.toY - ks.fromY) * progress;
+      G.player.displayX = ks.fromX + (ks.toX - ks.fromX) * progress;
+      G.player.displayY = ks.fromY + (ks.toY - ks.fromY) * progress;
       if (t >= 1.0) {
-        G.displayX = ks.toX;
-        G.displayY = ks.toY;
-        G.knockbackSlide = null;
+        G.player.displayX = ks.toX;
+        G.player.displayY = ks.toY;
+        G.player.knockbackSlide = null;
       }
-    } else if (G.myPlayer && G.state !== "idle") {
+    } else if (G.player.myPlayer && G.player.state !== "idle") {
       // During attacking/dying, lerp displayX/Y toward myPlayer position
-      if (G.displayX !== G.myPlayer.x || G.displayY !== G.myPlayer.y) {
-        G.displayX += (G.myPlayer.x - G.displayX) * MOVE_LERP;
-        G.displayY += (G.myPlayer.y - G.displayY) * MOVE_LERP;
-        if (Math.abs(G.myPlayer.x - G.displayX) < 0.05) G.displayX = G.myPlayer.x;
-        if (Math.abs(G.myPlayer.y - G.displayY) < 0.05) G.displayY = G.myPlayer.y;
+      if (G.player.displayX !== G.player.myPlayer.x || G.player.displayY !== G.player.myPlayer.y) {
+        G.player.displayX += (G.player.myPlayer.x - G.player.displayX) * MOVE_LERP;
+        G.player.displayY += (G.player.myPlayer.y - G.player.displayY) * MOVE_LERP;
+        if (Math.abs(G.player.myPlayer.x - G.player.displayX) < 0.05) G.player.displayX = G.player.myPlayer.x;
+        if (Math.abs(G.player.myPlayer.y - G.player.displayY) < 0.05) G.player.displayY = G.player.myPlayer.y;
       }
     }
 
-    for (const p of Object.values(G.otherPlayers)) {
+    for (const p of Object.values(G.room.otherPlayers)) {
       if (p.knockbackSlide) {
         const ks = p.knockbackSlide;
         const elapsed = performance.now() - ks.startTime;
@@ -669,7 +669,7 @@ function gameLoop(timestamp) {
       }
     }
 
-    for (const m of G.monsters) {
+    for (const m of G.room.monsters) {
       if (m.knockbackSlide) {
         const ks = m.knockbackSlide;
         const elapsed = performance.now() - ks.startTime;
@@ -708,11 +708,11 @@ function gameLoop(timestamp) {
   }
 
   // Render
-  G.ctx.clearRect(0, 0, CW, CH);
+  G.ui.ctx.clearRect(0, 0, CW, CH);
 
   if (renderConjuring(Date.now())) {
     // Conjuring animation is active — skip normal rendering
-  } else if (G.transition) {
+  } else if (G.ui.transition) {
     renderTransition(Date.now());
   } else {
     renderRoom();
@@ -741,7 +741,7 @@ function gameLoop(timestamp) {
     renderServerDebug();
     renderDungeonDebug();
     renderDungeonMinimap();
-    if (G.dyingPlayerSelf) renderDeathAnimation();
+    if (G.player.dyingPlayerSelf) renderDeathAnimation();
   }
   renderHeartsHUD();
   renderKeyHUD();
