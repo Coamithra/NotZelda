@@ -12,7 +12,8 @@ if [ $# -lt 1 ]; then
 fi
 
 BRANCH="$1"
-REPO_ROOT="$(git rev-parse --show-toplevel)"
+# Use --git-common-dir to find the main repo root, not the worktree root
+REPO_ROOT="$(cd "$(git rev-parse --git-common-dir)" && git rev-parse --show-toplevel)"
 TARGET="$REPO_ROOT/.trees/$BRANCH/.env"
 
 if [ ! -f "$REPO_ROOT/.env" ]; then
