@@ -88,6 +88,9 @@ class Monster:
         self.state = "idle"       # "idle" | "walking" | "charging" | "teleporting" | "area"
         self.state_data = {}      # state-scoped variables, replaced on state transition
         self.last_action_time = time.monotonic()  # when the last action completed (for idle timing)
+        # Monotonic counter incremented on every state change (walk, charge, knockback,
+        # teleport, etc.).  Sent to clients so they can discard stale messages.
+        self.move_seq = 0
 
     @property
     def tick_interval(self):

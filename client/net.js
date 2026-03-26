@@ -279,17 +279,17 @@ function handleMessage(msg) {
           id: m.id, kind: m.kind, x: m.x, y: m.y, displayX: m.x, displayY: m.y,
           width: m.width || 1, height: m.height || 1,
           walkTime: (m.walk_time || 2.0) * 1000,  // per-monster walk duration in ms
-          walkState: null, walkSeq: 0,
+          walkState: null, stateSeq: m.seq || 0,
           spawnTime: Date.now() + idx * 40,  // Juice: staggered spawn pop
         };
         if (m.walking) {
-          mon.walkSeq = 1;
+          mon.stateSeq = m.seq || 0;
           mon.walkState = {
             fromX: m.walk_from.x, fromY: m.walk_from.y,
             toX: m.walk_to.x, toY: m.walk_to.y,
             startTime: performance.now() - (m.walk_progress * mon.walkTime),
             walkTime: mon.walkTime,
-            seq: 1,
+            seq: mon.stateSeq,
           };
           mon.x = m.walk_to.x;
           mon.y = m.walk_to.y;
@@ -580,15 +580,18 @@ function handleMessage(msg) {
 
     case "monster_walk_started": {
       const walkMon = G.monsters.find(m => m.id === msg.id);
-      if (walkMon) {
-        walkMon.walkSeq = (walkMon.walkSeq || 0) + 1;
+      if (walkMon && (msg.seq == null || msg.seq >= walkMon.stateSeq)) {
+        walkMon.stateSeq = msg.seq || (walkMon.stateSeq + 1);
         walkMon.walkState = {
           fromX: msg.from_x, fromY: msg.from_y,
           toX: msg.to_x, toY: msg.to_y,
           startTime: performance.now(),
           walkTime: msg.walk_time * 1000,
-          seq: walkMon.walkSeq,
+          seq: walkMon.stateSeq,
         };
+        // Cancel any charge prep — walk supersedes it
+        walkMon.chargePrep = null;
+        G.chargePreps = G.chargePreps.filter(p => p.id !== msg.id);
         // Set logical position to target (walk will commit midway)
         walkMon.x = msg.to_x;
         walkMon.y = msg.to_y;
@@ -599,10 +602,10 @@ function handleMessage(msg) {
     case "monster_walk_complete": {
       const wcMon = G.monsters.find(m => m.id === msg.id);
       if (wcMon) {
-        // Ignore stale walk_complete if a charge, knockback, or new walk has
-        // bumped walkSeq since this walk started — acting on it would snap
-        // displayX/Y to the old walk destination and corrupt visual state.
-        if (wcMon.walkState && wcMon.walkState.seq === wcMon.walkSeq) {
+        // Only commit if this completion matches the walk we're currently
+        // animating.  A charge, knockback, or newer walk will have bumped
+        // stateSeq, making this message stale.
+        if (wcMon.walkState && wcMon.walkState.seq === (msg.seq != null ? msg.seq : wcMon.stateSeq)) {
           wcMon.displayX = wcMon.walkState.toX;
           wcMon.displayY = wcMon.walkState.toY;
           wcMon.walkState = null;
@@ -616,8 +619,10 @@ function handleMessage(msg) {
       if (mon) {
         mon.x = msg.x; mon.y = msg.y;
         mon.displayX = msg.x; mon.displayY = msg.y;
-        mon.walkSeq = (mon.walkSeq || 0) + 1;
+        mon.stateSeq = msg.seq || (mon.stateSeq + 1);
         mon.walkState = null;  // instant move — clear any walk
+        mon.chargePrep = null;
+        G.chargePreps = G.chargePreps.filter(p => p.id !== msg.id);
       }
       break;
     }
@@ -689,8 +694,9 @@ function handleMessage(msg) {
           };
           hitMon.x = msg.knock_x;
           hitMon.y = msg.knock_y;
-          hitMon.walkSeq = (hitMon.walkSeq || 0) + 1;
+          hitMon.stateSeq = msg.seq || (hitMon.stateSeq + 1);
           hitMon.walkState = null;  // cancel any in-progress walk
+          // Charge prep is cleaned up by warmup_cancel (same batch)
         }
         // Juice: hit sparks
         const cx = hitMon.displayX * TS + (hitMon.width || 1) * TS / 2;
@@ -720,7 +726,7 @@ function handleMessage(msg) {
           }
         }
       }
-      G.monsters.push({ id: msg.id, kind: msg.kind, x: msg.x, y: msg.y, displayX: msg.x, displayY: msg.y, width: msg.width || 1, height: msg.height || 1, walkTime: (msg.walk_time || 2.0) * 1000, walkState: null, walkSeq: 0, spawnTime: Date.now() });
+      G.monsters.push({ id: msg.id, kind: msg.kind, x: msg.x, y: msg.y, displayX: msg.x, displayY: msg.y, width: msg.width || 1, height: msg.height || 1, walkTime: (msg.walk_time || 2.0) * 1000, walkState: null, stateSeq: 0, spawnTime: Date.now() });
       break;
 
     // --- Stage 5: Monster attack messages ---
@@ -763,7 +769,12 @@ function handleMessage(msg) {
 
     case "charge_prep": {
       const prepMon = G.monsters.find(m => m.id === msg.id);
-      if (prepMon) prepMon.chargePrep = Date.now();
+      if (prepMon) {
+        if (msg.seq != null && msg.seq < prepMon.stateSeq) break; // stale
+        prepMon.chargePrep = Date.now();
+        // Cancel any in-progress walk — charge warmup supersedes it
+        prepMon.walkState = null;
+      }
       G.chargePreps = G.chargePreps.filter(p => p.id !== msg.id);
       G.chargePreps.push({ id: msg.id, lane: msg.lane, startTime: Date.now() });
       break;
@@ -772,12 +783,16 @@ function handleMessage(msg) {
     case "monster_charged": {
       const chargedMon = G.monsters.find(m => m.id === msg.id);
       if (chargedMon) {
+        if (msg.seq != null && msg.seq < chargedMon.stateSeq) break; // stale
         chargedMon.x = msg.x;
         chargedMon.y = msg.y;
         chargedMon.displayX = msg.x;
         chargedMon.displayY = msg.y;
-        chargedMon.walkSeq = (chargedMon.walkSeq || 0) + 1;
+        chargedMon.stateSeq = msg.seq || (chargedMon.stateSeq + 1);
         chargedMon.walkState = null;
+        // Clear the charge prep visuals — the charge has executed
+        chargedMon.chargePrep = null;
+        G.chargePreps = G.chargePreps.filter(p => p.id !== msg.id);
       }
       G.chargeTrails.push({ path: msg.path, startTime: Date.now() });
       break;
@@ -806,11 +821,12 @@ function handleMessage(msg) {
     case "teleport_end": {
       const tpEndMon = G.monsters.find(m => m.id === msg.id);
       if (tpEndMon) {
+        if (msg.seq != null && msg.seq < tpEndMon.stateSeq) break; // stale
         tpEndMon.x = msg.x;
         tpEndMon.y = msg.y;
         tpEndMon.displayX = msg.x;
         tpEndMon.displayY = msg.y;
-        tpEndMon.walkSeq = (tpEndMon.walkSeq || 0) + 1;
+        tpEndMon.stateSeq = msg.seq || (tpEndMon.stateSeq + 1);
         tpEndMon.walkState = null;
       }
       break;

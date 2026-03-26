@@ -241,7 +241,7 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
     for i, m in enumerate(get_room_monsters(player.room)):
         if m.alive:
             mdata = {"id": i, "kind": m.kind, "x": m.x, "y": m.y,
-                     "walk_time": m.walk_time}
+                     "walk_time": m.walk_time, "seq": m.move_seq}
             if m.width > 1:
                 mdata["width"] = m.width
             if m.height > 1:

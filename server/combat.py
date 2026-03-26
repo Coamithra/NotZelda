@@ -206,6 +206,7 @@ def start_walk(monster, room_id, monster_idx, action, msgs, now):
     nx, ny = action["x"], action["y"]
     remaining = action.get("distance", 1) - 1  # distance includes this step
     monster.state = "walking"
+    monster.move_seq += 1
     monster.state_data = {
         "from_x": monster.x, "from_y": monster.y,
         "to_x": nx, "to_y": ny,
@@ -215,6 +216,7 @@ def start_walk(monster, room_id, monster_idx, action, msgs, now):
         "monster_idx": monster_idx,
         "remaining_distance": remaining,
         "direction": action.get("direction", "random"),
+        "seq": monster.move_seq,
     }
     msgs.append(("broadcast", room_id, {
         "type": "monster_walk_started",
@@ -222,6 +224,7 @@ def start_walk(monster, room_id, monster_idx, action, msgs, now):
         "from_x": monster.x, "from_y": monster.y,
         "to_x": nx, "to_y": ny,
         "walk_time": monster.walk_time,
+        "seq": monster.move_seq,
     }, None))
 
 
@@ -309,6 +312,7 @@ def warmup_charge(monster, room_id, monster_idx, action, msgs):
         "dx": dx,
         "dy": dy,
         "lane": lane,
+        "seq": monster.move_seq,
     }, None))
 
 
@@ -333,6 +337,7 @@ def exec_charge(monster, room_id, monster_idx, action, msgs):
     end_x, end_y = path[-1]
     monster.x = end_x
     monster.y = end_y
+    monster.move_seq += 1
 
     msgs.append(("broadcast", room_id, {
         "type": "monster_charged",
@@ -340,6 +345,7 @@ def exec_charge(monster, room_id, monster_idx, action, msgs):
         "path": path,
         "x": end_x,
         "y": end_y,
+        "seq": monster.move_seq,
     }, None))
 
     # Check if player was hit — AABB overlap with charge path
@@ -372,12 +378,14 @@ def exec_teleport(monster, room_id, monster_idx, action, msgs):
 
     monster.x = target_x
     monster.y = target_y
+    monster.move_seq += 1
 
     msgs.append(("broadcast", room_id, {
         "type": "teleport_end",
         "id": monster_idx,
         "x": target_x,
         "y": target_y,
+        "seq": monster.move_seq,
     }, None))
 
     # Damage players within damage_radius of landing position
@@ -506,11 +514,13 @@ def _tick_all_monsters(now, msgs):
                                         }
                         remaining = sd.get("remaining_distance", 0)
                         walk_dir = sd.get("direction", "random")
+                        walk_seq = sd.get("seq", monster.move_seq)
                         monster.state = "idle"
                         monster.state_data = {}
                         msgs.append(("broadcast", room_id, {
                             "type": "monster_walk_complete",
                             "id": i,
+                            "seq": walk_seq,
                         }, None))
                         # Chain next walk if distance remains
                         if remaining > 0 and monster.alive:
@@ -537,6 +547,7 @@ def _tick_all_monsters(now, msgs):
                 if was_walking:
                     msgs.append(("broadcast", room_id, {
                         "type": "monster_walk_complete", "id": i,
+                        "seq": monster.move_seq,
                     }, None))
                 if _debug:
                     # Re-raises past the per-monster loop — skips remaining

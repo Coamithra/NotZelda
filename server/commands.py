@@ -379,6 +379,7 @@ def _process_attack(player, data, now, msgs):
                         monster.y = ky
                         knock_x = kx
                         knock_y = ky
+                        monster.move_seq += 1
                         # Reset to idle so the monster doesn't continue its interrupted action
                         if monster.state != "idle":
                             set_monster_idle(monster, player.room, i, msgs)
@@ -439,6 +440,7 @@ def _process_attack(player, data, now, msgs):
                     "x": monster.x,
                     "y": monster.y,
                     "hp": monster.hp,
+                    "seq": monster.move_seq,
                 }
                 if knock_x is not None:
                     msg_hit["knock_x"] = knock_x
