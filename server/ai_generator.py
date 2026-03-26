@@ -593,7 +593,7 @@ def patch_monster_placements(data: dict, walkable: set[str]) -> list[str]:
     return patches
 
 
-def patch_unreachable_doorways(data: dict, walkable: set[str], doorways=None) -> list[str]:
+def patch_unreachable_doorways(data: dict, walkable: set[str], doorways: list[tuple[int, int]] | None = None) -> list[str]:
     """Carve walkable paths to connect unreachable doorways.
     doorways: list of (row, col) positions to check. Defaults to ALL_DOORWAY_TILES.
     Returns list of patch descriptions."""
