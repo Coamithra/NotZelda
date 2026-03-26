@@ -2,7 +2,6 @@
 
 import math
 import random
-import time
 
 from server.state import game
 from server.constants import (
@@ -361,7 +360,7 @@ def _process_attack(player, data, now, msgs):
             # Knockback: push surviving non-boss monster 1 tile in attack direction
             knock_x = None
             knock_y = None
-            if monster.hp > 0 and not monster.is_boss:
+            if monster.hp > 0 and monster.knockbackable:
                 room = game.rooms.get(player.room)
                 if room:
                     kx = round(monster.x + dx)
@@ -380,9 +379,16 @@ def _process_attack(player, data, now, msgs):
                         knock_x = kx
                         knock_y = ky
                         monster.move_seq += 1
-                        # Reset to idle so the monster doesn't continue its interrupted action
-                        if monster.state != "idle":
-                            set_monster_idle(monster, player.room, i, msgs)
+                    elif monster.state == "walking":
+                        # Can't knock back but snap from fractional walk coords
+                        monster.x = round(monster.x)
+                        monster.y = round(monster.y)
+                        monster.move_seq += 1
+                # Always interrupt current action and reset decision timer on hit
+                if monster.state != "idle":
+                    set_monster_idle(monster, player.room, i, msgs)
+                else:
+                    monster.last_action_time = now
             # Boss engagement — start choir overlay if boss survives this hit
             dinst = get_dungeon_for_room(player.room)
             is_boss = monster.is_boss and dinst is not None

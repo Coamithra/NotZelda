@@ -671,6 +671,11 @@ function handleMessage(msg) {
       const hitMon = G.room.monsters.find(m => m.id === msg.id);
       if (hitMon) {
         hitMon.hitFlash = Date.now() + 200;
+        // Always sync logical position and cancel walk on hit
+        hitMon.x = msg.x;
+        hitMon.y = msg.y;
+        hitMon.stateSeq = msg.seq || (hitMon.stateSeq + 1);
+        hitMon.walkState = null;
         // Knockback slide (separate from walkState so no hop animation)
         if (msg.knock_x != null) {
           hitMon.knockbackSlide = {
@@ -678,10 +683,6 @@ function handleMessage(msg) {
             toX: msg.knock_x, toY: msg.knock_y,
             startTime: performance.now(), duration: 200,
           };
-          hitMon.x = msg.knock_x;
-          hitMon.y = msg.knock_y;
-          hitMon.stateSeq = msg.seq || (hitMon.stateSeq + 1);
-          hitMon.walkState = null;  // cancel any in-progress walk
           // Charge prep is cleaned up by warmup_cancel (same batch)
         }
         // Juice: hit sparks

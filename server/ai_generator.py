@@ -295,6 +295,9 @@ def validate_monster_design(monster: dict, index: int = 0) -> list[str]:
         dmg = stats.get("damage")
         if not isinstance(dmg, (int, float)) or dmg < 1 or dmg > 20:
             errors.append(f"{prefix}.stats.damage must be 1-20")
+        kb = stats.get("knockback")
+        if kb is not None and not isinstance(kb, bool):
+            errors.append(f"{prefix}.stats.knockback must be a bool")
 
     # Behavior
     behavior = monster.get("behavior")

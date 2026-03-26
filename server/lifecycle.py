@@ -28,6 +28,11 @@ def _on_state_exited(monster, old_state, room_id, monster_idx, msgs):
         msgs.append(("broadcast", room_id, {
             "type": "monster_fade_in", "id": monster_idx,
         }, None))
+    elif old_state == "walking":
+        msgs.append(("broadcast", room_id, {
+            "type": "monster_walk_complete", "id": monster_idx,
+            "seq": monster.state_data.seq,
+        }, None))
 
 
 def set_monster_idle(monster, room_id, monster_idx, msgs):
