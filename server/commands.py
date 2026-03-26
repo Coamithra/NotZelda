@@ -477,125 +477,165 @@ def _process_chat(player, data, msgs):
         msgs.append(("npc_chat", player, guard, text))
 
 
-def _process_slash_command(player, text, msgs):
-    """Handle a slash command."""
-    parts = text[1:].split(None, 1)
-    cmd = parts[0].lower() if parts else ""
+def _cmd_who(player, args, msgs):
+    lines = ["Players online:"]
+    for p in game.players.values():
+        room_name = game.rooms[p.room]["name"]
+        lines.append(f"  {p.name} — {p.description} (in {room_name})")
+    msgs.append(("send", player, {"type": "info", "text": "\n".join(lines)}))
 
-    if cmd == "who":
-        lines = ["Players online:"]
-        for p in game.players.values():
-            room_name = game.rooms[p.room]["name"]
-            lines.append(f"  {p.name} — {p.description} (in {room_name})")
-        msgs.append(("send", player, {"type": "info", "text": "\n".join(lines)}))
 
-    elif cmd == "help":
-        msgs.append(("send", player, {"type": "info", "text": (
-            "Arrow keys / WASD — Move\n"
-            "Space — Attack\n"
-            "Enter — Open chat\n"
-            "Escape — Close chat\n"
-            "M — Toggle music\n"
-            "/who — List online players\n"
-            "/dance — Bust a move\n"
-            "/help — Show this message"
-        )}))
+def _cmd_help(player, args, msgs):
+    msgs.append(("send", player, {"type": "info", "text": (
+        "Arrow keys / WASD — Move\n"
+        "Space — Attack\n"
+        "Enter — Open chat\n"
+        "Escape — Close chat\n"
+        "M — Toggle music\n"
+        "/who — List online players\n"
+        "/dance — Bust a move\n"
+        "/help — Show this message"
+    )}))
 
-    elif cmd == "dance":
-        player.avatar.dancing = True
+
+def _cmd_dance(player, args, msgs):
+    player.avatar.dancing = True
+    msgs.append(("broadcast", player.room, {
+        "type": "dance", "name": player.name,
+    }, None))
+
+
+def _cmd_me(player, args, msgs):
+    if args:
         msgs.append(("broadcast", player.room, {
-            "type": "dance", "name": player.name,
+            "type": "chat", "from": player.name, "text": f"*{args}*",
         }, None))
 
-    elif cmd == "me":
-        action = parts[1] if len(parts) > 1 else ""
-        if action:
-            msgs.append(("broadcast", player.room, {
-                "type": "chat", "from": player.name, "text": f"*{action}*",
-            }, None))
 
-    elif cmd == "cheat" and DEBUG_MODE:
-        if player.has_flag("invulnerable"):
-            player.flags.discard("invulnerable")
-            msgs.append(("send", player, {"type": "info", "text": "Cheat mode off: vulnerable again"}))
-        else:
-            player.grant_flag("has_sword")
-            player.grant_flag("invulnerable")
-            player.hp = player.max_hp
-            msgs.append(("send", player, {"type": "item_obtained", "item_type": "sword", "item_name": "Sword"}))
-            msgs.append(("send", player, {"type": "hp_update", "hp": player.hp, "max_hp": player.max_hp}))
-            msgs.append(("send", player, {"type": "info", "text": "Cheat mode: sword + invulnerability"}))
+def _cmd_cheat(player, args, msgs):
+    if player.has_flag("invulnerable"):
+        player.flags.discard("invulnerable")
+        msgs.append(("send", player, {"type": "info", "text": "Cheat mode off: vulnerable again"}))
+    else:
+        player.grant_flag("has_sword")
+        player.grant_flag("invulnerable")
+        player.hp = player.max_hp
+        msgs.append(("send", player, {"type": "item_obtained", "item_type": "sword", "item_name": "Sword"}))
+        msgs.append(("send", player, {"type": "hp_update", "hp": player.hp, "max_hp": player.max_hp}))
+        msgs.append(("send", player, {"type": "info", "text": "Cheat mode: sword + invulnerability"}))
 
-    elif cmd == "debug_spawn" and DEBUG_MODE:
-        msgs.append(("debug_spawn", player, parts[1] if len(parts) > 1 else ""))
 
-    elif cmd == "deprecate" and DEBUG_MODE:
-        for _tid in list(game.content_libraries.keys()):
-            _run_content_deprecation(_tid)
-        msgs.append(("send", player, {"type": "info", "text": "Forced deprecation pass — see ~ debug log"}))
+def _cmd_debug_spawn(player, args, msgs):
+    msgs.append(("debug_spawn", player, args))
 
-    elif cmd == "regen" and DEBUG_MODE:
-        regen_inst = get_dungeon_for_room(player.room)
-        regen_type = regen_inst.dungeon_id if regen_inst else "d1"
-        regen_libs = game.content_libraries.get(regen_type, {})
-        regen_room_lib = regen_libs.get("rooms")
-        count = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else (regen_room_lib.placeholder_count if regen_room_lib else 0)
-        if count <= 0:
-            msgs.append(("send", player, {"type": "info", "text": f"No {regen_type} room library slots to fill"}))
-        else:
-            start_background_regen(count, regen_type)
-            msgs.append(("send", player, {"type": "info", "text": f"Regen started: {count} {regen_type} room(s) — see ~ debug log"}))
 
-    elif cmd == "viewserver" and DEBUG_MODE:
-        enabled = not getattr(player, '_viewserver', False)
-        player._viewserver = enabled
-        msgs.append(("send", player, {"type": "viewserver_toggle", "enabled": enabled}))
+def _cmd_deprecate(player, args, msgs):
+    for _tid in list(game.content_libraries.keys()):
+        _run_content_deprecation(_tid)
+    msgs.append(("send", player, {"type": "info", "text": "Forced deprecation pass — see ~ debug log"}))
 
-    elif cmd == "choir" and DEBUG_MODE:
-        debug_on = getattr(player, '_debug_choir', False)
-        choir_inst = get_dungeon_for_room(player.room)
-        if debug_on:
-            player._debug_choir = False
-            if choir_inst:
-                choir_inst.boss_engaged = False
-            msgs.append(("send", player, {"type": "boss_choir_stop"}))
-            msgs.append(("send", player, {"type": "info", "text": "Choir overlay OFF"}))
-        else:
-            dist = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 2
-            player._debug_choir = True
-            if choir_inst:
-                choir_inst.boss_engaged = True
-            msgs.append(("send", player, {"type": "boss_choir_start", "distance": dist}))
-            msgs.append(("send", player, {"type": "info", "text": f"Choir overlay ON (distance={dist})"}))
 
-    elif cmd == "key" and DEBUG_MODE:
-        player.keys += 1
-        msgs.append(("send", player, {"type": "key_update", "keys": player.keys}))
-        msgs.append(("send", player, {"type": "info", "text": f"Granted key (total: {player.keys})"}))
+def _cmd_regen(player, args, msgs):
+    regen_inst = get_dungeon_for_room(player.room)
+    regen_type = regen_inst.dungeon_id if regen_inst else "d1"
+    regen_libs = game.content_libraries.get(regen_type, {})
+    regen_room_lib = regen_libs.get("rooms")
+    count = int(args) if args and args.isdigit() else (regen_room_lib.placeholder_count if regen_room_lib else 0)
+    if count <= 0:
+        msgs.append(("send", player, {"type": "info", "text": f"No {regen_type} room library slots to fill"}))
+    else:
+        start_background_regen(count, regen_type)
+        msgs.append(("send", player, {"type": "info", "text": f"Regen started: {count} {regen_type} room(s) — see ~ debug log"}))
 
-    elif cmd == "keylayout" and DEBUG_MODE:
-        dinst = get_dungeon_for_room(player.room)
-        if not dinst or not dinst.zone_cells:
-            msgs.append(("send", player, {"type": "info", "text": "Not in a dungeon with locked doors"}))
-        else:
-            from collections import Counter
-            key_counts = Counter(dinst.key_cells)
-            zone_data = []
-            for zid, cells in dinst.zone_cells.items():
-                keys_in_zone = sum(key_counts.get(c, 0) for c in cells)
-                zone_data.append({
-                    "zone_id": zid,
-                    "cells": [[c[0], c[1]] for c in cells],
-                    "keys": keys_in_zone,
-                })
-            msgs.append(("send", player, {
-                "type": "keylayout",
-                "zones": zone_data,
-            }))
-            msgs.append(("send", player, {"type": "info",
-                "text": f"Key layout: {len(dinst.zone_cells)} zones, "
-                        f"{len(dinst.locked_doors)} doors, {len(dinst.key_cells)} keys"}))
 
+def _cmd_viewserver(player, args, msgs):
+    enabled = not getattr(player, '_viewserver', False)
+    player._viewserver = enabled
+    msgs.append(("send", player, {"type": "viewserver_toggle", "enabled": enabled}))
+
+
+def _cmd_choir(player, args, msgs):
+    debug_on = getattr(player, '_debug_choir', False)
+    choir_inst = get_dungeon_for_room(player.room)
+    if debug_on:
+        player._debug_choir = False
+        if choir_inst:
+            choir_inst.boss_engaged = False
+        msgs.append(("send", player, {"type": "boss_choir_stop"}))
+        msgs.append(("send", player, {"type": "info", "text": "Choir overlay OFF"}))
+    else:
+        dist = int(args) if args and args.isdigit() else 2
+        player._debug_choir = True
+        if choir_inst:
+            choir_inst.boss_engaged = True
+        msgs.append(("send", player, {"type": "boss_choir_start", "distance": dist}))
+        msgs.append(("send", player, {"type": "info", "text": f"Choir overlay ON (distance={dist})"}))
+
+
+def _cmd_key(player, args, msgs):
+    player.keys += 1
+    msgs.append(("send", player, {"type": "key_update", "keys": player.keys}))
+    msgs.append(("send", player, {"type": "info", "text": f"Granted key (total: {player.keys})"}))
+
+
+def _cmd_keylayout(player, args, msgs):
+    from collections import Counter
+    dinst = get_dungeon_for_room(player.room)
+    if not dinst or not dinst.zone_cells:
+        msgs.append(("send", player, {"type": "info", "text": "Not in a dungeon with locked doors"}))
+    else:
+        key_counts = Counter(dinst.key_cells)
+        zone_data = []
+        for zid, cells in dinst.zone_cells.items():
+            keys_in_zone = sum(key_counts.get(c, 0) for c in cells)
+            zone_data.append({
+                "zone_id": zid,
+                "cells": [[c[0], c[1]] for c in cells],
+                "keys": keys_in_zone,
+            })
+        msgs.append(("send", player, {
+            "type": "keylayout",
+            "zones": zone_data,
+        }))
+        msgs.append(("send", player, {"type": "info",
+            "text": f"Key layout: {len(dinst.zone_cells)} zones, "
+                    f"{len(dinst.locked_doors)} doors, {len(dinst.key_cells)} keys"}))
+
+
+# ---------------------------------------------------------------------------
+# Command registry
+# ---------------------------------------------------------------------------
+
+SLASH_COMMANDS = {
+    "who": _cmd_who,
+    "help": _cmd_help,
+    "dance": _cmd_dance,
+    "me": _cmd_me,
+}
+
+DEBUG_COMMANDS = {
+    "cheat": _cmd_cheat,
+    "debug_spawn": _cmd_debug_spawn,
+    "deprecate": _cmd_deprecate,
+    "regen": _cmd_regen,
+    "viewserver": _cmd_viewserver,
+    "choir": _cmd_choir,
+    "key": _cmd_key,
+    "keylayout": _cmd_keylayout,
+}
+
+
+def _process_slash_command(player, text, msgs):
+    """Handle a slash command via registry lookup."""
+    parts = text[1:].split(None, 1)
+    cmd = parts[0].lower() if parts else ""
+    args = parts[1] if len(parts) > 1 else ""
+
+    handler = SLASH_COMMANDS.get(cmd)
+    if not handler and DEBUG_MODE:
+        handler = DEBUG_COMMANDS.get(cmd)
+    if handler:
+        handler(player, args, msgs)
     else:
         msgs.append(("send", player, {"type": "info", "text": "Unknown command. Try /help"}))
 
