@@ -239,7 +239,24 @@ function renderMonsterAttackFlashes() {
     const alpha = Math.max(0, 0.6 - age / 333);
     G.ctx.globalAlpha = alpha;
     G.ctx.fillStyle = "#ffffff";
-    G.ctx.fillRect(f.x * TS, f.y * TS, TS, TS);
+    if (f.range != null) {
+      // Area attack flash — render the same footprint-aware diamond as the warning
+      const aw = f.width || 1, ah = f.height || 1;
+      for (let dy = -f.range; dy <= f.range + ah - 1; dy++) {
+        for (let dx = -f.range; dx <= f.range + aw - 1; dx++) {
+          const nearX = Math.max(0, Math.min(dx, aw - 1));
+          const nearY = Math.max(0, Math.min(dy, ah - 1));
+          if (Math.abs(dx - nearX) + Math.abs(dy - nearY) <= f.range) {
+            const tx = f.x + dx, ty = f.y + dy;
+            if (tx >= 0 && tx < COLS && ty >= 0 && ty < ROWS) {
+              G.ctx.fillRect(tx * TS, ty * TS, TS, TS);
+            }
+          }
+        }
+      }
+    } else {
+      G.ctx.fillRect(f.x * TS, f.y * TS, TS, TS);
+    }
     G.ctx.globalAlpha = 1;
   }
 }

@@ -452,13 +452,18 @@ def exec_area(monster, room_id, monster_idx, action, msgs):
     aw = action.get("width", 1)
     ah = action.get("height", 1)
 
-    msgs.append(("broadcast", room_id, {
+    atk_msg = {
         "type": "area_attack",
         "id": monster_idx,
         "x": ax,
         "y": ay,
         "range": range_val,
-    }, None))
+    }
+    if aw > 1:
+        atk_msg["width"] = aw
+    if ah > 1:
+        atk_msg["height"] = ah
+    msgs.append(("broadcast", room_id, atk_msg, None))
 
     for p, a in avatars_in_room(room_id):
         if p.hp > 0:

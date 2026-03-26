@@ -836,7 +836,7 @@ function handleMessage(msg) {
       break;
 
     case "area_attack":
-      G.monsterAttackFlashes.push({ x: msg.x, y: msg.y, startTime: Date.now() });
+      G.monsterAttackFlashes.push({ x: msg.x, y: msg.y, width: msg.width || 1, height: msg.height || 1, range: msg.range, startTime: Date.now() });
       break;
 
     case "warmup_cancel": {
