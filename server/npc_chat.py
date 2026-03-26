@@ -110,6 +110,8 @@ GIFT_EFFECTS = {
 _conversations: dict[tuple[str, str], list[dict]] = defaultdict(list)
 _last_chat_time: dict[str, float] = {}  # player_name -> last npc chat time
 _last_guard_summon: dict[str, float] = {}  # room_id -> last summon time
+_angry_streak: dict[tuple[str, str], int] = defaultdict(int)  # (player, npc) -> consecutive angry count
+ANGRY_STREAK_THRESHOLD = 2  # require N consecutive [ANGRY] before summoning guards
 
 # ---------------------------------------------------------------------------
 # Server-wide hourly budget tracking
@@ -495,14 +497,24 @@ async def handle_npc_chat(player, guard: dict, text: str):
     raw_response = response  # keep original for debug log
     response = response.strip('"\'')
 
-    # Check for special tags before truncating
-    summon_guards = "[CALL_GUARDS]" in response
-    if summon_guards:
-        response = response.replace("[CALL_GUARDS]", "").strip()
-
+    # Check for special tags before cleanup — forced-choice classification tags
+    is_angry = "[ANGRY]" in response
     give_item = "[GIVE_ITEM]" in response
-    if give_item:
-        response = response.replace("[GIVE_ITEM]", "").strip()
+
+    # Consecutive-angry filter: only summon guards after N angry responses in a row
+    if is_angry:
+        _angry_streak[conv_key] += 1
+        summon_guards = _angry_streak[conv_key] >= ANGRY_STREAK_THRESHOLD
+    else:
+        _angry_streak[conv_key] = 0
+        summon_guards = False
+
+    # Also support legacy [CALL_GUARDS] tag (e.g. from CLI/API backends)
+    if "[CALL_GUARDS]" in response:
+        summon_guards = True
+
+    # Strip all classification tags from the response
+    response = re.sub(r'\[(FRIENDLY|NEUTRAL|ANGRY|CALL_GUARDS|GIVE_ITEM)\]', '', response).strip()
 
     # Strip emojis and *actions* — small models love these
     response = re.sub(r'\*[^*]+\*', '', response)  # *winks*, *laughs*, etc.
@@ -689,4 +701,7 @@ def clear_player_history(player_name: str):
     keys_to_remove = [k for k in _conversations if k[0] == player_name]
     for k in keys_to_remove:
         del _conversations[k]
+    streak_keys = [k for k in _angry_streak if k[0] == player_name]
+    for k in streak_keys:
+        del _angry_streak[k]
     _last_chat_time.pop(player_name, None)

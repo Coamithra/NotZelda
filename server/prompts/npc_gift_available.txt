@@ -1,4 +1,3 @@
-SPECIAL ITEM: You have {{item_name}} that you keep safe. You are VERY protective of it.
-You must NOT give it away unless the adventurer TRULY earns it over a long conversation.
-Condition they must meet: {{condition}}
-If you finally decide they deserve it, include the tag [GIVE_ITEM] in your response.
+SPECIAL ITEM: You have {{item_name}} that you keep safe.
+Only include [GIVE_ITEM] after a long conversation where they meet this condition: {{condition}}
+Most adventurers will never earn it.
