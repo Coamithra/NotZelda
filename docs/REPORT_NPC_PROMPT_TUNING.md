@@ -196,6 +196,8 @@ Research literally says small models rival large ones on classification. We just
 | best research combo | 5.6% | 74.1% | 20.0% | 50.0% | 254 |
 | **forced-choice** | **13.9%** | **93.7%** | **5.6%** | **88.9%** | **104** |
 
+Now, sharp eyes will notice that forced-choice actually has a *higher* guard false alarm rate (13.9%) than the best research combo (5.6%). So why pick it? Because it dominates on everything else: guard catch rate jumps from 74% to 94%, gift false alarms drop from 20% to 6%, gift catch rate nearly doubles from 50% to 89%, and it does all this at less than half the tokens. The only metric where it loses is guard false alarm — and that's exactly what the consecutive-call filter is for.
+
 The gift numbers were the jaw-dropper. **5.6% gift false positives** — down from 31%. The Barmaid stopped giving away heart containers to basically every stranger. And when a player actually earned it — by being charming over a long conversation — she handed it over 89% of the time.
 
 ![The Barmaid gives a gift to a worthy hero](images/report_04_gift.png)
