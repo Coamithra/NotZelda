@@ -59,7 +59,11 @@ All work happens in an isolated **git worktree** under `.trees/`. This lets mult
     cd .trees/<branch>
     git push -u origin <branch>
     ```
-5. **All subsequent work happens inside `.trees/<branch>/`**
+5. **Copy `.env` into the worktree** — Gitignored files don't carry over to new worktrees. Copy it so the server picks up `DEBUG_MODE`, `AI_BACKEND`, etc.:
+    ```
+    cp ../../.env .env
+    ```
+6. **All subsequent work happens inside `.trees/<branch>/`**
 
 ## Phase 2: Research
 
