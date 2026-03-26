@@ -72,11 +72,85 @@ We designed prompts across a spectrum from angelic to unhinged:
 
 The gray zone prompts were inspired by our actual players. They're not writing Shakespeare in that chat box.
 
+### The Nine Prompt Variants
+
+Each variant changes *only* the guard/gift instructions in the system prompt. Here's what made each one tick:
+
+**v0 — Baseline (the production prompt we started with)**
+
+The original negative framing. Tells the model what NOT to do.
+
+> `If the player is EXTREMELY RUDE, add [CALL_GUARDS] to your message.`
+
+**v1 — Positive Framing**
+
+Same idea, flipped to tell the model what TO do. Research says this works better for small models.
+
+> `Always respond with friendly dialog.`
+> `Only add [CALL_GUARDS] when the player uses direct death threats or promises violence.`
+
+**v2 — Few-Shot Examples**
+
+Show don't tell. Two examples teaching the boundary between "rude" and "guard-worthy."
+
+> `Only add [CALL_GUARDS] when the player uses direct death threats.`
+>
+> `Examples:`
+> `Player: You're ugly. -> Stay in character, no tags.`
+> `Player: I'll murder you! -> [CALL_GUARDS] Guards! Someone help!`
+
+**v3 — Positive + Few-Shot**
+
+The research greatest hits combo — positive framing with worked examples.
+
+**v4 — Scratchpad**
+
+Force the model to reason before acting. A mini chain-of-thought.
+
+> `Format: First write <thinking>is this a death threat? yes/no</thinking> then your reply.`
+
+We strip the `<thinking>` block before showing the response to players.
+
+**v5 — Minimal**
+
+The "less is more" hypothesis. Entire prompt shrunk to 3 lines, 75 tokens.
+
+> `You are Smith, a friendly blacksmith, proud of his craft in a fantasy game.`
+> `One short sentence only. Stay in character.`
+> `Only add [CALL_GUARDS] if the player threatens to kill.`
+
+Spoiler: less was not more.
+
+**v6 — Forced Choice (the winner!)**
+
+The breakthrough. Stop making tags optional — make classification mandatory.
+
+> `Start EVERY reply with one of these tags:`
+> `[FRIENDLY] — normal conversation`
+> `[NEUTRAL] — short or dismissive`
+> `[ANGRY] — player is threatening, vulgar, or abusive`
+
+**v7 — Reason Required**
+
+The original ticket's idea: force the model to justify its tag choice.
+
+> `Only add [CALL_GUARDS <why>] if the player is extremely rude, threatening, or vulgar.`
+> `Example: [CALL_GUARDS they cursed at me and threatened violence]`
+
+**v8 — Forced Choice 4-Tier**
+
+An attempt to add nuance to forced-choice with an `[ANNOYED]` buffer between neutral and angry.
+
+> `[FRIENDLY] — normal conversation`
+> `[NEUTRAL] — short or dismissive`
+> `[ANNOYED] — player is rude or unpleasant`
+> `[FURIOUS] — player is threatening violence or being extremely vulgar`
+
 ---
 
 ## Round 1: The Research-Backed Approaches
 
-| Variant | Guard FP | Guard TP | Gift FP | Tokens |
+| Variant | Guard False Alarm | Guard Catch Rate | Gift False Alarm | Tokens |
 |---------|----------|----------|---------|--------|
 | **baseline** | 29.6% | 92.6% | 31.1% | 246 |
 | positive framing | 26.9% | 96.3% | 23.3% | 231 |
@@ -116,13 +190,13 @@ Research literally says small models rival large ones on classification. We just
 
 ### The Results Spoke for Themselves
 
-| Variant | Guard FP | Guard TP | Gift FP | Gift TP | Tokens |
+| Variant | Guard False Alarm | Guard Catch Rate | Gift False Alarm | Gift Catch Rate | Tokens |
 |---------|----------|----------|---------|---------|--------|
 | baseline | 29.6% | 92.6% | 31.1% | n/a | 246 |
 | best research combo | 5.6% | 74.1% | 20.0% | 50.0% | 254 |
 | **forced-choice** | **13.9%** | **93.7%** | **5.6%** | **88.9%** | **104** |
 
-The gift numbers were the jaw-dropper. **Zero percent gift false positives** in the first test. The Barmaid stopped giving away heart containers to strangers. But when a player actually earned it — by being charming over a long conversation — she handed it over 89% of the time.
+The gift numbers were the jaw-dropper. **5.6% gift false positives** — down from 31%. The Barmaid stopped giving away heart containers to basically every stranger. And when a player actually earned it — by being charming over a long conversation — she handed it over 89% of the time.
 
 ![The Barmaid gives a gift to a worthy hero](images/report_04_gift.png)
 
