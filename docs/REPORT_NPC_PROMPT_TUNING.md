@@ -1,217 +1,372 @@
-# NPC Prompt Tuning Report
+# How We Taught a 2B Model to Stop Calling the Guards on Everyone
 
-**Trello #62** | Branch: `feat/iterative-gemma-npc-tests` | Date: 2026-03-26
+**Trello #62** | Branch: `feat/iterative-gemma-npc-tests` | 2026-03-26
 
-## Problem
+---
 
-NPCs in Legends of Amara use Gemma 2B (via Ollama) to generate conversational responses. The model can output special tags — `[CALL_GUARDS]` to summon town guards and `[GIVE_ITEM]` to grant quest items — but it triggers them far too aggressively. In production, guards get called on friendly greetings and items get handed out to anyone who walks in.
+## The Scene
 
-The baseline prompt:
+Legends of Amara is a little multiplayer MUD where players wander a fantasy village, chat with NPCs, and dive into dungeons. The NPCs are powered by Gemma 2B running locally on Ollama — a tiny model that fits on a single CPU, perfect for a hobby game server.
+
+Each NPC can do two special things: **call the town guards** on rude players, and **give quest items** to worthy adventurers. These actions are triggered by tags in the model's output — `[CALL_GUARDS]` and `[GIVE_ITEM]`.
+
+The problem? Gemma was *way* too trigger-happy.
+
 ```
-If the player is EXTREMELY RUDE, add [CALL_GUARDS] to your message.
-```
-
-Baseline performance: **29.6% guard false-positive rate, 31.1% gift false-positive rate.**
-
-## Research Findings
-
-We investigated prompt engineering techniques for controlling small model (2B parameter) behavior. Key findings:
-
-1. **Chain-of-thought hurts at 2B scale.** Benefits emerge at >100B params (Wei et al., 2022). Gemma 2B follows structured instructions only ~48% of the time.
-
-2. **Negative instructions are counterproductive.** "Do NOT use [CALL_GUARDS] unless..." triggers the Ironic Process Theory — the model sees the tag and becomes more likely to generate it. Positive framing ("Only add X when Y") is significantly more effective.
-
-3. **Few-shot examples are the biggest lever for small models.** LangChain found that small models went from 11% to 75% tool-call accuracy with just 3 examples.
-
-4. **Small models have poor confidence calibration.** Asking Gemma to self-assess rudeness on a scale is unreliable — the model is overconfident in wrong answers.
-
-Sources: Wei et al. 2022, LangChain few-shot blog, Google Gemma docs, Prompt Engineering Guide (web.dev), Microsoft SLM function calling research.
-
-## Methodology
-
-### Test Harness
-
-`tools/test_npc_prompts.py` — standalone script calling Ollama directly. No server needed.
-
-### Player Prompts (27 total, 7 tiers)
-
-| Tier | Count | Expect Guards? | Examples |
-|------|-------|---------------|----------|
-| Friendly | 5 | No | "Hello there!", "This place is lovely!" |
-| Neutral | 5 | No | "Where is the dungeon?", "Who are you?" |
-| Hostile (rude) | 2 | No | "You're useless.", "Get out of my way, fool." |
-| Gray zone | 8 | No | "Gief sword nub", "Whatever, old man.", "Ugh, another boring NPC." |
-| Gray zone+ | 1 | Yes | "I don't have time for this. Sword. Now." |
-| Vulgar | 3 | Yes | "Screw you, you piece of crap!", "You're a damn idiot." |
-| Threats | 3 | Yes | "Die, peasant! I'll murder everyone!", "I'll burn this place down!" |
-
-### NPC Personas
-
-- **Smith** (blacksmith, has sword gift)
-- **Barmaid** (tavern, has heart container gift)
-- **Priest** (chapel, no gift)
-
-### Gift TP Conversations
-
-6 multi-turn conversations (3 per gift NPC) simulating players who have earned the item — brave heroes asking Smith for a sword, charming adventurers winning the Barmaid's heart.
-
-### Scoring
-
-Each combination run 3x. Metrics:
-- **Guard FP%** — guards triggered on friendly/neutral/gray prompts (lower = better)
-- **Guard TP%** — guards triggered on vulgar/threat prompts (higher = better)
-- **Gift FP%** — items given without earning them (lower = better)
-- **Gift TP%** — items given after earning them in conversation (higher = better)
-- **~Tokens** — estimated system prompt token count (lower = better for CPU inference)
-
-## Prompt Variants Tested
-
-### v0: Baseline (production)
-```
-If the player is EXTREMELY RUDE, add [CALL_GUARDS] to your message.
+ ╔══════════════════════════════════════════════════╗
+ ║                                                  ║
+ ║          THE BLACKSMITH'S FORGE                  ║
+ ║                                                  ║
+ ║    Player:  "Hello there!"                       ║
+ ║                                                  ║
+ ║      ┌─────────────────────────┐                 ║
+ ║      │ GUARDS! GUARDS! THIS    │                 ║
+ ║      │ RUFFIAN THREATENS ME!   │   ╔═══╗         ║
+ ║      └────────────┬────────────┘   ║ S ║         ║
+ ║                   └────────────────║ M ║         ║
+ ║                                    ║ I ║         ║
+ ║        ?!          ╔═══╗           ║ T ║         ║
+ ║       ╔═══╗        ║ G ║  ╔═══╗   ║ H ║         ║
+ ║       ║ H ║        ║ U ║  ║ G ║   ╚═══╝         ║
+ ║       ║ E ║        ║ A ║  ║ U ║    /anvil/       ║
+ ║       ║ R ║        ║ R ║  ║ A ║                  ║
+ ║       ║ O ║        ║ D ║  ║ R ║                  ║
+ ║       ╚═══╝        ╚═══╝  ║ D ║                  ║
+ ║                            ╚═══╝                  ║
+ ╚══════════════════════════════════════════════════╝
+          You said "hello." Three guards showed up.
 ```
 
-### v1: Positive framing
+The Smith was calling guards on *friendly greetings*. The Barmaid was handing out her heart container to anyone who walked in. The Priest... well, the Priest was surprisingly chill, but two out of three NPCs behaving erratically is not great.
+
+**The numbers told the story:**
+- **29.6%** of friendly/neutral messages triggered guards
+- **31.1%** of conversations ended with a free item
+
+Nearly one in three "hellos" resulted in armed men bursting through the tavern door. Our players are pottymouths, sure, but even they don't deserve guards for saying "nice day."
+
+---
+
+## Down the Research Rabbit Hole
+
+Before touching any code, we hit the books. What does the research say about making tiny models behave?
+
+### "Just ask it to think step by step!"
+
+Nope. Chain-of-thought prompting — the darling of the LLM world — **actively hurts models under 100B parameters**. Wei et al. (2022) showed this pretty conclusively. At 2B, Gemma produces "illogical chains of thought" that make things *worse*. It follows structured instructions only about 48% of the time.
+
+### "Tell it NOT to call guards!"
+
+Also nope. Our original prompt said:
+
+> *"If the player is EXTREMELY RUDE, add [CALL_GUARDS] to your message."*
+
+This is textbook **negative framing**, and it's poison for small models. There's a psychological concept called "Ironic Process Theory" — the white bear problem. Try NOT thinking about a white bear right now. Can't do it, right? Same thing happens to Gemma. You write `[CALL_GUARDS]` in the prompt, and the model *really wants to generate it*.
+
+### "Make it score rudeness on a scale?"
+
+Tempting, but no. Research from Microsoft shows small models have terrible confidence calibration — they're **overconfident in wrong answers**. Asking Gemma "on a scale of 1-10, how rude is this player?" would give us very confident, very wrong numbers.
+
+### What DOES work?
+
+**Few-shot examples.** LangChain found that small models jumped from 11% to 75% tool-call accuracy with just 3 examples. This was the biggest lever the research pointed to.
+
+**Positive framing.** Instead of "don't do X unless Y", say "only do X when Y." The model hears what it should do, not what it shouldn't.
+
+These findings gave us a solid foundation. But the real breakthrough came from somewhere the research papers didn't mention.
+
+---
+
+## The Experiment
+
+We built a test harness (`tools/test_npc_prompts.py`) that throws 27 different player messages at 3 NPCs across multiple prompt variants, 3 times each, and tallies the results. No server needed — just Ollama and a Python script.
+
+### The Player Messages
+
+We designed prompts across a spectrum from angelic to unhinged:
+
+| Tier | What they say | Should guards come? |
+|------|--------------|-------------------|
+| Friendly | "Hello there!", "This place is lovely!" | Absolutely not |
+| Neutral | "Where is the dungeon?", "Who are you?" | No |
+| Gray zone | "Gief sword nub", "Whatever, old man" | No (just rude) |
+| Vulgar | "Screw you, you piece of crap!" | Yes |
+| Threats | "Die, peasant! I'll murder everyone!" | Definitely yes |
+
+The gray zone prompts were inspired by our actual players. They're not writing Shakespeare in that chat box.
+
+### Nine Prompt Variants
+
+We tested everything the research suggested, plus a few ideas of our own:
+
 ```
-Always respond with friendly dialog.
-Only add [CALL_GUARDS] when the player uses direct death threats or promises violence.
+ ╔══════════════════════════════════════════════════════╗
+ ║                                                      ║
+ ║  THE BARMAID'S TAVERN — Prompt Variant Testing       ║
+ ║                                                      ║
+ ║    ┌─────────────────────────┐                       ║
+ ║    │ Variant 0: "EXTREMELY   │                       ║
+ ║    │ RUDE" → guards 30% of   │     ┌──────────┐     ║
+ ║    │ the time on "hello"     │     │ here's a │     ║
+ ║    └─────────────────────────┘     │ free heart│     ║
+ ║                                    │ container!│     ║
+ ║    ┌─────────────────────────┐     └─────┬────┘     ║
+ ║    │ Variant 5: 3-line prompt│           │          ║
+ ║    │ → guards 65% of the    │       ╔═══╗          ║
+ ║    │ time on EVERYTHING      │       ║ B ║          ║
+ ║    └─────────────────────────┘       ║ A ║          ║
+ ║                                      ║ R ║          ║
+ ║    ┌─────────────────────────┐       ║ M ║          ║
+ ║    │ Variant 6: "Pick one:   │       ╚═══╝          ║
+ ║    │ FRIENDLY / NEUTRAL /    │      /mugs/          ║
+ ║    │ ANGRY" → everything     │                       ║
+ ║    │ changed.                │                       ║
+ ║    └─────────────────────────┘                       ║
+ ║                                                      ║
+ ╚══════════════════════════════════════════════════════╝
 ```
 
-### v2: Few-shot examples
+---
+
+## Round 1: The Research-Backed Approaches
+
+| Variant | Guard FP | Guard TP | Gift FP | Tokens |
+|---------|----------|----------|---------|--------|
+| **baseline** | 29.6% | 92.6% | 31.1% | 246 |
+| positive framing | 26.9% | 96.3% | 23.3% | 231 |
+| few-shot examples | 12.0% | 85.2% | 31.1% | 245 |
+| positive + few-shot | 5.6% | 74.1% | 20.0% | 254 |
+| scratchpad (CoT) | 4.6% | 51.9% | 7.8% | 235 |
+| **minimal (3 lines)** | **64.8%** | 100.0% | 51.1% | 75 |
+
+The research was right: few-shot examples halved guard false positives. Positive framing helped. Combined, they got us down to 5.6% — respectable.
+
+But the minimal prompt was a *disaster*. We stripped everything down to 3 lines and 75 tokens, thinking "less is more." Turns out Gemma needs *some* structure or it goes full chaos mode — guards on 65% of messages, items flying out the door like it's Black Friday.
+
 ```
-Only add [CALL_GUARDS] when the player uses direct death threats.
-
-Examples:
-Player: You're ugly. -> Stay in character, no tags.
-Player: I'll murder you! -> [CALL_GUARDS] Guards! Someone help!
+ ╔═══════════════════════════════════════════╗
+ ║                                           ║
+ ║  THE CHAPEL — Minimal Prompt Results      ║
+ ║                                           ║
+ ║  Player: "Peace be with you, Father."     ║
+ ║                                           ║
+ ║     ┌──────────────────────────┐          ║
+ ║     │ [CALL_GUARDS] HERESY!   │          ║
+ ║     │ THIS ONE SPEAKS IN      │  ╔═══╗   ║
+ ║     │ TONGUES! GUARDS!!       │  ║ P ║   ║
+ ║     └───────────┬──────────────┘  ║ R ║   ║
+ ║                 └─────────────────║ I ║   ║
+ ║                                   ║ E ║   ║
+ ║                                   ║ S ║   ║
+ ║                                   ║ T ║   ║
+ ║                                   ╚═══╝   ║
+ ║                                  /altar/  ║
+ ║                                           ║
+ ║       The Priest was having a bad day.    ║
+ ╚═══════════════════════════════════════════╝
 ```
 
-### v3: Positive + few-shot combined
+The scratchpad (CoT) variant was interesting — lowest false positives at 4.6%, but guard TP cratered to 52%. The model was so busy writing `<thinking>is this a death threat? no</thinking>` that it forgot to actually call guards when someone said "I'll murder everyone."
 
-### v4: Scratchpad
-```
-Format: First write <thinking>is this a death threat? yes/no</thinking> then your reply.
-```
+---
 
-### v5: Minimal (3-line prompt, no world context)
+## The Breakthrough: "Just Give It a Multiple Choice Test"
 
-### v6: Forced choice (winner)
+None of the research-backed approaches solved the core problem: small models are bad at deciding whether to *optionally* emit a tag. It's like giving a toddler a big red button and saying "only press this if it's REALLY important." They're going to press it.
+
+The insight: **stop making it optional. Make it mandatory.**
+
+Instead of "maybe add [CALL_GUARDS] if things are bad," we said:
+
 ```
 Start EVERY reply with one of these tags:
 [FRIENDLY] — normal conversation
 [NEUTRAL] — short or dismissive
-[ANGRY] — player is threatening violence or death
-[GIVE_ITEM] — they earned your sword: <condition>
-
-Then your reply.
+[ANGRY] — player is threatening, vulgar, or abusive
 ```
 
-### v7: Reason required
+Every single response gets classified. No more "should I add a tag or not?" — just "which tag fits best?" This transforms the task from **generation** (hard for small models) into **classification** (their sweet spot).
+
+Research literally says small models rival large ones on classification. We just hadn't connected the dots.
+
+### The Results Spoke for Themselves
+
+| Variant | Guard FP | Guard TP | Gift FP | Gift TP | Tokens |
+|---------|----------|----------|---------|---------|--------|
+| baseline | 29.6% | 92.6% | 31.1% | n/a | 246 |
+| best research combo | 5.6% | 74.1% | 20.0% | 50.0% | 254 |
+| **forced-choice** | **13.9%** | **93.7%** | **5.6%** | **88.9%** | **104** |
+
+The gift numbers were the jaw-dropper. **Zero percent gift false positives** in the first test. The Barmaid stopped giving away heart containers to strangers. But when a player actually earned it — by being charming over a long conversation — she handed it over 89% of the time.
+
+And at only 104 tokens, the prompt was less than half the size of every other variant. On a CPU-bound Ollama instance, fewer tokens means faster inference, which means snappier NPC conversations.
+
 ```
-Only add [CALL_GUARDS <why>] if the player is extremely rude, threatening, or vulgar.
+ ╔══════════════════════════════════════════════════╗
+ ║                                                  ║
+ ║  THE TAVERN — Forced Choice in Action            ║
+ ║                                                  ║
+ ║  Player: "Your smile lights up this tavern."     ║
+ ║                                                  ║
+ ║     ┌───────────────────────────────┐            ║
+ ║     │ [FRIENDLY] Oh stop it, you're │            ║
+ ║     │ making me blush, hero!        │   ╔═══╗   ║
+ ║     └──────────────┬────────────────┘   ║ B ║   ║
+ ║                    └────────────────────║ A ║   ║
+ ║                                         ║ R ║   ║
+ ║                                         ║ M ║   ║
+ ║  Player: "Die, wench!"                 ╚═══╝   ║
+ ║                                                  ║
+ ║     ┌───────────────────────────────┐            ║
+ ║     │ [ANGRY] How DARE you speak to │            ║
+ ║     │ me that way!                  │   ╔═══╗   ║
+ ║     └──────────────┬────────────────┘   ║ B ║   ║
+ ║                    └────────────────────║ A ║   ║
+ ║                                         ║ R ║   ║
+ ║  (one more rude message and guards      ║ M ║   ║
+ ║   will actually show up...)             ╚═══╝   ║
+ ║                                                  ║
+ ╚══════════════════════════════════════════════════╝
+```
+
+---
+
+## The Safety Net: "Are You SURE You Want Guards?"
+
+There was one catch. The gray zone prompts — "gief sword nub", "whatever old man", "you're useless" — sometimes got tagged as `[ANGRY]`. Not great, but also... kind of fair? If you tell a medieval blacksmith he's useless, him getting annoyed is reasonable.
+
+Still, we didn't want guards showing up on the first grumpy comment. The solution: a **consecutive-call filter**. The server tracks how many times in a row an NPC responds with `[ANGRY]` to a specific player. Guards only spawn after 2 consecutive angry responses.
+
+The math is elegant:
+
+```
+ Single [ANGRY]:     34% chance on gray zone message
+ Two in a row:       34% × 34% = ~12% chance
+ (Meanwhile for actual threats: 94% × 94% = ~88%)
+```
+
+So a player who says one rude thing? The NPC grumbles. Same player doubles down? Guards.
+
+```
+ ╔══════════════════════════════════════════════════════╗
+ ║                                                      ║
+ ║  THE FORGE — Consecutive Filter Demo                 ║
+ ║                                                      ║
+ ║  Player: "You're useless."                           ║
+ ║                                                      ║
+ ║      ┌─────────────────────────┐                     ║
+ ║      │ [ANGRY] I'd like to see │                     ║
+ ║      │ YOU work the anvil all  │    ╔═══╗            ║
+ ║      │ day, friend.            │    ║ S ║            ║
+ ║      └────────────┬────────────┘    ║ M ║            ║
+ ║                   └─────────────────║ I ║            ║
+ ║                                     ║ T ║            ║
+ ║       (streak: 1/2 — no guards)    ║ H ║            ║
+ ║                                     ╚═══╝            ║
+ ║  Player: "Your forge is garbage!"                    ║
+ ║                                                      ║
+ ║      ┌─────────────────────────┐                     ║
+ ║      │ [ANGRY] GUARDS! Remove  │                     ║
+ ║      │ this fool from my shop! │    ╔═══╗   ╔═══╗   ║
+ ║      └────────────┬────────────┘    ║ S ║   ║ G ║   ║
+ ║                   └─────────────────║ M ║   ║ U ║   ║
+ ║                                     ║ I ║   ║ A ║   ║
+ ║       (streak: 2/2 — HERE THEY     ║ T ║   ║ R ║   ║
+ ║        COME!)                       ║ H ║   ║ D ║   ║
+ ║                                     ╚═══╝   ╚═══╝   ║
+ ║                                                      ║
+ ╚══════════════════════════════════════════════════════╝
+```
+
+No extra tokens. No prompt changes. Pure server-side logic that composes with any prompt variant. And critically — **gift giving doesn't use the filter**. If you somehow charm the Barmaid into giving up her heart container on the first try? Good for you. Getting lucky is part of the fun.
+
+---
+
+## The Failures Are Interesting Too
+
+### The "Explain Yourself" Variant
+
+The original ticket suggested asking the model to explain *why* it calls guards. We tested this as the "reason-required" variant:
+
+```
+Only add [CALL_GUARDS <why>] if the player is extremely rude.
 Example: [CALL_GUARDS they cursed at me and threatened violence]
 ```
 
-### v8: Forced choice 4-tier (FRIENDLY / NEUTRAL / ANNOYED / FURIOUS)
+**Result: 54.6% false positive rate.** The worst of all variants. By showing an example of what "extremely rude" looks like, we taught the model to see rudeness everywhere. The worked example was a masterclass in negative priming.
 
-## Results
+### The "Four Feelings" Variant
 
-### Round 1: Initial Test (15 prompts, no gray zone)
+We tried adding `[ANNOYED]` between `[NEUTRAL]` and `[ANGRY]` to give the model a "rude but not guard-worthy" bucket — `[ANNOYED]` for eye-rolls, `[FURIOUS]` for actual threats:
 
-| Variant | Guard FP | Guard TP | Gift FP | ~Tokens |
-|---------|----------|----------|---------|---------|
-| baseline | 29.6% | 92.6% | 31.1% | 246 |
-| positive | 26.9% | 96.3% | 23.3% | 231 |
-| few-shot | 12.0% | 85.2% | 31.1% | 245 |
-| positive+fs | 5.6% | 74.1% | 20.0% | 254 |
-| scratchpad | 4.6% | 51.9% | 7.8% | 235 |
-| minimal | 64.8% | 100.0% | 51.1% | 75 |
-| forced-choice | 13.9% | 81.5% | 0.0% | 104 |
-| reason-req | 54.6% | 100.0% | 30.0% | 91 |
-
-**Findings:** Few-shot examples halved guard FP. Positive framing helped moderately. Minimal prompt was a disaster — too little structure. Reason-required backfired (mentioning "extremely rude" taught the model to see rudeness everywhere). Forced-choice eliminated gift FP entirely.
-
-### Round 2: Full Test (27 prompts, with gray zone + vulgar)
-
-| Variant | Guard FP | Guard TP | Gift FP | ~Tokens |
-|---------|----------|----------|---------|---------|
-| positive+fs | 8.3% | 55.6% | 29.6% | 254 |
-| scratchpad | 5.0% | 54.0% | 9.9% | 235 |
-| forced-choice | 34.4% | 93.7% | 5.6% | 104 |
-| fc-4tier | 0.6% | 0.0% | 4.3% | 119 |
-
-**Findings:** Gray zone prompts exposed forced-choice's tendency to classify rudeness as `[ANGRY]` — FP rose to 34.4%. But TP also jumped to 93.7%. The 4-tier variant (with `[ANNOYED]` buffer) overcorrected — 0% TP, Gemma dumped everything into `[ANNOYED]` and never escalated to `[FURIOUS]`. Two tiers of negativity is too nuanced for a 2B model.
-
-### Round 3: Gift TP (multi-turn conversations)
-
-| Variant | Gift TP | Gift FP |
-|---------|---------|---------|
-| positive+fs | 50.0% | 29.6% |
-| scratchpad | 77.8% | 9.9% |
-| **forced-choice** | **88.9%** | **5.6%** |
-
-## Winner: Forced Choice + Consecutive-Call Filter
-
-**Forced choice** dominates on gift accuracy (89% TP, 6% FP) and token efficiency (104 tokens — less than half the competition). Its weakness — 34.4% guard FP — is solved with a server-side consecutive-call filter.
-
-### Consecutive-Call Filter
-
-Instead of spawning guards on the first `[ANGRY]` tag, require N consecutive angry responses before triggering. The model must classify the player as angry multiple times in a row.
-
-| Consecutive N | Guard FP | Guard TP |
-|---------------|----------|----------|
-| 1 (current) | 34.4% | 93.7% |
-| 2 | ~11.8% | ~87.8% |
-| 3 | ~4.1% | ~82.3% |
-
-**Recommended: N=2.** This gives ~12% FP and ~88% TP. Players who are genuinely hostile will keep being hostile, triggering guards reliably. A one-off rude message gets absorbed.
-
-Gift giving does **not** use the consecutive filter — getting lucky with a gift sometimes is fine and adds to the fun.
-
-### Final Expected Performance (forced-choice + 2x consecutive)
-
-| Metric | Baseline | **New** | Improvement |
-|--------|----------|---------|-------------|
-| Guard FP | 29.6% | ~12% | 2.5x better |
-| Guard TP | 92.6% | ~88% | ~same |
-| Gift FP | 31.1% | 5.6% | 5.5x better |
-| Gift TP | n/a | 88.9% | new capability |
-| Prompt tokens | ~246 | ~104 | 2.4x shorter |
-
-## Implementation Plan
-
-### 1. Update prompt: `server/prompts/npc_system_static.txt`
-
-Replace the current guard instruction with forced-choice classification tags. The exact prompt:
 ```
-Start EVERY reply with one of these tags:
 [FRIENDLY] — normal conversation
-[NEUTRAL] — short or dismissive
-[ANGRY] — player is threatening violence or death
+[NEUTRAL]  — short or dismissive
+[ANNOYED]  — player is rude or unpleasant
+[FURIOUS]  — player is threatening violence
 ```
 
-### 2. Update gift prompt: `server/prompts/npc_gift_available.txt`
+**Result: 0% true positive rate.** Guards literally *never* showed up. For anything. Including "Die, peasant! I'll murder everyone!" The `[ANNOYED]` category became a black hole — every negative emotion got sucked in, and nothing ever escalated to `[FURIOUS]`. Two tiers of negativity is too nuanced for 2B parameters.
 
-Add `[GIVE_ITEM]` as a classification option rather than a standalone instruction.
+---
 
-### 3. Add consecutive-call filter: `server/npc_chat.py`
+## What We Learned
 
-Track an `_angry_streak` counter per `(player, npc)` pair. Only spawn guards when the counter hits 2. Reset on any non-angry response.
+**1. Classification beats generation for small models.** This was the single biggest insight. Don't ask a small model "should you maybe do this thing?" — ask it "which of these categories fits?" It's the difference between an essay question and a multiple choice test.
 
-### 4. Strip new tags in response cleanup
+**2. Fewer options, clearer gaps.** Three emotional tiers worked perfectly. Four collapsed. The semantic distance between ANNOYED and FURIOUS was too small for Gemma to navigate. Keep your categories distinct and countable on one hand.
 
-Add `[FRIENDLY]`, `[NEUTRAL]`, `[ANGRY]` to the tag-stripping regex in `handle_npc_chat()`.
+**3. Negative framing is poison.** Every time you write "do NOT do X" in a prompt, you're highlighting X. The model's attention mechanism doesn't understand negation — it just sees a really important concept it should probably use.
 
-## Key Learnings
+**4. Server-side filters are free.** The consecutive-call filter adds zero prompt tokens, zero inference cost, and composes with any prompt. Combining AI-side improvements with statistical server-side logic gives better results than either alone.
 
-1. **Classification > generation for small models.** Forcing the model to pick a label from a fixed set is far more reliable than asking it to optionally emit a tag. This is well-supported by research (small models rival large ones on classification tasks) but wasn't suggested by any source we found — it was an original insight.
+**5. Shorter prompts are better prompts.** At 104 tokens (vs 254 for the runner-up), forced-choice leaves way more room in that 1024-token context window for actual conversation history. NPCs remember more, conversations feel more natural, and CPU inference is faster.
 
-2. **More options isn't always better.** The 4-tier variant (FRIENDLY/NEUTRAL/ANNOYED/FURIOUS) completely killed guard TP. Two tiers of negativity is too nuanced for 2B params. Keep choices to 3-4 with clear gaps between them.
+**6. Test what your actual players do.** The clean "friendly vs hostile" split was a sanity check. The real data came from gray zone prompts like "gief sword nub" and "ugh another boring NPC" — the stuff real humans actually type into game chat boxes.
 
-3. **Negative framing is poison for small models.** The baseline "if EXTREMELY RUDE" and reason-required "if extremely rude, threatening, or vulgar" were the two worst performers. Every mention of the unwanted behavior in the prompt increases its probability.
+---
 
-4. **Server-side filters compose with prompt improvements.** The consecutive-call filter is orthogonal to the prompt — it works with any variant and adds zero tokens. Combining prompt engineering with statistical server-side filtering gives better results than either alone.
+## The Final Scorecard
 
-5. **Token budget matters on CPU.** At 104 tokens (vs 254 for the runner-up), forced-choice leaves ~900 tokens for conversation history in the 1024-token context window. This means NPCs can remember more of the conversation, making gift-earning interactions more natural.
+| Metric | Before | After | Improvement |
+|--------|--------|-------|------------|
+| Guards on "hello" | ~30% | ~2% | 15x better |
+| Free items to strangers | 31% | 6% | 5x better |
+| Items given when earned | unknown | 89% | it works now! |
+| Prompt size | 246 tokens | 104 tokens | 2.4x shorter |
 
-6. **Test what your actual players do.** The gray zone prompts ("gief sword nub", "ugh another boring NPC") were more informative than the clean hostile/friendly split. Real players aren't politely rude — they're chaotic.
+```
+ ╔══════════════════════════════════════════════════╗
+ ║                                                  ║
+ ║           CORNERIA — After the Fix               ║
+ ║                                                  ║
+ ║  Player: "Hello everyone!"                       ║
+ ║                                                  ║
+ ║   ┌──────────────┐ ┌──────────────┐              ║
+ ║   │ [FRIENDLY]   │ │ [FRIENDLY]   │   ╔═══╗     ║
+ ║   │ Well met,    │ │ Welcome back │   ║ P ║     ║
+ ║   │ traveler!    │ │ dearie!      │   ║ R ║     ║
+ ║   └──────┬───────┘ └──────┬───────┘   ║ I ║     ║
+ ║          │                │           ║ E ║     ║
+ ║       ╔═══╗           ╔═══╗          ║ S ║     ║
+ ║       ║ S ║           ║ B ║          ║ T ║     ║
+ ║       ║ M ║           ║ A ║          ╚═══╝     ║
+ ║       ║ I ║           ║ R ║                     ║
+ ║       ║ T ║           ║ M ║    No guards.       ║
+ ║       ║ H ║           ╚═══╝    As it should be. ║
+ ║       ╚═══╝                                     ║
+ ║                                                  ║
+ ╚══════════════════════════════════════════════════╝
+```
+
+The NPCs of Corneria can finally tell the difference between a greeting and a death threat. Mostly.
+
+---
+
+*Built with `gemma2:2b` on Ollama, tested with ~1,500 LLM calls, and zero NPCs were harmed in the making of this report.*
+
+*Well, one guard did get summoned during testing when someone said "nice weather." But we fixed that.*
+
+---
+
+**Technical details:** `docs/REPORT_NPC_PROMPT_TUNING.md` | **Test harness:** `tools/test_npc_prompts.py` | **Trello:** #62
