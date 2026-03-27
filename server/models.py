@@ -62,6 +62,9 @@ class Player:
         self.death_room = None        # room_id where the player died
         self.keys = 0                 # dungeon keys held (persists across dungeon exits)
         self.active_attack = None     # dict {direction, start_time, room, hit_monsters} or None
+        self.death_x = 0.0            # x position where player died (tombstone location)
+        self.death_y = 0.0            # y position where player died
+        self.chose_respawn = False    # True if dead player clicked Respawn button
         self.avatar = Avatar(8.0, 5.0, "down")
 
     def quest(self, qid: str) -> int:
@@ -75,6 +78,24 @@ class Player:
 
     def grant_flag(self, flag: str):
         self.flags.add(flag)
+
+
+class Tombstone:
+    """Standalone game object spawned when a player dies with allies nearby.
+
+    All revival state lives here, not on Player. The dead player's avatar is
+    destroyed as normal — this object tracks position and revival progress.
+    """
+    def __init__(self, player, room_id: str, x: float, y: float):
+        self.player = player          # dead Player reference (for reviving)
+        self.name = player.name       # display name
+        self.room_id = room_id        # room where tombstone sits
+        self.x = x
+        self.y = y
+        self.color_index = player.color_index
+        self.reviver = None           # Player currently channeling, or None
+        self.revival_start_time = 0.0 # when channel started
+        self.created_time = 0.0       # time.monotonic() when tombstone appeared
 
 
 class Monster:

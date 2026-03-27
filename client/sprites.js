@@ -434,6 +434,13 @@ const ITEM_DRAW_FNS = {
   key: drawItemKey,
 };
 
+function drawTombstone(ctx, px, py, S) {
+  for (const [color, x, y, w, h] of TOMBSTONE_SPRITE) {
+    ctx.fillStyle = color;
+    ctx.fillRect(px + x*S, py + y*S, w*S, h*S);
+  }
+}
+
 function drawGroundItem(ctx, px, py, itemType, S) {
   const bounce = Math.sin(Date.now() / 300) * 2 * S;
   const drawFn = ITEM_DRAW_FNS[itemType];

@@ -284,6 +284,12 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
     if player.room in game.locked_rooms:
         msg["locked"] = True
 
+    # Tombstones in this room
+    room_tombstones = [{"name": ts.name, "x": ts.x, "y": ts.y, "color_index": ts.color_index}
+                       for ts in game.tombstones.values() if ts.room_id == player.room]
+    if room_tombstones:
+        msg["tombstones"] = room_tombstones
+
     # Attach custom sprite/tile data so the client can render them.
     # For dungeon rooms, send ALL registered custom content (the player may
     # encounter any of it as they explore). For overworld rooms, send only

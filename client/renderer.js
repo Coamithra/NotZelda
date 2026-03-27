@@ -264,7 +264,11 @@ function updateDyingOtherPlayers() {
   for (const [name, dp] of Object.entries(G.room.dyingOtherPlayers)) {
     advanceFrame(dp, DYING_PLAYER_FRAME_MS, now);
     if (dp.frame > 5) {
-      delete G.room.dyingOtherPlayers[name];
+      // If a tombstone exists for this player, keep the dying entry
+      // (stops advancing but stays so tombstone can take over rendering)
+      if (!G.room.tombstones[name]) {
+        delete G.room.dyingOtherPlayers[name];
+      }
     }
   }
 }
@@ -314,22 +318,41 @@ function renderDeathAnimation() {
   const elapsed = Date.now() - G.player.dyingPlayerSelf.startTime;
   const duration = 5000;
 
-  if (elapsed >= duration) return;
+  // After death animation: hold black + "You died!" until server sends
+  // waiting_for_revival (tombstone path) or room_enter (auto-respawn path).
+  // No gap — client stays dark regardless of network timing.
+  if (elapsed >= duration) {
+    if (G.player.waitingForRevival) {
+      renderRevivalWaiting();
+    } else {
+      G.ui.ctx.fillStyle = "rgba(0,0,0,1)";
+      G.ui.ctx.fillRect(0, 0, CW, CH);
+      G.ui.ctx.font = "bold 28px monospace";
+      G.ui.ctx.fillStyle = "#cc3333";
+      const txt = "You died!";
+      G.ui.ctx.fillText(txt, CW / 2 - G.ui.ctx.measureText(txt).width / 2, CH / 2);
+    }
+    return;
+  }
 
   const px = G.player.dyingPlayerSelf.x * TS;
   const py = G.player.dyingPlayerSelf.y * TS;
 
-  if (elapsed < 1000) {
+  if (elapsed < 2000) {
+    // Spin phase — 2s with ease-in darkening so you can watch the spin
     const dirs = ["down", "left", "up", "right"];
     const spinDir = dirs[Math.floor(elapsed / 80) % 4];
-    const playerAlpha = Math.max(0, 1 - elapsed / 1000);
+    const t = elapsed / 2000;
+    const easeIn = t * t;  // quadratic ease-in
+    const playerAlpha = Math.max(0, 1 - easeIn);
     G.ui.ctx.globalAlpha = playerAlpha;
     drawPlayer(G.ui.ctx, px, py, spinDir, G.player.myColorIndex, 0, SCALE);
     G.ui.ctx.globalAlpha = 1;
-    G.ui.ctx.fillStyle = `rgba(0,0,0,${elapsed / 1000 * 0.7})`;
+    G.ui.ctx.fillStyle = `rgba(0,0,0,${easeIn * 0.7})`;
     G.ui.ctx.fillRect(0, 0, CW, CH);
-  } else if (elapsed < 1500) {
-    const blackAlpha = 0.7 + 0.3 * ((elapsed - 1000) / 500);
+  } else if (elapsed < 2500) {
+    // Transition to full black
+    const blackAlpha = 0.7 + 0.3 * ((elapsed - 2000) / 500);
     G.ui.ctx.fillStyle = `rgba(0,0,0,${blackAlpha})`;
     G.ui.ctx.fillRect(0, 0, CW, CH);
   } else {
@@ -337,8 +360,8 @@ function renderDeathAnimation() {
     G.ui.ctx.fillRect(0, 0, CW, CH);
   }
 
-  if (elapsed > 800) {
-    const textAlpha = Math.min(1, (elapsed - 800) / 500);
+  if (elapsed > 1600) {
+    const textAlpha = Math.min(1, (elapsed - 1600) / 500);
     G.ui.ctx.globalAlpha = textAlpha;
     G.ui.ctx.font = "bold 28px monospace";
     G.ui.ctx.fillStyle = "#cc3333";
@@ -347,6 +370,173 @@ function renderDeathAnimation() {
     G.ui.ctx.fillText(txt, CW/2 - tw/2, CH/2);
     G.ui.ctx.globalAlpha = 1;
   }
+}
+
+// Respawn button dimensions (canvas coordinates) — shared between render and input
+const RESPAWN_BTN = {
+  w: 160, h: 40,
+  get x() { return CW / 2 - this.w / 2; },
+  get y() { return CH / 2 + 80; },
+};
+
+function renderRevivalWaiting() {
+  const ctx = G.ui.ctx;
+  const now = Date.now();
+
+  const waitStart = G.player._revivalWaitStart || (G.player._revivalWaitStart = now);
+  const elapsed = now - waitStart;
+
+  // Smoothstep: overlay fades from 1.0 (fully black, matching death screen)
+  // down to 0.20 over 5 seconds so the dead player can watch the action
+  const FADE_DURATION = 5000;
+  const t = Math.min(elapsed / FADE_DURATION, 1.0);
+  const smooth = t * t * (3 - 2 * t);
+  const overlayAlpha = 1.0 - (1.0 - 0.20) * smooth;
+  ctx.fillStyle = `rgba(0, 0, 0, ${overlayAlpha})`;
+  ctx.fillRect(0, 0, CW, CH);
+
+  // "You died!" fades out over first 1.5s, "Waiting for revival..." fades in
+  const TEXT_CROSSFADE = 1500;
+  const crossfade = Math.min(elapsed / TEXT_CROSSFADE, 1.0);
+
+  if (crossfade < 1.0) {
+    // "You died!" text fading out
+    ctx.globalAlpha = 1.0 - crossfade;
+    ctx.font = "bold 28px monospace";
+    ctx.fillStyle = "#cc3333";
+    const died = "You died!";
+    ctx.fillText(died, CW / 2 - ctx.measureText(died).width / 2, CH / 2);
+    ctx.globalAlpha = 1;
+  }
+
+  // "Waiting for revival..." fades in, then pulses
+  const waitAlpha = crossfade < 1.0
+    ? crossfade
+    : 0.5 + 0.5 * Math.sin(now / 600);
+  ctx.globalAlpha = waitAlpha;
+  ctx.font = "bold 18px monospace";
+  ctx.fillStyle = "#e0d0a0";
+  const waitTxt = "Waiting for revival...";
+  ctx.fillText(waitTxt, CW / 2 - ctx.measureText(waitTxt).width / 2, CH / 2 - 10);
+  ctx.globalAlpha = 1;
+
+  // Revival progress bar (when someone is channeling)
+  if (G.player.revivalProgress) {
+    const rp = G.player.revivalProgress;
+    const progress = Math.min((now - rp.startTime) / rp.duration, 1.0);
+
+    const barW = 200, barH = 16;
+    const barX = CW / 2 - barW / 2;
+    const barY = CH / 2 + 20;
+
+    ctx.fillStyle = "#333";
+    ctx.fillRect(barX, barY, barW, barH);
+
+    const fillW = barW * progress;
+    const grad = ctx.createLinearGradient(barX, barY, barX + barW, barY);
+    grad.addColorStop(0, "#ffcc00");
+    grad.addColorStop(1, "#ffe066");
+    ctx.fillStyle = grad;
+    ctx.fillRect(barX, barY, fillW, barH);
+
+    ctx.strokeStyle = "#888";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX, barY, barW, barH);
+
+    ctx.font = "14px monospace";
+    ctx.fillStyle = "#ccc";
+    const revTxt = `Being revived by ${rp.reviverName}...`;
+    ctx.fillText(revTxt, CW / 2 - ctx.measureText(revTxt).width / 2, barY + barH + 20);
+  }
+
+  // Respawn button — fade in with the waiting text
+  const btnAlpha = Math.min(crossfade, 1.0);
+  ctx.globalAlpha = btnAlpha;
+  const btn = RESPAWN_BTN;
+  const hover = G.player._respawnBtnHover;
+  ctx.fillStyle = hover ? "#554433" : "#3a2a1a";
+  ctx.strokeStyle = "#aa8855";
+  ctx.lineWidth = 2;
+  _roundRect(ctx, btn.x, btn.y, btn.w, btn.h, 6);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.font = "bold 16px monospace";
+  ctx.fillStyle = hover ? "#ffe0a0" : "#ccaa77";
+  const btnTxt = "Respawn";
+  ctx.fillText(btnTxt, CW / 2 - ctx.measureText(btnTxt).width / 2, btn.y + 26);
+  ctx.globalAlpha = 1;
+}
+
+function _roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function renderTombstones() {
+  const ctx = G.ui.ctx;
+  const now = Date.now();
+  for (const [name, ts] of Object.entries(G.room.tombstones)) {
+    const px = ts.x * TS;
+    const py = ts.y * TS;
+
+    // Draw tombstone sprite
+    drawTombstone(ctx, px, py, SCALE);
+
+    // Player name label below
+    ctx.font = "bold 10px monospace";
+    ctx.fillStyle = "#999";
+    const tw = ctx.measureText(name).width;
+    ctx.fillText(name, px + TS / 2 - tw / 2, py + TS + 12);
+
+    // Revival progress ring (for the reviver looking at it)
+    if (G.room.activeRevival && G.room.activeRevival.targetName === name) {
+      const ar = G.room.activeRevival;
+      const progress = Math.min((now - ar.startTime) / ar.duration, 1.0);
+      const cx = px + TS / 2;
+      const cy = py + TS / 2;
+      const radius = TS * 0.6;
+
+      // Background ring
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(100, 80, 40, 0.4)";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      // Progress arc
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, -Math.PI / 2, -Math.PI / 2 + progress * Math.PI * 2);
+      ctx.strokeStyle = "#ffcc00";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+  }
+}
+
+function renderReviverGlow() {
+  if (!G.room.activeRevival || !G.player.myPlayer) return;
+  const ctx = G.ui.ctx;
+  const now = performance.now() / 1000;
+  const pulse = 0.3 + 0.15 * Math.sin(now * 4);
+  const cx = G.player.displayX * TS + TS / 2;
+  const cy = G.player.displayY * TS + TS / 2;
+  const radius = TS * 0.8;
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+  grad.addColorStop(0, `rgba(255, 200, 50, ${pulse})`);
+  grad.addColorStop(0.6, `rgba(255, 180, 30, ${pulse * 0.3})`);
+  grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
 }
 
 function startAttack(name, direction) {

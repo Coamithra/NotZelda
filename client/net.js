@@ -271,7 +271,12 @@ function handleMessage(msg) {
       G.player.itemPickupActive = null;
       G.player.itemPickupEffects = {};
       G.player.dyingPlayerSelf = null;
+      G.player.waitingForRevival = false;
+      G.player.revivalProgress = null;
+      G.player._revivalWaitStart = null;
       G.room.dyingOtherPlayers = {};
+      G.room.tombstones = {};
+      G.room.activeRevival = null;
       G.fx.bossDeathEffect = null;
       G.fx.projectiles = [];
       G.fx.areaWarnings = [];
@@ -302,6 +307,12 @@ function handleMessage(msg) {
       for (const p of msg.players) {
         G.room.otherPlayers[p.name] = createOtherPlayer(p.x, p.y, p.direction, p.color_index);
         if (p.dancing) startDance(p.name);
+      }
+      // Populate tombstones from room data
+      if (msg.tombstones) {
+        for (const ts of msg.tombstones) {
+          G.room.tombstones[ts.name] = { x: ts.x, y: ts.y, color_index: ts.color_index };
+        }
       }
       G.player.preciseX = G.player.myPlayer.x;
       G.player.preciseY = G.player.myPlayer.y;
@@ -359,7 +370,7 @@ function handleMessage(msg) {
           startTime: Date.now(),
           duration: 500,
         };
-      } else if (oldCanvas && prevRoom) {
+      } else if (oldCanvas && prevRoom && prevRoom.room_id !== msg.room_id) {
         const transDir = guessTransitionDir(prevRoom.room_id, msg.room_id, msg.exit_direction, prevExits);
         const isFade = transDir === "up" || transDir === "down";
         G.ui.transition = {
@@ -1009,6 +1020,76 @@ function handleMessage(msg) {
       }
       break;
     }
+
+    // ----- Revival system -----
+
+    case "waiting_for_revival":
+      G.player.waitingForRevival = true;
+      appendChatLog(`<span class="chat-system">Waiting for revival... Press Respawn to give up.</span>`);
+      break;
+
+    case "tombstone_placed":
+      G.room.tombstones[msg.name] = { x: msg.x, y: msg.y, color_index: msg.color_index };
+      break;
+
+    case "tombstone_removed":
+      delete G.room.tombstones[msg.name];
+      delete G.room.dyingOtherPlayers[msg.name];
+      if (G.room.activeRevival && G.room.activeRevival.targetName === msg.name) {
+        G.room.activeRevival = null;
+      }
+      break;
+
+    case "revival_started": {
+      const revDuration = (msg.duration || 10) * 1000;  // server sends seconds
+      if (msg.target === G.player.myName) {
+        // Someone is reviving us
+        G.player.revivalProgress = {
+          reviverName: msg.reviver,
+          startTime: Date.now(),
+          duration: revDuration,
+        };
+      }
+      if (msg.reviver === G.player.myName) {
+        // We are reviving someone
+        G.room.activeRevival = {
+          targetName: msg.target,
+          startTime: Date.now(),
+          duration: revDuration,
+        };
+      }
+      break;
+    }
+
+    case "revival_cancelled":
+      if (G.player.revivalProgress) G.player.revivalProgress = null;
+      if (G.room.activeRevival && (!msg.target || G.room.activeRevival.targetName === msg.target)) {
+        G.room.activeRevival = null;
+      }
+      break;
+
+    case "revival_complete": {
+      // Sparkle burst at revival position
+      const rcx = msg.x * TS + TS / 2;
+      const rcy = msg.y * TS + TS / 2;
+      spawnBurst(rcx, rcy, 12, 3, 600,
+        ["#ffe066", "#ffffff", "#ffcc00", "#ffd700"],
+        [3 * SCALE, 6 * SCALE]);
+      G.room.activeRevival = null;
+      if (msg.target === G.player.myName) {
+        G.player.revivalProgress = null;
+      }
+      appendChatLog(`<span class="chat-system">${escHtml(msg.reviver)} revived ${escHtml(msg.target)}!</span>`);
+      break;
+    }
+
+    case "you_revived":
+      G.player.waitingForRevival = false;
+      G.player.revivalProgress = null;
+      G.player.dyingPlayerSelf = null;
+      G.player._revivalWaitStart = null;
+      appendChatLog(`<span class="chat-system">${escHtml(msg.reviver)} revived you!</span>`);
+      break;
 
     case "error":
       G.ui.loginError.textContent = msg.text;

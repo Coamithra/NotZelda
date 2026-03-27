@@ -205,7 +205,7 @@ async def handle_connection(websocket):
                 msg_type = data.get("type")
                 if msg_type == "ping":
                     await player.ws.send(json.dumps({"type": "pong"}))
-                elif msg_type in ("position_update", "face", "attack", "chat", "unlock_door"):
+                elif msg_type in ("position_update", "face", "attack", "chat", "unlock_door", "respawn_request"):
                     player.command_queue.append((msg_type, data))
             except json.JSONDecodeError:
                 log.debug(f"[WARN] {name}: bad JSON: {raw[:200]}")
@@ -230,6 +230,27 @@ async def handle_connection(websocket):
             log.event("LEAVE", player.name)
             clear_player_history(player.name)
             disc_msgs = []
+
+            # Clean up tombstone if this player had one
+            if player.name in game.tombstones:
+                ts = game.tombstones.pop(player.name)
+                if ts.reviver:
+                    disc_msgs.append(("send", ts.reviver, {"type": "revival_cancelled"}))
+                disc_msgs.append(("broadcast", ts.room_id, {
+                    "type": "tombstone_removed", "name": player.name,
+                }, None))
+
+            # Cancel any revival this player was channeling
+            for ts in game.tombstones.values():
+                if ts.reviver is player:
+                    ts.reviver = None
+                    ts.revival_start_time = 0.0
+                    disc_msgs.append(("send", ts.player, {"type": "revival_cancelled"}))
+                    disc_msgs.append(("broadcast", ts.room_id, {
+                        "type": "revival_cancelled", "target": ts.name,
+                    }, None))
+                    break
+
             disc_msgs.append(("broadcast", leaving_room,
                               {"type": "player_left", "name": player.name}, None))
             on_player_leave_room(leaving_room, disc_msgs)

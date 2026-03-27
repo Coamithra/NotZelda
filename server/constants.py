@@ -70,6 +70,8 @@ HEART_DROP_CHANCE = 0.1
 INVINCIBILITY_DURATION = 1.5
 COLLISION_GRACE_PERIOD = 0.1  # seconds before contact damage triggers (corner-scrape forgiveness)
 ITEM_PICKUP_FREEZE_DURATION = 2.5  # seconds — monsters pause during item pickup animation
+REVIVAL_DURATION = 6.5              # seconds — channel time to revive a tombstone
+REVIVAL_PROXIMITY = 1.0             # tile distance — how close reviver must be to tombstone
 
 # Tick loop
 TICK_INTERVAL = 1.0 / 30     # ~33ms — unified game tick rate

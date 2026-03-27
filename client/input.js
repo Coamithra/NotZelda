@@ -246,3 +246,46 @@ if (G.ui.isMobile) {
 document.getElementById("debug-btn").addEventListener("click", () => {
   if (G.debug.debugMode) G.debug.showDebug = !G.debug.showDebug;
 });
+
+// ---------------------------------------------------------------------------
+// Revival — Respawn button click handling
+// ---------------------------------------------------------------------------
+
+function _canvasCoords(e) {
+  const canvas = G.ui.canvas;
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) * (canvas.width / rect.width),
+    y: (e.clientY - rect.top) * (canvas.height / rect.height),
+  };
+}
+
+function _isInRespawnBtn(cx, cy) {
+  if (typeof RESPAWN_BTN === "undefined") return false;
+  const btn = RESPAWN_BTN;
+  return cx >= btn.x && cx <= btn.x + btn.w && cy >= btn.y && cy <= btn.y + btn.h;
+}
+
+G.ui.canvas.addEventListener("mousemove", (e) => {
+  if (!G.player.waitingForRevival) { G.player._respawnBtnHover = false; return; }
+  const { x, y } = _canvasCoords(e);
+  G.player._respawnBtnHover = _isInRespawnBtn(x, y);
+});
+
+G.ui.canvas.addEventListener("click", (e) => {
+  if (!G.player.waitingForRevival) return;
+  const { x, y } = _canvasCoords(e);
+  if (_isInRespawnBtn(x, y)) {
+    sendToServer({ type: "respawn_request" });
+  }
+});
+
+G.ui.canvas.addEventListener("touchstart", (e) => {
+  if (!G.player.waitingForRevival) return;
+  const touch = e.touches[0];
+  const { x, y } = _canvasCoords(touch);
+  if (_isInRespawnBtn(x, y)) {
+    e.preventDefault();
+    sendToServer({ type: "respawn_request" });
+  }
+}, { passive: false });

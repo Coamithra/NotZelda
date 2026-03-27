@@ -13,6 +13,7 @@ from server.constants import (
     PROJECTILE_TICK_RATE, SWORD_ACTIVE_DURATION,
     GUARD_DESPAWN_TIMEOUT, GUARD_DESPAWN_DISTANCE, GUARD_DESPAWN_GRACE,
     TICK_INTERVAL, COLLISION_GRACE_PERIOD,
+    REVIVAL_DURATION, REVIVAL_PROXIMITY,
 )
 from server.net import send_to, broadcast_to_room, avatars_in_room, player_info
 
@@ -24,7 +25,7 @@ from server.net import send_to, broadcast_to_room, avatars_in_room, player_info
 # Tuple format:
 #   ("broadcast", room_id, msg_dict, exclude_ws_or_None)
 #   ("send", player, msg_dict)
-#   ("death", player, old_room_id)
+#   ("death", player, old_room_id, death_x, death_y)
 #   ("guard_chat", player, guard)
 #   ("npc_chat", player, guard, text)
 #   ("debug_spawn", player, args)
@@ -103,6 +104,11 @@ def _apply_damage(player, damage: int, room_id: str, msgs: list,
             "debug_source_w": source_w,
             "debug_source_h": source_h,
         }, None))
+        # Cancel any revival this player is channeling
+        for ts in game.tombstones.values():
+            if ts.reviver is player:
+                _cancel_revival(ts, msgs)
+                break
     else:
         # Player died
         msgs.append(("broadcast", room_id, {
@@ -117,7 +123,7 @@ def _apply_damage(player, damage: int, room_id: str, msgs: list,
             "x": a.x,
             "y": a.y,
         }))
-        msgs.append(("death", player, room_id))
+        msgs.append(("death", player, room_id, a.x, a.y))
 
 
 async def flush_messages(msgs: list):
@@ -132,10 +138,13 @@ async def flush_messages(msgs: list):
             _, player, msg = entry
             await send_to(player, msg)
         elif kind == "death":
-            _, player, old_room_id = entry
+            _, player, old_room_id, dx, dy = entry
             player.dead = True
             player.death_time = time.monotonic()
             player.death_room = old_room_id
+            player.death_x = dx
+            player.death_y = dy
+            player.avatar = None  # destroy physical presence — tombstone takes over
         elif kind == "guard_chat":
             _, player, guard = entry
             asyncio.ensure_future(handle_quest_npc(player, guard))
@@ -159,6 +168,9 @@ def _respawn_player(player, msgs):
     player.dead = False
     player.death_time = 0.0
     player.death_room = None
+    player.death_x = 0.0
+    player.death_y = 0.0
+    player.chose_respawn = False
     player.hp = player.max_hp
     player.room = STARTING_ROOM
     spawn = game.rooms[STARTING_ROOM]["spawn_points"]["default"]
@@ -196,11 +208,164 @@ def _respawn_player(player, msgs):
 # Background tick loops
 # ---------------------------------------------------------------------------
 
+def _has_potential_revivers(player) -> bool:
+    """Check if any alive player is in the same area (dungeon instance or overworld)."""
+    from server.dungeons import get_dungeon_for_room, is_dungeon_room
+    death_room = player.death_room
+    inst = get_dungeon_for_room(death_room)
+    for p in game.players.values():
+        if p is player or p.dead:
+            continue
+        if inst:
+            if p.room in inst.active_rooms:
+                return True
+        else:
+            if not is_dungeon_room(p.room):
+                return True
+    return False
+
+
+def _place_tombstone(player, now, msgs):
+    """Create a Tombstone game object for a dead player."""
+    from server.models import Tombstone
+    ts = Tombstone(player, player.death_room, player.death_x, player.death_y)
+    ts.created_time = now
+    game.tombstones[player.name] = ts
+    msgs.append(("broadcast", player.death_room, {
+        "type": "tombstone_placed",
+        "name": player.name, "x": ts.x, "y": ts.y, "color_index": ts.color_index,
+    }, None))
+    msgs.append(("send", player, {"type": "waiting_for_revival"}))
+    log.event("TOMBSTONE", f"{player.name} tombstone placed in {player.death_room}")
+
+
+def _remove_tombstone(name, msgs):
+    """Remove a tombstone and broadcast its removal."""
+    ts = game.tombstones.pop(name, None)
+    if ts:
+        if ts.reviver:
+            msgs.append(("send", ts.reviver, {"type": "revival_cancelled"}))
+        msgs.append(("broadcast", ts.room_id, {
+            "type": "tombstone_removed", "name": name,
+        }, None))
+
+
+def _cancel_revival(ts, msgs):
+    """Cancel an in-progress revival channel."""
+    if ts.reviver:
+        msgs.append(("send", ts.reviver, {"type": "revival_cancelled"}))
+    msgs.append(("send", ts.player, {"type": "revival_cancelled"}))
+    msgs.append(("broadcast", ts.room_id, {
+        "type": "revival_cancelled", "target": ts.name,
+    }, None))
+    ts.reviver = None
+    ts.revival_start_time = 0.0
+
+
+def _complete_revival(ts, now, msgs):
+    """Revive a dead player at their tombstone position."""
+    from server.lifecycle import on_player_enter_room, send_room_enter
+    from server.models import Avatar
+
+    player = ts.player
+    reviver = ts.reviver
+    room_id = ts.room_id
+
+    player.dead = False
+    player.death_time = 0.0
+    player.death_room = None
+    player.death_x = 0.0
+    player.death_y = 0.0
+    player.chose_respawn = False
+    player.hp = player.max_hp
+    player.avatar = Avatar(ts.x, ts.y, "down")
+    player.command_queue.clear()
+    player.active_attack = None
+    player.last_damage_time = now  # brief invincibility after revival
+
+    game.tombstones.pop(player.name, None)
+
+    msgs.append(("broadcast", room_id, {
+        "type": "tombstone_removed", "name": player.name,
+    }, None))
+    msgs.append(("broadcast", room_id, {
+        "type": "revival_complete",
+        "reviver": reviver.name, "target": player.name,
+        "x": ts.x, "y": ts.y,
+    }, None))
+    msgs.append(("send", player, {"type": "you_revived", "reviver": reviver.name}))
+
+    on_player_enter_room(room_id)
+    send_room_enter(player, msgs)
+    msgs.append(("broadcast", room_id,
+                  {"type": "player_entered", **player_info(player)}, player.ws))
+    log.event("REVIVE", f"{reviver.name} revived {player.name} in {room_id}")
+
+
 def _tick_players(now, msgs):
-    """Check dead players for respawn after death animation delay."""
+    """Two-phase death handling: death animation → tombstone or auto-respawn."""
     for player in list(game.players.values()):
-        if player.dead and now - player.death_time >= PLAYER_RESPAWN_DELAY:
-            _respawn_player(player, msgs)
+        if not player.dead:
+            continue
+        if player.name in game.tombstones:
+            # Phase 2: has tombstone — check manual respawn or orphan
+            if player.chose_respawn:
+                _remove_tombstone(player.name, msgs)
+                _respawn_player(player, msgs)
+            elif not _has_potential_revivers(player):
+                _remove_tombstone(player.name, msgs)
+                _respawn_player(player, msgs)
+        elif now - player.death_time >= PLAYER_RESPAWN_DELAY:
+            # Phase 1: death animation done — tombstone vs auto-respawn
+            if player.chose_respawn:
+                _respawn_player(player, msgs)
+            elif _has_potential_revivers(player):
+                _place_tombstone(player, now, msgs)
+            else:
+                _respawn_player(player, msgs)
+
+
+def _tick_revivals(now, msgs):
+    """Check revival proximity, start/cancel/complete revival channels."""
+    for name, ts in list(game.tombstones.items()):
+        # Skip revival checks during room pickup freeze
+        freeze_info = game.room_pickup_freeze.get(ts.room_id)
+        if freeze_info and now < freeze_info["end"]:
+            if ts.reviver and ts.revival_start_time > 0:
+                # Shift revival start forward so freeze doesn't count as channel time
+                ts.revival_start_time = now
+            continue
+        if ts.reviver:
+            r = ts.reviver
+            # Validate reviver is still valid
+            if r.dead or r.avatar is None or r.room != ts.room_id:
+                _cancel_revival(ts, msgs)
+                continue
+            dx = r.avatar.x - ts.x
+            dy = r.avatar.y - ts.y
+            if (dx * dx + dy * dy) > REVIVAL_PROXIMITY * REVIVAL_PROXIMITY:
+                _cancel_revival(ts, msgs)
+                continue
+            # Check completion
+            if now - ts.revival_start_time >= REVIVAL_DURATION:
+                _complete_revival(ts, now, msgs)
+        else:
+            # Look for a new reviver among alive players in the room
+            for p, a in avatars_in_room(ts.room_id):
+                if p.dead or p is ts.player:
+                    continue
+                dx = a.x - ts.x
+                dy = a.y - ts.y
+                if (dx * dx + dy * dy) <= REVIVAL_PROXIMITY * REVIVAL_PROXIMITY:
+                    ts.reviver = p
+                    ts.revival_start_time = now
+                    # Broadcast covers both reviver and dead player
+                    msgs.append(("broadcast", ts.room_id, {
+                        "type": "revival_started",
+                        "reviver": p.name, "target": ts.name,
+                        "duration": REVIVAL_DURATION,
+                    }, None))
+                    break
 
 
 def _tick_active_attacks(now, msgs):
@@ -513,12 +678,19 @@ async def game_tick():
             # Drain queued commands from all connected players
             for player in list(game.players.values()):
                 if player.dead or player.avatar is None:
+                    # Allow respawn_request while dead
+                    if player.dead:
+                        while player.command_queue:
+                            cmd_type, _ = player.command_queue.popleft()
+                            if cmd_type == "respawn_request":
+                                player.chose_respawn = True
                     continue
                 try:
                     process_player_commands(player, now, msgs)
                 except Exception:
                     traceback.print_exc()
             _tick_players(now, msgs)
+            _tick_revivals(now, msgs)
             _tick_active_attacks(now, msgs)
             _tick_all_monsters(now, msgs)
             _resolve_pending_collisions(now, msgs)

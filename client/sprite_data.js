@@ -162,3 +162,27 @@ const PLAYER_FALL_FRAMES = [
     ["BOOTS",13,10, 2, 2],
   ],
 ];
+
+// ---------------------------------------------------------------------------
+// Tombstone sprite — simple gray headstone with cross detail
+// Drawn in a 16x16 grid like other sprites
+// ---------------------------------------------------------------------------
+const TOMBSTONE_SPRITE = [
+  // Base/ground
+  ["#5a4a3a", 3,13, 10, 2],
+  // Stone body
+  ["#888",    4, 5, 8, 8],
+  ["#777",    4, 5, 8, 8],
+  // Rounded top
+  ["#888",    5, 3, 6, 2],
+  ["#888",    6, 2, 4, 1],
+  // Darker edges (depth)
+  ["#666",   11, 6, 1, 7],
+  ["#666",    4,12, 8, 1],
+  // Cross
+  ["#555",    7, 4, 2, 6],
+  ["#555",    6, 6, 4, 1],
+  // Highlight (left edge)
+  ["#999",    4, 5, 1, 7],
+  ["#999",    5, 3, 1, 2],
+];

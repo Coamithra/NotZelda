@@ -44,6 +44,7 @@ class GameState:
         self.room_projectiles = {}   # room_id -> {proj_id: Projectile}
         self.locked_rooms = {}       # room_id -> {"original_tiles": {(row,col): tile_code}}
         self.room_pickup_freeze = {} # room_id -> {"start": monotonic, "end": monotonic}
+        self.tombstones = {}         # player_name -> Tombstone
 
         # Dungeons
         self.active_dungeons = {}    # type_id -> DungeonInstance

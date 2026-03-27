@@ -75,6 +75,11 @@ const G = {
     keyCount: 0,                // dungeon keys held by this player
     itemPickupActive: null,     // {item_type, item_name, startTime, x, y}
     itemPickupEffects: {},      // name -> {item_type, startTime, x, y}
+
+    // Revival
+    waitingForRevival: false,   // True when dead + tombstone placed, showing waiting UI
+    revivalProgress: null,      // {reviverName, startTime, duration} when being revived
+    _respawnBtnHover: false,    // Respawn button hover state (set by mousemove in input.js)
   },
 
   // Current room, entities, dungeon state
@@ -95,6 +100,8 @@ const G = {
     dancingPlayers: {},    // name -> {frame, nextTime}
     attackingPlayers: {},  // name -> {direction, frame, nextTime}
     dyingOtherPlayers: {},
+    tombstones: {},            // name -> {x, y, color_index}
+    activeRevival: null,       // {targetName, startTime, duration} when local player channels
 
     // Chat
     speechBubbles: [],     // [{from, text, expires}]
