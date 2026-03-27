@@ -7,7 +7,7 @@ from server.state import game
 from server.constants import (
     DEBUG_MODE,
     DIRECTIONS, ROOM_COLS, ROOM_ROWS, DOORWAY_TILES,
-    ATTACK_COOLDOWN, HEART_DROP_CHANCE, HEART_RESTORE_HP,
+    ATTACK_COOLDOWN, TICK_INTERVAL, HEART_DROP_CHANCE, HEART_RESTORE_HP,
     POSITION_UPDATE_RATE, MAX_MOVE_PER_UPDATE, GUARD_COOLDOWN,
     COLLISION_GRACE_PERIOD,
 )
@@ -321,21 +321,35 @@ def _process_face(player, data, msgs):
 # Attack
 # ---------------------------------------------------------------------------
 
-def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs):
+def sword_hitbox(px, py, direction):
+    """Compute sword AABB from player position + direction. Single source of truth."""
+    dx, dy = DIRECTIONS.get(direction, (0, 0))
+    # 0.25 back into player + 0.75 forward
+    return (
+        px + (0.75 if dx > 0 else -0.75 if dx < 0 else 0),
+        py + (0.75 if dy > 0 else -0.75 if dy < 0 else 0),
+        1.0 if dx != 0 else 1.0,
+        1.0 if dy != 0 else 1.0,
+    )
+
+
+def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, anchor_x=None, anchor_y=None):
     """Check sword AABB against all monsters in the room, damaging new targets.
 
     Called on the initial attack tick and on each subsequent tick while the
-    sword is active.  ``hit_monsters`` is a *set* of monster indices already
+    sword is active.  ``hit_monsters`` is a *set* of monster object IDs already
     damaged by this swing — updated in-place so each monster is only hit once.
+
+    If ``anchor_x``/``anchor_y`` are provided, the hitbox is computed from that
+    position (client-supplied) instead of the server-side avatar position.
     """
     a = player.avatar
     if a is None:
         return
+    px = anchor_x if anchor_x is not None else a.x
+    py = anchor_y if anchor_y is not None else a.y
     dx, dy = DIRECTIONS.get(direction, (0, 0))
-    sword_x = a.x + (0.5 if dx > 0 else -1.0 if dx < 0 else 0)
-    sword_y = a.y + (0.5 if dy > 0 else -1.0 if dy < 0 else 0)
-    sword_w = 1.5 if dx != 0 else 1.0
-    sword_h = 1.5 if dy != 0 else 1.0
+    sword_x, sword_y, sword_w, sword_h = sword_hitbox(px, py, direction)
     for i, monster in enumerate(get_room_monsters(room_id)):
         mid = id(monster)
         if mid in hit_monsters:
@@ -372,7 +386,8 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs):
                         monster.x = round(monster.x)
                         monster.y = round(monster.y)
                         monster.move_seq += 1
-                # Always interrupt current action and reset decision timer on hit
+            # Always interrupt current action and reset decision timer on hit
+            if monster.hp > 0:
                 if monster.state != "idle":
                     set_monster_idle(monster, room_id, i, msgs)
                 else:
@@ -449,7 +464,7 @@ def _process_attack(player, data, now, msgs):
     if not player.has_flag("has_sword"):
         msgs.append(("send", player, {"type": "info", "text": "You don't have a weapon."}))
         return
-    if now - player.last_attack_time < ATTACK_COOLDOWN:
+    if now - player.last_attack_time < ATTACK_COOLDOWN - TICK_INTERVAL:
         return
     player.last_attack_time = now
     a = player.avatar
@@ -467,6 +482,17 @@ def _process_attack(player, data, now, msgs):
         "direction": a.direction,
     }, None))
 
+    # Use client-supplied position for precise hitbox placement (the server
+    # may not have the latest sub-half-tile position yet)
+    anchor_x = data.get("x")
+    anchor_y = data.get("y")
+    if anchor_x is not None and anchor_y is not None:
+        anchor_x = float(anchor_x)
+        anchor_y = float(anchor_y)
+    else:
+        anchor_x = a.x
+        anchor_y = a.y
+
     # Set up active attack for multi-frame hit detection
     hit_monsters = set()
     player.active_attack = {
@@ -474,10 +500,13 @@ def _process_attack(player, data, now, msgs):
         "start_time": now,
         "room": player.room,
         "hit_monsters": hit_monsters,
+        "anchor_x": anchor_x,
+        "anchor_y": anchor_y,
     }
 
     # First hit scan — instant hits still register with zero delay
-    sword_hit_scan(player, a.direction, player.room, hit_monsters, now, msgs)
+    sword_hit_scan(player, a.direction, player.room, hit_monsters, now, msgs,
+                   anchor_x=anchor_x, anchor_y=anchor_y)
 
 
 # ---------------------------------------------------------------------------

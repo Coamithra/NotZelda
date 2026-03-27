@@ -554,7 +554,7 @@ function playerTick() {
       const attackDone = now - G.player.stateData.startTime >= ATTACK_FRAME_MS * ATTACK_FRAMES;
       if (attackDone) {
         if (G.player.keysDown["Space"] && G.player.playerFlags.has("has_sword")) {
-          sendToServer({ type: "attack", direction: G.player.myPlayer.direction });
+          sendToServer({ type: "attack", direction: G.player.myPlayer.direction, x: G.player.preciseX, y: G.player.preciseY });
           startAttack(G.player.myName, G.player.myPlayer.direction);
           spawnSlashArc(G.player.myPlayer.direction);
           setState("attacking", { startTime: performance.now() });

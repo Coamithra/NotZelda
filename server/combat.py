@@ -218,7 +218,8 @@ def _tick_active_attacks(now, msgs):
             player.active_attack = None
             continue
         sword_hit_scan(player, atk["direction"], atk["room"],
-                       atk["hit_monsters"], now, msgs)
+                       atk["hit_monsters"], now, msgs,
+                       anchor_x=atk.get("anchor_x"), anchor_y=atk.get("anchor_y"))
 
 
 def _tick_all_monsters(now, msgs):
@@ -420,6 +421,7 @@ def _resolve_pending_collisions(now, msgs):
 async def _send_debug_state_snapshots():
     """Send full room state to players with /viewserver active."""
     from server.dungeons import get_dungeon_for_room
+    from server.commands import sword_hitbox
     for player in list(game.players.values()):
         if not getattr(player, '_viewserver', False):
             continue
@@ -449,6 +451,17 @@ async def _send_debug_state_snapshots():
         if dinst:
             for it in dinst.dungeon_items.get(room_id, []):
                 items.append({"x": it["x"], "y": it["y"]})
+        # Active sword hitboxes
+        swords = []
+        for p, a in avatars_in_room(room_id):
+            atk = p.active_attack
+            if atk is None:
+                continue
+            d = atk["direction"]
+            px = atk.get("anchor_x", a.x)
+            py = atk.get("anchor_y", a.y)
+            sx, sy, sw, sh = sword_hitbox(px, py, d)
+            swords.append({"x": sx, "y": sy, "w": sw, "h": sh})
         await send_to(player, {
             "type": "debug_state",
             "players": players,
@@ -456,6 +469,7 @@ async def _send_debug_state_snapshots():
             "projectiles": projectiles,
             "hearts": hearts,
             "items": items,
+            "swords": swords,
         })
 
 

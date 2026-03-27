@@ -58,7 +58,7 @@ document.addEventListener("keydown", (e) => {
       return;
     }
     if (G.player.state === "idle") {
-      sendToServer({ type: "attack", direction: G.player.myPlayer.direction });
+      sendToServer({ type: "attack", direction: G.player.myPlayer.direction, x: G.player.preciseX, y: G.player.preciseY });
       startAttack(G.player.myName, G.player.myPlayer.direction);
       spawnSlashArc(G.player.myPlayer.direction);
       setState("attacking", { startTime: performance.now() });

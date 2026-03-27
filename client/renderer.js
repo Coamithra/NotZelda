@@ -789,6 +789,12 @@ function renderServerDebug() {
     ctx.fillRect(it.x * TS + TS * 0.15, it.y * TS + TS * 0.15, TS * 0.7, TS * 0.7);
   }
 
+  // Active sword hitboxes — cyan
+  ctx.fillStyle = "#00ffff";
+  for (const sw of (s.swords || [])) {
+    ctx.fillRect(sw.x * TS, sw.y * TS, sw.w * TS, sw.h * TS);
+  }
+
   ctx.globalAlpha = 1;
 
   // Labels (fully opaque, small text)
