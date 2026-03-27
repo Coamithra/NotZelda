@@ -236,11 +236,17 @@ def _tick_all_monsters(now, msgs):
                 continue
             # Freeze just expired — shift all monster timers so they resume smoothly
             freeze_dur = freeze_info["end"] - freeze_info["start"]
+            freeze_start = freeze_info["start"]
             for m in monster_list:
                 if not m.alive:
                     continue
-                m.last_action_time += freeze_dur
-                if m.state == "walking":
+                # Only shift timers set before freeze; timers set during freeze
+                # (e.g. by player attacks) restart from thaw instead
+                if m.last_action_time < freeze_start:
+                    m.last_action_time += freeze_dur
+                else:
+                    m.last_action_time = freeze_info["end"]
+                if m.state == "walking" and m.state_data.start_time < freeze_start:
                     m.state_data.start_time += freeze_dur
                 elif m.state in ("charging", "teleporting", "area"):
                     m.state_data["end_time"] += freeze_dur

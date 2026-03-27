@@ -285,10 +285,12 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
                     # Freeze monsters in the room during item pickup animation
                     freeze_end = now + ITEM_PICKUP_FREEZE_DURATION
                     existing = game.room_pickup_freeze.get(player.room)
-                    if not existing or freeze_end > existing["end"]:
+                    if not existing:
                         game.room_pickup_freeze[player.room] = {
                             "start": now, "end": freeze_end,
                         }
+                    elif freeze_end > existing["end"]:
+                        existing["end"] = freeze_end  # extend without resetting start
                     # Clear pending contact collisions (grace periods go stale during freeze)
                     for p in game.players.values():
                         if p.room == player.room and p.avatar:

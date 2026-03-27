@@ -1204,6 +1204,7 @@ def destroy_dungeon(instance):
         game.room_projectiles.pop(room_id, None)
         game.room_to_dungeon.pop(room_id, None)
         game.locked_rooms.pop(room_id, None)
+        game.room_pickup_freeze.pop(room_id, None)
 
     game.active_dungeons.pop(type_id, None)
 
