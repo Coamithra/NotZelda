@@ -668,6 +668,20 @@ function gameLoop(timestamp) {
       }
     }
 
+    // Monster freeze — when item pickup pauses monsters, shift walk timers on thaw
+    const mf = G.room.monsterFreeze;
+    if (mf && performance.now() >= mf.start + mf.duration) {
+      for (const m of G.room.monsters) {
+        if (m.walkState && m.walkState.startTime < mf.start) {
+          m.walkState.startTime += mf.duration;
+        }
+        if (m.knockbackSlide && m.knockbackSlide.startTime < mf.start) {
+          m.knockbackSlide.startTime += mf.duration;
+        }
+      }
+      G.room.monsterFreeze = null;
+    }
+
     for (const m of G.room.monsters) {
       if (m.knockbackSlide) {
         const ks = m.knockbackSlide;
@@ -683,7 +697,9 @@ function gameLoop(timestamp) {
         }
       } else if (m.walkState) {
         const ws = m.walkState;
-        const elapsed = performance.now() - ws.startTime;
+        // During monster freeze, clamp time to freeze start so walks pause in place
+        const now = (mf && performance.now() < mf.start + mf.duration) ? mf.start : performance.now();
+        const elapsed = now - ws.startTime;
         const progress = Math.min(elapsed / ws.walkTime, 1.0);
         m.displayX = ws.fromX + (ws.toX - ws.fromX) * progress;
         m.displayY = ws.fromY + (ws.toY - ws.fromY) * progress;

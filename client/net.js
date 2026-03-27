@@ -267,6 +267,7 @@ function handleMessage(msg) {
       G.fx.screenShake = null;
       G.ui.canvas.style.transform = "";
       G.room.dungeonGroundItems = msg.dungeon_items || [];
+      G.room.monsterFreeze = null;
       G.player.itemPickupActive = null;
       G.player.itemPickupEffects = {};
       G.player.dyingPlayerSelf = null;
@@ -943,6 +944,13 @@ function handleMessage(msg) {
       }
       break;
     }
+
+    case "room_freeze":
+      G.room.monsterFreeze = {
+        start: performance.now(),
+        duration: msg.duration * 1000,
+      };
+      break;
 
     case "key_update":
       G.player.keyCount = msg.keys;

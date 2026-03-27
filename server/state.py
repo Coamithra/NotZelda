@@ -43,6 +43,7 @@ class GameState:
         self.room_hearts = {}        # room_id -> [heart dicts]
         self.room_projectiles = {}   # room_id -> {proj_id: Projectile}
         self.locked_rooms = {}       # room_id -> {"original_tiles": {(row,col): tile_code}}
+        self.room_pickup_freeze = {} # room_id -> {"start": monotonic, "end": monotonic}
 
         # Dungeons
         self.active_dungeons = {}    # type_id -> DungeonInstance

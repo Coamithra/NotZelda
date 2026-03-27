@@ -9,7 +9,7 @@ from server.constants import (
     DIRECTIONS, ROOM_COLS, ROOM_ROWS, DOORWAY_TILES,
     ATTACK_COOLDOWN, TICK_INTERVAL, HEART_DROP_CHANCE, HEART_RESTORE_HP,
     POSITION_UPDATE_RATE, MAX_MOVE_PER_UPDATE, GUARD_COOLDOWN,
-    COLLISION_GRACE_PERIOD,
+    COLLISION_GRACE_PERIOD, ITEM_PICKUP_FREEZE_DURATION,
 )
 from server import log
 from server.lifecycle import (
@@ -282,6 +282,21 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
                         collect_msg["y"] = item["y"]
                         collect_msg["room_id"] = player.room
                     broadcast_to_dungeon(dinst, collect_msg, msgs)
+                    # Freeze monsters in the room during item pickup animation
+                    freeze_end = now + ITEM_PICKUP_FREEZE_DURATION
+                    existing = game.room_pickup_freeze.get(player.room)
+                    if not existing or freeze_end > existing["end"]:
+                        game.room_pickup_freeze[player.room] = {
+                            "start": now, "end": freeze_end,
+                        }
+                    # Clear pending contact collisions (grace periods go stale during freeze)
+                    for p in game.players.values():
+                        if p.room == player.room and p.avatar:
+                            p.avatar.pending_collisions.clear()
+                    msgs.append(("broadcast", player.room, {
+                        "type": "room_freeze",
+                        "duration": ITEM_PICKUP_FREEZE_DURATION,
+                    }, None))
                     break
 
     # Guard proximity chat (float-aware)

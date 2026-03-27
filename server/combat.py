@@ -229,6 +229,22 @@ def _tick_all_monsters(now, msgs):
             continue
         if not avatars_in_room(room_id):
             continue
+        # Item-pickup freeze — skip room while active, shift timers on thaw
+        freeze_info = game.room_pickup_freeze.get(room_id)
+        if freeze_info:
+            if now < freeze_info["end"]:
+                continue
+            # Freeze just expired — shift all monster timers so they resume smoothly
+            freeze_dur = freeze_info["end"] - freeze_info["start"]
+            for m in monster_list:
+                if not m.alive:
+                    continue
+                m.last_action_time += freeze_dur
+                if m.state == "walking":
+                    m.state_data.start_time += freeze_dur
+                elif m.state in ("charging", "teleporting", "area"):
+                    m.state_data["end_time"] += freeze_dur
+            del game.room_pickup_freeze[room_id]
         _check_guard_despawn(room_id, monster_list, now, msgs)
         for i, monster in enumerate(monster_list):
             try:
@@ -326,6 +342,9 @@ def _tick_projectiles(msgs):
         if room_id not in game.rooms:
             del game.room_projectiles[room_id]
             continue
+        # Freeze projectiles during item pickup
+        if room_id in game.room_pickup_freeze:
+            continue
         projs = game.room_projectiles[room_id]
         to_remove = []
         for proj_id, proj in list(projs.items()):
@@ -387,6 +406,9 @@ def _resolve_pending_collisions(now, msgs):
     for player in list(game.players.values()):
         a = player.avatar
         if a is None or not a.pending_collisions:
+            continue
+        # Skip contact damage while room is frozen for item pickup
+        if player.room in game.room_pickup_freeze:
             continue
         for mid in list(a.pending_collisions):
             pc = a.pending_collisions[mid]

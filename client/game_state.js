@@ -106,6 +106,7 @@ const G = {
     // Dungeon
     dungeonState: null,         // {collected: Set, cells, bossCell, currentCell, lockedEdges}
     dungeonGroundItems: [],     // [{x, y, item_type}]
+    monsterFreeze: null,        // {start, duration} — monsters paused during item pickup
 
     // Corpses
     roomCorpses: [],          // [{kind, x, y, width, height}]

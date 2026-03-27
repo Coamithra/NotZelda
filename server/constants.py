@@ -69,6 +69,7 @@ GUARD_DESPAWN_GRACE = 3.0      # seconds before distance check kicks in
 HEART_DROP_CHANCE = 0.1
 INVINCIBILITY_DURATION = 1.5
 COLLISION_GRACE_PERIOD = 0.1  # seconds before contact damage triggers (corner-scrape forgiveness)
+ITEM_PICKUP_FREEZE_DURATION = 2.5  # seconds — monsters pause during item pickup animation
 
 # Tick loop
 TICK_INTERVAL = 1.0 / 30     # ~33ms — unified game tick rate
