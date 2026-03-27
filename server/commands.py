@@ -308,11 +308,15 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
 
 def _check_guard_proximity_sync(player, now, msgs):
     """If near a guard and cooldown has passed, queue guard dialog."""
+    from server.npc_chat import is_npc_thinking
     a = player.avatar
     for guard in game.guards.get(player.room, []):
         dx = abs(a.x - guard["x"])
         dy = abs(a.y - guard["y"])
         if dx + dy <= 1.5:
+            # Skip proximity dialog if the NPC is still generating an LLM response
+            if is_npc_thinking(player.name, guard["name"]):
+                continue
             key = f"{player.room}:{guard['name']}:{guard['x']},{guard['y']}"
             last = player.guard_cooldowns.get(key, 0)
             if now - last >= GUARD_COOLDOWN:

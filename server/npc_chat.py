@@ -111,7 +111,14 @@ _conversations: dict[tuple[str, str], list[dict]] = defaultdict(list)
 _last_chat_time: dict[str, float] = {}  # player_name -> last npc chat time
 _last_guard_summon: dict[str, float] = {}  # room_id -> last summon time
 _angry_streak: dict[tuple[str, str], int] = defaultdict(int)  # (player, npc) -> consecutive angry count
+_active_npc_calls: set[tuple[str, str]] = set()  # (player, npc) — NPC is thinking for this player
 ANGRY_STREAK_THRESHOLD = 2  # require N consecutive [ANGRY] before summoning guards
+
+
+def is_npc_thinking(player_name: str, npc_name: str) -> bool:
+    """Check if an NPC is currently processing an LLM response for this player."""
+    return (player_name, npc_name) in _active_npc_calls
+
 
 # ---------------------------------------------------------------------------
 # Server-wide hourly budget tracking
@@ -438,6 +445,10 @@ async def handle_npc_chat(player, guard: dict, text: str):
     npc_name = guard["name"]
     conv_key = (player.name, npc_name)
 
+    # Don't start a new LLM call if this NPC is already thinking for this player
+    if conv_key in _active_npc_calls:
+        return
+
     # --- Server-wide hourly budget (skipped for ollama — it's free) ---
     if AI_BACKEND != "ollama":
         if now - _hourly_reset_time >= 3600:
@@ -473,19 +484,24 @@ async def handle_npc_chat(player, guard: dict, text: str):
         player.flags)
 
     # Show thinking indicator to all players in the room
+    _active_npc_calls.add(conv_key)
     await broadcast_to_room(player.room, {
         "type": "npc_thinking", "name": npc_name,
     })
 
     # Call LLM
-    t0 = time.monotonic()
-    response = await _call_npc_llm(static_prompt, dynamic_prompt,
-                                   _conversations[conv_key])
+    try:
+        t0 = time.monotonic()
+        response = await _call_npc_llm(static_prompt, dynamic_prompt,
+                                       _conversations[conv_key])
 
-    # NPCs should pause before responding (feels more natural)
-    elapsed = time.monotonic() - t0
-    if elapsed < 1.5:
-        await asyncio.sleep(1.5 - elapsed)
+        # NPCs should pause before responding (feels more natural)
+        elapsed = time.monotonic() - t0
+        if elapsed < 1.5:
+            await asyncio.sleep(1.5 - elapsed)
+    except Exception:
+        _active_npc_calls.discard(conv_key)
+        raise
 
     if not response:
         # Fallback to static dialog
@@ -545,6 +561,7 @@ async def handle_npc_chat(player, guard: dict, text: str):
 
     # Cooldown starts from when the NPC finishes responding
     _last_chat_time[player.name] = time.monotonic()
+    _active_npc_calls.discard(conv_key)
 
     # Log and broadcast NPC response
     room_name = game.rooms.get(player.room, {}).get("name", player.room)
@@ -704,4 +721,6 @@ def clear_player_history(player_name: str):
     streak_keys = [k for k in _angry_streak if k[0] == player_name]
     for k in streak_keys:
         del _angry_streak[k]
+    _active_npc_calls.difference_update(
+        {k for k in _active_npc_calls if k[0] == player_name})
     _last_chat_time.pop(player_name, None)
