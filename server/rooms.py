@@ -36,12 +36,22 @@ def load_room_files(directory: str = "rooms"):
                 key, val = line.split(":", 1)
                 header[key.strip()] = val.strip()
 
-        # Parse exits
+        # Parse exits (supports :debug[:replacement_tile] suffix)
         exits = {}
+        debug_stair_replacements = {}  # direction -> tile to replace SD/SU with
         if "exits" in header:
             for pair in header["exits"].split():
                 if "=" in pair:
                     direction, target = pair.split("=", 1)
+                    # Check for :debug suffix — e.g. down=d1_entrance:debug:GR
+                    if ":debug" in target:
+                        parts_exit = target.split(":")
+                        target = parts_exit[0]
+                        if not DEBUG_MODE:
+                            # Skip this exit in release mode
+                            replacement = parts_exit[2] if len(parts_exit) > 2 else "GR"
+                            debug_stair_replacements[direction] = replacement
+                            continue
                     exits[direction] = target
 
         # Parse tilemap
@@ -68,6 +78,20 @@ def load_room_files(directory: str = "rooms"):
         for direction, pos in EDGE_SPAWN_POINTS.items():
             if direction in exits:
                 spawn_points[direction] = pos
+        # Replace debug-only stair tiles in release mode
+        if "down" in debug_stair_replacements:
+            repl = debug_stair_replacements["down"]
+            for ry, row in enumerate(tilemap):
+                for rx, tile in enumerate(row):
+                    if tile == "SD":
+                        tilemap[ry][rx] = repl
+        if "up" in debug_stair_replacements:
+            repl = debug_stair_replacements["up"]
+            for ry, row in enumerate(tilemap):
+                for rx, tile in enumerate(row):
+                    if tile == "SU":
+                        tilemap[ry][rx] = repl
+
         # Scan for stairs tiles
         su_pos = None
         sd_pos = None
