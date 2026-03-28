@@ -19,6 +19,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from server.state import game
+from server.constants import DEBUG_MODE
 from server.net import broadcast_to_room, avatars_in_room, send_to
 from server import log
 
@@ -112,7 +113,27 @@ _last_chat_time: dict[str, float] = {}  # player_name -> last npc chat time
 _last_guard_summon: dict[str, float] = {}  # room_id -> last summon time
 _angry_streak: dict[tuple[str, str], int] = defaultdict(int)  # (player, npc) -> consecutive angry count
 _active_npc_calls: set[tuple[str, str]] = set()  # (player, npc) — NPC is thinking for this player
+_last_proximity_dialog: dict[tuple[str, str], str] = {}  # (player, npc) -> last proximity dialog text
+_npc_greeting_overrides: dict[tuple[str, str], object] = {}  # (npc_name, room_id) -> callable(player, guard) -> str
 ANGRY_STREAK_THRESHOLD = 2  # require N consecutive [ANGRY] before summoning guards
+
+
+def set_npc_greeting(npc_name: str, room_id: str, fn):
+    """Register a dynamic greeting function for an NPC.
+
+    ``fn(player, guard) -> str`` is called each time the NPC is approached.
+    This lets quest logic override the static room-file dialog based on
+    current game state (e.g. slime alive/dead, player has sword).
+    """
+    _npc_greeting_overrides[(npc_name, room_id)] = fn
+
+
+def get_npc_greeting(npc_name: str, room_id: str, player, guard) -> str | None:
+    """Get the dynamic greeting for an NPC, or None to use the default."""
+    fn = _npc_greeting_overrides.get((npc_name, room_id))
+    if fn:
+        return fn(player, guard)
+    return None
 
 
 def is_npc_thinking(player_name: str, npc_name: str) -> bool:
@@ -210,25 +231,26 @@ def _build_situation_context(guard: dict, room_id: str, player) -> str:
     """
     lines = []
 
-    # Equipment awareness — useful for any NPC
+    # Equipment awareness
     if player.has_flag("has_sword"):
         lines.append("The adventurer carries a sword.")
     else:
-        lines.append("The adventurer is unarmed.")
+        lines.append("The adventurer is unarmed. You should tell them to visit the Smith in town for a weapon.")
 
-    # Room monster awareness — build conditionally to avoid post-hoc filtering
+    # Room monster awareness — build conditionally to avoid contradictions
     room_monsters = game.room_monsters.get(room_id, [])
     killed_clearing_slime = (player.has_flag("clearing_slime_killed")
                              and room_id == "clearing")
     for m in room_monsters:
         if m.alive:
-            # Skip "slime lurking" if this player already killed it (it respawned)
+            # Skip slime line if this player already killed it (it respawned)
             if killed_clearing_slime and m.kind == "slime":
                 continue
-            lines.append(f"There is a {m.kind} lurking nearby.")
+            # Clarify monster type for small models
+            lines.append(f"There is a monster (a {m.kind}) lurking nearby. You keep a nervous eye on it.")
 
     if killed_clearing_slime:
-        lines.append("This adventurer slew the slime that once lurked here.")
+        lines.append("This adventurer slew the slime monster that once lurked here. You are grateful and impressed.")
     elif room_monsters and all(not m.alive for m in room_monsters):
         lines.append("The monsters that lurked here have been slain.")
 
@@ -508,9 +530,10 @@ async def handle_npc_chat(player, guard: dict, text: str):
 
         _hourly_chat_count += 1
 
-    # Seed conversation with NPC's proximity greeting so the AI knows what it said
+    # Seed conversation with NPC's proximity greeting so the AI knows what it said.
+    # Use the stored dynamic dialog if available (from quest handlers), fall back to static.
     if not _conversations[conv_key]:
-        greeting = guard.get("dialog", "")
+        greeting = _last_proximity_dialog.pop(conv_key, "") or guard.get("dialog", "")
         if greeting:
             _conversations[conv_key].append({"role": "user", "content": "(approaches)"})
             _conversations[conv_key].append({"role": "assistant", "content": greeting})
@@ -529,6 +552,21 @@ async def handle_npc_chat(player, guard: dict, text: str):
         player.description or "a wandering adventurer",
         player.flags,
         situation_context=situation)
+
+    # Dump full chatlog to guard.txt for debugging (debug mode only)
+    if DEBUG_MODE:
+        try:
+            system_prompt = static_prompt + "\n\n" + dynamic_prompt
+            with open("guard.txt", "a", encoding="utf-8") as gf:
+                gf.write(f"\n{'='*60}\n")
+                gf.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {npc_name} -> {player.name}\n")
+                gf.write(f"{'='*60}\n\n")
+                gf.write(f"--- SYSTEM ---\n{system_prompt}\n\n")
+                for msg in _conversations[conv_key]:
+                    role = "USER" if msg["role"] == "user" else "ASSISTANT"
+                    gf.write(f"--- {role} ---\n{msg['content']}\n\n")
+        except Exception:
+            pass
 
     # Show thinking indicator to all players in the room
     _active_npc_calls.add(conv_key)

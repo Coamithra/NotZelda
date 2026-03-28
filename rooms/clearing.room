@@ -15,5 +15,5 @@ TR TR GR GR GR GR FL GR GR GR GR GR GR TR TR
 TR TR TR GR GR GR GR GR GR GR GR TR TR TR TR
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 ---
-npc Guard 7 2 guard Careful, there's a slime lurking below! | Young guard stationed at the forest clearing. Warns unarmed adventurers to visit the Smith in town for a sword. Keeps watch over the slime in the clearing. Grateful to anyone brave enough to deal with it. Knows the forest beyond is dangerous.
+npc Guard 7 2 guard Careful, there's a slime lurking below! | Nervous young guard stationed at the forest clearing. Takes his post seriously despite his nerves. Knows the forest beyond is dangerous.
 monster slime 7 8

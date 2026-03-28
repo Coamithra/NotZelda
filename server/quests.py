@@ -7,6 +7,7 @@ reacts to. Emitters stay generic — all one-off quest logic lives here.
 
 from collections import defaultdict
 
+from server.state import game
 from server.net import send_to, broadcast_to_room
 
 # ---------------------------------------------------------------------------
@@ -163,16 +164,47 @@ def _clearing_slime_killed(player, msgs, **kw):
     player.set_quest("clearing_guard", 3)
 
 
+# Clearing guard — dynamic greeting via override (not @npc_handler).
+# Evaluated each time the NPC is approached, so slime respawn is handled.
+def _clearing_guard_greeting(player, guard):
+    has_sword = player.has_flag("has_sword")
+    killed_slime = player.has_flag("clearing_slime_killed")
+    slime_alive = any(m.kind == "slime" and m.alive
+                      for m in game.room_monsters.get("clearing", []))
+
+    if killed_slime and not slime_alive:
+        return "You're the one who slew that slime! The clearing is much safer now."
+    if killed_slime and slime_alive:
+        return "Another slime?! At least you've done it before — get that thing!"
+    if not has_sword:
+        return "You can't go out there unarmed! Visit the Smith in town square."
+    if slime_alive:
+        return "Careful, there's a slime lurking below! Watch yourself."
+    return "Someone took care of that slime. The clearing feels safer today."
+
+
+from server.npc_chat import set_npc_greeting
+set_npc_greeting("Guard", "clearing", _clearing_guard_greeting)
+
+
 # ---------------------------------------------------------------------------
 # NPC proximity dispatch
 # ---------------------------------------------------------------------------
 
 async def handle_quest_npc(player, guard):
-    """Dispatch to registered NPC handler, or fall back to static dialog."""
+    """Dispatch to registered NPC handler, or fall back to greeting override / static dialog."""
+    from server.npc_chat import get_npc_greeting, _last_proximity_dialog
+
     handler = NPC_HANDLERS.get((guard["name"], player.room))
     if handler:
         await handler(player, guard)
-    elif guard["dialog"]:
+        return
+
+    # Check for a dynamic greeting override (registered by quest system)
+    override = get_npc_greeting(guard["name"], player.room, player, guard)
+    dialog = override or guard.get("dialog", "")
+    if dialog:
+        _last_proximity_dialog[(player.name, guard["name"])] = dialog
         await broadcast_to_room(player.room, {
-            "type": "chat", "from": guard["name"], "text": guard["dialog"],
+            "type": "chat", "from": guard["name"], "text": dialog,
         })
