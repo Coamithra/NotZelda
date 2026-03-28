@@ -51,7 +51,7 @@ document.addEventListener("keydown", (e) => {
     return;
   }
 
-  if (e.code === "Space" && !e.repeat && !G.ui.chatFocused && G.player.state !== "attacking" && G.player.state !== "dying") {
+  if (e.code === "Space" && !e.repeat && !G.ui.chatFocused && !G.player.spiritJarRevive && G.player.state !== "attacking" && G.player.state !== "dying") {
     e.preventDefault();
     if (!G.player.playerFlags.has("has_sword")) {
       G.ui.infoMessages.push({ text: "You don't have a weapon.", expires: Date.now() + 2000 });

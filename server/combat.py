@@ -328,7 +328,9 @@ def _spirit_jar_revive(player, now, msgs):
     player.avatar = Avatar(x, y, "down")
     player.command_queue.clear()
     player.active_attack = None
-    player.last_damage_time = now  # brief invincibility after revival
+    # Invincibility must cover the 2.5s client animation — shift time forward
+    # so INVINCIBILITY_DURATION (1.5s) doesn't expire until animation ends.
+    player.last_damage_time = now + 1.0
 
     # Notify client — spirit jar animation, then room data
     msgs.append(("send", player, {
