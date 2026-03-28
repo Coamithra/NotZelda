@@ -425,6 +425,9 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
             if monster.hp <= 0:
                 set_monster_idle(monster, room_id, i, msgs)
                 monster.alive = False
+                from server.quests import quest_event
+                quest_event("monster_killed", player, msgs,
+                            kind=monster.kind, room=room_id)
                 msg_killed = {
                     "type": "monster_killed",
                     "id": i,

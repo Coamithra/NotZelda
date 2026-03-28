@@ -600,6 +600,10 @@ def do_room_transition(player, exit_direction: str, msgs: list):
         # Create new avatar at the spawn position
         player.avatar = Avatar(spawn_x, spawn_y, old_avatar.direction)
 
+        # Quest event — player entered a new room
+        from server.quests import quest_event
+        quest_event("room_enter", player, msgs, room=new_room_id)
+
         # Send new room data and broadcast arrival (exclude self from broadcast
         # since player.room is already new_room_id)
         send_room_enter(player, msgs, exit_direction=exit_direction)

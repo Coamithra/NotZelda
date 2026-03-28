@@ -4,7 +4,7 @@ from pathlib import Path
 
 from server import log
 from server.state import game
-from server.constants import EDGE_SPAWN_POINTS, DEFAULT_SPAWN
+from server.constants import EDGE_SPAWN_POINTS, DEFAULT_SPAWN, DEBUG_MODE
 
 
 def load_room_files(directory: str = "rooms"):
@@ -139,6 +139,10 @@ def load_room_files(directory: str = "rooms"):
                     kind = tokens[1]
                     mx = int(tokens[2])
                     my = int(tokens[3])
+                    # Optional "debug" flag — monster only spawns in DEBUG_MODE
+                    if len(tokens) >= 5 and tokens[4] == "debug":
+                        if not DEBUG_MODE:
+                            continue
                     if room_id not in game.monster_templates:
                         game.monster_templates[room_id] = []
                     game.monster_templates[room_id].append({"kind": kind, "x": mx, "y": my})

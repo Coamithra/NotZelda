@@ -67,6 +67,18 @@ class GameState:
         recipe = self.custom_tile_recipes.get(tile)
         return recipe is not None and recipe.get("walkable", False)
 
+    def is_monster_walkable_tile(self, tile) -> bool:
+        """Check if a tile code is walkable by monsters.
+
+        Uses ``monster_walkable`` if present, otherwise falls back to ``walkable``.
+        """
+        recipe = self.custom_tile_recipes.get(tile)
+        if recipe is None:
+            return False
+        if "monster_walkable" in recipe:
+            return recipe["monster_walkable"]
+        return recipe.get("walkable", False)
+
     def load_tiles(self):
         """Load all tile definitions from data/tiles.json."""
         path = Path(__file__).parent.parent / "data" / "tiles.json"

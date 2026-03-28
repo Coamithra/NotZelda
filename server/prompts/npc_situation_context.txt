@@ -1,0 +1,2 @@
+Situation you can see right now:
+{{situation_lines}}

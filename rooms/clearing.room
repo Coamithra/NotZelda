@@ -9,11 +9,11 @@ TR GR GR FL GR GR GR GR GR GR FL GR GR GR TR
 TR GR GR GR GR FL GR GR GR GR GR GR GR TR TR
 TR GR FL GR GR GR GR GR GR FL GR GR GR GR TR
 TR GR GR GR GR GR GR SD GR GR GR FL GR TR TR
-TR GR GR GR FL GR GR GR FL GR GR GR GR GR TR
+TR MB MB MB MB MB MB MB MB MB MB MB MB MB TR
 TR GR FL GR GR GR GR GR GR GR GR GR FL TR TR
 TR TR GR GR GR GR FL GR GR GR GR GR GR TR TR
 TR TR TR GR GR GR GR GR GR GR GR TR TR TR TR
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 ---
-npc Guard 7 2 guard Careful, it's dangerous to go alone! | Nervous young guard posted at the clearing. Scared of the dungeon entrance nearby but won't admit it. Warns adventurers about the dangers below. Has heard strange voices coming from the dungeon, like an eerie choir. Looks up to the town guard in the square.
+npc Guard 7 2 guard Careful, there's a slime lurking below! | Young guard stationed at the forest clearing. Warns unarmed adventurers to visit the Smith in town for a sword. Keeps watch over the slime in the clearing. Grateful to anyone brave enough to deal with it. Knows the forest beyond is dangerous.
 monster slime 7 8

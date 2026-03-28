@@ -125,7 +125,7 @@ class BehaviorEngine:
         if x < 0 or x >= ROOM_COLS or y < 0 or y >= ROOM_ROWS:
             return False
         tilemap = game.rooms[room_id]["tilemap"]
-        if not game.is_walkable_tile(tilemap[y][x]):
+        if not game.is_monster_walkable_tile(tilemap[y][x]):
             return False
         guards = game.guards.get(room_id, [])
         if any(g["x"] == x and g["y"] == y for g in guards):

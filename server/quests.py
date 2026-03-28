@@ -1,6 +1,17 @@
-"""NPC quest handler registry and quest-aware NPC interactions."""
+"""NPC quest handler registry, quest event system, and quest definitions.
+
+NPC proximity handlers: walk-into-NPC interactions (async, run via ensure_future).
+Quest events: generic game events (monster_killed, room_enter) that quest logic
+reacts to. Emitters stay generic — all one-off quest logic lives here.
+"""
+
+from collections import defaultdict
 
 from server.net import send_to, broadcast_to_room
+
+# ---------------------------------------------------------------------------
+# NPC proximity handler registry (unchanged — async handlers for walk-into)
+# ---------------------------------------------------------------------------
 
 NPC_HANDLERS = {}  # (npc_name, room_id) -> async handler(player, guard)
 
@@ -12,6 +23,50 @@ def npc_handler(name: str, room: str):
         return fn
     return decorator
 
+
+# ---------------------------------------------------------------------------
+# Quest event system — synchronous, called from tick code
+# ---------------------------------------------------------------------------
+
+# event_type -> list of (quest_id, filter_fn, handler_fn)
+_EVENT_HANDLERS: dict[str, list] = defaultdict(list)
+
+
+def on_event(event_type: str, quest_id: str, **filters):
+    """Decorator to register a quest event handler with optional kwarg filters.
+
+    Example::
+
+        @on_event("monster_killed", "clearing_guard", kind="slime", room="clearing")
+        def _on_slime_killed(player, msgs, **kw):
+            player.grant_flag("clearing_slime_killed")
+    """
+    def decorator(fn):
+        if filters:
+            frozen = dict(filters)
+            def filter_fn(_player, **kwargs):
+                return all(kwargs.get(k) == v for k, v in frozen.items())
+        else:
+            filter_fn = None
+        _EVENT_HANDLERS[event_type].append((quest_id, filter_fn, fn))
+        return fn
+    return decorator
+
+
+def quest_event(event_type: str, player, msgs: list, **kwargs):
+    """Emit a quest event. Called synchronously during tick processing.
+
+    All registered handlers whose filters match are called in registration order.
+    Handlers can mutate player state and append to ``msgs``.
+    """
+    for _quest_id, filter_fn, handler_fn in _EVENT_HANDLERS.get(event_type, []):
+        if filter_fn is None or filter_fn(player, **kwargs):
+            handler_fn(player, msgs, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Amara questline — NPC proximity handlers
+# ---------------------------------------------------------------------------
 
 @npc_handler("Amara", "chapel_sanctum")
 async def amara_interact(player, guard):
@@ -81,6 +136,36 @@ async def barmaid_interact(player, guard):
         "type": "chat", "from": guard["name"], "text": dialog,
     })
 
+
+# ---------------------------------------------------------------------------
+# Clearing guard quest — event-driven
+#
+# Stages: 0 = never visited clearing
+#         1 = visited clearing (no sword)
+#         2 = has sword
+#         3 = killed the slime in the clearing
+# ---------------------------------------------------------------------------
+
+@on_event("room_enter", "clearing_guard", room="clearing")
+def _clearing_entered(player, msgs, **kw):
+    stage = player.quest("clearing_guard")
+    if stage == 0:
+        player.set_quest("clearing_guard", 1)
+        stage = 1
+    # Upgrade to stage 2 if they got a sword since last visit
+    if stage < 2 and player.has_flag("has_sword"):
+        player.set_quest("clearing_guard", 2)
+
+
+@on_event("monster_killed", "clearing_guard", kind="slime", room="clearing")
+def _clearing_slime_killed(player, msgs, **kw):
+    player.grant_flag("clearing_slime_killed")
+    player.set_quest("clearing_guard", 3)
+
+
+# ---------------------------------------------------------------------------
+# NPC proximity dispatch
+# ---------------------------------------------------------------------------
 
 async def handle_quest_npc(player, guard):
     """Dispatch to registered NPC handler, or fall back to static dialog."""

@@ -202,8 +202,42 @@ def register_town_guard():
 # World context (shared across all NPCs)
 # ---------------------------------------------------------------------------
 
+def _build_situation_context(guard: dict, room_id: str, player) -> str:
+    """Build situational context lines for an NPC's AI prompt.
+
+    Checks room state (alive monsters) and player state (flags, quests) to give
+    the NPC awareness of what's happening around them.
+    """
+    lines = []
+
+    # Equipment awareness — useful for any NPC
+    if player.has_flag("has_sword"):
+        lines.append("The adventurer carries a sword.")
+    else:
+        lines.append("The adventurer is unarmed.")
+
+    # Room monster awareness — build conditionally to avoid post-hoc filtering
+    room_monsters = game.room_monsters.get(room_id, [])
+    killed_clearing_slime = (player.has_flag("clearing_slime_killed")
+                             and room_id == "clearing")
+    for m in room_monsters:
+        if m.alive:
+            # Skip "slime lurking" if this player already killed it (it respawned)
+            if killed_clearing_slime and m.kind == "slime":
+                continue
+            lines.append(f"There is a {m.kind} lurking nearby.")
+
+    if killed_clearing_slime:
+        lines.append("This adventurer slew the slime that once lurked here.")
+    elif room_monsters and all(not m.alive for m in room_monsters):
+        lines.append("The monsters that lurked here have been slain.")
+
+    return "\n".join(lines)
+
+
 def _build_system_prompt(guard: dict, room_id: str, player_name: str, player_desc: str,
-                         player_flags: set | None = None) -> tuple[str, str]:
+                         player_flags: set | None = None,
+                         situation_context: str = "") -> tuple[str, str]:
     """Build a system prompt for NPC conversation.
 
     Returns (static_prompt, dynamic_prompt) — split for prompt caching.
@@ -249,6 +283,10 @@ def _build_system_prompt(guard: dict, room_id: str, player_name: str, player_des
     dynamic = _load_prompt("npc_system_dynamic.txt",
                            player_name=player_name,
                            player_desc=player_desc) + gift_section
+
+    if situation_context:
+        dynamic += "\n\n" + _load_prompt("npc_situation_context.txt",
+                                          situation_lines=situation_context)
 
     return static, dynamic
 
@@ -485,10 +523,12 @@ async def handle_npc_chat(player, guard: dict, text: str):
         _conversations[conv_key] = _conversations[conv_key][-MAX_HISTORY * 2:]
 
     # Build system prompt (split for caching — static is per-NPC, dynamic is per-player)
+    situation = _build_situation_context(guard, player.room, player)
     static_prompt, dynamic_prompt = _build_system_prompt(
         guard, player.room, player.name,
         player.description or "a wandering adventurer",
-        player.flags)
+        player.flags,
+        situation_context=situation)
 
     # Show thinking indicator to all players in the room
     _active_npc_calls.add(conv_key)

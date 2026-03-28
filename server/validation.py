@@ -342,6 +342,8 @@ def register_tile_type(data: dict) -> tuple[bool, list[str]]:
     }
     if data.get("bright"):
         recipe["bright"] = True
+    if "monster_walkable" in data:
+        recipe["monster_walkable"] = data["monster_walkable"]
     game.custom_tile_recipes[tile_id] = recipe
 
     log.server(f"[REG] Tile type registered: {tile_id} (walkable={data.get('walkable', False)})")
