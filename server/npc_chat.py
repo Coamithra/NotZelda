@@ -496,7 +496,9 @@ async def handle_npc_chat(player, guard: dict, text: str):
         "type": "npc_thinking", "name": npc_name,
     })
 
-    # Call LLM
+    # Call LLM — wrapped in try/finally to guarantee thinking bubble cleanup.
+    # handle_npc_chat runs via ensure_future, so uncaught exceptions are silent.
+    response = None
     try:
         t0 = time.monotonic()
         response = await _call_npc_llm(static_prompt, dynamic_prompt,
@@ -506,93 +508,96 @@ async def handle_npc_chat(player, guard: dict, text: str):
         elapsed = time.monotonic() - t0
         if elapsed < 1.5:
             await asyncio.sleep(1.5 - elapsed)
-    except Exception:
-        _active_npc_calls.discard(conv_key)
-        raise
+    except Exception as e:
+        log.debug(f"[NPC_CHAT] LLM call failed for {npc_name}: {type(e).__name__}: {e}")
 
-    if not response:
-        # Fallback to static dialog
-        response = guard.get("dialog", "...")
+    try:
         if not response:
-            response = "..."
+            # Fallback to static dialog
+            response = guard.get("dialog", "...")
+            if not response:
+                response = "..."
 
-    # Clean up response — remove quotes, truncate
-    raw_response = response  # keep original for debug log
-    response = response.strip('"\'')
+        # Clean up response — remove quotes, truncate
+        raw_response = response  # keep original for debug log
+        response = response.strip('"\'')
 
-    # Check for special tags before cleanup — forced-choice classification tags
-    is_angry = "[ANGRY]" in response
-    give_item = "[GIVE_ITEM]" in response
+        # Check for special tags before cleanup — forced-choice classification tags
+        is_angry = "[ANGRY]" in response
+        give_item = "[GIVE_ITEM]" in response
 
-    # Consecutive-angry filter: only summon guards after N angry responses in a row
-    if is_angry:
-        _angry_streak[conv_key] += 1
-        summon_guards = _angry_streak[conv_key] >= ANGRY_STREAK_THRESHOLD
-    else:
-        _angry_streak[conv_key] = 0
-        summon_guards = False
-
-    # Also support legacy [CALL_GUARDS] tag (e.g. from CLI/API backends)
-    if "[CALL_GUARDS]" in response:
-        summon_guards = True
-
-    # Strip all classification tags from the response
-    response = re.sub(r'\[(FRIENDLY|NEUTRAL|ANGRY|CALL_GUARDS|GIVE_ITEM)\]', '', response).strip()
-
-    # Strip emojis and *actions* — small models love these
-    response = re.sub(r'\*[^*]+\*', '', response)  # *winks*, *laughs*, etc.
-    response = re.sub(
-        r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF'
-        r'\U0001F900-\U0001F9FF\U00002702-\U000027B0\U0000FE00-\U0000FE0F'
-        r'\U0001FA00-\U0001FA6F\U0001FA70-\U0001FAFF\U00002600-\U000026FF'
-        r'\U0000200D\U00002B50]+', '', response)
-    response = re.sub(r'\s{2,}', ' ', response).strip()
-
-    # Trim trailing incomplete sentence (small models hard-stop at token limit)
-    if response and response[-1] not in '.!?':
-        last_sentence = max(response.rfind('.'), response.rfind('!'), response.rfind('?'))
-        if last_sentence > 20:  # only if we keep a reasonable chunk
-            response = response[:last_sentence + 1]
-
-    if len(response) > 200:
-        # Truncate at last sentence boundary, fall back to hard cut
-        truncated = response[:200]
-        last_sentence = max(truncated.rfind('.'), truncated.rfind('!'), truncated.rfind('?'))
-        if last_sentence > 40:
-            response = truncated[:last_sentence + 1]
+        # Consecutive-angry filter: only summon guards after N angry responses in a row
+        if is_angry:
+            _angry_streak[conv_key] += 1
+            summon_guards = _angry_streak[conv_key] >= ANGRY_STREAK_THRESHOLD
         else:
-            response = response[:197] + "..."
+            _angry_streak[conv_key] = 0
+            summon_guards = False
 
-    # Add NPC response to history (without tags)
-    _conversations[conv_key].append({"role": "assistant", "content": response})
+        # Also support legacy [CALL_GUARDS] tag (e.g. from CLI/API backends)
+        if "[CALL_GUARDS]" in response:
+            summon_guards = True
 
-    # Cooldown starts from when the NPC finishes responding
-    _last_chat_time[player.name] = time.monotonic()
-    _active_npc_calls.discard(conv_key)
+        # Strip all classification tags from the response
+        response = re.sub(r'\[(FRIENDLY|NEUTRAL|ANGRY|CALL_GUARDS|GIVE_ITEM)\]', '', response).strip()
 
-    # Log and broadcast NPC response
-    room_name = game.rooms.get(player.room, {}).get("name", player.room)
-    _backend = AI_BACKEND if AI_BACKEND in ("ollama", "api") else "cli"
-    _model = OLLAMA_MODEL if _backend == "ollama" else NPC_MODEL
-    log.event("NPC_CHAT", f"[{_backend}:{_model}] {npc_name} -> {player.name} ({room_name}): {response}")
-    if raw_response != response:
-        log.event("NPC_RAW", f"{npc_name}: {raw_response}")
-    # Print raw response to sidelog (encode-safe for Windows cp1252 console)
-    safe_raw = raw_response.encode("ascii", errors="replace").decode("ascii")
-    log.server(f"[NPC_RAW] [{_backend}:{_model}] {npc_name}: {safe_raw}")
-    await broadcast_to_room(player.room, {
-        "type": "chat",
-        "from": npc_name,
-        "text": response,
-    })
+        # Strip emojis and *actions* — small models love these
+        response = re.sub(r'\*[^*]+\*', '', response)  # *winks*, *laughs*, etc.
+        response = re.sub(
+            r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF'
+            r'\U0001F900-\U0001F9FF\U00002702-\U000027B0\U0000FE00-\U0000FE0F'
+            r'\U0001FA00-\U0001FA6F\U0001FA70-\U0001FAFF\U00002600-\U000026FF'
+            r'\U0000200D\U00002B50]+', '', response)
+        response = re.sub(r'\s{2,}', ' ', response).strip()
 
-    # Spawn guards if the NPC called for them
-    if summon_guards:
-        await _spawn_summoned_guards(player.room, guard["x"], guard["y"], npc_name, player.name)
+        # Trim trailing incomplete sentence (small models hard-stop at token limit)
+        if response and response[-1] not in '.!?':
+            last_sentence = max(response.rfind('.'), response.rfind('!'), response.rfind('?'))
+            if last_sentence > 20:  # only if we keep a reasonable chunk
+                response = response[:last_sentence + 1]
 
-    # Grant item if the NPC decided to give one
-    if give_item:
-        await _grant_npc_gift(player, guard)
+        if len(response) > 200:
+            # Truncate at last sentence boundary, fall back to hard cut
+            truncated = response[:200]
+            last_sentence = max(truncated.rfind('.'), truncated.rfind('!'), truncated.rfind('?'))
+            if last_sentence > 40:
+                response = truncated[:last_sentence + 1]
+            else:
+                response = response[:197] + "..."
+
+        # Add NPC response to history (without tags)
+        _conversations[conv_key].append({"role": "assistant", "content": response})
+
+        # Cooldown starts from when the NPC finishes responding
+        _last_chat_time[player.name] = time.monotonic()
+
+        # Log and broadcast NPC response
+        room_name = game.rooms.get(player.room, {}).get("name", player.room)
+        _backend = AI_BACKEND if AI_BACKEND in ("ollama", "api") else "cli"
+        _model = OLLAMA_MODEL if _backend == "ollama" else NPC_MODEL
+        log.event("NPC_CHAT", f"[{_backend}:{_model}] {npc_name} -> {player.name} ({room_name}): {response}")
+        if raw_response != response:
+            log.event("NPC_RAW", f"{npc_name}: {raw_response}")
+        # Print raw response to sidelog (encode-safe for Windows cp1252 console)
+        safe_raw = raw_response.encode("ascii", errors="replace").decode("ascii")
+        log.server(f"[NPC_RAW] [{_backend}:{_model}] {npc_name}: {safe_raw}")
+        await broadcast_to_room(player.room, {
+            "type": "chat",
+            "from": npc_name,
+            "text": response,
+        })
+
+        # Spawn guards if the NPC called for them
+        if summon_guards:
+            await _spawn_summoned_guards(player.room, guard["x"], guard["y"], npc_name, player.name)
+
+        # Grant item if the NPC decided to give one
+        if give_item:
+            await _grant_npc_gift(player, guard)
+    except Exception as e:
+        log.debug(f"[NPC_CHAT] Response processing failed for {npc_name}: {type(e).__name__}: {e}")
+    finally:
+        _active_npc_calls.discard(conv_key)
 
 
 async def _grant_npc_gift(player, guard: dict):

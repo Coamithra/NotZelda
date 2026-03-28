@@ -50,8 +50,14 @@ def _write_file(line: str) -> None:
 def _to_stdout(text: str) -> None:
     """Write to the real stdout, bypassing any wrapper."""
     out = sys.__stdout__ or sys.stdout
-    out.write(text + "\n")
-    out.flush()
+    try:
+        out.write(text + "\n")
+        out.flush()
+    except UnicodeEncodeError:
+        # Windows cp1252 console can't handle emojis / exotic unicode
+        safe = text.encode(out.encoding or "utf-8", errors="replace").decode(out.encoding or "utf-8", errors="replace")
+        out.write(safe + "\n")
+        out.flush()
 
 
 async def _safe_send(ws, msg: str) -> None:
