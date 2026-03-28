@@ -438,6 +438,16 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
                     msg_killed["knock_x"] = knock_x
                     msg_killed["knock_y"] = knock_y
                 msgs.append(("broadcast", room_id, msg_killed, None))
+                # Kill message
+                monster_name = monster.kind.replace("_", " ").title()
+                msgs.append(("send", player, {
+                    "type": "info",
+                    "text": f"You defeated the {monster_name}!",
+                }))
+                msgs.append(("broadcast", room_id, {
+                    "type": "info",
+                    "text": f"{player.name} defeated the {monster_name}!",
+                }, player.ws))
                 # Heart drop
                 if random.random() < HEART_DROP_CHANCE:
                     hid = game.next_heart_id
