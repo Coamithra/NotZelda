@@ -15,6 +15,6 @@ RW RF ST RF ST RF RF RF RF RF RF ST RF RF RW
 RW RF RF RF RF RF RF RF RF RF RF RF RF RF RW
 RW RW RW RW RW RW RW RW RW RW RW RW RW RW RW
 ---
-npc Ghost_Knight 7 5 ghost_knight The darkness below took everything. Do not descend those stairs. | Ghost of a noble knight who served the castle. Speaks with honor and sadness. Warns travelers about the dungeon beneath the armory. Many soldiers were lost to the darkness below.
+npc Ghost_Knight 7 5 ghost_knight The darkness below took everything. Do not descend those stairs. | Ghost of a noble knight who served the castle. Speaks with honor and sadness. Warns travelers about the dungeon beneath the armory. Many soldiers were lost to the darkness below. | Ghost's Spirit Jar:The adventurer expresses sadness, worry, or fear about the dungeon or dying
 monster skeleton 10 3
 monster bat 4 8
