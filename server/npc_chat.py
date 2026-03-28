@@ -470,6 +470,13 @@ async def handle_npc_chat(player, guard: dict, text: str):
 
         _hourly_chat_count += 1
 
+    # Seed conversation with NPC's proximity greeting so the AI knows what it said
+    if not _conversations[conv_key]:
+        greeting = guard.get("dialog", "")
+        if greeting:
+            _conversations[conv_key].append({"role": "user", "content": "(approaches)"})
+            _conversations[conv_key].append({"role": "assistant", "content": greeting})
+
     # Add player message to history
     _conversations[conv_key].append({"role": "user", "content": text})
 

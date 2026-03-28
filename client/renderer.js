@@ -763,6 +763,63 @@ function renderSpeechBubbles() {
   }
 }
 
+function renderNpcListening() {
+  if (G.player.waitingForRevival || G.player.itemPickupActive) return;
+  const now = Date.now();
+  const bob = Math.sin(now / 750) * 2;
+  const alpha = 0.65 + 0.15 * Math.sin(now / 900);
+
+  for (const guard of G.room.guards) {
+    const dx = Math.abs(G.player.displayX - guard.x);
+    const dy = Math.abs(G.player.displayY - guard.y);
+    if (dx + dy > 2.25) continue;
+
+    if (G.room.speechBubbles.some(b => b.from === guard.name)) continue;
+    if (G.room.npcThinking[guard.name]) continue;
+
+    const px = tileCenterX(guard.x);
+    const py = guard.y * TS - 16;
+
+    const iw = 14, ih = 11;
+    const ix = px - iw / 2;
+    const iy = py - ih - 10 + bob;
+
+    G.ui.ctx.globalAlpha = alpha;
+
+    // Bubble body
+    G.ui.ctx.fillStyle = "rgba(255,255,255,0.95)";
+    G.ui.ctx.beginPath();
+    roundRect(G.ui.ctx, ix, iy, iw, ih, 3);
+    G.ui.ctx.fill();
+
+    // Tail
+    G.ui.ctx.beginPath();
+    G.ui.ctx.moveTo(px - 2, iy + ih);
+    G.ui.ctx.lineTo(px, iy + ih + 3);
+    G.ui.ctx.lineTo(px + 2, iy + ih);
+    G.ui.ctx.fill();
+
+    // Border
+    G.ui.ctx.strokeStyle = "rgba(0,0,0,0.25)";
+    G.ui.ctx.lineWidth = 1;
+    G.ui.ctx.beginPath();
+    roundRect(G.ui.ctx, ix, iy, iw, ih, 3);
+    G.ui.ctx.stroke();
+
+    // Three dots
+    G.ui.ctx.fillStyle = "rgba(100,100,100,0.8)";
+    const dotR = 1.5;
+    const dotY = iy + ih / 2;
+    for (let d = -1; d <= 1; d++) {
+      G.ui.ctx.beginPath();
+      G.ui.ctx.arc(px + d * 4, dotY, dotR, 0, Math.PI * 2);
+      G.ui.ctx.fill();
+    }
+
+    G.ui.ctx.globalAlpha = 1;
+  }
+}
+
 function renderNpcThinking() {
   const now = Date.now();
   for (const [name, startTime] of Object.entries(G.room.npcThinking)) {
