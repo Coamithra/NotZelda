@@ -902,6 +902,8 @@ function handleMessage(msg) {
         // Grant gameplay flag after animation starts
         if (msg.item_type === "sword") {
           setTimeout(() => { G.player.playerFlags.add("has_sword"); }, 500);
+        } else if (msg.item_type === "spirit_jar") {
+          setTimeout(() => { G.player.playerFlags.add("has_spirit_jar"); }, 500);
         }
         setTimeout(() => {
           G.ui.infoMessages.push({ text: "You got the " + msg.item_name + "!", expires: Date.now() + 4000 });
@@ -1099,6 +1101,7 @@ function handleMessage(msg) {
       G.player.waitingForRevival = false;
       G.player.revivalProgress = null;
       G.player._revivalWaitStart = null;
+      G.player.playerFlags.delete("has_spirit_jar");
       appendChatLog(`<span class="chat-system">The Spirit Jar saved you!</span>`);
       break;
 

@@ -1184,6 +1184,30 @@ function renderKeyHUD() {
   ctx.fillText("x" + G.player.keyCount, x + 26, y + 15);
 }
 
+function renderSpiritJarHUD() {
+  if (!G.player.playerFlags.has("has_spirit_jar")) return;
+  const ctx = G.ui.ctx;
+  // Position below key HUD (or at y=34 if no keys shown)
+  const hasKeys = G.room.dungeonState && G.player.keyCount > 0;
+  const x = 8, y = hasKeys ? 58 : 34;
+  // Background
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillRect(x, y, 28, 22);
+  // Tiny spirit jar icon
+  const s = SCALE * 0.18;
+  // Jar body
+  ctx.fillStyle = "#88cccc";
+  ctx.fillRect(x+5+2*s, y+4+3*s, 4*s, 5*s);
+  ctx.fillRect(x+5+s, y+4+4*s, 6*s, 3*s);
+  // Lid
+  ctx.fillStyle = "#8a7060";
+  ctx.fillRect(x+5+2*s, y+4+s, 4*s, 2*s);
+  // Wisp
+  ctx.fillStyle = "#66ffaa";
+  ctx.fillRect(x+5+3*s, y+4+5*s, 2*s, s);
+  ctx.fillRect(x+5+4*s, y+4+4*s, s, s);
+}
+
 function getExitDirs() {
   if (!G.room.currentRoom || !G.room.currentRoom.room_id) return new Set();
   const tm = G.room.currentRoom.tilemap;
