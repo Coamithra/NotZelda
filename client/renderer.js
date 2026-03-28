@@ -482,6 +482,91 @@ function _roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
+const SPIRIT_JAR_ANIM_DURATION = 2500; // ms — spirit jar revival overlay
+
+function renderSpiritJarRevive() {
+  const sj = G.player.spiritJarRevive;
+  if (!sj) return;
+  const ctx = G.ui.ctx;
+  const elapsed = Date.now() - sj.startTime;
+  const t = Math.min(elapsed / SPIRIT_JAR_ANIM_DURATION, 1.0);
+
+  if (t >= 1.0) {
+    G.player.spiritJarRevive = null;
+    return;
+  }
+
+  // Phase 1 (0-40%): black screen, jar fades in rising from center
+  // Phase 2 (40-70%): jar visible, glow pulses, text appears
+  // Phase 3 (70-100%): everything fades out, revealing the room
+
+  // Overlay opacity: fully black → transparent
+  let overlayAlpha;
+  if (t < 0.4) {
+    overlayAlpha = 1.0;
+  } else {
+    overlayAlpha = 1.0 - ((t - 0.4) / 0.6);
+  }
+  ctx.fillStyle = `rgba(0, 0, 0, ${overlayAlpha})`;
+  ctx.fillRect(0, 0, CW, CH);
+
+  // Jar sprite — fades in and rises
+  const jarAlpha = t < 0.1 ? t / 0.1 : (t > 0.7 ? 1.0 - (t - 0.7) / 0.3 : 1.0);
+  const riseY = (1.0 - t) * 20 * SCALE;
+  const jarX = CW / 2 - 4 * SCALE;
+  const jarY = CH / 2 - 5 * SCALE + riseY;
+
+  // Ghostly glow behind jar
+  if (jarAlpha > 0) {
+    const glowT = elapsed / 1000;
+    const glowR = (30 + 10 * Math.sin(glowT * 4)) * SCALE;
+    ctx.globalAlpha = jarAlpha * 0.4;
+    const grad = ctx.createRadialGradient(
+      CW / 2, jarY + 5 * SCALE, 0,
+      CW / 2, jarY + 5 * SCALE, glowR
+    );
+    grad.addColorStop(0, "rgba(102, 255, 170, 0.6)");
+    grad.addColorStop(0.5, "rgba(102, 255, 170, 0.2)");
+    grad.addColorStop(1, "rgba(102, 255, 170, 0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(CW / 2 - glowR, jarY + 5 * SCALE - glowR, glowR * 2, glowR * 2);
+    ctx.globalAlpha = 1;
+
+    // Draw jar sprite
+    ctx.globalAlpha = jarAlpha;
+    drawItemSpiritJar(ctx, jarX, jarY, SCALE);
+    ctx.globalAlpha = 1;
+  }
+
+  // Ghostly particles rising from jar
+  if (t > 0.15 && t < 0.85) {
+    const partAlpha = jarAlpha * 0.7;
+    ctx.globalAlpha = partAlpha;
+    const partCount = 6;
+    for (let i = 0; i < partCount; i++) {
+      const seed = i * 137.5;
+      const px = CW / 2 + Math.sin(seed + elapsed / 300) * 15 * SCALE;
+      const py = jarY - (elapsed / 8 + seed * 2) % (40 * SCALE);
+      const size = (1 + Math.sin(seed)) * SCALE;
+      ctx.fillStyle = i % 2 === 0 ? "#aaffcc" : "#66ffaa";
+      ctx.fillRect(px, py, size, size);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Text: "Spirit Jar!" — fades in at 25%, out at 75%
+  const textAlpha = t < 0.25 ? 0 : (t < 0.4 ? (t - 0.25) / 0.15 : (t > 0.75 ? 1.0 - (t - 0.75) / 0.25 : 1.0));
+  if (textAlpha > 0) {
+    ctx.globalAlpha = textAlpha;
+    ctx.font = "bold 24px monospace";
+    ctx.fillStyle = "#aaffcc";
+    const txt = "Spirit Jar!";
+    const tw = ctx.measureText(txt).width;
+    ctx.fillText(txt, CW / 2 - tw / 2, CH / 2 + 50 * SCALE);
+    ctx.globalAlpha = 1;
+  }
+}
+
 function renderTombstones() {
   const ctx = G.ui.ctx;
   const now = Date.now();

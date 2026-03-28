@@ -426,12 +426,48 @@ function drawItemKey(ctx, px, py, S) {
   ctx.fillRect(px+6*S, py+10*S, S, S);
 }
 
+function drawItemSpiritJar(ctx, px, py, S) {
+  // Glass jar with ghostly wisp inside
+  const glass = "#88cccc", glassDark = "#5a9999", glassBright = "#aaeedd";
+  const lid = "#8a7060", lidDark = "#6a5040";
+  const wisp = "#aaffcc", wispGlow = "#66ffaa";
+  // Jar body
+  ctx.fillStyle = glass;
+  ctx.fillRect(px+2*S, py+3*S, 4*S, 6*S);
+  ctx.fillRect(px+S, py+4*S, 6*S, 4*S);
+  // Jar highlight (left edge)
+  ctx.fillStyle = glassBright;
+  ctx.fillRect(px+S, py+4*S, S, 4*S);
+  ctx.fillRect(px+2*S, py+3*S, S, S);
+  // Jar shadow (right edge)
+  ctx.fillStyle = glassDark;
+  ctx.fillRect(px+6*S, py+4*S, S, 4*S);
+  ctx.fillRect(px+5*S, py+3*S, S, S);
+  // Lid / cork
+  ctx.fillStyle = lid;
+  ctx.fillRect(px+2*S, py+S, 4*S, 2*S);
+  ctx.fillStyle = lidDark;
+  ctx.fillRect(px+3*S, py, 2*S, S);
+  // Ghostly wisp inside
+  ctx.fillStyle = wispGlow;
+  ctx.fillRect(px+3*S, py+5*S, 2*S, S);
+  ctx.fillRect(px+4*S, py+4*S, S, 2*S);
+  ctx.fillStyle = wisp;
+  ctx.fillRect(px+3*S, py+6*S, S, S);
+  ctx.fillRect(px+4*S, py+7*S, S, S);
+  // Jar bottom
+  ctx.fillStyle = glassDark;
+  ctx.fillRect(px+S, py+8*S, 6*S, S);
+  ctx.fillRect(px+2*S, py+9*S, 4*S, S);
+}
+
 const ITEM_DRAW_FNS = {
   sword: drawItemSword,
   map: drawItemMap,
   compass: drawItemCompass,
   heart: drawItemHeart,
   key: drawItemKey,
+  spirit_jar: drawItemSpiritJar,
 };
 
 function drawTombstone(ctx, px, py, S) {

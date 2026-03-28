@@ -101,6 +101,7 @@ def warmup_ollama():
 GIFT_EFFECTS = {
     "Sword": {"effect": "sword", "flag": "has_sword"},
     "Barmaid's Heart Container": {"effect": "heart"},
+    "Ghost's Spirit Jar": {"effect": "spirit_jar", "flag": "has_spirit_jar"},
     # Items without an entry here get a generic "You obtained X!" message.
 }
 
@@ -702,7 +703,7 @@ async def _grant_npc_gift(player, guard: dict):
         player.grant_flag(gameplay_flag)
     log.event("NPC_GIFT", f"{guard['name']} gave {display_name} to {player.name}")
 
-    if effect in ("sword", "heart"):
+    if effect in ("sword", "heart", "spirit_jar"):
         # Use item pickup animation (golden glow + sparkles + hold pose)
         await send_to(player, {"type": "item_obtained", "item_type": effect, "item_name": display_name})
         await broadcast_to_room(player.room, {

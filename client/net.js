@@ -1091,6 +1091,17 @@ function handleMessage(msg) {
       appendChatLog(`<span class="chat-system">${escHtml(msg.reviver)} revived you!</span>`);
       break;
 
+    case "spirit_jar_revive":
+      G.player.spiritJarRevive = { startTime: Date.now() };
+      G.player.myHp = msg.hp;
+      G.player.myMaxHp = msg.max_hp;
+      G.player.dyingPlayerSelf = null;
+      G.player.waitingForRevival = false;
+      G.player.revivalProgress = null;
+      G.player._revivalWaitStart = null;
+      appendChatLog(`<span class="chat-system">The Spirit Jar saved you!</span>`);
+      break;
+
     case "error":
       G.ui.loginError.textContent = msg.text;
       break;

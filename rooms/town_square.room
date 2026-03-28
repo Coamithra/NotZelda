@@ -1,10 +1,10 @@
 name: Town Square
 biome: town
 music: village
-exits: north=blacksmith south=forest_path east=tavern west=old_chapel
+exits: north=blacksmith south=forest_path east=tavern west=old_chapel down=ow_1_12:debug:ST up=d1_entrance:debug:ST
 ---
 WS WS WS WS WS WS DR DR DR WS WS WS WS WS WS
-WS ST ST ST ST ST ST ST ST ST ST ST ST ST WS
+WS SD ST ST ST ST ST ST ST ST ST ST ST SU WS
 WS ST ST ST ST ST ST ST ST ST ST ST ST ST WS
 WS ST ST ST ST ST ST ST ST ST ST ST ST ST WS
 DR ST ST ST ST WA WA WA ST ST ST ST ST ST DR

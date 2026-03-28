@@ -589,7 +589,7 @@ function gameLoop(timestamp) {
     }
 
     // Player state machine tick
-    if (!G.ui.chatFocused && !G.ui.transition && !G.ui.conjuring) {
+    if (!G.ui.chatFocused && !G.ui.transition && !G.ui.conjuring && !G.player.spiritJarRevive) {
       playerTick();
     }
 
@@ -759,6 +759,7 @@ function gameLoop(timestamp) {
     renderDungeonDebug();
     renderDungeonMinimap();
     if (G.player.dyingPlayerSelf) renderDeathAnimation();
+    if (G.player.spiritJarRevive) renderSpiritJarRevive();
   }
   renderHeartsHUD();
   renderKeyHUD();

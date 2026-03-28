@@ -13,7 +13,7 @@ from server.constants import (
     PROJECTILE_TICK_RATE, SWORD_ACTIVE_DURATION,
     GUARD_DESPAWN_TIMEOUT, GUARD_DESPAWN_DISTANCE, GUARD_DESPAWN_GRACE,
     TICK_INTERVAL, COLLISION_GRACE_PERIOD,
-    REVIVAL_DURATION, REVIVAL_PROXIMITY,
+    REVIVAL_DURATION, REVIVAL_PROXIMITY, REVIVAL_HP,
 )
 from server.net import send_to, broadcast_to_room, avatars_in_room, player_info
 
@@ -277,7 +277,7 @@ def _complete_revival(ts, now, msgs):
     player.death_x = 0.0
     player.death_y = 0.0
     player.chose_respawn = False
-    player.hp = player.max_hp
+    player.hp = min(REVIVAL_HP, player.max_hp)
     player.avatar = Avatar(ts.x, ts.y, "down")
     player.command_queue.clear()
     player.active_attack = None
@@ -302,6 +302,47 @@ def _complete_revival(ts, now, msgs):
     log.event("REVIVE", f"{reviver.name} revived {player.name} in {room_id}")
 
 
+def _spirit_jar_revive(player, now, msgs):
+    """Auto-revive a dead player using their spirit jar."""
+    from server.lifecycle import on_player_enter_room, send_room_enter
+    from server.models import Avatar
+
+    room_id = player.death_room
+    x, y = player.death_x, player.death_y
+
+    # Consume the spirit jar
+    player.flags.discard("has_spirit_jar")
+    # Clear gift tracking flag so the Ghost NPC can re-gift
+    for flag in list(player.flags):
+        if flag.startswith("gift_") and flag.endswith("_spirit_jar"):
+            player.flags.discard(flag)
+
+    # Reset death state
+    player.dead = False
+    player.death_time = 0.0
+    player.death_room = None
+    player.death_x = 0.0
+    player.death_y = 0.0
+    player.chose_respawn = False
+    player.hp = min(REVIVAL_HP, player.max_hp)
+    player.avatar = Avatar(x, y, "down")
+    player.command_queue.clear()
+    player.active_attack = None
+    player.last_damage_time = now  # brief invincibility after revival
+
+    # Notify client — spirit jar animation, then room data
+    msgs.append(("send", player, {
+        "type": "spirit_jar_revive",
+        "hp": player.hp,
+        "max_hp": player.max_hp,
+    }))
+    on_player_enter_room(room_id)
+    send_room_enter(player, msgs)
+    msgs.append(("broadcast", room_id,
+                  {"type": "player_entered", **player_info(player)}, player.ws))
+    log.event("SPIRIT_JAR", f"{player.name} auto-revived via spirit jar in {room_id}")
+
+
 def _tick_players(now, msgs):
     """Two-phase death handling: death animation → tombstone or auto-respawn."""
     for player in list(game.players.values()):
@@ -316,8 +357,10 @@ def _tick_players(now, msgs):
                 _remove_tombstone(player.name, msgs)
                 _respawn_player(player, msgs)
         elif now - player.death_time >= PLAYER_RESPAWN_DELAY:
-            # Phase 1: death animation done — tombstone vs auto-respawn
-            if player.chose_respawn:
+            # Phase 1: death animation done — spirit jar / tombstone / auto-respawn
+            if player.has_flag("has_spirit_jar"):
+                _spirit_jar_revive(player, now, msgs)
+            elif player.chose_respawn:
                 _respawn_player(player, msgs)
             elif _has_potential_revivers(player):
                 _place_tombstone(player, now, msgs)

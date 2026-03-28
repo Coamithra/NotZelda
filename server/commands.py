@@ -258,6 +258,10 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
                         # Keys go to the player, not to collected_items
                         player.keys += 1
                         item_name = "Small Key"
+                    elif item_type == "spirit_jar":
+                        # Spirit jar is per-player (like keys), not shared
+                        player.grant_flag("has_spirit_jar")
+                        item_name = "Spirit Jar"
                     else:
                         dinst.collected_items.add(item_type)
                         item_name = {"map": "Dungeon Map", "compass": "Compass"}.get(item_type, item_type)

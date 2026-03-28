@@ -79,6 +79,7 @@ const G = {
     // Revival
     waitingForRevival: false,   // True when dead + tombstone placed, showing waiting UI
     revivalProgress: null,      // {reviverName, startTime, duration} when being revived
+    spiritJarRevive: null,      // {startTime} when spirit jar auto-revive animation is playing
     _respawnBtnHover: false,    // Respawn button hover state (set by mousemove in input.js)
   },
 
