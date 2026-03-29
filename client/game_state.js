@@ -114,6 +114,7 @@ const G = {
     // Dungeon
     dungeonState: null,         // {collected: Set, cells, bossCell, currentCell, lockedEdges}
     dungeonGroundItems: [],     // [{x, y, item_type}]
+    openedChests: [],           // [{x, y}] — chests opened this visit (client-local)
     monsterFreeze: null,        // {start, duration} — monsters paused during item pickup
 
     // Darkness

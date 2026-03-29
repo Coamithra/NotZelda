@@ -156,12 +156,18 @@ def _clearing_entered(player, msgs, **kw):
     # Upgrade to stage 2 if they got a sword since last visit
     if stage < 2 and player.has_flag("has_sword"):
         player.set_quest("clearing_guard", 2)
+        # Dialog changed — let the guard speak again when approached
+        from server.npc_chat import reset_npc_greeting_for_player
+        reset_npc_greeting_for_player(player, "Guard", "clearing")
 
 
 @on_event("monster_killed", "clearing_guard", kind="slime", room="clearing")
 def _clearing_slime_killed(player, msgs, **kw):
     player.grant_flag("clearing_slime_killed")
     player.set_quest("clearing_guard", 3)
+    # Dialog changed — let the guard speak again when approached
+    from server.npc_chat import reset_npc_greeting_for_player
+    reset_npc_greeting_for_player(player, "Guard", "clearing")
 
 
 # Clearing guard — dynamic greeting via override (not @npc_handler).

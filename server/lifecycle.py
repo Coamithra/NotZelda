@@ -353,6 +353,11 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
                 existing = msg.get("dungeon_items", [])
                 existing.extend([{"x": it["x"], "y": it["y"], "item_type": it["item_type"]} for it in visible])
                 msg["dungeon_items"] = existing
+            # Send already-collected lantern chests as opened (persists across visits)
+            collected_chests = [it for it in pp_items
+                                if it["item_type"] == "lantern" and player.has_flag("has_lantern")]
+            if collected_chests:
+                msg["opened_chests"] = [{"x": it["x"], "y": it["y"]} for it in collected_chests]
 
     # Dark room data
     if inst:
@@ -412,6 +417,10 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
                     cell_info["boss"] = True
                 if (c, r) == inst.treasure_cell:
                     cell_info["treasure"] = True
+                # Mark item cells for debug minimap
+                for itype, icell in inst.item_cells.items():
+                    if (c, r) == icell:
+                        cell_info.setdefault("items", []).append(itype)
             cell_info["ent"] = c == entrance_col and r == entrance_row
             cells.append(cell_info)
         # Find which cell the player is in
@@ -425,6 +434,9 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
             "player": player_cell,
             "other_players": _dungeon_other_players(inst, exclude_player=player),
         }
+        # Send lantern cell for compass chest marker (only if player hasn't collected it)
+        if inst.lantern_cell and not player.has_flag("has_lantern"):
+            debug["minimap"]["lantern_cell"] = list(inst.lantern_cell)
         if is_debug:
             # Serialize connections as [[c1,r1,c2,r2], ...]
             conn_list = []
@@ -573,6 +585,7 @@ def do_room_transition(player, exit_direction: str, msgs: list):
     old_avatar = player.avatar
     old_x, old_y = old_avatar.x, old_avatar.y
     player.avatar = None
+    player.guard_greeted.clear()  # reset NPC greeting tracker for new room
 
     try:
         # Broadcast departure (avatar is gone so player is excluded from

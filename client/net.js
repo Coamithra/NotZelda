@@ -267,6 +267,7 @@ function handleMessage(msg) {
       G.fx.screenShake = null;
       G.ui.canvas.style.transform = "";
       G.room.dungeonGroundItems = msg.dungeon_items || [];
+      G.room.openedChests = msg.opened_chests || [];
       G.room.monsterFreeze = null;
       G.room.dark = msg.dark || false;
       G.room.lightSources = msg.light_sources || [];
@@ -331,6 +332,7 @@ function handleMessage(msg) {
         const mm = msg.dungeon_debug && msg.dungeon_debug.minimap;
         const currentCell = mm && mm.player;
         const otherPlayers = mm ? (mm.other_players || []) : [];
+        const lanternCell = mm && mm.lantern_cell;
         if (!G.room.dungeonState) {
           G.room.dungeonState = {
             collected: new Set(msg.dungeon_collected),
@@ -339,6 +341,7 @@ function handleMessage(msg) {
             currentCell: currentCell,
             lockedEdges: msg.locked_edges || [],
             otherPlayers: otherPlayers,
+            lanternCell: lanternCell || null,
           };
         } else {
           G.room.dungeonState.collected = new Set(msg.dungeon_collected);
@@ -347,6 +350,9 @@ function handleMessage(msg) {
           G.room.dungeonState.bossCell = msg.dungeon_boss_cell || G.room.dungeonState.bossCell;
           G.room.dungeonState.lockedEdges = msg.locked_edges || G.room.dungeonState.lockedEdges || [];
           G.room.dungeonState.otherPlayers = otherPlayers;
+          // lanternCell is null once collected — don't overwrite with stale value
+          if (lanternCell) G.room.dungeonState.lanternCell = lanternCell;
+          else G.room.dungeonState.lanternCell = null;
         }
         if (msg.keys !== undefined) G.player.keyCount = msg.keys;
       } else {
@@ -906,6 +912,10 @@ function handleMessage(msg) {
           G.room.dungeonGroundItems = G.room.dungeonGroundItems.filter(it => {
             if (!removed && it.item_type === msg.item_type && Math.abs(it.x - px) < 1 && Math.abs(it.y - py) < 1) {
               removed = true;
+              // Lantern: transition chest to opened state at this position
+              if (msg.item_type === "lantern") {
+                G.room.openedChests.push({x: it.x, y: it.y});
+              }
               return false;
             }
             return true;

@@ -129,6 +129,18 @@ def set_npc_greeting(npc_name: str, room_id: str, fn):
     _npc_greeting_overrides[(npc_name, room_id)] = fn
 
 
+def reset_npc_greeting_for_player(player, npc_name: str, room_id: str):
+    """Reset a player's greeting tracker for a specific NPC so the next
+    proximity approach triggers dialog again.  Call this from quest code
+    when an NPC's greeting text changes (e.g. after quest state advance).
+    """
+    guards = game.guards.get(room_id, [])
+    for guard in guards:
+        if guard["name"] == npc_name:
+            key = f"{room_id}:{npc_name}:{guard['x']},{guard['y']}"
+            player.guard_greeted.discard(key)
+
+
 def get_npc_greeting(npc_name: str, room_id: str, player, guard) -> str | None:
     """Get the dynamic greeting for an NPC, or None to use the default."""
     fn = _npc_greeting_overrides.get((npc_name, room_id))

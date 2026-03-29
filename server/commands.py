@@ -8,7 +8,7 @@ from server.constants import (
     DEBUG_MODE,
     DIRECTIONS, ROOM_COLS, ROOM_ROWS, DOORWAY_TILES,
     ATTACK_COOLDOWN, TICK_INTERVAL, HEART_DROP_CHANCE, HEART_RESTORE_HP,
-    POSITION_UPDATE_RATE, MAX_MOVE_PER_UPDATE, GUARD_COOLDOWN,
+    POSITION_UPDATE_RATE, MAX_MOVE_PER_UPDATE,
     COLLISION_GRACE_PERIOD, ITEM_PICKUP_FREEZE_DURATION,
     SEAL_FRAGMENT_HP_BONUS,
 )
@@ -392,7 +392,7 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
 
 
 def _check_guard_proximity_sync(player, now, msgs):
-    """If near a guard and cooldown has passed, queue guard dialog."""
+    """If near a guard and not yet greeted this visit, queue guard dialog."""
     from server.npc_chat import is_npc_thinking
     a = player.avatar
     for guard in game.guards.get(player.room, []):
@@ -403,9 +403,9 @@ def _check_guard_proximity_sync(player, now, msgs):
             if is_npc_thinking(player.name, guard["name"]):
                 continue
             key = f"{player.room}:{guard['name']}:{guard['x']},{guard['y']}"
-            last = player.guard_cooldowns.get(key, 0)
-            if now - last >= GUARD_COOLDOWN:
-                player.guard_cooldowns[key] = now
+            if key not in player.guard_greeted:
+                player.guard_greeted.add(key)
+                player.guard_cooldowns[key] = now  # keep timestamp for LLM seeding
                 msgs.append(("guard_chat", player, guard))
 
 

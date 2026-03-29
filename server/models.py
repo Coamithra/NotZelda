@@ -54,6 +54,7 @@ class Player:
         self.last_attack_time = 0.0
         self.last_pos_update_time = 0.0   # anti-cheat: last accepted position_update timestamp
         self.guard_cooldowns: dict[str, float] = {}  # guard_key -> last_trigger_time
+        self.guard_greeted: set[str] = set()         # NPC keys greeted this room visit
         self.quests: dict[str, int] = {}              # quest_id -> stage
         self.flags: set[str] = set()                  # e.g. {"has_sword"}
         self.command_queue = deque()  # (msg_type, data) tuples — drained by game_tick

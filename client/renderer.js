@@ -355,7 +355,16 @@ const ITEM_PICKUP_DURATION = 2500;
 
 function renderDungeonGroundItems() {
   for (const item of G.room.dungeonGroundItems) {
-    drawGroundItem(G.ui.ctx, item.x * TS, item.y * TS, item.item_type, SCALE);
+    if (item.item_type === "lantern") {
+      // Lantern lives inside a treasure chest — draw closed chest
+      drawGroundChest(G.ui.ctx, item.x * TS, item.y * TS, false, SCALE);
+    } else {
+      drawGroundItem(G.ui.ctx, item.x * TS, item.y * TS, item.item_type, SCALE);
+    }
+  }
+  // Opened chests persist visually after pickup (client-local state)
+  for (const ch of G.room.openedChests) {
+    drawGroundChest(G.ui.ctx, ch.x * TS, ch.y * TS, true, SCALE);
   }
 }
 
@@ -1657,9 +1666,9 @@ function renderDungeonMinimap() {
     G.ui.ctx.lineWidth = 1;
   }
 
-  // Draw locked door indicators (red bars between cells)
+  // Draw locked door indicators (debug only — hidden from player map)
   const lockedEdges = (ds && ds.lockedEdges) || [];
-  if ((hasMap || isDebug) && lockedEdges.length > 0) {
+  if (isDebug && lockedEdges.length > 0) {
     G.ui.ctx.strokeStyle = "#cc3333";
     G.ui.ctx.lineWidth = 3;
     for (const edge of lockedEdges) {
@@ -1780,6 +1789,23 @@ function renderDungeonMinimap() {
     }
     // Compass-only: cells already drawn as full grid above
 
+    // Debug item icons (tiny text labels on cells)
+    if (isDebug && cell.items && cell.items.length > 0) {
+      G.ui.ctx.font = "bold 7px monospace";
+      G.ui.ctx.textAlign = "center";
+      G.ui.ctx.textBaseline = "middle";
+      const iconMap = {map: "M", compass: "C", lantern: "T"};
+      const label = cell.items.map(i => iconMap[i] || "?").join("");
+      // White text with dark outline for readability
+      const tx = cx + cellSize / 2, ty = cy + cellSize / 2;
+      G.ui.ctx.fillStyle = "rgba(0,0,0,0.7)";
+      G.ui.ctx.fillText(label, tx + 0.5, ty + 0.5);
+      G.ui.ctx.fillStyle = "#fff";
+      G.ui.ctx.fillText(label, tx, ty);
+      G.ui.ctx.textAlign = "start";
+      G.ui.ctx.textBaseline = "alphabetic";
+    }
+
     // Entrance marker (map only, non-debug)
     if (cell.ent && (isDebug || hasMap)) {
       G.ui.ctx.fillStyle = "rgba(80, 220, 80, 0.9)";
@@ -1794,6 +1820,13 @@ function renderDungeonMinimap() {
         cell.c === ds.bossCell[0] && cell.r === ds.bossCell[1]) {
       G.ui.ctx.fillStyle = "rgba(220, 40, 40, 0.9)";
       G.ui.ctx.fillRect(cx + 3, cy + 3, cellSize - 6, cellSize - 6);
+    }
+    // Treasure chest marker (compass collected, lantern not yet picked up)
+    if (!isDebug && hasCompass && ds.lanternCell &&
+        cell.c === ds.lanternCell[0] && cell.r === ds.lanternCell[1]) {
+      const pulse = 0.7 + 0.3 * Math.sin(Date.now() / 400);
+      G.ui.ctx.fillStyle = `rgba(220, 180, 40, ${pulse})`;
+      G.ui.ctx.fillRect(cx + 2, cy + 2, cellSize - 4, cellSize - 4);
     }
   }
 

@@ -555,6 +555,139 @@ const ITEM_DRAW_FNS = {
   seal_fragment: drawItemSealFragment,
 };
 
+// ── Treasure Chest (large, two states) ──────────────────────────────
+// 14 wide × 12 tall pixel grid, drawn at scale S per pixel.
+
+function drawChestClosed(ctx, px, py, S) {
+  const wood = "#7a4420", woodLt = "#9b6030", woodDk = "#4e2a10";
+  const metal = "#5a5a62", metalLt = "#787880";
+  const gold = "#d4a830", goldLt = "#f0d060";
+  // --- Lid (curved top) ---
+  ctx.fillStyle = woodLt;
+  ctx.fillRect(px+3*S, py,     8*S, S);   // top curve
+  ctx.fillRect(px+2*S, py+S,  10*S, S);
+  ctx.fillStyle = wood;
+  ctx.fillRect(px+S,   py+2*S, 12*S, S);
+  ctx.fillRect(px+S,   py+3*S, 12*S, S);
+  // Metal band across lid
+  ctx.fillStyle = metal;
+  ctx.fillRect(px+S,   py+4*S, 12*S, S);
+  ctx.fillStyle = metalLt;
+  ctx.fillRect(px+2*S, py+4*S, 4*S, S);
+  // --- Seam / clasp row ---
+  ctx.fillStyle = wood;
+  ctx.fillRect(px,     py+5*S, 14*S, S);
+  ctx.fillStyle = gold;
+  ctx.fillRect(px+6*S, py+5*S, 2*S, S);   // clasp
+  // --- Body ---
+  ctx.fillStyle = wood;
+  ctx.fillRect(px,     py+6*S, 14*S, S);
+  ctx.fillRect(px,     py+7*S, 14*S, S);
+  // Metal band across body
+  ctx.fillStyle = metal;
+  ctx.fillRect(px,     py+8*S, 14*S, S);
+  ctx.fillStyle = metalLt;
+  ctx.fillRect(px+S,   py+8*S, 4*S, S);
+  // Lower body
+  ctx.fillStyle = woodDk;
+  ctx.fillRect(px,     py+9*S, 14*S, S);
+  ctx.fillRect(px,     py+10*S,14*S, S);
+  // Base band
+  ctx.fillStyle = metal;
+  ctx.fillRect(px+S,   py+11*S,12*S, S);
+  // --- Lock plate ---
+  ctx.fillStyle = gold;
+  ctx.fillRect(px+5*S, py+6*S, 4*S, 4*S);
+  ctx.fillStyle = goldLt;
+  ctx.fillRect(px+6*S, py+6*S, 2*S, S);
+  // Keyhole
+  ctx.fillStyle = woodDk;
+  ctx.fillRect(px+6*S, py+8*S, 2*S, S);
+  ctx.fillRect(px+7*S, py+9*S, S, S);
+  // --- Side edges ---
+  ctx.fillStyle = metalLt;
+  ctx.fillRect(px,     py+5*S, S, 7*S);   // left edge
+  ctx.fillRect(px+13*S,py+5*S, S, 7*S);   // right edge
+  // --- Lid highlight ---
+  ctx.fillStyle = "#b07838";
+  ctx.fillRect(px+3*S, py+S, 6*S, S);
+}
+
+function drawChestOpened(ctx, px, py, S) {
+  const wood = "#7a4420", woodLt = "#9b6030", woodDk = "#4e2a10";
+  const metal = "#5a5a62", metalLt = "#787880";
+  const gold = "#d4a830", goldLt = "#f0d060";
+  const glow = "#fff4b0", glowMid = "#ffe060";
+  // --- Open lid (tilted back, shown above body) ---
+  ctx.fillStyle = woodDk;
+  ctx.fillRect(px+S,   py,     12*S, S);  // lid interior (dark)
+  ctx.fillRect(px+S,   py+S,   12*S, S);
+  ctx.fillStyle = metal;
+  ctx.fillRect(px+S,   py+2*S, 12*S, S);  // metal band on lid
+  ctx.fillStyle = woodLt;
+  ctx.fillRect(px+2*S, py+3*S, 10*S, S);  // lid top edge (visible rim)
+  // --- Inner glow from open chest ---
+  ctx.fillStyle = "rgba(255,230,80,0.35)";
+  ctx.fillRect(px+S,   py+4*S, 12*S, 3*S);
+  ctx.fillStyle = glow;
+  ctx.fillRect(px+4*S, py+4*S, 6*S, S);
+  ctx.fillStyle = glowMid;
+  ctx.fillRect(px+3*S, py+5*S, 8*S, S);
+  ctx.fillRect(px+2*S, py+6*S, 10*S, S);
+  // --- Body (same as closed) ---
+  ctx.fillStyle = wood;
+  ctx.fillRect(px,     py+7*S, 14*S, S);
+  ctx.fillRect(px,     py+8*S, 14*S, S);
+  // Metal band
+  ctx.fillStyle = metal;
+  ctx.fillRect(px,     py+9*S, 14*S, S);
+  ctx.fillStyle = metalLt;
+  ctx.fillRect(px+S,   py+9*S, 4*S, S);
+  // Lower body
+  ctx.fillStyle = woodDk;
+  ctx.fillRect(px,     py+10*S,14*S, S);
+  // Base band
+  ctx.fillStyle = metal;
+  ctx.fillRect(px+S,   py+11*S,12*S, S);
+  // --- Lock plate (open / unlatched) ---
+  ctx.fillStyle = gold;
+  ctx.fillRect(px+5*S, py+7*S, 4*S, 3*S);
+  ctx.fillStyle = goldLt;
+  ctx.fillRect(px+6*S, py+7*S, 2*S, S);
+  // --- Side edges ---
+  ctx.fillStyle = metalLt;
+  ctx.fillRect(px,     py+7*S, S, 5*S);
+  ctx.fillRect(px+13*S,py+7*S, S, 5*S);
+}
+
+function drawGroundChest(ctx, px, py, opened, S) {
+  // Chest sits still on the ground — no bounce, subtle ambient glow
+  const t = performance.now() / 1000;
+  const cx = px + 7*S, cy = py + 6*S;
+  if (!opened) {
+    // Faint golden shimmer for closed chest
+    const flicker = 0.15 + 0.08 * Math.sin(t * 3.0);
+    const radius = 12*S;
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+    grad.addColorStop(0, `rgba(255, 200, 50, ${flicker})`);
+    grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+    drawChestClosed(ctx, px, py, S);
+  } else {
+    // Bright glow for opened chest
+    const flicker = 0.35 + 0.1 * Math.sin(t * 5.0);
+    const radius = 14*S;
+    const grad = ctx.createRadialGradient(cx, cy - 2*S, 0, cx, cy, radius);
+    grad.addColorStop(0, `rgba(255, 230, 80, ${flicker})`);
+    grad.addColorStop(0.5, `rgba(230, 150, 30, ${flicker * 0.3})`);
+    grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+    drawChestOpened(ctx, px, py, S);
+  }
+}
+
 function drawTombstone(ctx, px, py, S) {
   for (const [color, x, y, w, h] of TOMBSTONE_SPRITE) {
     ctx.fillStyle = color;
