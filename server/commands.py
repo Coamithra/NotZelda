@@ -546,32 +546,32 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
                         "x": monster.x,
                         "y": monster.y,
                     }, None))
+                # Unlock trap room doors if all monsters dead (dungeon or overworld)
+                alive = [m for m in game.room_monsters[room_id] if m.alive]
+                if not alive:
+                    if room_id in game.locked_rooms:
+                        unlock_room(room_id, msgs)
                 # Mark dungeon room as cleared if all monsters dead
-                if dinst:
-                    alive = [m for m in game.room_monsters[room_id] if m.alive]
-                    if not alive:
-                        dinst.cleared_rooms.add(room_id)
-                        # Unlock trap room doors
-                        if room_id in game.locked_rooms:
-                            unlock_room(room_id, msgs)
-                        # Boss defeated — silence music + stop choir
-                        if is_boss:
-                            log.debug(f"[BOSS] Boss defeated in {room_id}, silencing music")
-                            dinst.boss_engaged = False
-                            msgs.append(("broadcast", room_id, {
-                                "type": "music_change", "music": None,
-                            }, None))
-                            broadcast_choir_stop(room_id, msgs)
-                            # Spawn seal fragment in treasure room (center of room)
-                            treasure_room_id = f"{dinst.dungeon_id}_{dinst.treasure_cell[0]}_{dinst.treasure_cell[1]}"
-                            # Ensure treasure room is resolved (it's lazily loaded)
-                            if treasure_room_id not in game.rooms:
-                                from server.dungeons import resolve_dungeon_room
-                                resolve_dungeon_room(dinst, dinst.treasure_cell)
-                            dinst.per_player_items.setdefault(treasure_room_id, []).append(
-                                {"x": 7, "y": 5, "item_type": "seal_fragment"}
-                            )
-                            log.debug(f"[BOSS] Seal Fragment spawned in {treasure_room_id} at (7,5)")
+                if dinst and not alive:
+                    dinst.cleared_rooms.add(room_id)
+                    # Boss defeated — silence music + stop choir
+                    if is_boss:
+                        log.debug(f"[BOSS] Boss defeated in {room_id}, silencing music")
+                        dinst.boss_engaged = False
+                        msgs.append(("broadcast", room_id, {
+                            "type": "music_change", "music": None,
+                        }, None))
+                        broadcast_choir_stop(room_id, msgs)
+                        # Spawn seal fragment in treasure room (center of room)
+                        treasure_room_id = f"{dinst.dungeon_id}_{dinst.treasure_cell[0]}_{dinst.treasure_cell[1]}"
+                        # Ensure treasure room is resolved (it's lazily loaded)
+                        if treasure_room_id not in game.rooms:
+                            from server.dungeons import resolve_dungeon_room
+                            resolve_dungeon_room(dinst, dinst.treasure_cell)
+                        dinst.per_player_items.setdefault(treasure_room_id, []).append(
+                            {"x": 7, "y": 5, "item_type": "seal_fragment"}
+                        )
+                        log.debug(f"[BOSS] Seal Fragment spawned in {treasure_room_id} at (7,5)")
             else:
                 msg_hit = {
                     "type": "monster_hit",

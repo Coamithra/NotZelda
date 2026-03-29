@@ -114,6 +114,8 @@ def load_room_files(directory: str = "rooms"):
             "biome": header.get("biome", "plains"),
             "music": header.get("music", "overworld"),
         }
+        if header.get("locked", "").lower() == "true":
+            room["locked"] = True
         game.rooms[room_id] = room
 
         # Parse entity section (after second ---)

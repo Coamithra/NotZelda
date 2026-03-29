@@ -1,10 +1,10 @@
 """
-World generator — creates ~121 .room files for the overworld grid.
+World generator — creates ~133 .room files for the overworld grid.
 
 Run:  python worldgen.py
 Output: rooms/*.room files
 
-The 16x8 biome grid, MST connectivity, feature composition, NPC/monster placement.
+The 16x11 biome grid, MST connectivity, feature composition, NPC/monster placement.
 """
 
 import os
@@ -30,6 +30,9 @@ BIOME_GRID = [
     ["D",  "D",  "D",  "P",  "P",  "L",  "L",  "L",  "P",  "P",  "S",  "S",  "S",  ".",  ".",  "."],   # Row 5
     [".",  "D",  "P",  "P",  "P",  "P",  "P",  "P",  "P",  "P",  "P",  "P",  "S",  ".",  ".",  "."],   # Row 6
     [".",  ".",  ".",  "P",  "P",  "P",  "C",  "C",  "C",  "C",  "P",  "P",  ".",  ".",  ".",  "."],   # Row 7
+    [".",  ".",  ".",  ".",  ".",  ".",  "C",  "C",  "C",  "C",  ".",  ".",  ".",  ".",  ".",  "."],   # Row 8
+    [".",  ".",  ".",  ".",  ".",  ".",  "C",  "C",  "C",  "C",  ".",  ".",  ".",  ".",  ".",  "."],   # Row 9
+    [".",  ".",  ".",  ".",  ".",  ".",  "C",  "C",  "C",  "C",  ".",  ".",  ".",  ".",  ".",  "."],   # Row 10
 ]
 
 BIOME_FULL = {
@@ -168,7 +171,7 @@ def gen_room_name(biome):
 def get_grid_rooms():
     """Return list of (row, col, biome) for all non-empty cells."""
     rooms = []
-    for r in range(8):
+    for r in range(len(BIOME_GRID)):
         for c in range(16):
             b = BIOME_GRID[r][c]
             if b != ".":

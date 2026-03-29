@@ -5,7 +5,7 @@ Run:  python render_map.py
 Requires: pip install Pillow
 
 Each tile = 4x4 pixels, each room = 60x44px.
-Grid rooms laid out in 16x8 grid with gaps. Village rooms above.
+Grid rooms laid out in 16x11 grid with gaps. Village rooms above.
 """
 
 import sys
@@ -119,7 +119,7 @@ def load_room_file(path):
 def render():
     # Grid layout: 16 cols x 8 rows, plus village above
     GRID_COLS = 16
-    GRID_ROWS = 8
+    GRID_ROWS = 11
     VILLAGE_HEIGHT = 3  # room-height units above grid for village
 
     total_w = GRID_COLS * (ROOM_W + GAP) + GAP
