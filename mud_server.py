@@ -161,6 +161,14 @@ async def handle_connection(websocket):
         name = data.get("name", "").strip()[:20]
         desc = data.get("description", "").strip()[:80]
 
+        # Debug auto-login: assign debugN name if none provided
+        if DEBUG_MODE and not name:
+            existing = {p.name for p in game.players.values()}
+            n = 1
+            while f"debug{n}" in existing:
+                n += 1
+            name = f"debug{n}"
+
         name_error = _validate_login_name(name)
         if name_error:
             await websocket.send(json.dumps({"type": "error", "text": name_error}))
@@ -182,14 +190,15 @@ async def handle_connection(websocket):
         log.event("JOIN", f"{name} ({player.description}) from {addr}")
         warmup_ollama()
 
-        login_msg = {"type": "login_ok", "color_index": color_index, "hp": PLAYER_MAX_HP, "max_hp": PLAYER_MAX_HP}
+        login_msg = {"type": "login_ok", "name": name, "color_index": color_index, "hp": PLAYER_MAX_HP, "max_hp": PLAYER_MAX_HP}
         if DEBUG_MODE:
             login_msg["debug_mode"] = True
             player.grant_flag("has_sword")
-            player.grant_flag("invulnerable")
+            player.grant_flag("has_lantern")
         await send_to(player, login_msg)
         if DEBUG_MODE:
             await send_to(player, {"type": "item_obtained", "item_type": "sword", "item_name": "Sword"})
+            await send_to(player, {"type": "item_obtained", "item_type": "lantern", "item_name": "Magic Lantern"})
 
         # Room entry — use sync lifecycle with message batching
         on_player_enter_room(player.room)
@@ -405,6 +414,9 @@ async def process_request(path, request_headers):
     if path in STATIC_FILES:
         filename, content_type = STATIC_FILES[path]
         body = (ROOT_DIR / filename).read_bytes()
+        # Inject debug flag into HTML so client can auto-login
+        if DEBUG_MODE and filename.endswith(".html"):
+            body = body.replace(b"</head>", b"<script>window.SERVER_DEBUG=true</script></head>")
         return HTTPStatus.OK, [("Content-Type", content_type)], body
     return HTTPStatus.NOT_FOUND, [], b"Not Found"
 

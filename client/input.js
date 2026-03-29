@@ -155,6 +155,14 @@ G.ui.connectBtn.addEventListener("click", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Debug auto-login: skip title screen, connect with empty name (server assigns debugN)
+// ---------------------------------------------------------------------------
+if (window.SERVER_DEBUG) {
+  MusicPlayer.start();
+  connect("", "");
+}
+
+// ---------------------------------------------------------------------------
 // Visibility change (reconnect on tab resume)
 // ---------------------------------------------------------------------------
 document.addEventListener("visibilitychange", () => {

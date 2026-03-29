@@ -121,6 +121,7 @@ function guessTransitionDir(fromId, toId, exitDir, fromExits) {
 function handleMessage(msg) {
   switch (msg.type) {
     case "login_ok":
+      if (msg.name) { G.player.myName = msg.name; G.conn.lastLoginName = msg.name; }
       G.player.myColorIndex = msg.color_index;
       G.player.myHp = msg.hp;
       G.player.myMaxHp = msg.max_hp;
@@ -704,13 +705,13 @@ function handleMessage(msg) {
       const hitMon = G.room.monsters.find(m => m.id === msg.id);
       if (hitMon) {
         hitMon.hitFlash = Date.now() + 200;
-        // Always sync logical position and cancel walk on hit
-        hitMon.x = msg.x;
-        hitMon.y = msg.y;
         hitMon.stateSeq = msg.seq || (hitMon.stateSeq + 1);
-        hitMon.walkState = null;
-        // Knockback slide (separate from walkState so no hop animation)
+        // Only sync position and cancel walk if monster was knocked back
+        // (bosses are non-knockbackable — they continue walking through hits)
         if (msg.knock_x != null) {
+          hitMon.x = msg.x;
+          hitMon.y = msg.y;
+          hitMon.walkState = null;
           hitMon.knockbackSlide = {
             fromX: hitMon.displayX, fromY: hitMon.displayY,
             toX: msg.knock_x, toY: msg.knock_y,

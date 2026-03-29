@@ -2149,10 +2149,10 @@
       "undead"
     ],
     "stats": {
-      "hp": 20,
+      "hp": 15,
       "walk_time": 0.25,
       "decision_time": 0.67,
-      "damage": 3,
+      "damage": 1,
       "width": 2,
       "height": 2,
       "boss": true
@@ -2160,43 +2160,20 @@
     "behavior": {
       "rules": [
         {
-          "if": "hp_below",
-          "value": 10,
-          "do": "projectile",
-          "direction": "player",
-          "damage": 2,
-          "sprite_color": "#cc33ff",
-          "warmup": 1,
-          "cooldown": 2
-        },
-        {
-          "if": "player_within",
-          "range": 2,
-          "do": "area",
-          "damage": 3,
-          "warmup": 1,
-          "cooldown": 4
-        },
-        {
           "if": "player_in_range_line",
           "range": 6,
           "los": true,
           "do": "charge",
           "direction": "player",
-          "damage": 4,
-          "warmup": 1,
+          "damage": 2,
+          "warmup": 2,
           "cooldown": 5
-        },
-        {
-          "if": "player_within",
-          "range": 10,
-          "do": "move",
-          "direction": "player"
         },
         {
           "if": "always",
           "do": "move",
-          "direction": "random"
+          "direction": "patrol",
+          "patrol_route": "RRRRRDDDDDLLLLLUUUUU"
         }
       ]
     },
