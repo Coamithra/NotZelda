@@ -195,6 +195,7 @@ async def handle_connection(websocket):
             login_msg["debug_mode"] = True
             player.grant_flag("has_sword")
             player.grant_flag("has_lantern")
+            player.grant_flag("invulnerable")
         await send_to(player, login_msg)
         if DEBUG_MODE:
             await send_to(player, {"type": "item_obtained", "item_type": "sword", "item_name": "Sword"})
