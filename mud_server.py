@@ -287,6 +287,7 @@ STATIC_FILES = {
     "/music_tavern.mp3":       ("music/overworld/tavern.mp3", "audio/mpeg"),
     "/music_chapel.mp3":       ("music/overworld/chapel.mp3", "audio/mpeg"),
     "/music_overworld.mp3":    ("music/overworld/overworld.mp3", "audio/mpeg"),
+    "/music_castle_ruins.mp3": ("music/overworld/castle_ruins.mp3", "audio/mpeg"),
     # Dungeon 1 music
     "/music_dungeon2.mp3":     ("music/dungeon1/dungeon_b.mp3", "audio/mpeg"),
     "/music_dungeon4.mp3":     ("music/dungeon1/dungeon_d.mp3", "audio/mpeg"),
