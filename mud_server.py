@@ -311,6 +311,7 @@ STATIC_FILES = {
 }
 
 
+# Captured at module load — slightly earlier than actual server listen, but close enough for debug
 _server_start_time = time.time()
 
 
@@ -396,7 +397,10 @@ async def process_request(path, request_headers):
     if path == "/admin/library-stats":
         if not DEBUG_MODE:
             return HTTPStatus.NOT_FOUND, [], b"Not Found"
-        body = json.dumps(_build_library_stats(), indent=2).encode()
+        try:
+            body = json.dumps(_build_library_stats(), indent=2).encode()
+        except Exception as e:
+            body = json.dumps({"error": str(e)}).encode()
         return HTTPStatus.OK, [("Content-Type", "application/json")], body
     if path in STATIC_FILES:
         filename, content_type = STATIC_FILES[path]
