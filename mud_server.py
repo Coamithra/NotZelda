@@ -44,6 +44,7 @@ from server.dungeons import load_deprecation_timestamp, load_deprecated_sets, ge
 from server.dungeon_types import DUNGEON_TYPES
 from server.content_library import ContentLibrary, MONSTER_LIBRARY_CAPACITY, TILE_LIBRARY_CAPACITY, ROOM_LIBRARY_CAPACITY
 from server.validation import register_monster_type, register_tile_type
+from server.ai_generator import rate_limiter, usage_tracker, AI_BACKEND, ANTHROPIC_MODEL
 
 
 # ---------------------------------------------------------------------------
@@ -310,6 +311,78 @@ STATIC_FILES = {
 }
 
 
+_server_start_time = time.time()
+
+
+def _build_library_stats() -> dict:
+    """Assemble a JSON-serializable snapshot of library composition and API usage."""
+    # -- Server info --
+    server_info = {
+        "uptime_seconds": round(time.time() - _server_start_time),
+        "players_online": len(game.players),
+        "active_dungeons": sorted(game.active_dungeons.keys()),
+        "debug_mode": DEBUG_MODE,
+    }
+
+    # -- Per-dungeon library composition --
+    libraries = {}
+    for type_id, libs in sorted(game.content_libraries.items()):
+        type_libs = {}
+        for lib_name in ("rooms", "monsters", "tiles"):
+            lib = libs.get(lib_name)
+            if lib:
+                type_libs[lib_name] = {
+                    "capacity": lib.capacity,
+                    "real": lib.real_count,
+                    "permanent": lib.permanent_count,
+                    "custom": lib.custom_count,
+                    "placeholders": lib.placeholder_count,
+                }
+        libraries[type_id] = type_libs
+
+    # -- Deprecated content counts --
+    deprecated = {}
+    for type_id, dep in sorted(game.deprecated_content.items()):
+        deprecated[type_id] = {
+            "monsters": len(dep.get("monsters", set())),
+            "tiles": len(dep.get("tiles", set())),
+        }
+
+    # -- API usage --
+    api_usage = {
+        "backend": AI_BACKEND,
+        "model": ANTHROPIC_MODEL,
+        "rate_limit": {
+            "per_minute": rate_limiter.per_minute,
+            "per_day": rate_limiter.per_day,
+            "daily_calls_used": rate_limiter.daily_calls,
+        },
+        "tokens": {
+            "total_input": usage_tracker.total_input_tokens,
+            "total_output": usage_tracker.total_output_tokens,
+            "total_cache_write": usage_tracker.total_cache_write_tokens,
+            "total_cache_read": usage_tracker.total_cache_read_tokens,
+            "total_calls": usage_tracker.total_calls,
+            "estimated_cost_usd": round(usage_tracker.estimated_cost(), 4),
+        },
+        "session": {
+            "input": usage_tracker.session_input_tokens,
+            "output": usage_tracker.session_output_tokens,
+            "cache_write": usage_tracker.session_cache_write_tokens,
+            "cache_read": usage_tracker.session_cache_read_tokens,
+            "calls": usage_tracker.session_calls,
+            "estimated_cost_usd": round(usage_tracker.session_cost(), 4),
+        },
+    }
+
+    return {
+        "server": server_info,
+        "libraries": libraries,
+        "deprecated": deprecated,
+        "api_usage": api_usage,
+    }
+
+
 async def process_request(path, request_headers):
     path = path.split("?")[0]  # strip query string for cache-busting support
     if path == "/ws":
@@ -320,6 +393,11 @@ async def process_request(path, request_headers):
     if path == "/clear-log":
         game.log_file.write_text("", encoding="utf-8")
         return HTTPStatus.OK, [("Content-Type", "text/plain; charset=utf-8")], b"Log cleared."
+    if path == "/admin/library-stats":
+        if not DEBUG_MODE:
+            return HTTPStatus.NOT_FOUND, [], b"Not Found"
+        body = json.dumps(_build_library_stats(), indent=2).encode()
+        return HTTPStatus.OK, [("Content-Type", "application/json")], body
     if path in STATIC_FILES:
         filename, content_type = STATIC_FILES[path]
         body = (ROOT_DIR / filename).read_bytes()

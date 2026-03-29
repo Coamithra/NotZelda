@@ -107,6 +107,7 @@ When pushing to git make sure to update CLAUDE.md first!
   - `_LogBroadcaster` in `mud_server.py` is a safety net that catches stray `print()` from libraries/tracebacks → sidebar + file.
   - Exception: `state.py` startup prints stay as `print()` (runs before game exists). `ai_generator.py` `__main__` block stays as `print()` (standalone test).
 - **Debug /viewserver**: sends full `debug_state` snapshot every tick to subscribed players (toggled via `/viewserver` chat command, debug-only). Renders semi-transparent red shapes for server-side entity positions.
+- **Admin `/admin/library-stats`**: debug-only HTTP endpoint returning JSON snapshot of content library composition (per-dungeon real/permanent/custom/placeholder counts), deprecated content, and API usage (tokens, cost, rate limits). Gated behind `DEBUG_MODE` — returns 404 in production. Built by `_build_library_stats()` in `mud_server.py`.
 - **Room geometry constants** live in `server/constants.py`: `DOORWAY_TILES`, `ALL_DOORWAY_TILES`, `bfs_reachable()`. Use `bfs_reachable()` instead of inline BFS for tile reachability checks.
 
 ## Key Gotchas
