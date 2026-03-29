@@ -461,6 +461,89 @@ function drawItemSpiritJar(ctx, px, py, S) {
   ctx.fillRect(px+2*S, py+9*S, 4*S, S);
 }
 
+function drawItemLantern(ctx, px, py, S) {
+  // Brass lantern with amber flame inside
+  const brass = "#c8a832", brassDark = "#8a7020", brassBright = "#e8d060";
+  const flame = "#ff9922", flameCore = "#ffdd44", flameTip = "#ff6600";
+  const glass = "rgba(255,200,100,0.3)";
+  // Handle (top)
+  ctx.fillStyle = brassDark;
+  ctx.fillRect(px+3*S, py, 2*S, S);
+  ctx.fillRect(px+2*S, py+S, S, S);
+  ctx.fillRect(px+5*S, py+S, S, S);
+  // Top cap
+  ctx.fillStyle = brass;
+  ctx.fillRect(px+S, py+2*S, 6*S, S);
+  ctx.fillStyle = brassBright;
+  ctx.fillRect(px+2*S, py+2*S, 3*S, S);
+  // Glass body
+  ctx.fillStyle = glass;
+  ctx.fillRect(px+S, py+3*S, 6*S, 5*S);
+  // Flame
+  ctx.fillStyle = flame;
+  ctx.fillRect(px+3*S, py+4*S, 2*S, 3*S);
+  ctx.fillStyle = flameCore;
+  ctx.fillRect(px+3*S, py+5*S, 2*S, S);
+  ctx.fillRect(px+4*S, py+4*S, S, S);
+  ctx.fillStyle = flameTip;
+  ctx.fillRect(px+4*S, py+3*S, S, S);
+  // Side frame
+  ctx.fillStyle = brass;
+  ctx.fillRect(px, py+3*S, S, 5*S);
+  ctx.fillRect(px+7*S, py+3*S, S, 5*S);
+  // Bottom base
+  ctx.fillStyle = brass;
+  ctx.fillRect(px, py+8*S, 8*S, S);
+  ctx.fillRect(px+S, py+9*S, 6*S, S);
+  ctx.fillStyle = brassDark;
+  ctx.fillRect(px+S, py+9*S, 2*S, S);
+}
+
+function drawItemSealFragment(ctx, px, py, S) {
+  // Glowing crystal fragment — purple/blue with golden edge
+  const crystal = "#7744cc", crystalBright = "#aa77ff", crystalDark = "#442288";
+  const gold = "#d4a830", goldBright = "#f0d060";
+  const glow = "rgba(120,80,220,0.4)";
+  // Glow aura
+  ctx.fillStyle = glow;
+  ctx.fillRect(px, py+2*S, 8*S, 7*S);
+  ctx.fillRect(px+S, py+S, 6*S, 9*S);
+  // Crystal body (shield/triangle shape)
+  ctx.fillStyle = crystal;
+  ctx.fillRect(px+3*S, py+S, 2*S, S);
+  ctx.fillRect(px+2*S, py+2*S, 4*S, S);
+  ctx.fillRect(px+2*S, py+3*S, 5*S, S);
+  ctx.fillRect(px+S, py+4*S, 6*S, S);
+  ctx.fillRect(px+S, py+5*S, 6*S, S);
+  ctx.fillRect(px+2*S, py+6*S, 5*S, S);
+  ctx.fillRect(px+2*S, py+7*S, 4*S, S);
+  ctx.fillRect(px+3*S, py+8*S, 3*S, S);
+  ctx.fillRect(px+3*S, py+9*S, 2*S, S);
+  // Bright edge (left)
+  ctx.fillStyle = crystalBright;
+  ctx.fillRect(px+2*S, py+2*S, S, S);
+  ctx.fillRect(px+S, py+4*S, S, 2*S);
+  ctx.fillRect(px+2*S, py+3*S, S, S);
+  ctx.fillRect(px+3*S, py+S, S, S);
+  // Dark edge (right)
+  ctx.fillStyle = crystalDark;
+  ctx.fillRect(px+6*S, py+4*S, S, 2*S);
+  ctx.fillRect(px+6*S, py+6*S, S, S);
+  ctx.fillRect(px+5*S, py+7*S, S, S);
+  ctx.fillRect(px+4*S, py+9*S, S, S);
+  // Golden border highlight
+  ctx.fillStyle = gold;
+  ctx.fillRect(px+3*S, py, 2*S, S);
+  ctx.fillRect(px+S, py+3*S, S, S);
+  ctx.fillRect(px+7*S, py+3*S, S, S);
+  ctx.fillStyle = goldBright;
+  ctx.fillRect(px+4*S, py, S, S);
+  // Center shine
+  ctx.fillStyle = "#ccaaff";
+  ctx.fillRect(px+3*S, py+4*S, S, 2*S);
+  ctx.fillRect(px+4*S, py+5*S, S, S);
+}
+
 const ITEM_DRAW_FNS = {
   sword: drawItemSword,
   map: drawItemMap,
@@ -468,6 +551,8 @@ const ITEM_DRAW_FNS = {
   heart: drawItemHeart,
   key: drawItemKey,
   spirit_jar: drawItemSpiritJar,
+  lantern: drawItemLantern,
+  seal_fragment: drawItemSealFragment,
 };
 
 function drawTombstone(ctx, px, py, S) {

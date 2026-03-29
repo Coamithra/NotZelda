@@ -7,7 +7,8 @@ import time
 from collections import deque
 
 from server.state import game
-from server.constants import EDGE_SPAWN_POINTS, DEFAULT_SPAWN, ROOM_COLS, ROOM_ROWS, DOORWAY_TILES, bfs_reachable
+from server.constants import (EDGE_SPAWN_POINTS, DEFAULT_SPAWN, ROOM_COLS, ROOM_ROWS,
+                              DOORWAY_TILES, bfs_reachable, DARK_ROOM_FRACTION)
 from server import log
 from server.net import broadcast_debug
 from server.ai_generator import patch_unreachable_doorways, patch_monster_placements
@@ -40,10 +41,22 @@ class DungeonInstance:
         self.treasure_cell = None   # (col, row)
         self.boss_engaged = False   # True once boss takes first non-lethal hit
 
-        # Dungeon items (Map & Compass)
-        self.item_cells = {}           # "map" -> (col, row), "compass" -> (col, row)
+        # Dungeon items (Map & Compass & Lantern)
+        self.item_cells = {}           # "map" -> (col, row), "compass" -> (col, row), "lantern" -> (col, row)
         self.dungeon_items = {}        # room_id -> [{x, y, item_type}]
         self.collected_items = set()   # "map", "compass"
+        self.per_player_items = {}     # room_id -> [{x, y, item_type}] — items that stay for all players
+
+        # Darkness
+        self.dark_cells = set()        # cells flagged as dark rooms
+        self.lantern_cell = None       # (col, row) where the lantern spawns
+
+        # Distance maps — computed once at creation, reused for all placement
+        # distances[landmark] = {cell: int}, parents[landmark] = {cell: cell|None}
+        self.distances = {}
+        self.parents = {}
+        self.adj = {}                  # connection adjacency: cell -> [cell, ...]
+        self.critical_paths = {}       # name -> set of cells on shortest path (immune from darkness)
 
         # Trap rooms — decided at creation time so key placement can use it
         self.trap_cells = set()            # cells that will become trap rooms on resolution
@@ -130,6 +143,47 @@ def dungeon_player_count(instance) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Distance utilities
+# ---------------------------------------------------------------------------
+
+def _bfs_distances(adj, origin):
+    """BFS from origin on adjacency dict. Returns (dist, parent) dicts."""
+    dist = {origin: 0}
+    parent = {origin: None}
+    queue = deque([origin])
+    while queue:
+        cell = queue.popleft()
+        for n in adj[cell]:
+            if n not in dist:
+                dist[n] = dist[cell] + 1
+                parent[n] = cell
+                queue.append(n)
+    return dist, parent
+
+
+def _trace_path(parents, target):
+    """Backtrack from target to origin using a parent dict. Returns set of cells on the path."""
+    path = set()
+    cur = target
+    while cur is not None:
+        path.add(cur)
+        cur = parents.get(cur)
+    return path
+
+
+def _connection_adj(connections, cells):
+    """Build adjacency dict from a set of frozenset connection edges."""
+    adj = {c: [] for c in cells}
+    for edge in connections:
+        a, b = tuple(edge)
+        if a in adj:
+            adj[a].append(b)
+        if b in adj:
+            adj[b].append(a)
+    return adj
+
+
+# ---------------------------------------------------------------------------
 # Dungeon path generation
 # ---------------------------------------------------------------------------
 
@@ -174,17 +228,12 @@ def _build_dungeon_path(active_cells, entrance):
             stack.pop()
 
     # BFS on the tree to find distances from entrance
-    dist = {entrance: 0}
-    bfs_parent = {entrance: None}
-    queue = deque([entrance])
-    while queue:
-        cell = queue.popleft()
-        for n in adj[cell]:
-            edge = frozenset((cell, n))
-            if edge in tree_edges and n not in dist:
-                dist[n] = dist[cell] + 1
-                bfs_parent[n] = cell
-                queue.append(n)
+    tree_adj = {c: [] for c in cell_set}
+    for edge in tree_edges:
+        a, b = tuple(edge)
+        tree_adj[a].append(b)
+        tree_adj[b].append(a)
+    dist, bfs_parent = _bfs_distances(tree_adj, entrance)
 
     # Find leaf nodes (degree 1 in tree, excluding entrance)
     tree_degree = {c: 0 for c in cell_set}
@@ -219,6 +268,61 @@ def _build_dungeon_path(active_cells, entrance):
         connections.update(extras)
 
     return connections, boss_cell, treasure_cell
+
+
+def _assign_darkness(adj, active_cells, entrance, boss_cell, treasure_cell,
+                     dist_entrance, parent_entrance, dist_boss):
+    """Assign dark rooms and choose the lantern cell.
+
+    Uses pre-computed distance dicts from entrance and boss to place the
+    lantern in the opposite branch from the boss. Marks ~25% of eligible
+    rooms as dark, ensuring the shortest path from entrance to lantern has
+    NO dark rooms. Room(s) adjacent to boss are dark.
+
+    Returns (dark_cells: set, lantern_cell: tuple, critical_path: set).
+    The critical_path is the entrance→lantern shortest path (immune from darkness).
+    """
+    # Choose lantern cell: far from boss (different branch), not too close to entrance.
+    # Score = boss_dist * 2 + entrance_dist.  Heavily favors the opposite branch.
+    special = {entrance, boss_cell, treasure_cell}
+    lantern_candidates = [c for c in active_cells if c not in special]
+    if not lantern_candidates:
+        lantern_candidates = [c for c in active_cells if c not in {boss_cell, treasure_cell}]
+    max_entrance_dist = max(dist_entrance.values()) if dist_entrance else 1
+    min_entrance_dist = max(1, int(max_entrance_dist * 0.3))  # at least 30% from entrance
+    # Prefer candidates not too close to entrance
+    good_candidates = [c for c in lantern_candidates if dist_entrance.get(c, 0) >= min_entrance_dist]
+    pool = good_candidates if good_candidates else lantern_candidates
+    lantern_cell = max(pool, key=lambda c: dist_boss.get(c, 0) * 2 + dist_entrance.get(c, 0))
+
+    # Critical path: entrance → lantern (immune from darkness)
+    lantern_path = _trace_path(parent_entrance, lantern_cell)
+
+    # Cells never flagged dark (critical path + special rooms)
+    immune = lantern_path | {entrance, boss_cell, treasure_cell}
+
+    # Cells adjacent to boss (in connection graph) are always dark
+    boss_neighbors = set()
+    for n in adj.get(boss_cell, []):
+        if n not in immune:
+            boss_neighbors.add(n)
+
+    # Eligible cells for random darkness: not immune, not already boss-adjacent
+    eligible = [c for c in active_cells if c not in immune and c not in boss_neighbors]
+    random.shuffle(eligible)
+
+    # Pick ~25% of eligible as dark
+    num_dark = max(0, round(len(eligible) * DARK_ROOM_FRACTION))
+    random_dark = set(eligible[:num_dark])
+
+    dark_cells = boss_neighbors | random_dark
+
+    log.debug(f"[DUNGEON] Darkness: {len(dark_cells)} dark rooms "
+              f"({len(boss_neighbors)} pre-boss, {len(random_dark)} random), "
+              f"lantern at {lantern_cell} (dist {dist_entrance.get(lantern_cell, '?')}), "
+              f"critical path: {len(lantern_path)} rooms")
+
+    return dark_cells, lantern_cell, lantern_path
 
 
 def _get_cell_exits(cell, connections, entrance_col, entrance_row, dungeon_id, exit_room):
@@ -570,8 +674,12 @@ def _resolve_room_from_entry(room_id, entry_data, exits, cell, music_track, is_e
             if tile == "SU":
                 spawn_points["down"] = (rx, ry)
 
+    raw_name = entry_data.get("name", "Dungeon Room")
+    # Prettify snake_case names from older AI generations
+    if "_" in raw_name and raw_name == raw_name.lower():
+        raw_name = raw_name.replace("_", " ").title()
     game.rooms[room_id] = {
-        "name": entry_data.get("name", "Dungeon Room"),
+        "name": raw_name,
         "exits": exits,
         "tilemap": tilemap,
         "spawn_points": spawn_points,
@@ -734,7 +842,16 @@ def create_dungeon(type_id) -> DungeonInstance | None:
                 "source": "special", "entry": entry, "resolved": False,
             }
 
-    # Pick cells for dungeon items (Map & Compass)
+    # --- Compute distances from each landmark (reused for all placement) ---
+    adj = _connection_adj(connections, active_cells)
+    distances = {}  # landmark_name -> {cell: dist}
+    parents = {}    # landmark_name -> {cell: parent}
+
+    distances["entrance"], parents["entrance"] = _bfs_distances(adj, entrance)
+    distances["boss"], parents["boss"] = _bfs_distances(adj, boss_cell)
+
+    # Pick cells for dungeon items (Map & Compass) — currently random, will be
+    # smarter once we use distances["lantern"] etc.
     special_cells = {entrance, boss_cell, treasure_cell}
     item_candidates = [c for c in active_cells if c not in special_cells]
     item_cells = {}
@@ -744,6 +861,19 @@ def create_dungeon(type_id) -> DungeonInstance | None:
         item_cells["compass"] = compass_cell
     elif len(item_candidates) == 1:
         item_cells["map"] = item_candidates[0]
+
+    # Assign darkness and place lantern (d1 only for now)
+    dark_cells = set()
+    lantern_cell = None
+    critical_paths = {}  # name -> set of cells on the shortest path
+    if type_id == "d1":
+        dark_cells, lantern_cell, lantern_path = _assign_darkness(
+            adj, active_cells, entrance, boss_cell, treasure_cell,
+            distances["entrance"], parents["entrance"], distances["boss"])
+        critical_paths["entrance_to_lantern"] = lantern_path
+        if lantern_cell:
+            item_cells["lantern"] = lantern_cell
+            distances["lantern"], parents["lantern"] = _bfs_distances(adj, lantern_cell)
 
     # Decide trap rooms upfront (boss always; others: 3+ monsters, 1/3 chance).
     # All cells now have entry data assigned at creation time.
@@ -782,11 +912,17 @@ def create_dungeon(type_id) -> DungeonInstance | None:
     instance.boss_cell = boss_cell
     instance.treasure_cell = treasure_cell
     instance.item_cells = item_cells
+    instance.distances = distances
+    instance.parents = parents
+    instance.adj = adj
+    instance.critical_paths = critical_paths
     instance.trap_cells = trap_cells
     instance.locked_doors = locked_doors
     instance.key_cells = key_cells
     instance.zone_of = lock_zone_of
     instance.zone_cells = lock_zone_cells
+    instance.dark_cells = dark_cells
+    instance.lantern_cell = lantern_cell
 
     game.active_dungeons[type_id] = instance
     for room_id in active_rooms:
@@ -812,7 +948,8 @@ def create_dungeon(type_id) -> DungeonInstance | None:
 
     # Dump dungeon layout to file for debugging
     _dump_dungeon_debug(instance, active_cells, connections, locked_doors,
-                        key_cells, item_cells, entrance, boss_cell, treasure_cell)
+                        key_cells, item_cells, entrance, boss_cell, treasure_cell,
+                        dark_cells, lantern_cell)
 
     # Resolve the entrance room immediately (always precreated, so instant)
     resolve_dungeon_room(instance, (entrance_col, entrance_row))
@@ -821,12 +958,15 @@ def create_dungeon(type_id) -> DungeonInstance | None:
 
 
 def _dump_dungeon_debug(instance, active_cells, connections, locked_doors,
-                        key_cells, item_cells, entrance, boss_cell, treasure_cell):
+                        key_cells, item_cells, entrance, boss_cell, treasure_cell,
+                        dark_cells=None, lantern_cell=None):
     """Write a human-readable dungeon layout to dungeon.txt for debugging."""
+    dark_cells = dark_cells or set()
     lines = []
     lines.append(f"=== Dungeon: {instance.dungeon_id} ===")
     lines.append(f"Entrance: {entrance}  Boss: {boss_cell}  Treasure: {treasure_cell}")
-    lines.append(f"Locked doors: {len(locked_doors)}  Keys: {len(key_cells)}")
+    lines.append(f"Locked doors: {len(locked_doors)}  Keys: {len(key_cells)}  "
+                 f"Dark rooms: {len(dark_cells)}  Lantern: {lantern_cell}")
     lines.append("")
 
     # Build cell labels
@@ -839,8 +979,16 @@ def _dump_dungeon_debug(instance, active_cells, connections, locked_doors,
             tag.append("BOSS")
         if c == treasure_cell:
             tag.append("TREA")
+        if c in dark_cells:
+            tag.append("DARK")
+        if c == lantern_cell:
+            tag.append("LANTERN")
+        # Mark critical path cells (entrance→lantern shortest path)
+        for path_name, path_cells in instance.critical_paths.items():
+            if c in path_cells and c != entrance and c != lantern_cell:
+                tag.append("PATH")
         for itype, icell in item_cells.items():
-            if c == icell:
+            if c == icell and itype != "lantern":  # lantern already tagged above
                 tag.append(itype.upper())
         key_count = sum(1 for k in key_cells if k == c)
         if key_count:
@@ -963,13 +1111,48 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
     assignment["resolved"] = True
     instance.resolved_rooms.add(room_id)
 
+    # Darkness — scan tilemap for bright tiles (sconces, braziers, fireplaces)
+    room_data = game.rooms.get(room_id, {})
+    tilemap = room_data.get("tilemap", [])
+    light_sources = []
+    has_bright_tiles = False
+    for r_idx, row in enumerate(tilemap):
+        for c_idx, tile_code in enumerate(row):
+            tile_props = game.custom_tile_recipes.get(tile_code, {})
+            if tile_props.get("bright"):
+                has_bright_tiles = True
+                light_sources.append([c_idx, r_idx])
+
+    # A room is dark if explicitly in dark_cells, OR has bright tiles (atmosphere).
+    # Bright-tile rooms on the critical path are still dark — the sconces provide enough light.
+    is_dark = cell in instance.dark_cells or has_bright_tiles
+    if is_dark:
+        room_data["dark"] = True
+        room_data["light_sources"] = light_sources
+    if has_bright_tiles or cell in instance.dark_cells:
+        log.debug(f"[DUNGEON] Room {room_id} dark={is_dark} "
+                  f"(in dark_cells={cell in instance.dark_cells}, bright_tiles={has_bright_tiles}, "
+                  f"lights={len(light_sources)})")
+
     # Place dungeon items — track used positions to avoid overlap
     # Clear any prior items for this room (guards against duplicate placement on re-resolve)
     instance.dungeon_items.pop(room_id, None)
+    instance.per_player_items.pop(room_id, None)
     used_positions = set()
 
+    # Per-player items (lantern) — always placed, tracked separately
+    per_player_types = {"lantern"}
     for item_type, item_cell in instance.item_cells.items():
-        if cell == item_cell and item_type not in instance.collected_items:
+        if item_type in per_player_types:
+            if cell == item_cell:
+                pos = _find_item_tile(room_id, exclude=used_positions)
+                if pos:
+                    used_positions.add(pos)
+                    instance.per_player_items.setdefault(room_id, []).append(
+                        {"x": pos[0], "y": pos[1], "item_type": item_type}
+                    )
+                    log.debug(f"[DUNGEON] Placed {item_type} (per-player) in {room_id} at ({pos[0]},{pos[1]})")
+        elif cell == item_cell and item_type not in instance.collected_items:
             pos = _find_item_tile(room_id, exclude=used_positions)
             if pos:
                 used_positions.add(pos)

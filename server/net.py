@@ -47,6 +47,8 @@ def player_info(p) -> dict:
     }
     if a.dancing:
         info["dancing"] = True
+    if p.has_flag("has_lantern"):
+        info["has_lantern"] = True
     return info
 
 

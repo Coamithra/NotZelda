@@ -343,6 +343,28 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
         if room_items and player.room not in game.locked_rooms:
             msg["dungeon_items"] = [{"x": it["x"], "y": it["y"], "item_type": it["item_type"]} for it in room_items]
 
+    # Per-player dungeon items (lantern, seal_fragment) — filter by player flags
+    if inst:
+        pp_items = inst.per_player_items.get(player.room, [])
+        if pp_items and player.room not in game.locked_rooms:
+            visible = [it for it in pp_items if not player.has_flag(f"has_{it['item_type']}")]
+            if visible:
+                # Merge with regular dungeon_items for client rendering
+                existing = msg.get("dungeon_items", [])
+                existing.extend([{"x": it["x"], "y": it["y"], "item_type": it["item_type"]} for it in visible])
+                msg["dungeon_items"] = existing
+
+    # Dark room data
+    if inst:
+        room_data = game.rooms.get(player.room, {})
+        if room_data.get("dark"):
+            msg["dark"] = True
+            msg["light_sources"] = room_data.get("light_sources", [])
+            # Tell client which players in this room have lanterns
+            lantern_holders = [p.name for p, a in avatars_in_room(player.room) if p.has_flag("has_lantern")]
+            if lantern_holders:
+                msg["lantern_holders"] = lantern_holders
+
     # Attach dungeon type for client-side ambient effects
     if inst:
         msg["dungeon_type"] = inst.dungeon_id

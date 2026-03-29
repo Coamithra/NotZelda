@@ -74,6 +74,13 @@ REVIVAL_DURATION = 6.5              # seconds — channel time to revive a tombs
 REVIVAL_PROXIMITY = 1.0             # tile distance — how close reviver must be to tombstone
 REVIVAL_HP = 6                      # HP on revive (3 hearts) — caps both spirit jar and player revival
 
+# Darkness & Lantern
+DARK_ROOM_FRACTION = 0.25           # ~25% of eligible rooms flagged dark
+LANTERN_RADIUS = 3.5                # tile visibility radius with lantern
+NO_LANTERN_RADIUS = 0.75            # tile visibility radius without lantern (practically blind)
+BRIGHT_TILE_RADIUS = 3.0            # static light radius for sconces, braziers, fireplaces
+SEAL_FRAGMENT_HP_BONUS = 2          # +1 heart container = +2 HP
+
 # Tick loop
 TICK_INTERVAL = 1.0 / 30     # ~33ms — unified game tick rate
 

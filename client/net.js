@@ -268,6 +268,9 @@ function handleMessage(msg) {
       G.ui.canvas.style.transform = "";
       G.room.dungeonGroundItems = msg.dungeon_items || [];
       G.room.monsterFreeze = null;
+      G.room.dark = msg.dark || false;
+      G.room.lightSources = msg.light_sources || [];
+      G.room.lanternHolders = new Set(msg.lantern_holders || []);
       G.player.itemPickupActive = null;
       G.player.itemPickupEffects = {};
       G.player.dyingPlayerSelf = null;
@@ -428,12 +431,14 @@ function handleMessage(msg) {
       if (msg.name !== G.player.myName) {
         G.room.otherPlayers[msg.name] = createOtherPlayer(msg.x, msg.y, msg.direction, msg.color_index);
         if (msg.dancing) startDance(msg.name);
+        if (msg.has_lantern) G.room.lanternHolders.add(msg.name);
         appendChatLog(`<span class="chat-system">${escHtml(msg.name)} entered the room</span>`);
       }
       break;
 
     case "player_left":
       delete G.room.otherPlayers[msg.name];
+      G.room.lanternHolders.delete(msg.name);
       stopDance(msg.name);
       appendChatLog(`<span class="chat-system">${escHtml(msg.name)} left the room</span>`);
       break;
@@ -679,6 +684,16 @@ function handleMessage(msg) {
       break;
     }
 
+    case "tile_change": {
+      // Dynamic tile updates (e.g., exit stairwell spawning)
+      if (G.room.currentRoom && G.room.currentRoom.tilemap && msg.changes) {
+        for (const [r, c, tile] of msg.changes) {
+          G.room.currentRoom.tilemap[r][c] = tile;
+        }
+      }
+      break;
+    }
+
     case "monster_hit": {
       const hitMon = G.room.monsters.find(m => m.id === msg.id);
       if (hitMon) {
@@ -882,7 +897,20 @@ function handleMessage(msg) {
           y: G.player.displayY,
         };
         // Remove from ground items (dungeon items only)
-        if (msg.item_type === "key") {
+        // Per-player items (lantern, seal_fragment) stay on ground for other players
+        const perPlayerItems = new Set(["lantern", "seal_fragment"]);
+        if (perPlayerItems.has(msg.item_type)) {
+          // Remove for THIS player only (visual) — server keeps it for others
+          const px = G.player.displayX, py = G.player.displayY;
+          let removed = false;
+          G.room.dungeonGroundItems = G.room.dungeonGroundItems.filter(it => {
+            if (!removed && it.item_type === msg.item_type && Math.abs(it.x - px) < 1 && Math.abs(it.y - py) < 1) {
+              removed = true;
+              return false;
+            }
+            return true;
+          });
+        } else if (msg.item_type === "key") {
           // Keys: remove by position (multiple keys can exist)
           const kx = G.player.displayX, ky = G.player.displayY;
           let removed = false;
@@ -904,6 +932,13 @@ function handleMessage(msg) {
           setTimeout(() => { G.player.playerFlags.add("has_sword"); }, 500);
         } else if (msg.item_type === "spirit_jar") {
           setTimeout(() => { G.player.playerFlags.add("has_spirit_jar"); }, 500);
+        } else if (msg.item_type === "lantern") {
+          setTimeout(() => {
+            G.player.playerFlags.add("has_lantern");
+            G.room.lanternHolders.add(G.player.myName);
+          }, 500);
+        } else if (msg.item_type === "seal_fragment") {
+          setTimeout(() => { G.player.playerFlags.add("has_seal_fragment"); }, 500);
         }
         setTimeout(() => {
           G.ui.infoMessages.push({ text: "You got the " + msg.item_name + "!", expires: Date.now() + 4000 });
@@ -928,6 +963,10 @@ function handleMessage(msg) {
           x: effPlayer.displayX,
           y: effPlayer.displayY,
         };
+      }
+      // Track lantern holders for darkness rendering
+      if (msg.item_type === "lantern") {
+        G.room.lanternHolders.add(msg.name);
       }
       appendChatLog(`<span class="chat-item">${escHtml(msg.name)} obtained ${escHtml(msg.item_name)}!</span>`);
       break;

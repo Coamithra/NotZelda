@@ -116,6 +116,11 @@ const G = {
     dungeonGroundItems: [],     // [{x, y, item_type}]
     monsterFreeze: null,        // {start, duration} — monsters paused during item pickup
 
+    // Darkness
+    dark: false,                    // current room is dark
+    lightSources: [],               // [[col, row], ...] — sconce/brazier positions
+    lanternHolders: new Set(),      // player names with lanterns in this room
+
     // Corpses
     roomCorpses: [],          // [{kind, x, y, width, height}]
   },

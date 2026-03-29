@@ -107,6 +107,77 @@ function renderWaterMist() {
   ctx.restore();
 }
 
+// --- Darkness / Fog-of-war ---
+// Offscreen canvas used to composite the darkness overlay
+let _darkCanvas = null;
+let _darkCtx = null;
+
+const LANTERN_RADIUS = 3.5;
+const NO_LANTERN_RADIUS = 0.75;
+const BRIGHT_TILE_RADIUS = 3.0;
+
+function renderDarkness() {
+  if (!G.room.dark) return;
+
+  // Lazy-init offscreen canvas
+  if (!_darkCanvas || _darkCanvas.width !== CW || _darkCanvas.height !== CH) {
+    _darkCanvas = document.createElement("canvas");
+    _darkCanvas.width = CW;
+    _darkCanvas.height = CH;
+    _darkCtx = _darkCanvas.getContext("2d");
+  }
+
+  const dCtx = _darkCtx;
+  const ctx = G.ui.ctx;
+
+  // Fill with darkness
+  dCtx.globalCompositeOperation = "source-over";
+  dCtx.fillStyle = "black";
+  dCtx.fillRect(0, 0, CW, CH);
+
+  // Punch light holes using destination-out
+  dCtx.globalCompositeOperation = "destination-out";
+
+  // Helper: punch a radial gradient circle
+  function punchLight(cx, cy, radius) {
+    const r = radius * TS;
+    const grad = dCtx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    grad.addColorStop(0, "rgba(0,0,0,1)");
+    grad.addColorStop(0.7, "rgba(0,0,0,0.8)");
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    dCtx.fillStyle = grad;
+    dCtx.fillRect(cx - r, cy - r, r * 2, r * 2);
+  }
+
+  // Local player light
+  const hasLantern = G.player.playerFlags.has("has_lantern");
+  const playerRadius = hasLantern ? LANTERN_RADIUS : NO_LANTERN_RADIUS;
+  const px = G.player.displayX * TS + TS / 2;
+  const py = G.player.displayY * TS + TS / 2;
+  punchLight(px, py, playerRadius);
+
+  // Other players with lanterns
+  for (const name of G.room.lanternHolders) {
+    if (name === G.player.myName) continue;
+    const op = G.room.otherPlayers[name];
+    if (op) {
+      punchLight(op.displayX * TS + TS / 2, op.displayY * TS + TS / 2, LANTERN_RADIUS);
+    }
+  }
+
+  // Static light sources (sconces, braziers, fireplaces)
+  for (const [col, row] of G.room.lightSources) {
+    punchLight(col * TS + TS / 2, row * TS + TS / 2, BRIGHT_TILE_RADIUS);
+  }
+
+  // Composite the darkness onto the main canvas
+  dCtx.globalCompositeOperation = "source-over"; // reset
+  ctx.save();
+  ctx.globalAlpha = 0.93;
+  ctx.drawImage(_darkCanvas, 0, 0);
+  ctx.restore();
+}
+
 function startDance(name) {
   G.room.dancingPlayers[name] = { frame: 0, nextTime: Date.now() };
   G.room.speechBubbles.push({

@@ -10,6 +10,7 @@ from server.constants import (
     ATTACK_COOLDOWN, TICK_INTERVAL, HEART_DROP_CHANCE, HEART_RESTORE_HP,
     POSITION_UPDATE_RATE, MAX_MOVE_PER_UPDATE, GUARD_COOLDOWN,
     COLLISION_GRACE_PERIOD, ITEM_PICKUP_FREEZE_DURATION,
+    SEAL_FRAGMENT_HP_BONUS,
 )
 from server import log
 from server.lifecycle import (
@@ -200,6 +201,30 @@ def _get_monster_visual_pos(monster, now):
     return monster.x, monster.y
 
 
+def _spawn_treasure_exit(dinst, room_id, msgs):
+    """Spawn an exit stairwell in the treasure room when the Seal Fragment is picked up."""
+    from server.dungeon_types import DUNGEON_TYPES
+    room = game.rooms.get(room_id)
+    if not room:
+        return
+    type_config = DUNGEON_TYPES.get(dinst.dungeon_id, {})
+    exit_room = type_config.get("exit_room", "clearing")
+
+    # Place stairs in a corner (top-left walkable area)
+    stair_col, stair_row = 2, 2
+    tilemap = room.get("tilemap", [])
+    if stair_row < len(tilemap) and stair_col < len(tilemap[stair_row]):
+        tilemap[stair_row][stair_col] = "SU"
+    room.setdefault("exits", {})["up"] = exit_room
+    room.setdefault("spawn_points", {})["down"] = (stair_col, stair_row)
+
+    msgs.append(("broadcast", room_id, {
+        "type": "tile_change",
+        "changes": [[stair_row, stair_col, "SU"]],
+    }, None))
+    log.debug(f"[DUNGEON] Spawned exit stairwell in {room_id} at ({stair_col},{stair_row})")
+
+
 def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_player_y=None):
     """Check monster contact, heart pickup, dungeon items at player position."""
     a = player.avatar
@@ -273,6 +298,7 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
                     msgs.append(("broadcast", player.room, {
                         "type": "item_effect",
                         "item_type": item_type,
+                        "item_name": item_name,
                         "name": player.name,
                     }, player.ws))
                     collect_msg = {
@@ -296,6 +322,61 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
                     elif freeze_end > existing["end"]:
                         existing["end"] = freeze_end  # extend without resetting start
                     # Clear pending contact collisions (grace periods go stale during freeze)
+                    for p in game.players.values():
+                        if p.room == player.room and p.avatar:
+                            p.avatar.pending_collisions.clear()
+                    msgs.append(("broadcast", player.room, {
+                        "type": "room_freeze",
+                        "duration": ITEM_PICKUP_FREEZE_DURATION,
+                    }, None))
+                    break
+
+    # Per-player dungeon items (lantern, seal_fragment) — stay on ground for others
+    if player.hp > 0:
+        dinst = get_dungeon_for_room(player.room)
+        if dinst and player.room not in game.locked_rooms:
+            pp_items = dinst.per_player_items.get(player.room, [])
+            for item in pp_items:
+                if abs(a.x - item["x"]) < 0.75 and abs(a.y - item["y"]) < 0.75:
+                    item_type = item["item_type"]
+                    flag_name = f"has_{item_type}"
+                    if player.has_flag(flag_name):
+                        continue  # already collected by this player
+                    player.grant_flag(flag_name)
+                    if item_type == "lantern":
+                        item_name = "Magic Lantern"
+                    elif item_type == "seal_fragment":
+                        item_name = "Seal Fragment"
+                        # +1 heart container
+                        player.max_hp += SEAL_FRAGMENT_HP_BONUS
+                        player.hp = player.max_hp
+                        msgs.append(("send", player, {
+                            "type": "hp_update", "hp": player.hp, "max_hp": player.max_hp,
+                        }))
+                        # Spawn exit stairwell in treasure room
+                        _spawn_treasure_exit(dinst, player.room, msgs)
+                    else:
+                        item_name = item_type.replace("_", " ").title()
+                    msgs.append(("send", player, {
+                        "type": "item_obtained",
+                        "item_type": item_type,
+                        "item_name": item_name,
+                    }))
+                    msgs.append(("broadcast", player.room, {
+                        "type": "item_effect",
+                        "item_type": item_type,
+                        "item_name": item_name,
+                        "name": player.name,
+                    }, player.ws))
+                    # Freeze monsters during pickup animation
+                    freeze_end = now + ITEM_PICKUP_FREEZE_DURATION
+                    existing = game.room_pickup_freeze.get(player.room)
+                    if not existing:
+                        game.room_pickup_freeze[player.room] = {
+                            "start": now, "end": freeze_end,
+                        }
+                    elif freeze_end > existing["end"]:
+                        existing["end"] = freeze_end
                     for p in game.players.values():
                         if p.room == player.room and p.avatar:
                             p.avatar.pending_collisions.clear()
@@ -411,8 +492,9 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
                         monster.x = round(monster.x)
                         monster.y = round(monster.y)
                         monster.move_seq += 1
-            # Always interrupt current action and reset decision timer on hit
-            if monster.hp > 0:
+            # Interrupt current action on hit — but non-knockbackable monsters
+            # (bosses, heavy monsters) continue their behavior uninterrupted
+            if monster.hp > 0 and monster.knockbackable:
                 if monster.state != "idle":
                     set_monster_idle(monster, room_id, i, msgs)
                 else:
@@ -480,6 +562,16 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
                                 "type": "music_change", "music": None,
                             }, None))
                             broadcast_choir_stop(room_id, msgs)
+                            # Spawn seal fragment in treasure room (center of room)
+                            treasure_room_id = f"{dinst.dungeon_id}_{dinst.treasure_cell[0]}_{dinst.treasure_cell[1]}"
+                            # Ensure treasure room is resolved (it's lazily loaded)
+                            if treasure_room_id not in game.rooms:
+                                from server.dungeons import resolve_dungeon_room
+                                resolve_dungeon_room(dinst, dinst.treasure_cell)
+                            dinst.per_player_items.setdefault(treasure_room_id, []).append(
+                                {"x": 7, "y": 5, "item_type": "seal_fragment"}
+                            )
+                            log.debug(f"[BOSS] Seal Fragment spawned in {treasure_room_id} at (7,5)")
             else:
                 msg_hit = {
                     "type": "monster_hit",
@@ -617,11 +709,23 @@ def _cmd_cheat(player, args, msgs):
         msgs.append(("send", player, {"type": "info", "text": "Cheat mode off: vulnerable again"}))
     else:
         player.grant_flag("has_sword")
+        player.grant_flag("has_lantern")
         player.grant_flag("invulnerable")
         player.hp = player.max_hp
         msgs.append(("send", player, {"type": "item_obtained", "item_type": "sword", "item_name": "Sword"}))
+        msgs.append(("send", player, {"type": "item_obtained", "item_type": "lantern", "item_name": "Magic Lantern"}))
         msgs.append(("send", player, {"type": "hp_update", "hp": player.hp, "max_hp": player.max_hp}))
-        msgs.append(("send", player, {"type": "info", "text": "Cheat mode: sword + invulnerability"}))
+        msgs.append(("send", player, {"type": "info", "text": "Cheat mode: sword + lantern + invulnerability"}))
+
+
+def _cmd_lantern(player, args, msgs):
+    if player.has_flag("has_lantern"):
+        player.flags.discard("has_lantern")
+        msgs.append(("send", player, {"type": "info", "text": "Lantern removed"}))
+    else:
+        player.grant_flag("has_lantern")
+        msgs.append(("send", player, {"type": "item_obtained", "item_type": "lantern", "item_name": "Magic Lantern"}))
+        msgs.append(("send", player, {"type": "info", "text": "Lantern granted"}))
 
 
 def _cmd_debug_spawn(player, args, msgs):
@@ -714,6 +818,7 @@ SLASH_COMMANDS = {
 
 DEBUG_COMMANDS = {
     "cheat": _cmd_cheat,
+    "lantern": _cmd_lantern,
     "debug_spawn": _cmd_debug_spawn,
     "deprecate": _cmd_deprecate,
     "regen": _cmd_regen,
