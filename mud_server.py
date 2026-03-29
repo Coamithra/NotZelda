@@ -6,6 +6,7 @@ Then open http://localhost:8080 in your browser.
 """
 
 import asyncio
+import base64
 import json
 import os
 import re
@@ -405,8 +406,18 @@ async def process_request(path, request_headers):
         game.log_file.write_text("", encoding="utf-8")
         return HTTPStatus.OK, [("Content-Type", "text/plain; charset=utf-8")], b"Log cleared."
     if path == "/admin/library-stats":
-        if not DEBUG_MODE:
+        admin_pw = os.environ.get("ADMIN_PASSWORD", "")
+        if not admin_pw:
             return HTTPStatus.NOT_FOUND, [], b"Not Found"
+        auth = request_headers.get("Authorization", "")
+        if not auth.startswith("Basic "):
+            return HTTPStatus.UNAUTHORIZED, [("WWW-Authenticate", 'Basic realm="Admin"')], b"Unauthorized"
+        try:
+            provided = base64.b64decode(auth[6:]).decode()
+        except Exception:
+            return HTTPStatus.UNAUTHORIZED, [("WWW-Authenticate", 'Basic realm="Admin"')], b"Unauthorized"
+        if provided != f"admin:{admin_pw}":
+            return HTTPStatus.UNAUTHORIZED, [("WWW-Authenticate", 'Basic realm="Admin"')], b"Unauthorized"
         try:
             body = json.dumps(_build_library_stats(), indent=2).encode()
         except Exception as e:
