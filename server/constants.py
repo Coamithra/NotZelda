@@ -75,7 +75,8 @@ REVIVAL_PROXIMITY = 1.0             # tile distance — how close reviver must b
 REVIVAL_HP = 6                      # HP on revive (3 hearts) — caps both spirit jar and player revival
 
 # Darkness & Lantern
-DARK_ROOM_FRACTION = 0.25           # ~25% of eligible rooms flagged dark
+DARK_ROOM_FRACTION = 0.25           # ~25% of eligible rooms flagged dark (d1)
+DEFAULT_DARK_FRACTION = 0.10        # 10% of eligible rooms flagged dark (other dungeons)
 LANTERN_RADIUS = 3.5                # tile visibility radius with lantern
 NO_LANTERN_RADIUS = 0.75            # tile visibility radius without lantern (practically blind)
 BRIGHT_TILE_RADIUS = 3.0            # static light radius for sconces, braziers, fireplaces

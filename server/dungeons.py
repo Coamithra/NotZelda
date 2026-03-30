@@ -8,7 +8,9 @@ from collections import deque
 
 from server.state import game
 from server.constants import (EDGE_SPAWN_POINTS, DEFAULT_SPAWN, ROOM_COLS, ROOM_ROWS,
-                              DOORWAY_TILES, bfs_reachable, DARK_ROOM_FRACTION)
+                              DOORWAY_TILES, bfs_reachable, DARK_ROOM_FRACTION,
+                              DEFAULT_DARK_FRACTION)
+from server.dungeon_topology import DungeonTopology
 from server import log
 from server.net import broadcast_debug
 from server.ai_generator import patch_unreachable_doorways, patch_monster_placements
@@ -35,11 +37,15 @@ class DungeonInstance:
         # Custom cells pick a random slot at resolution time.
         self.custom_slots = []
 
+        # Topology — lazy spatial oracle (all distance/path queries go here)
+        self.topo = None               # DungeonTopology instance
+
         # Dungeon path — connectivity graph (set of frozensets of cell tuples)
         self.connections = set()
-        self.boss_cell = None       # (col, row)
-        self.treasure_cell = None   # (col, row)
-        self.boss_engaged = False   # True once boss takes first non-lethal hit
+        self.boss_cell = None          # (col, row) — boss room
+        self.sanctum_cell = None       # (col, row) — seal-shard room (past boss)
+        self.treasure_cell = None      # (col, row) — treasure chest (lantern in d1)
+        self.boss_engaged = False      # True once boss takes first non-lethal hit
 
         # Dungeon items (Map & Compass & Lantern)
         self.item_cells = {}           # "map" -> (col, row), "compass" -> (col, row), "lantern" -> (col, row)
@@ -50,13 +56,6 @@ class DungeonInstance:
         # Darkness
         self.dark_cells = set()        # cells flagged as dark rooms
         self.lantern_cell = None       # (col, row) where the lantern spawns
-
-        # Distance maps — computed once at creation, reused for all placement
-        # distances[landmark] = {cell: int}, parents[landmark] = {cell: cell|None}
-        self.distances = {}
-        self.parents = {}
-        self.adj = {}                  # connection adjacency: cell -> [cell, ...]
-        self.critical_paths = {}       # name -> set of cells on shortest path (immune from darkness)
 
         # Trap rooms — decided at creation time so key placement can use it
         self.trap_cells = set()            # cells that will become trap rooms on resolution
@@ -143,60 +142,14 @@ def dungeon_player_count(instance) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Distance utilities
+# Dungeon graph generation
 # ---------------------------------------------------------------------------
 
-def _bfs_distances(adj, origin):
-    """BFS from origin on adjacency dict. Returns (dist, parent) dicts."""
-    dist = {origin: 0}
-    parent = {origin: None}
-    queue = deque([origin])
-    while queue:
-        cell = queue.popleft()
-        for n in adj[cell]:
-            if n not in dist:
-                dist[n] = dist[cell] + 1
-                parent[n] = cell
-                queue.append(n)
-    return dist, parent
+def _build_spanning_tree(active_cells, entrance):
+    """Build a random spanning tree over the dungeon grid.
 
-
-def _trace_path(parents, target):
-    """Backtrack from target to origin using a parent dict. Returns set of cells on the path."""
-    path = set()
-    cur = target
-    while cur is not None:
-        path.add(cur)
-        cur = parents.get(cur)
-    return path
-
-
-def _connection_adj(connections, cells):
-    """Build adjacency dict from a set of frozenset connection edges."""
-    adj = {c: [] for c in cells}
-    for edge in connections:
-        a, b = tuple(edge)
-        if a in adj:
-            adj[a].append(b)
-        if b in adj:
-            adj[b].append(a)
-    return adj
-
-
-# ---------------------------------------------------------------------------
-# Dungeon path generation
-# ---------------------------------------------------------------------------
-
-def _build_dungeon_path(active_cells, entrance):
-    """Build a connectivity graph through the dungeon.
-
-    Uses randomized DFS to create a spanning tree, then adds ~25% extra
-    edges for non-linearity. Finds the furthest leaf node from the entrance
-    as the treasure room, with its parent as the boss room. The treasure
-    room is guaranteed to have exactly one connection (the boss room).
-
-    Returns (connections, boss_cell, treasure_cell) where connections is
-    a set of frozensets of cell tuples.
+    Uses randomized DFS to create a single connected tree through all
+    active cells.  Returns a set of frozenset edges.
     """
     cell_set = set(active_cells)
 
@@ -211,7 +164,6 @@ def _build_dungeon_path(active_cells, entrance):
     # Randomized DFS spanning tree
     visited = {entrance}
     tree_edges = set()
-    tree_parent = {entrance: None}
     stack = [entrance]
 
     while stack:
@@ -221,108 +173,68 @@ def _build_dungeon_path(active_cells, entrance):
             random.shuffle(neighbors)
             next_cell = neighbors[0]
             tree_edges.add(frozenset((cell, next_cell)))
-            tree_parent[next_cell] = cell
             visited.add(next_cell)
             stack.append(next_cell)
         else:
             stack.pop()
 
-    # BFS on the tree to find distances from entrance
-    tree_adj = {c: [] for c in cell_set}
-    for edge in tree_edges:
-        a, b = tuple(edge)
-        tree_adj[a].append(b)
-        tree_adj[b].append(a)
-    dist, bfs_parent = _bfs_distances(tree_adj, entrance)
+    return tree_edges
 
-    # Find leaf nodes (degree 1 in tree, excluding entrance)
-    tree_degree = {c: 0 for c in cell_set}
-    for edge in tree_edges:
-        for c in edge:
-            tree_degree[c] += 1
-    leaf_nodes = [c for c in cell_set if tree_degree[c] == 1 and c != entrance]
 
-    # Treasure = furthest leaf from entrance
-    if leaf_nodes:
-        treasure_cell = max(leaf_nodes, key=lambda c: dist.get(c, 0))
-    else:
-        # Fallback: furthest cell overall (shouldn't happen with real layouts)
-        treasure_cell = max(dist, key=dist.get)
-    boss_cell = bfs_parent.get(treasure_cell, entrance)
+def _pick_extra_edges(active_cells, tree_edges, exclude=None):
+    """Sample ~25% of non-tree grid-adjacent edges for non-linearity.
 
-    # Build final connections: tree + extra edges for non-linearity
-    connections = set(tree_edges)
+    Edges touching any cell in `exclude` are never added (keeps dead ends).
+    Returns a set of frozenset edges.
+    """
+    exclude = exclude or set()
+    cell_set = set(active_cells)
 
-    # Add ~25% of remaining adjacent edges, but never touching treasure cell
-    non_tree_edges = []
+    # Build grid adjacency
+    adj = {c: [] for c in cell_set}
+    for (col, row) in cell_set:
+        for dc, dr in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
+            neighbor = (col + dc, row + dr)
+            if neighbor in cell_set:
+                adj[(col, row)].append(neighbor)
+
+    # Collect non-tree edges that don't touch excluded cells
+    non_tree = set()
     for cell in cell_set:
         for n in adj[cell]:
             edge = frozenset((cell, n))
-            if edge not in connections and treasure_cell not in edge:
-                non_tree_edges.append(edge)
-    # Deduplicate (frozenset handles order, but list may have dupes)
-    non_tree_edges = list(set(non_tree_edges))
-    if non_tree_edges:
-        extra_count = max(1, len(non_tree_edges) // 4)
-        extras = random.sample(non_tree_edges, min(extra_count, len(non_tree_edges)))
-        connections.update(extras)
+            if edge not in tree_edges and not (edge & exclude):
+                non_tree.add(edge)
 
-    return connections, boss_cell, treasure_cell
+    if not non_tree:
+        return set()
+
+    non_tree = list(non_tree)
+    extra_count = max(1, len(non_tree) // 4)
+    return set(random.sample(non_tree, min(extra_count, len(non_tree))))
 
 
-def _assign_darkness(adj, active_cells, entrance, boss_cell, treasure_cell,
-                     dist_entrance, parent_entrance, dist_boss):
-    """Assign dark rooms and choose the lantern cell.
+def _identify_trap_rooms(cell_assignments, boss, entrance, sanctum):
+    """Identify which rooms become trap rooms (lock-in until cleared).
 
-    Uses pre-computed distance dicts from entrance and boss to place the
-    lantern in the opposite branch from the boss. Marks ~25% of eligible
-    rooms as dark, ensuring the shortest path from entrance to lantern has
-    NO dark rooms. Room(s) adjacent to boss are dark.
+    Boss room is always a trap. Other rooms with enough monsters have a
+    random chance.  Entrance and sanctum are never traps.
 
-    Returns (dark_cells: set, lantern_cell: tuple, critical_path: set).
-    The critical_path is the entrance→lantern shortest path (immune from darkness).
+    Returns a set of cells.
     """
-    # Choose lantern cell: far from boss (different branch), not too close to entrance.
-    # Score = boss_dist * 2 + entrance_dist.  Heavily favors the opposite branch.
-    special = {entrance, boss_cell, treasure_cell}
-    lantern_candidates = [c for c in active_cells if c not in special]
-    if not lantern_candidates:
-        lantern_candidates = [c for c in active_cells if c not in {boss_cell, treasure_cell}]
-    max_entrance_dist = max(dist_entrance.values()) if dist_entrance else 1
-    min_entrance_dist = max(1, int(max_entrance_dist * 0.3))  # at least 30% from entrance
-    # Prefer candidates not too close to entrance
-    good_candidates = [c for c in lantern_candidates if dist_entrance.get(c, 0) >= min_entrance_dist]
-    pool = good_candidates if good_candidates else lantern_candidates
-    lantern_cell = max(pool, key=lambda c: dist_boss.get(c, 0) * 2 + dist_entrance.get(c, 0))
+    trap_cells = {boss}
+    for cell, assignment in cell_assignments.items():
+        if cell in (entrance, boss, sanctum):
+            continue
+        entry = assignment.get("entry")
+        data = assignment.get("slot_data") or (
+            entry.data if entry and hasattr(entry, "data") else None)
+        if data:
+            n_monsters = len(data.get("monster_placements", []))
+            if n_monsters >= TRAP_ROOM_MIN_MONSTERS and random.random() < TRAP_ROOM_CHANCE:
+                trap_cells.add(cell)
+    return trap_cells
 
-    # Critical path: entrance → lantern (immune from darkness)
-    lantern_path = _trace_path(parent_entrance, lantern_cell)
-
-    # Cells never flagged dark (critical path + special rooms)
-    immune = lantern_path | {entrance, boss_cell, treasure_cell}
-
-    # Cells adjacent to boss (in connection graph) are always dark
-    boss_neighbors = set()
-    for n in adj.get(boss_cell, []):
-        if n not in immune:
-            boss_neighbors.add(n)
-
-    # Eligible cells for random darkness: not immune, not already boss-adjacent
-    eligible = [c for c in active_cells if c not in immune and c not in boss_neighbors]
-    random.shuffle(eligible)
-
-    # Pick ~25% of eligible as dark
-    num_dark = max(0, round(len(eligible) * DARK_ROOM_FRACTION))
-    random_dark = set(eligible[:num_dark])
-
-    dark_cells = boss_neighbors | random_dark
-
-    log.debug(f"[DUNGEON] Darkness: {len(dark_cells)} dark rooms "
-              f"({len(boss_neighbors)} pre-boss, {len(random_dark)} random), "
-              f"lantern at {lantern_cell} (dist {dist_entrance.get(lantern_cell, '?')}), "
-              f"critical path: {len(lantern_path)} rooms")
-
-    return dark_cells, lantern_cell, lantern_path
 
 
 def _get_cell_exits(cell, connections, entrance_col, entrance_row, dungeon_id, exit_room):
@@ -346,39 +258,37 @@ def _get_cell_exits(cell, connections, entrance_col, entrance_row, dungeon_id, e
 _DIR_OFFSETS = {"north": (0, -1), "south": (0, 1), "west": (-1, 0), "east": (1, 0)}
 
 
-def _place_locked_doors(connections, active_cells, entrance, boss_cell, treasure_cell,
-                        occupied_cells, min_locks, max_locks, trap_cells=None,
-                        critical_path=None):
-    """Choose connections to lock and place keys using the constraint solver.
+def _place_locked_doors(topo, min_locks, max_locks):
+    """Choose which connections to lock and build the zone graph.
 
-    occupied_cells: set of cells already holding an item (e.g. lantern).
-        Keys are deprioritized from these cells but not excluded.
-        Updated in-place as keys are placed.
-    critical_path: set of cells on the entrance→treasure shortest path.
-        Keys prefer rooms off this path.
+    Does NOT place keys — that happens in the main pipeline via topo queries.
 
-    Returns (locked_doors, key_cells, zone_of, zone_cells).
+    Returns (locked_doors, zone_of, zone_cells, zone_adj).
+    locked_doors: set of frozenset edges that are locked.
+    zone_of: cell -> zone_id (connected components without locked edges).
+    zone_cells: zone_id -> set of cells.
+    zone_adj: zone_id -> list of zone_ids (multigraph, for solver).
     """
-    from tools.key_math.key_solver import solve as solve_keys
+    connections = topo.connections
+    active_cells = topo.cells
 
-    # Step 1: choose which connections to lock
-    # Exclude treasure cell's single connection (dead end, pointless to lock)
-    candidates = [e for e in connections if treasure_cell not in e]
+    # Exclude sanctum's single connection (dead end, pointless to lock)
+    candidates = [e for e in connections
+                  if not any(topo.has_mark(c, "sanctum") for c in e)]
     effective_max = min(max_locks, len(candidates))
     num_locks = random.randint(min(min_locks, effective_max), effective_max)
     if num_locks == 0:
         zone_of = {c: 0 for c in active_cells}
         zone_cells = {0: set(active_cells)}
-        return set(), [], zone_of, zone_cells
+        return set(), zone_of, zone_cells, {}
 
     locked = set(random.sample(candidates, num_locks))
     log.debug(f"[LOCKS] Chose {num_locks} locks from {len(candidates)} candidates")
 
-    # Step 2: build zone graph (connected components without locked edges)
+    # Build zone graph (connected components without locked edges)
     unlocked_connections = connections - locked
     cell_set = set(active_cells)
 
-    # BFS to find zones
     zone_of = {}    # cell -> zone_id
     zone_cells = {} # zone_id -> set of cells
     zid = 0
@@ -400,12 +310,8 @@ def _place_locked_doors(connections, active_cells, entrance, boss_cell, treasure
                         queue.append(nb)
         zid += 1
 
-    entrance_zone = zone_of[entrance]
-
-    # Build zone adjacency — full multigraph sent to solver.
-    # Self-loops (both cells in same zone) = redundant doors the player can walk around.
-    # Remove them from locked set entirely — they don't block anything.
-    # Multi-edges: naturally kept as duplicate entries.
+    # Build zone adjacency — full multigraph for solver.
+    # Self-loops = redundant doors (player can walk around). Remove them.
     redundant = set()
     zone_adj = {}
     for edge in locked:
@@ -421,7 +327,7 @@ def _place_locked_doors(connections, active_cells, entrance, boss_cell, treasure
         num_locks = len(locked)
         log.debug(f"[LOCKS] Removed {len(redundant)} redundant self-loop doors (bypassable)")
 
-    # Ensure entrance zone is in the graph
+    entrance_zone = zone_of[topo.entrance]
     if entrance_zone not in zone_adj:
         zone_adj[entrance_zone] = []
 
@@ -430,216 +336,29 @@ def _place_locked_doors(connections, active_cells, entrance, boss_cell, treasure
     log.debug(f"[LOCKS] Entrance zone: {entrance_zone}, solver edges: {solver_edges}, "
               f"total doors: {num_locks}")
 
-    # Step 3: solve for key distribution
+    return locked, zone_of, zone_cells, zone_adj
+
+
+def _solve_key_distribution(zone_adj, entrance_zone, num_locks):
+    """Solve for which zones should contain keys.
+
+    Returns {zone_id: num_keys}. Falls back to all keys in entrance zone
+    if the solver finds no solutions.
+    """
+    from tools.key_math.key_solver import solve as solve_keys
+
     solutions = solve_keys(zone_adj, entrance_zone, max_keys=2)
     log.debug(f"[LOCKS] Solver returned {len(solutions)} solutions")
 
-    if not solutions:
-        # Fallback: all keys in entrance zone, using the same sort logic
-        log.debug(f"[DUNGEON] key_solver found no solutions, falling back to entrance zone")
-        crit = critical_path or set()
-        key_cells = []
-        keys_in_cell = {}
-        ez_cells = list(zone_cells[entrance_zone])
-        for _ in range(num_locks):
-            if ez_cells:
-                ez_cells.sort(key=lambda c: (
-                    keys_in_cell.get(c, 0),
-                    1 if c in occupied_cells else 0,
-                    1 if c in crit else 0,
-                    0 if c in (trap_cells or set()) else 1,
-                ))
-                pick = ez_cells[0]
-                key_cells.append(pick)
-                keys_in_cell[pick] = keys_in_cell.get(pick, 0) + 1
-                occupied_cells.add(pick)
-        return locked, key_cells, zone_of, zone_cells
+    if solutions:
+        distribution = random.choice(solutions)
+        log.debug(f"[LOCKS] Chosen distribution: {distribution}")
+        return distribution
 
-    # Pick a random solution
-    distribution = random.choice(solutions)
-    log.debug(f"[LOCKS] Chosen distribution: {distribution}")
+    # Fallback: all keys in entrance zone
+    log.debug(f"[LOCKS] No solutions, falling back to entrance zone")
+    return {entrance_zone: num_locks}
 
-    # Step 4: place keys in rooms within each zone, preferring interesting rooms.
-    # Sort priority (lower = better):
-    #   1. keys already in room (spread keys across rooms)
-    #   2. has another item (lantern etc.) — prefer empty rooms
-    #   3. on critical path — prefer side rooms for exploration
-    #   4. category: trap > no locked doors > multi locked > single locked
-
-    # Precompute per-cell info
-    locked_door_count = {}  # cell -> number of locked edges touching it
-    for edge in locked:
-        for c in edge:
-            locked_door_count[c] = locked_door_count.get(c, 0) + 1
-
-    trap_candidates = trap_cells or set()
-    crit = critical_path or set()
-
-    key_cells = []
-    keys_in_cell = {}  # cell -> keys already assigned here
-
-    for zone_id, num_keys in distribution.items():
-        zone_pool = list(zone_cells.get(zone_id, []))
-
-        for _ in range(num_keys):
-            if zone_pool:
-                def _sort_key(c):
-                    already = keys_in_cell.get(c, 0)
-                    has_item = 1 if c in occupied_cells else 0
-                    on_crit = 1 if c in crit else 0
-                    ldc = locked_door_count.get(c, 0)
-                    if c in trap_candidates:
-                        cat = 0
-                    elif ldc == 0:
-                        cat = 1
-                    elif ldc >= 2:
-                        cat = 2
-                    else:
-                        cat = 3
-                    return (already, has_item, on_crit, cat)
-
-                zone_pool.sort(key=_sort_key)
-                pick = zone_pool[0]
-                key_cells.append(pick)
-                keys_in_cell[pick] = keys_in_cell.get(pick, 0) + 1
-                occupied_cells.add(pick)
-                # Don't remove from pool — allow multiple keys per room
-                # but the sort will deprioritize it next round
-            elif zone_cells.get(zone_id):
-                pick = random.choice(list(zone_cells[zone_id]))
-                key_cells.append(pick)
-                occupied_cells.add(pick)
-
-    if len(key_cells) != num_locks:
-        log.debug(f"[LOCKS] WARNING: keys={len(key_cells)} != doors={num_locks}!")
-    log.debug(f"[LOCKS] Placed {len(key_cells)} keys for {num_locks} doors "
-              f"({len(zone_adj)} zones, {len(solutions)} solutions)")
-
-    return locked, key_cells, zone_of, zone_cells
-
-
-def _place_dungeon_items(active_cells, entrance, boss_cell, treasure_cell,
-                         zone_of, zone_cells, occupied_cells, distances,
-                         critical_path):
-    """Place map and compass using zone-aware scoring.
-
-    Picks zones furthest from both entrance and boss, then picks the best
-    cell within each zone.  All criteria are sort-based (never hard-filter)
-    so placement always succeeds even in degenerate layouts.
-
-    occupied_cells is updated in-place as items are placed.
-    Returns dict of item_type -> cell (e.g. {"map": (3,2), "compass": (1,4)}).
-    """
-    if len(active_cells) < 2:
-        return {}
-
-    special = {entrance, boss_cell, treasure_cell}
-    dist_entrance = distances.get("entrance", {})
-    dist_boss = distances.get("boss", {})
-    crit = critical_path or set()
-
-    # --- Zone-level scoring (useful when there are multiple zones) ---
-    entrance_zone = zone_of.get(entrance, 0)
-    boss_zone = zone_of.get(boss_cell, 0)
-
-    # Build simple zone adjacency (deduplicated) from zone_of
-    zone_adj = {}
-    for c in active_cells:
-        z = zone_of[c]
-        zone_adj.setdefault(z, set())
-        for dc, dr in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
-            nb = (c[0] + dc, c[1] + dr)
-            if nb in zone_of:
-                nz = zone_of[nb]
-                if nz != z:
-                    zone_adj[z].add(nz)
-                    zone_adj.setdefault(nz, set()).add(z)
-
-    # BFS from entrance zone and boss zone on the zone graph
-    def _zone_bfs(start):
-        zd = {start: 0}
-        q = deque([start])
-        while q:
-            z = q.popleft()
-            for nz in zone_adj.get(z, set()):
-                if nz not in zd:
-                    zd[nz] = zd[z] + 1
-                    q.append(nz)
-        return zd
-
-    zone_dist_entrance = _zone_bfs(entrance_zone)
-    zone_dist_boss = _zone_bfs(boss_zone)
-
-    # Score each zone: higher = further from both entrance and boss.
-    # Count available cells (non-special, non-occupied) to break ties toward zones
-    # with more room.  Zones with zero available cells are heavily penalized.
-    zone_scores = {}
-    zone_avail = {}  # zone -> number of non-special, non-occupied cells
-    for z, cells in zone_cells.items():
-        zone_scores[z] = zone_dist_entrance.get(z, 0) + zone_dist_boss.get(z, 0)
-        zone_avail[z] = sum(1 for c in cells if c not in special and c not in occupied_cells)
-
-    # Rank zones: primarily by distance score, tiebreak by available cell count.
-    # Zones with no available cells sort last (they'll force co-location).
-    def _zone_rank(z):
-        avail = zone_avail[z]
-        return (0 if avail > 0 else 1, -zone_scores.get(z, 0), -avail)
-
-    ranked_zones = sorted(zone_cells.keys(), key=_zone_rank)
-
-    def _pick_cell_in_zone(zone_id):
-        """Pick the best cell in a zone using sort-based scoring."""
-        cells = list(zone_cells.get(zone_id, []))
-        if not cells:
-            return None
-        cells.sort(key=lambda c: (
-            2 if c in special else 0,             # strongly avoid special rooms
-            1 if c in occupied_cells else 0,      # prefer empty rooms
-            1 if c in crit else 0,                # prefer off-critical-path
-            -(dist_entrance.get(c, 0) + dist_boss.get(c, 0)),  # tiebreak: furthest cell
-        ))
-        return cells[0]
-
-    def _pick_cell_global():
-        """Fallback: pick best cell from all active cells (for single-zone dungeons)."""
-        cells = list(active_cells)
-        cells.sort(key=lambda c: (
-            2 if c in special else 0,
-            1 if c in occupied_cells else 0,
-            1 if c in crit else 0,
-            -(dist_entrance.get(c, 0) + dist_boss.get(c, 0)),
-        ))
-        return cells[0] if cells else None
-
-    item_cells = {}
-
-    # Place map in the best zone
-    if ranked_zones:
-        map_cell = _pick_cell_in_zone(ranked_zones[0])
-        if map_cell is None:
-            map_cell = _pick_cell_global()
-        if map_cell is not None:
-            item_cells["map"] = map_cell
-            occupied_cells.add(map_cell)
-
-    # Place compass in the second-best zone (or same zone if only 1)
-    if ranked_zones:
-        compass_zone_idx = 1 if len(ranked_zones) > 1 else 0
-        compass_cell = _pick_cell_in_zone(ranked_zones[compass_zone_idx])
-        if compass_cell is None:
-            compass_cell = _pick_cell_global()
-        if compass_cell is not None:
-            item_cells["compass"] = compass_cell
-            occupied_cells.add(compass_cell)
-
-    if item_cells:
-        zones_used = set()
-        for item_type, cell in item_cells.items():
-            zones_used.add(zone_of.get(cell, "?"))
-        log.debug(f"[DUNGEON] Item placement: {item_cells} "
-                  f"(zones: {zones_used}, zone_scores: {zone_scores})")
-
-    return item_cells
 
 
 # ---------------------------------------------------------------------------
@@ -959,19 +678,164 @@ def create_dungeon(type_id) -> DungeonInstance | None:
             perm_idx += 1
             cell_assignments[cell] = {"source": "precreated", "entry": entry, "resolved": False}
 
-    # Build dungeon path — spanning tree with extra edges, find boss/treasure
+    # ===================================================================
+    # Placement pipeline — all spatial queries go through the topology
+    # ===================================================================
     entrance = (entrance_col, entrance_row)
-    connections, boss_cell, treasure_cell = _build_dungeon_path(active_cells, entrance)
 
-    # Override boss/treasure cells with special templates
+    # --- Generation: build spanning tree ---
+    tree_edges = _build_spanning_tree(active_cells, entrance)
+    topo = DungeonTopology(active_cells, tree_edges, entrance)
+
+    # --- Sanctum: the seal-shard room at the dungeon's deepest point ---
+    sanctum = max(topo.leaves, key=lambda c:
+        topo.dist(c, "entrance")                # furthest tree-leaf from entrance
+    )
+    topo.mark(sanctum, "sanctum")
+
+    # --- Generation: add extra edges (sanctum stays a dead end) ---
+    extra_edges = _pick_extra_edges(active_cells, tree_edges, exclude={sanctum})
+    topo.add_connections(extra_edges)
+
+    # --- Boss: guards the sanctum, one room before it ---
+    boss_cell = topo.parent_of(sanctum, "entrance")
+    topo.mark(boss_cell, "boss")
+
+    # --- Trap rooms: lock-in until cleared ---
+    trap_cells = _identify_trap_rooms(cell_assignments, boss_cell, entrance, sanctum)
+    for cell in trap_cells:
+        topo.mark(cell, "trap")
+
+    # --- Treasure chest: far from both boss and entrance ---
+    # (contains lantern in d1, TBD for other dungeons)
+    treasure_cell = max(topo.cells, key=lambda c: (
+        topo.lacks_mark(c, "boss"),             # avoid the boss room
+        topo.lacks_mark(c, "sanctum"),          # avoid the sanctum
+        c != topo.entrance,                     # avoid the entrance
+        topo.dist(c, "boss") + topo.dist(c, "entrance"),  # maximize remoteness
+    ))
+    topo.mark(treasure_cell, "treasure")
+
+    # --- Darkness ---
+    if type_id == "d1":
+        # Entrance→treasure path stays lit so players can find the chest
+        immune = topo.path_between("entrance", "treasure")
+        dark_cells = {n for n in topo.neighbors(boss_cell) if n not in immune}
+        eligible = [c for c in topo.cells if c not in immune and c not in dark_cells]
+        random.shuffle(eligible)
+        dark_cells |= set(eligible[:round(len(eligible) * DARK_ROOM_FRACTION)])
+    else:
+        # Other dungeons: flat dark fraction, but never boss or sanctum
+        eligible = [c for c in topo.cells
+                    if c != entrance
+                    and not topo.has_mark(c, "boss")
+                    and not topo.has_mark(c, "sanctum")]
+        random.shuffle(eligible)
+        dark_cells = set(eligible[:round(len(eligible) * DEFAULT_DARK_FRACTION)])
+    for c in dark_cells:
+        topo.mark(c, "dark")
+    # Note: rooms with bright tiles (braziers/sconces) are auto-flagged dark
+    # at room resolution time in resolve_dungeon_room, not here.
+
+    # --- Locked doors (just doors + zones, no key placement) ---
+    lock_min = type_config.get("min_locks", 0)
+    lock_max = type_config.get("max_locks", 3)
+    locked_doors, zone_of, zone_cells, zone_adj = _place_locked_doors(
+        topo, lock_min, lock_max)
+    # Deduplicate zone_adj for topology (solver gets the multigraph version)
+    deduped_zone_adj = {z: set(neighbors) for z, neighbors in zone_adj.items()}
+    topo.set_zones(zone_of, zone_cells, deduped_zone_adj)
+
+    # --- Keys: one per locked door, placed in solver-assigned zones ---
+    num_locks = len(locked_doors)
+    entrance_zone = zone_of[entrance]
+    key_distribution = _solve_key_distribution(zone_adj, entrance_zone, num_locks)
+
+    # Precompute locked door counts per cell (for key scoring)
+    locked_door_count = {}
+    for edge in locked_doors:
+        for c in edge:
+            locked_door_count[c] = locked_door_count.get(c, 0) + 1
+
+    key_cells = []
+    for zone_id, num_keys in key_distribution.items():
+        pool = list(topo.cells_in_zone(zone_id))
+        for _ in range(num_keys):
+            pick = max(pool, key=lambda c: (
+                -topo.marks(c, "key"),              # spread keys across rooms
+                topo.lacks_mark(c, "treasure"),      # avoid the treasure room
+                not topo.is_on_path(c, "entrance", "sanctum"),  # prefer side rooms
+                topo.has_mark(c, "trap"),            # prefer trap rooms (thematic)
+                locked_door_count.get(c, 0) == 0,   # prefer rooms with no locked doors
+                locked_door_count.get(c, 0) >= 2,   # then prefer 2+ locked doors
+            ))
+            topo.mark(pick, "key")
+            key_cells.append(pick)
+
+    if len(key_cells) != num_locks:
+        log.debug(f"[LOCKS] WARNING: keys={len(key_cells)} != doors={num_locks}!")
+
+    # --- Map & compass: zone-aware ---
+    # Step 1: rank zones by remoteness from entrance and boss
+    zone_scores = {}
+    for z in topo.zone_ids:
+        remoteness = topo.zone_dist(z, "entrance") + topo.zone_dist(z, "boss")
+        available = sum(1 for c in topo.cells_in_zone(z)
+                        if topo.lacks_mark(c, "treasure")
+                        and topo.lacks_mark(c, "key"))
+        zone_scores[z] = (available > 0, remoteness, available)
+
+    ranked_zones = sorted(topo.zone_ids, key=lambda z: zone_scores[z], reverse=True)
+
+    # Step 2: pick best cell in a zone
+    def _pick_cell_in_zone(zone_id):
+        return max(topo.cells_in_zone(zone_id), key=lambda c: (
+            topo.lacks_mark(c, "boss"),          # avoid the boss room
+            topo.lacks_mark(c, "sanctum"),        # avoid the sanctum
+            topo.lacks_mark(c, "treasure"),        # avoid the treasure room
+            topo.lacks_mark(c, "key"),             # avoid rooms with keys
+            topo.lacks_mark(c, "map"),             # avoid rooms with map (for compass)
+            c != topo.entrance,                    # avoid the entrance
+            not topo.is_on_path(c, "entrance", "sanctum"),  # prefer side rooms
+            topo.dist(c, "entrance") + topo.dist(c, "boss"),  # maximize remoteness
+        ))
+
+    item_cells = {}
+
+    # Treasure chest item (lantern for d1, pending for d2)
+    treasure_item_type = {"d1": "lantern"}.get(type_id, "lantern")
+    item_cells[treasure_item_type] = treasure_cell
+
+    # Map
+    if ranked_zones:
+        map_cell = _pick_cell_in_zone(ranked_zones[0])
+        topo.mark(map_cell, "map")
+        item_cells["map"] = map_cell
+
+    # Compass (second-best zone, or same zone if only one)
+    if ranked_zones:
+        compass_zone = ranked_zones[1] if len(ranked_zones) > 1 else ranked_zones[0]
+        compass_cell = _pick_cell_in_zone(compass_zone)
+        topo.mark(compass_cell, "compass")
+        item_cells["compass"] = compass_cell
+
+    log.debug(f"[DUNGEON] Item placement: {item_cells} "
+              f"(zones: {len(zone_scores)}, zone_scores: {zone_scores})")
+    log.debug(f"[LOCKS] Placed {len(key_cells)} keys for {num_locks} doors "
+              f"({len(zone_adj)} zones)")
+
+    # ===================================================================
+    # Override cell assignments for special rooms (boss, sanctum templates)
+    # ===================================================================
     from server.dungeon_content import _template_to_room_data
     from server.content_library import LibraryEntry
 
     type_templates = game.dungeon_templates.get(type_id, {})
     boss_template_id = type_config["boss_template"]
-    treasure_template_id = type_config["treasure_template"]
+    sanctum_template_id = type_config["treasure_template"]  # TODO: rename in dungeon_types
 
-    for special_id, special_cell in [(boss_template_id, boss_cell), (treasure_template_id, treasure_cell)]:
+    for special_id, special_cell in [(boss_template_id, boss_cell),
+                                     (sanctum_template_id, sanctum)]:
         template = type_templates.get(special_id)
         if template:
             room_data = _template_to_room_data(template)
@@ -984,70 +848,9 @@ def create_dungeon(type_id) -> DungeonInstance | None:
                 "source": "special", "entry": entry, "resolved": False,
             }
 
-    # --- Compute distances from each landmark (reused for all placement) ---
-    adj = _connection_adj(connections, active_cells)
-    distances = {}  # landmark_name -> {cell: dist}
-    parents = {}    # landmark_name -> {cell: parent}
-
-    distances["entrance"], parents["entrance"] = _bfs_distances(adj, entrance)
-    distances["boss"], parents["boss"] = _bfs_distances(adj, boss_cell)
-
-    # Critical path: entrance → treasure (all doors treated as open).
-    # Used by key/item placement to prefer off-path rooms for exploration.
-    critical_path = _trace_path(parents["entrance"], treasure_cell)
-
-    # Assign darkness and place lantern (d1 only for now)
-    dark_cells = set()
-    lantern_cell = None
-    critical_paths = {}  # name -> set of cells on the shortest path
-    critical_paths["entrance_to_treasure"] = critical_path
-    if type_id == "d1":
-        dark_cells, lantern_cell, lantern_path = _assign_darkness(
-            adj, active_cells, entrance, boss_cell, treasure_cell,
-            distances["entrance"], parents["entrance"], distances["boss"])
-        critical_paths["entrance_to_lantern"] = lantern_path
-        if lantern_cell:
-            distances["lantern"], parents["lantern"] = _bfs_distances(adj, lantern_cell)
-
-    # Decide trap rooms upfront (boss always; others: 3+ monsters, 1/3 chance).
-    # All cells now have entry data assigned at creation time.
-    trap_cells = {boss_cell}
-    for cell, assignment in cell_assignments.items():
-        if cell in (entrance, boss_cell, treasure_cell):
-            continue
-        # Get monster placements from entry data or slot_data (custom rooms)
-        entry = assignment.get("entry")
-        data = assignment.get("slot_data") or (entry.data if entry and hasattr(entry, "data") else None)
-        if data:
-            n_monsters = len(data.get("monster_placements", []))
-            if n_monsters >= TRAP_ROOM_MIN_MONSTERS and random.random() < TRAP_ROOM_CHANCE:
-                trap_cells.add(cell)
-
-    # --- Item & key placement (order: lantern → keys → map/compass) ---
-    # All share an occupied_cells set to prefer max 1 item/key per room.
-    occupied_cells = set()
-    if lantern_cell:
-        occupied_cells.add(lantern_cell)
-
-    # Place locked doors & keys
-    lock_min = type_config.get("min_locks", 0)
-    lock_max = type_config.get("max_locks", 3)
-    locked_doors, key_cells, lock_zone_of, lock_zone_cells = _place_locked_doors(
-        connections, active_cells, entrance, boss_cell, treasure_cell,
-        occupied_cells, lock_min, lock_max, trap_cells=trap_cells,
-        critical_path=critical_path,
-    )
-
-    # Place map & compass — zone-aware, after locks so zone info is available
-    item_cells = {}
-    if lantern_cell:
-        item_cells["lantern"] = lantern_cell
-    item_cells.update(_place_dungeon_items(
-        active_cells, entrance, boss_cell, treasure_cell,
-        lock_zone_of, lock_zone_cells, occupied_cells, distances,
-        critical_path,
-    ))
-
+    # ===================================================================
+    # Populate DungeonInstance
+    # ===================================================================
     instance = DungeonInstance(
         dungeon_id=type_id,
         layout=layout,
@@ -1059,21 +862,19 @@ def create_dungeon(type_id) -> DungeonInstance | None:
     )
     instance.cell_assignments = cell_assignments
     instance.custom_slots = custom_slots
-    instance.connections = connections
+    instance.topo = topo
+    instance.connections = topo.connections
     instance.boss_cell = boss_cell
     instance.treasure_cell = treasure_cell
+    instance.sanctum_cell = sanctum
     instance.item_cells = item_cells
-    instance.distances = distances
-    instance.parents = parents
-    instance.adj = adj
-    instance.critical_paths = critical_paths
     instance.trap_cells = trap_cells
     instance.locked_doors = locked_doors
     instance.key_cells = key_cells
-    instance.zone_of = lock_zone_of
-    instance.zone_cells = lock_zone_cells
+    instance.zone_of = zone_of
+    instance.zone_cells = zone_cells
     instance.dark_cells = dark_cells
-    instance.lantern_cell = lantern_cell
+    instance.lantern_cell = treasure_cell if treasure_item_type == "lantern" else None
 
     game.active_dungeons[type_id] = instance
     for room_id in active_rooms:
@@ -1087,20 +888,20 @@ def create_dungeon(type_id) -> DungeonInstance | None:
     empty_slots = num_slots - filled_slots
 
     boss_id = f"{type_id}_{boss_cell[0]}_{boss_cell[1]}"
-    treasure_id = f"{type_id}_{treasure_cell[0]}_{treasure_cell[1]}"
+    sanctum_id = f"{type_id}_{sanctum[0]}_{sanctum[1]}"
     log.debug(f"[DUNGEON] Created {type_id}: layout={layout['name']}, "
               f"rooms={len(active_rooms)} ({precreated_count}p/{custom_count}c/{special_count}s), "
               f"slots={num_slots} ({filled_slots}filled/{empty_slots}empty), "
-              f"entrance={entrance_room_id}, boss={boss_id}, treasure={treasure_id}, "
-              f"music={music_track}, boss_music={boss_track}, connections={len(connections)}, "
+              f"entrance={entrance_room_id}, boss={boss_id}, sanctum={sanctum_id}, "
+              f"music={music_track}, boss_music={boss_track}, connections={len(topo.connections)}, "
               f"locked_doors={len(locked_doors)}, keys={len(key_cells)}")
     broadcast_debug(f"Dungeon {type_id} created: {layout['name']} ({len(active_rooms)} rooms, "
-                    f"boss={boss_id}, treasure={treasure_id})")
+                    f"boss={boss_id}, sanctum={sanctum_id})")
 
     # Dump dungeon layout to file for debugging
-    _dump_dungeon_debug(instance, active_cells, connections, locked_doors,
-                        key_cells, item_cells, entrance, boss_cell, treasure_cell,
-                        dark_cells, lantern_cell)
+    _dump_dungeon_debug(instance, active_cells, topo.connections, locked_doors,
+                        key_cells, item_cells, entrance, boss_cell, sanctum,
+                        dark_cells, treasure_cell)
 
     # Resolve the entrance room immediately (always precreated, so instant)
     resolve_dungeon_room(instance, (entrance_col, entrance_row))
@@ -1109,15 +910,15 @@ def create_dungeon(type_id) -> DungeonInstance | None:
 
 
 def _dump_dungeon_debug(instance, active_cells, connections, locked_doors,
-                        key_cells, item_cells, entrance, boss_cell, treasure_cell,
-                        dark_cells=None, lantern_cell=None):
+                        key_cells, item_cells, entrance, boss_cell, sanctum_cell,
+                        dark_cells=None, treasure_cell=None):
     """Write a human-readable dungeon layout to dungeon.txt for debugging."""
     dark_cells = dark_cells or set()
     lines = []
     lines.append(f"=== Dungeon: {instance.dungeon_id} ===")
-    lines.append(f"Entrance: {entrance}  Boss: {boss_cell}  Treasure: {treasure_cell}")
+    lines.append(f"Entrance: {entrance}  Boss: {boss_cell}  Sanctum: {sanctum_cell}  Treasure: {treasure_cell}")
     lines.append(f"Locked doors: {len(locked_doors)}  Keys: {len(key_cells)}  "
-                 f"Dark rooms: {len(dark_cells)}  Lantern: {lantern_cell}")
+                 f"Dark rooms: {len(dark_cells)}")
     lines.append("")
 
     # Build cell labels
@@ -1128,15 +929,17 @@ def _dump_dungeon_debug(instance, active_cells, connections, locked_doors,
             tag.append("ENT")
         if c == boss_cell:
             tag.append("BOSS")
+        if c == sanctum_cell:
+            tag.append("SANC")
         if c == treasure_cell:
-            tag.append("TREA")
+            tag.append("TRES")
         if c in dark_cells:
             tag.append("DARK")
-        if c == lantern_cell:
-            tag.append("LANTERN")
-        # Mark critical path cells (entrance→lantern shortest path)
-        for path_name, path_cells in instance.critical_paths.items():
-            if c in path_cells and c != entrance and c != lantern_cell:
+        # Mark critical path cells (entrance→treasure shortest path)
+        topo = instance.topo
+        if topo:
+            path = topo.path_between("entrance", "treasure")
+            if c in path and c != entrance and c != treasure_cell:
                 tag.append("PATH")
         for itype, icell in item_cells.items():
             if c == icell and itype != "lantern":  # lantern already tagged above
@@ -1931,31 +1734,15 @@ def _apply_staged_content(results, type_id):
 # ---------------------------------------------------------------------------
 
 def get_boss_distances(instance: DungeonInstance) -> dict:
-    """BFS distance from boss cell to all other cells. Returns {room_id: int}."""
+    """BFS distance from boss cell to all other cells. Returns {room_id: int}.
+
+    Uses the topology's cached BFS if available.
+    """
     if not instance or not instance.boss_cell:
         return {}
-    boss = instance.boss_cell
-    connections = instance.connections
-    if not connections:
-        # No connections — return just the boss cell at distance 0
-        c, r = boss
-        return {f"{instance.dungeon_id}_{c}_{r}": 0}
-    adj = {}
-    for conn in connections:
-        cells = list(conn)
-        if len(cells) != 2:
-            log.debug(f"[DUNGEON] WARNING: malformed connection (len={len(cells)}): {conn}")
-            continue
-        a, b = cells
-        adj.setdefault(a, []).append(b)
-        adj.setdefault(b, []).append(a)
-    dist = {boss: 0}
-    queue = deque([boss])
-    while queue:
-        cell = queue.popleft()
-        for n in adj.get(cell, []):
-            if n not in dist:
-                dist[n] = dist[cell] + 1
-                queue.append(n)
-    dungeon_id = instance.dungeon_id
-    return {f"{dungeon_id}_{c}_{r}": d for (c, r), d in dist.items()}
+    topo = instance.topo
+    if topo:
+        did = instance.dungeon_id
+        return {f"{did}_{c[0]}_{c[1]}": topo.dist(c, "boss") for c in topo.cells}
+    # Fallback for instances without topology (shouldn't happen)
+    return {}

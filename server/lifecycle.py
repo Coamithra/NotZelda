@@ -415,6 +415,8 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
                 cell_info["gen"] = asn.get("entry") is not None
                 if (c, r) == inst.boss_cell:
                     cell_info["boss"] = True
+                if (c, r) == inst.sanctum_cell:
+                    cell_info["sanctum"] = True
                 if (c, r) == inst.treasure_cell:
                     cell_info["treasure"] = True
                 # Mark item cells for debug minimap

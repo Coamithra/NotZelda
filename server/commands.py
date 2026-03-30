@@ -562,16 +562,16 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
                             "type": "music_change", "music": None,
                         }, None))
                         broadcast_choir_stop(room_id, msgs)
-                        # Spawn seal fragment in treasure room (center of room)
-                        treasure_room_id = f"{dinst.dungeon_id}_{dinst.treasure_cell[0]}_{dinst.treasure_cell[1]}"
-                        # Ensure treasure room is resolved (it's lazily loaded)
-                        if treasure_room_id not in game.rooms:
+                        # Spawn seal fragment in sanctum (center of room)
+                        sanctum_room_id = f"{dinst.dungeon_id}_{dinst.sanctum_cell[0]}_{dinst.sanctum_cell[1]}"
+                        # Ensure sanctum room is resolved (it's lazily loaded)
+                        if sanctum_room_id not in game.rooms:
                             from server.dungeons import resolve_dungeon_room
-                            resolve_dungeon_room(dinst, dinst.treasure_cell)
-                        dinst.per_player_items.setdefault(treasure_room_id, []).append(
+                            resolve_dungeon_room(dinst, dinst.sanctum_cell)
+                        dinst.per_player_items.setdefault(sanctum_room_id, []).append(
                             {"x": 7, "y": 5, "item_type": "seal_fragment"}
                         )
-                        log.debug(f"[BOSS] Seal Fragment spawned in {treasure_room_id} at (7,5)")
+                        log.debug(f"[BOSS] Seal Fragment spawned in {sanctum_room_id} at (7,5)")
             else:
                 msg_hit = {
                     "type": "monster_hit",
