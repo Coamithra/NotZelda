@@ -484,33 +484,29 @@ audio.addEventListener("timeupdate", () => {
   }
 });
 
-function seekFromEvent(e) {
+let dragging = false;
+let dragPct = 0;
+
+function dragFromEvent(e) {
   if (!audio.duration) return;
   const rect = progressBar.getBoundingClientRect();
-  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-  progressFill.style.width = (pct * 100) + "%";
-  timeCur.textContent = fmt(pct * audio.duration);
-  audio.currentTime = pct * audio.duration;
+  dragPct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  progressFill.style.width = (dragPct * 100) + "%";
+  timeCur.textContent = fmt(dragPct * audio.duration);
 }
 
-let dragging = false;
-progressBar.addEventListener("mousedown", (e) => {
-  dragging = true;
-  seekFromEvent(e);
-});
-document.addEventListener("mousemove", (e) => {
-  if (dragging) seekFromEvent(e);
-});
-document.addEventListener("mouseup", () => { dragging = false; });
+function commitSeek() {
+  if (audio.duration) audio.currentTime = dragPct * audio.duration;
+  dragging = false;
+}
 
-progressBar.addEventListener("touchstart", (e) => {
-  dragging = true;
-  seekFromEvent(e.touches[0]);
-}, { passive: true });
-document.addEventListener("touchmove", (e) => {
-  if (dragging) seekFromEvent(e.touches[0]);
-}, { passive: true });
-document.addEventListener("touchend", () => { dragging = false; });
+progressBar.addEventListener("mousedown", (e) => { dragging = true; dragFromEvent(e); });
+document.addEventListener("mousemove", (e) => { if (dragging) dragFromEvent(e); });
+document.addEventListener("mouseup", () => { if (dragging) commitSeek(); });
+
+progressBar.addEventListener("touchstart", (e) => { dragging = true; dragFromEvent(e.touches[0]); }, { passive: true });
+document.addEventListener("touchmove", (e) => { if (dragging) dragFromEvent(e.touches[0]); }, { passive: true });
+document.addEventListener("touchend", () => { if (dragging) commitSeek(); });
 
 // ── Volume ──
 const volBar = document.getElementById("vol-bar");
