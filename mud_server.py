@@ -438,7 +438,30 @@ async def process_request(path, request_headers):
         # Inject debug flag into HTML so client can auto-login
         if DEBUG_MODE and filename.endswith(".html"):
             body = body.replace(b"</head>", b"<script>window.SERVER_DEBUG=true</script></head>")
-        return HTTPStatus.OK, [("Content-Type", content_type)], body
+        # Support Range requests for audio seeking
+        range_header = request_headers.get("Range", "")
+        if range_header.startswith("bytes=") and content_type.startswith("audio/"):
+            total = len(body)
+            range_spec = range_header[6:]  # strip "bytes="
+            start_str, _, end_str = range_spec.partition("-")
+            start = int(start_str) if start_str else 0
+            end = int(end_str) if end_str else total - 1
+            end = min(end, total - 1)
+            if start > end or start >= total:
+                return HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE, [
+                    ("Content-Range", f"bytes */{total}"),
+                ], b""
+            chunk = body[start:end + 1]
+            return HTTPStatus.PARTIAL_CONTENT, [
+                ("Content-Type", content_type),
+                ("Accept-Ranges", "bytes"),
+                ("Content-Range", f"bytes {start}-{end}/{total}"),
+                ("Content-Length", str(len(chunk))),
+            ], chunk
+        headers = [("Content-Type", content_type)]
+        if content_type.startswith("audio/"):
+            headers.append(("Accept-Ranges", "bytes"))
+        return HTTPStatus.OK, headers, body
     return HTTPStatus.NOT_FOUND, [], b"Not Found"
 
 
