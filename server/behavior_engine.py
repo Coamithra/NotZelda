@@ -134,13 +134,6 @@ class BehaviorEngine:
             return False
         return True
 
-    def _is_walkable_multi(self, x, y, w, h, room_id):
-        """Check if all tiles in a w x h footprint at (x, y) are walkable."""
-        for dy in range(h):
-            for dx in range(w):
-                if not self._is_walkable(x + dx, y + dy, room_id):
-                    return False
-        return True
 
     def _has_los(self, x1, y1, x2, y2, room_id):
         """Check line of sight between two points on the same row or column."""
@@ -222,7 +215,7 @@ class BehaviorEngine:
         for dx in range(w):
             mx = monster.x + dx
             if abs(pa.x - mx) < 0.75:
-                if check_los and not self._has_los(mx, monster.y, int(round(pa.x)), int(round(pa.y)), room_id):
+                if check_los and not self._has_los(int(round(mx)), int(round(monster.y)), int(round(pa.x)), int(round(pa.y)), room_id):
                     continue
                 return True
 
@@ -230,7 +223,7 @@ class BehaviorEngine:
         for dy in range(h):
             my = monster.y + dy
             if abs(pa.y - my) < 0.75:
-                if check_los and not self._has_los(monster.x, my, int(round(pa.x)), int(round(pa.y)), room_id):
+                if check_los and not self._has_los(int(round(monster.x)), int(round(my)), int(round(pa.x)), int(round(pa.y)), room_id):
                     continue
                 return True
 
@@ -470,10 +463,11 @@ class BehaviorEngine:
 
         # Find a walkable position within drift of the center point
         candidates = []
+        mx_r, my_r = round(monster.x), round(monster.y)
         for ddx in range(-drift, drift + 1):
             for ddy in range(-drift, drift + 1):
                 tx, ty = cx + ddx, cy + ddy
-                dist_from_monster = abs(tx - monster.x) + abs(ty - monster.y)
+                dist_from_monster = abs(tx - mx_r) + abs(ty - my_r)
                 if dist_from_monster > max_range:
                     continue
                 if dist_from_monster == 0:
@@ -508,7 +502,10 @@ class BehaviorEngine:
         """Wrapper that attaches distance and direction to the resolved move."""
         result = self.resolve_move(rule, monster, room_id)
         if result is not None:
-            result["distance"] = max(1, int(rule.get("distance", 1)))
+            # Scale rule distance by 1/MOVE_STEP so "distance: 2" (tiles) becomes
+            # 4 half-tile steps. Default 1 tile = 2 half-tile steps.
+            tile_dist = max(1, int(rule.get("distance", 1)))
+            result["distance"] = int(tile_dist / MOVE_STEP)
             result["direction"] = rule.get("direction", "random")
         return result
 
@@ -530,7 +527,6 @@ class BehaviorEngine:
             to_x=nx, to_y=ny,
             start_time=now,
             walk_time=walk_time,
-            midpoint_checked=False,
             room_id=room_id,
             monster_idx=monster_idx,
             remaining_distance=remaining,
@@ -568,8 +564,8 @@ class BehaviorEngine:
             spawn_row = monster.y            # top row
         else:
             spawn_row = monster.y + h // 2   # center
-        start_x = spawn_col + dx
-        start_y = spawn_row + dy
+        start_x = round(spawn_col + dx)
+        start_y = round(spawn_row + dy)
         if start_x < 0 or start_x >= ROOM_COLS or start_y < 0 or start_y >= ROOM_ROWS:
             return
         room = game.rooms.get(room_id)
@@ -620,7 +616,8 @@ class BehaviorEngine:
 
         lane = []
         seen = set()
-        nx, ny = monster.x, monster.y
+        # Snap to nearest integer for charge path (charges move in whole tiles)
+        nx, ny = round(monster.x), round(monster.y)
         for _ in range(max_range):
             nx += dx
             ny += dy
@@ -650,7 +647,8 @@ class BehaviorEngine:
         damage = action.get("damage", monster.damage)
         path = []
 
-        nx, ny = monster.x, monster.y
+        # Snap to nearest integer for charge path (charges move in whole tiles)
+        nx, ny = round(monster.x), round(monster.y)
         for _ in range(max_range):
             nx += dx
             ny += dy

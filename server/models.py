@@ -17,7 +17,6 @@ class WalkState:
     to_y: float
     start_time: float
     walk_time: float        # actual duration for this step (scaled by step distance)
-    midpoint_checked: bool
     room_id: str
     monster_idx: int
     remaining_distance: int

@@ -496,6 +496,7 @@ def _tick_all_monsters(now, msgs):
                                         "prev_source_x": prev_mx, "prev_source_y": prev_my,
                                     }
                     # At 100%: snap to exact destination, complete walk
+                    if progress >= 1.0:
                         remaining = sd.remaining_distance
                         walk_dir = sd.direction
                         walk_seq = sd.seq
