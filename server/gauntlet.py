@@ -464,10 +464,10 @@ def _init_bounds(session, defaults):
     session.hard_config = {k: v for k, v in session.config.items() if k != "kind"}
     session.easy_config = {
         "count": 1,
-        "walk_time": defaults.get("walk_time", 0.25),
-        "decision_time": defaults.get("decision_time", 1.0),
+        "walk_time": max(0.5, defaults.get("walk_time", 0.25) * 2),
+        "decision_time": max(2.0, defaults.get("decision_time", 1.0) * 2),
         "damage": 1,
-        "hp": defaults.get("hp", 1),
+        "hp": max(1, defaults.get("hp", 1)),
     }
 
 
@@ -512,20 +512,26 @@ def _auto_adjust(session, outcome, msgs_out):
     easy_val = session.easy_config.get(param, old_val)
 
     is_int = param in INT_PARAMS
+    higher_is_harder = HARDER_IS_HIGHER[param]
+
     if outcome in ("TOO HARD", "HARD"):
-        # Make easier: move toward easy value
+        # Narrow: current value was too hard, so it becomes the new hard bound
+        session.hard_config[param] = old_val
+        # Make easier: bisect toward easy bound
         if is_int:
             new_val = max(1, (old_val + int(easy_val)) // 2)
             if new_val == old_val and old_val > 1:
-                new_val = old_val - 1
+                new_val = old_val - 1 if higher_is_harder else old_val + 1
         else:
             new_val = round((old_val + easy_val) / 2, 3)
     else:
-        # EASY: make harder — move toward hard value
+        # EASY: current value was too easy, so it becomes the new easy bound
+        session.easy_config[param] = old_val
+        # Make harder: bisect toward hard bound
         if is_int:
             new_val = (old_val + int(hard_val) + 1) // 2
             if new_val == old_val:
-                new_val = old_val + 1
+                new_val = old_val + 1 if higher_is_harder else old_val - 1
         else:
             new_val = round((old_val + hard_val) / 2, 3)
 
