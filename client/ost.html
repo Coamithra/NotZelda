@@ -476,7 +476,7 @@ const timeCur = document.getElementById("time-cur");
 const timeDur = document.getElementById("time-dur");
 
 audio.addEventListener("timeupdate", () => {
-  if (audio.duration) {
+  if (audio.duration && !dragging) {
     const pct = (audio.currentTime / audio.duration) * 100;
     progressFill.style.width = pct + "%";
     timeCur.textContent = fmt(audio.currentTime);
@@ -488,6 +488,8 @@ function seekFromEvent(e) {
   if (!audio.duration) return;
   const rect = progressBar.getBoundingClientRect();
   const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  progressFill.style.width = (pct * 100) + "%";
+  timeCur.textContent = fmt(pct * audio.duration);
   audio.currentTime = pct * audio.duration;
 }
 
