@@ -237,6 +237,11 @@ def on_gauntlet_death(player, now, msgs):
         f"[TOO HARD]{adj_str}"
     )
 
+    # Clean up old room (monsters still ticking if not cleaned)
+    old_room = player.death_room
+    from server.lifecycle import on_player_leave_room
+    on_player_leave_room(old_room, msgs)
+
     # Advance wave
     session.wave += 1
     next_room = _create_gauntlet_room(session)
@@ -324,6 +329,9 @@ def on_gauntlet_exit(player_name):
         game.room_monsters.pop(rid, None)
         game.locked_rooms.pop(rid, None)
         game.room_cooldowns.pop(rid, None)
+        game.room_hearts.pop(rid, None)
+        game.room_projectiles.pop(rid, None)
+        game.room_pickup_freeze.pop(rid, None)
 
 
 # ---------------------------------------------------------------------------
@@ -481,6 +489,7 @@ def _auto_adjust(session, outcome, msgs_out):
             defaults = game.monster_stats.get(kind, {})
             hard = _max_hard_config(kind, session.hard_config.get("count", 25), defaults)
             config.update({k: v for k, v in hard.items() if k != "kind"})
+            _init_bounds(session, defaults)
             session.consecutive_good = 0
             return "RESET TO MAX HARD — searching for a new balance"
         return None  # stay at current settings, try again
@@ -668,14 +677,14 @@ def _cmd_halve(player, session, parts, msgs):
             new = round((old + default) / 2, 3)
             config[key] = new
             changed.append(f"{key}: {old}→{new}")
-        elif key == "hp":
-            old = config.get("hp")
+        elif key in INT_PARAMS:
+            old = config.get(key)
             if old is None:
                 continue
-            default = defaults.get("hp", old)
+            default = defaults.get(key, old)
             new = max(1, (old + default) // 2)
-            config["hp"] = new
-            changed.append(f"hp: {old}→{new}")
+            config[key] = new
+            changed.append(f"{key}: {old}→{new}")
 
     if changed:
         msgs.append(("send", player, {

@@ -316,6 +316,7 @@ def _spirit_jar_revive(player, now, msgs):
     for flag in list(player.flags):
         if flag.startswith("gift_") and flag.endswith("_spirit_jar"):
             player.flags.discard(flag)
+
     # Reset death state
     player.dead = False
     player.death_time = 0.0

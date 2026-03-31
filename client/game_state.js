@@ -38,7 +38,7 @@ const G = {
     myPlayer: null,        // {x, y, direction, color_index}
 
     // Player state machine
-    state: "idle",           // "idle" | "attacking" | "dying"
+    state: "idle",           // "idle" | "attacking" | "attack_cooldown" | "dying"
     stateData: {},           // state-scoped data, replaced on every transition
 
     // Free movement (sub-tile)
