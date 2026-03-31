@@ -325,6 +325,9 @@ STATIC_FILES = {
     "/music_watertemple_boss1_choir.mp3": ("music/dungeon2/watertemple_boss1_choir.mp3", "audio/mpeg"),
     "/music_watertemple_boss2.mp3":  ("music/dungeon2/watertemple_boss2.mp3", "audio/mpeg"),
     "/music_watertemple_boss2_choir.mp3": ("music/dungeon2/watertemple_boss2_choir.mp3", "audio/mpeg"),
+    # Dungeon 3 (desert tomb) music
+    "/music_desert_a.mp3":     ("music/dungeon3/desert_a.mp3", "audio/mpeg"),
+    "/music_desert_b.mp3":     ("music/dungeon3/desert_b.mp3", "audio/mpeg"),
 }
 
 

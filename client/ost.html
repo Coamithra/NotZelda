@@ -344,6 +344,9 @@ const TRACKS = [
   { title: "Water Temple III", area: "Water Temple — Exploration", url: "music_watertemple3.mp3" },
   { title: "Water Temple Boss I", area: "Water Temple — Boss", url: "music_watertemple_boss1.mp3" },
   { title: "Water Temple Boss II", area: "Water Temple — Boss", url: "music_watertemple_boss2.mp3" },
+  // Dungeon 3
+  { section: "The Desert Tomb", title: "Desert Ambient I", area: "Desert Tomb — Exploration", url: "music_desert_a.mp3" },
+  { title: "Desert Ambient II", area: "Desert Tomb — Exploration", url: "music_desert_b.mp3" },
 ];
 
 // ── State ──
@@ -481,12 +484,31 @@ audio.addEventListener("timeupdate", () => {
   }
 });
 
-progressBar.addEventListener("click", (e) => {
+function seekFromEvent(e) {
   if (!audio.duration) return;
   const rect = progressBar.getBoundingClientRect();
-  const pct = (e.clientX - rect.left) / rect.width;
+  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
   audio.currentTime = pct * audio.duration;
+}
+
+let dragging = false;
+progressBar.addEventListener("mousedown", (e) => {
+  dragging = true;
+  seekFromEvent(e);
 });
+document.addEventListener("mousemove", (e) => {
+  if (dragging) seekFromEvent(e);
+});
+document.addEventListener("mouseup", () => { dragging = false; });
+
+progressBar.addEventListener("touchstart", (e) => {
+  dragging = true;
+  seekFromEvent(e.touches[0]);
+}, { passive: true });
+document.addEventListener("touchmove", (e) => {
+  if (dragging) seekFromEvent(e.touches[0]);
+}, { passive: true });
+document.addEventListener("touchend", () => { dragging = false; });
 
 // ── Volume ──
 const volBar = document.getElementById("vol-bar");
@@ -507,7 +529,7 @@ document.addEventListener("keydown", (e) => {
   if (e.code === "ArrowLeft" && e.shiftKey) prevTrack();
 });
 
-// ── Album art — pixel art triforce/shield ──
+// ── Album art — pixel art shield with seal crystal ──
 function drawAlbumArt(canvasId) {
   const c = document.getElementById(canvasId);
   if (!c) return;
@@ -559,14 +581,32 @@ function drawAlbumArt(canvasId) {
     }
   }
 
-  // Triforce-ish symbol (3 triangles)
+  // Seal crystal emblem
+  const dcx = 32, dcy = 25;
+  // Outer diamond
   ctx.fillStyle = "#d4a843";
-  // Top triangle
-  drawTri(ctx, 32, 20, 5);
-  // Bottom left
-  drawTri(ctx, 27, 28, 5);
-  // Bottom right
-  drawTri(ctx, 37, 28, 5);
+  for (let row = -6; row <= 6; row++) {
+    const half = 6 - Math.abs(row);
+    for (let dx = -half; dx <= half; dx++) ctx.fillRect(dcx + dx, dcy + row, 1, 1);
+  }
+  // Inner glow
+  ctx.fillStyle = "#f0d060";
+  for (let row = -4; row <= 4; row++) {
+    const half = 4 - Math.abs(row);
+    for (let dx = -half; dx <= half; dx++) ctx.fillRect(dcx + dx, dcy + row, 1, 1);
+  }
+  // Bright core
+  ctx.fillStyle = "#fff8d0";
+  for (let row = -2; row <= 2; row++) {
+    const half = 2 - Math.abs(row);
+    for (let dx = -half; dx <= half; dx++) ctx.fillRect(dcx + dx, dcy + row, 1, 1);
+  }
+  // Radiating sparkles
+  ctx.fillStyle = "#d4a843";
+  ctx.fillRect(dcx, dcy - 9, 1, 2);
+  ctx.fillRect(dcx, dcy + 8, 1, 2);
+  ctx.fillRect(dcx - 9, dcy, 2, 1);
+  ctx.fillRect(dcx + 8, dcy, 2, 1);
 
   // Sword across
   ctx.fillStyle = "#c0c8d8";
@@ -597,14 +637,6 @@ function drawAlbumArt(canvasId) {
       for (let px = 0; px < charW; px++) {
         if (glyph[py * charW + px]) ctx.fillRect(ox + px, ty + py, 1, 1);
       }
-    }
-  }
-}
-
-function drawTri(ctx, cx, top, size) {
-  for (let row = 0; row < size; row++) {
-    for (let dx = -row; dx <= row; dx++) {
-      ctx.fillRect(cx + dx, top + row, 1, 1);
     }
   }
 }

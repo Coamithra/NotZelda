@@ -125,6 +125,7 @@ Dig into the problem before proposing solutions. Use `/research` for topics that
 30. **Comment on the card** — Add a fix/feature summary to the Trello card: what changed, which files, what it fixes/adds, commit hash, and what needs manual testing. This leaves a paper trail for future debugging
 31. **Create follow-up tickets** — If the peer review, implementation, or testing surfaced issues that are out of scope for this card (pre-existing bugs, minor improvements, edge cases deferred as too risky to bundle), create new Trello cards in the appropriate list (Bugs, Future Features, or Refactoring). Reference the original card so there's a trail. Don't let follow-up work disappear into commit messages — if it's worth noting, it's worth tracking
 32. **Deploy (if requested)** — `ssh root@46.225.218.207` → `cd /opt/NotZelda && git pull && systemctl restart notzelda`
+33. **If new music was added** — Update `client/ost.html` (add track entries to `TRACKS` array) and `mud_server.py` (add serving routes to the static file dict) so the `/ost` soundtrack page stays current
 
 ---
 
