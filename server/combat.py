@@ -316,7 +316,6 @@ def _spirit_jar_revive(player, now, msgs):
     for flag in list(player.flags):
         if flag.startswith("gift_") and flag.endswith("_spirit_jar"):
             player.flags.discard(flag)
-
     # Reset death state
     player.dead = False
     player.death_time = 0.0
@@ -360,7 +359,11 @@ def _tick_players(now, msgs):
                 _respawn_player(player, msgs)
         elif now - player.death_time >= PLAYER_RESPAWN_DELAY:
             # Phase 1: death animation done — spirit jar / tombstone / auto-respawn
-            if player.has_flag("has_spirit_jar"):
+            # Gauntlet: death = wave failed, advance to next room
+            if player.death_room and player.death_room.startswith("gauntlet_"):
+                from server.gauntlet import on_gauntlet_death
+                on_gauntlet_death(player, now, msgs)
+            elif player.has_flag("has_spirit_jar"):
                 _spirit_jar_revive(player, now, msgs)
             elif player.chose_respawn:
                 _respawn_player(player, msgs)

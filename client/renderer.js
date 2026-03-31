@@ -4,6 +4,7 @@ const DANCE_FRAME_MS = 200;
 const DYING_MONSTER_FRAME_MS = 150;
 const ATTACK_FRAME_MS = 150;
 const ATTACK_FRAMES = 2;
+const ATTACK_GAP_MS = 90;  // vulnerability gap = 0.5 * sword active time (180ms)
 const DYING_PLAYER_FRAME_MS = 200;
 
 // Advance a frame-based animation: returns true if the frame advanced

@@ -553,6 +553,15 @@ function playerTick() {
     case "attacking": {
       const attackDone = now - G.player.stateData.startTime >= ATTACK_FRAME_MS * ATTACK_FRAMES;
       if (attackDone) {
+        // Enter cooldown gap — vulnerable, can't swing yet
+        setState("attack_cooldown", { startTime: performance.now() });
+      }
+      break;
+    }
+
+    case "attack_cooldown": {
+      const gapDone = now - G.player.stateData.startTime >= ATTACK_GAP_MS;
+      if (gapDone) {
         if (G.player.keysDown["Space"] && G.player.playerFlags.has("has_sword")) {
           sendToServer({ type: "attack", direction: G.player.myPlayer.direction, x: G.player.preciseX, y: G.player.preciseY });
           startAttack(G.player.myName, G.player.myPlayer.direction);

@@ -263,6 +263,11 @@ async def handle_connection(websocket):
                     }, None))
                     break
 
+            # Clean up gauntlet session if player was in one
+            if leaving_room.startswith("gauntlet_"):
+                from server.gauntlet import on_gauntlet_exit
+                on_gauntlet_exit(player.name)
+
             disc_msgs.append(("broadcast", leaving_room,
                               {"type": "player_left", "name": player.name}, None))
             on_player_leave_room(leaving_room, disc_msgs)

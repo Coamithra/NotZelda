@@ -524,18 +524,16 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
                     msg_killed["knock_x"] = knock_x
                     msg_killed["knock_y"] = knock_y
                 msgs.append(("broadcast", room_id, msg_killed, None))
-                # Kill message
+                # Kill message (chat log only, no popup)
                 monster_name = monster.kind.replace("_", " ").title()
                 msgs.append(("send", player, {
-                    "type": "info",
-                    "text": f"You defeated the {monster_name}!",
+                    "type": "log", "text": f"You defeated the {monster_name}!",
                 }))
                 msgs.append(("broadcast", room_id, {
-                    "type": "info",
-                    "text": f"{player.name} defeated the {monster_name}!",
+                    "type": "log", "text": f"{player.name} defeated the {monster_name}!",
                 }, player.ws))
-                # Heart drop
-                if random.random() < HEART_DROP_CHANCE:
+                # Heart drop (disabled in gauntlet for clean damage tracking)
+                if not room_id.startswith("gauntlet_") and random.random() < HEART_DROP_CHANCE:
                     hid = game.next_heart_id
                     game.next_heart_id += 1
                     heart = {"x": monster.x, "y": monster.y, "id": hid}
@@ -551,6 +549,10 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
                 if not alive:
                     if room_id in game.locked_rooms:
                         unlock_room(room_id, msgs)
+                    # Gauntlet: log results + create next room
+                    if room_id.startswith("gauntlet_"):
+                        from server.gauntlet import on_gauntlet_room_cleared
+                        on_gauntlet_room_cleared(player, room_id, msgs)
                 # Mark dungeon room as cleared if all monsters dead
                 if dinst and not alive:
                     dinst.cleared_rooms.add(room_id)
@@ -826,6 +828,8 @@ DEBUG_COMMANDS = {
     "choir": _cmd_choir,
     "key": _cmd_key,
     "keylayout": _cmd_keylayout,
+    "gauntlet": lambda p, a, m: __import__("server.gauntlet", fromlist=["cmd_gauntlet"]).cmd_gauntlet(p, a, m),
+    "gt": lambda p, a, m: __import__("server.gauntlet", fromlist=["cmd_gt"]).cmd_gt(p, a, m),
 }
 
 

@@ -1073,6 +1073,12 @@ function handleMessage(msg) {
       break;
     }
 
+    case "log": {
+      // Chat log only, no popup overlay
+      appendChatLog(`<span class="chat-system">${escHtml(msg.text)}</span>`);
+      break;
+    }
+
     // ----- Revival system -----
 
     case "waiting_for_revival":

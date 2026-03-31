@@ -50,8 +50,8 @@ STARTING_ROOM = "town_square"
 WALK_TIME = 0.250          # seconds — monster tile-to-tile walk duration (kept for monster walks)
 CANCEL_TIME = 0.090        # seconds — legacy (kept for backward compat)
 LATENCY_COMP = 0.066       # seconds — legacy (kept for backward compat)
-ATTACK_COOLDOWN = 0.3
-SWORD_ACTIVE_DURATION = 0.18  # 60% of cooldown — lingering hitbox but not full coverage when holding
+ATTACK_COOLDOWN = 0.27  # 1.5 * SWORD_ACTIVE_DURATION (0.18) — gap = 0.5 * active
+SWORD_ACTIVE_DURATION = 0.18
 
 # Half-tile free movement (NES Zelda-style)
 HALF_TILE = 0.5
@@ -68,7 +68,7 @@ GUARD_DESPAWN_DISTANCE = 4     # Manhattan tiles — target escapes if beyond th
 GUARD_DESPAWN_GRACE = 3.0      # seconds before distance check kicks in
 HEART_DROP_CHANCE = 0.1
 INVINCIBILITY_DURATION = 1.5
-COLLISION_GRACE_PERIOD = 0.1  # seconds before contact damage triggers (corner-scrape forgiveness)
+COLLISION_GRACE_PERIOD = 0.0  # seconds before contact damage triggers (was 0.1 — removed, too exploitable)
 ITEM_PICKUP_FREEZE_DURATION = 2.5  # seconds — monsters pause during item pickup animation
 REVIVAL_DURATION = 6.5              # seconds — channel time to revive a tombstone
 REVIVAL_PROXIMITY = 1.0             # tile distance — how close reviver must be to tombstone

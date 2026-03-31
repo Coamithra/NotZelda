@@ -1,0 +1,291 @@
+==================================================
+GAUNTLET SESSION — debug1
+Started: 2026-03-31 01:48:14
+==================================================
+
+--- Wave 1 ---
+Monster: bat x25
+Stats: hp=1 walk_time=0.08 decision_time=0.08 damage=2
+Result: DIED (1 deaths) | HP lost: 6 (3.0 hearts) | Time: 17.4s
+Outcome: TOO HARD
+
+--- Wave 2 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.08 decision_time=0.08 damage=2
+Result: SURVIVED | HP lost: 4 (2.0 hearts) | Time: 13.8s
+Outcome: HARD
+
+--- Wave 3 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.08 decision_time=0.08 damage=2
+Result: DIED (1 deaths) | HP lost: 6 (3.0 hearts) | Time: 11.4s
+Outcome: TOO HARD
+
+--- Wave 4 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.14 decision_time=0.14 damage=2
+Result: DIED (1 deaths) | HP lost: 6 (3.0 hearts) | Time: 19.0s
+Outcome: TOO HARD
+
+--- Wave 5 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.14 decision_time=0.14 damage=2
+Result: DIED (1 deaths) | HP lost: 6 (3.0 hearts) | Time: 29.0s
+Outcome: TOO HARD
+
+==================================================
+GAUNTLET SESSION — debug1
+Started: 2026-03-31 02:01:05
+==================================================
+
+--- Wave 1 ---
+Monster: bat x25
+Stats: hp=1 walk_time=0.08 decision_time=0.08 damage=2
+Result: DIED (1 deaths) | HP lost: 6 (3.0 hearts) | Time: 19.6s
+Outcome: TOO HARD
+
+--- Wave 2 ---
+Monster: bat x25
+Stats: hp=1 walk_time=0.08 decision_time=0.54 damage=2
+Result: DIED (1 deaths) | HP lost: 6 (3.0 hearts) | Time: 57.7s
+Outcome: TOO HARD
+
+--- Wave 3 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.08 decision_time=0.54 damage=2
+Result: SURVIVED | HP lost: 4 (2.0 hearts) | Time: 23.2s
+Outcome: HARD
+
+--- Wave 4 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.14 decision_time=0.54 damage=2
+Result: DIED (1 deaths) | HP lost: 6 (3.0 hearts) | Time: 31.3s
+Outcome: TOO HARD
+
+--- Wave 5 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.14 decision_time=0.54 damage=1
+Result: SURVIVED | HP lost: 2 (1.0 hearts) | Time: 24.4s
+Outcome: GOOD
+
+--- Wave 6 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.14 decision_time=0.54 damage=1
+Result: SURVIVED | HP lost: 0 (0.0 hearts) | Time: 29.1s
+Outcome: EASY
+
+--- Wave 7 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.14 decision_time=0.31 damage=1
+Result: SURVIVED | HP lost: 4 (2.0 hearts) | Time: 27.2s
+Outcome: HARD
+
+==================================================
+GAUNTLET SESSION — debug1
+Started: 2026-03-31 02:05:01
+==================================================
+
+--- Wave 1 ---
+Monster: bat x25
+Stats: hp=1 walk_time=0.08 decision_time=0.08 damage=2
+Result: DIED (1 deaths) | HP lost: 6 (3.0 hearts) | Time: 10.2s
+Outcome: TOO HARD
+
+--- Wave 2 ---
+Monster: bat x25
+Stats: hp=1 walk_time=0.14 decision_time=0.14 damage=2
+Result: DIED (1 deaths) | HP lost: 6 (3.0 hearts) | Time: 12.1s
+Outcome: TOO HARD
+
+--- Wave 3 ---
+Monster: bat x25
+Stats: hp=1 walk_time=0.17 decision_time=0.17 damage=2
+Result: DIED (1 deaths) | HP lost: 6 (3.0 hearts) | Time: 23.4s
+Outcome: TOO HARD
+
+--- Wave 4 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.17 decision_time=0.17 damage=2
+Result: SURVIVED | HP lost: 2 (1.0 hearts) | Time: 29.0s
+Outcome: GOOD
+
+--- Wave 5 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.17 decision_time=0.17 damage=2
+Result: DIED (1 deaths) | HP lost: 6 (3.0 hearts) | Time: 13.4s
+Outcome: TOO HARD
+
+--- Wave 6 ---
+Monster: bat x7
+Stats: hp=1 walk_time=0.17 decision_time=0.17 damage=2
+Result: SURVIVED | HP lost: 4 (2.0 hearts) | Time: 20.4s
+Outcome: HARD
+
+--- Wave 7 ---
+Monster: bat x7
+Stats: hp=1 walk_time=0.17 decision_time=0.58 damage=2
+Result: SURVIVED | HP lost: 0 (0.0 hearts) | Time: 16.1s
+Outcome: EASY
+
+--- Wave 8 ---
+Monster: bat x16
+Stats: hp=1 walk_time=0.17 decision_time=0.58 damage=2
+Result: SURVIVED | HP lost: 2 (1.0 hearts) | Time: 33.8s
+Outcome: GOOD
+
+--- Wave 9 ---
+Monster: bat x16
+Stats: hp=1 walk_time=0.17 decision_time=0.58 damage=2
+Result: SURVIVED | HP lost: 0 (0.0 hearts) | Time: 40.4s
+Outcome: EASY
+
+--- Wave 10 ---
+Monster: bat x21
+Stats: hp=1 walk_time=0.17 decision_time=0.58 damage=2
+Result: SURVIVED | HP lost: 4 (2.0 hearts) | Time: 31.4s
+Outcome: HARD
+
+--- Wave 11 ---
+Monster: bat x21
+Stats: hp=1 walk_time=0.17 decision_time=0.58 damage=1
+Result: SURVIVED | HP lost: 3 (1.5 hearts) | Time: 33.4s
+Outcome: GOOD
+
+--- Wave 12 ---
+Monster: bat x21
+Stats: hp=1 walk_time=0.17 decision_time=0.58 damage=1
+Result: SURVIVED | HP lost: 4 (2.0 hearts) | Time: 41.0s
+Outcome: HARD
+
+--- Wave 13 ---
+Monster: bat x21
+Stats: hp=1 walk_time=0.18 decision_time=0.58 damage=1
+Result: SURVIVED | HP lost: 3 (1.5 hearts) | Time: 33.6s
+Outcome: GOOD
+
+--- Wave 14 ---
+Monster: bat x21
+Stats: hp=1 walk_time=0.18 decision_time=0.58 damage=1
+Result: SURVIVED | HP lost: 2 (1.0 hearts) | Time: 40.6s
+Outcome: GOOD
+
+--- Wave 15 ---
+Monster: bat x25
+Stats: hp=1 walk_time=0.08 decision_time=0.08 damage=2
+Result: DIED (1 deaths) | HP lost: 6 (3.0 hearts) | Time: 10.8s
+Outcome: TOO HARD
+
+--- Wave 16 ---
+Monster: bat x25
+Stats: hp=1 walk_time=0.14 decision_time=0.14 damage=2
+Result: DIED (1 deaths) | HP lost: 6 (3.0 hearts) | Time: 11.9s
+Outcome: TOO HARD
+
+--- Wave 17 ---
+Monster: bat x25
+Stats: hp=1 walk_time=0.14 decision_time=0.57 damage=2
+Result: DIED (1 deaths) | HP lost: 6 (3.0 hearts) | Time: 17.4s
+Outcome: TOO HARD
+
+--- Wave 18 ---
+Monster: bat x25
+Stats: hp=1 walk_time=0.17 decision_time=0.57 damage=2
+Result: SURVIVED | HP lost: 2 (1.0 hearts) | Time: 44.9s
+Outcome: GOOD
+
+--- Wave 19 ---
+Monster: bat x25
+Stats: hp=1 walk_time=0.17 decision_time=0.57 damage=2
+Result: DIED (1 deaths) | HP lost: 6 (3.0 hearts) | Time: 23.2s
+Outcome: TOO HARD
+
+--- Wave 20 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.17 decision_time=0.57 damage=2
+Result: SURVIVED | HP lost: 2 (1.0 hearts) | Time: 18.4s
+Outcome: GOOD
+
+--- Wave 21 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.17 decision_time=0.57 damage=2
+Result: DIED (1 deaths) | HP lost: 6 (3.0 hearts) | Time: 21.5s
+Outcome: TOO HARD
+
+--- Wave 22 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.18 decision_time=0.57 damage=2
+Result: SURVIVED | HP lost: 4 (2.0 hearts) | Time: 22.4s
+Outcome: HARD
+
+--- Wave 23 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.18 decision_time=0.57 damage=1
+Result: SURVIVED | HP lost: 0 (0.0 hearts) | Time: 23.9s
+Outcome: EASY
+
+--- Wave 24 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.18 decision_time=0.57 damage=2
+Result: SURVIVED | HP lost: 4 (2.0 hearts) | Time: 33.8s
+Outcome: HARD
+
+--- Wave 25 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.18 decision_time=0.79 damage=2
+Result: SURVIVED | HP lost: 2 (1.0 hearts) | Time: 23.6s
+Outcome: GOOD
+
+--- Wave 26 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.18 decision_time=0.79 damage=2
+Result: SURVIVED | HP lost: 2 (1.0 hearts) | Time: 33.4s
+Outcome: GOOD
+
+--- Wave 27 ---
+Monster: bat x25
+Stats: hp=1 walk_time=0.08 decision_time=0.08 damage=2
+Result: DIED (1 deaths) | HP lost: 6 (3.0 hearts) | Time: 13.4s
+Outcome: TOO HARD
+
+--- Wave 28 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.08 decision_time=0.08 damage=2
+Result: DIED (1 deaths) | HP lost: 6 (3.0 hearts) | Time: 10.1s
+Outcome: TOO HARD
+
+--- Wave 29 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.14 decision_time=0.14 damage=2
+Result: SURVIVED | HP lost: 4 (2.0 hearts) | Time: 21.0s
+Outcome: HARD
+
+--- Wave 30 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.14 decision_time=0.57 damage=2
+Result: SURVIVED | HP lost: 2 (1.0 hearts) | Time: 24.3s
+Outcome: GOOD
+
+--- Wave 31 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.14 decision_time=0.57 damage=2
+Result: DIED (1 deaths) | HP lost: 6 (3.0 hearts) | Time: 19.5s
+Outcome: TOO HARD
+
+--- Wave 32 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.14 decision_time=0.57 damage=1
+Result: SURVIVED | HP lost: 1 (0.5 hearts) | Time: 30.9s
+Outcome: GOOD
+
+--- Wave 33 ---
+Monster: bat x13
+Stats: hp=1 walk_time=0.14 decision_time=0.57 damage=1
+Result: SURVIVED | HP lost: 2 (1.0 hearts) | Time: 23.2s
+Outcome: GOOD
+
+--- Wave 34 ---
+Monster: bat x25
+Stats: hp=1 walk_time=0.08 decision_time=0.08 damage=2
+Result: DIED (1 deaths) | HP lost: 6 (3.0 hearts) | Time: 10.8s
+Outcome: TOO HARD
+

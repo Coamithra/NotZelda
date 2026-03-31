@@ -111,6 +111,11 @@ def get_room_monsters(room_id: str) -> list[Monster]:
 
 def on_player_enter_room(room_id: str):
     """Called when a player enters a room. Spawns monsters if needed."""
+    # Gauntlet: set up monster templates from session config
+    if room_id.startswith("gauntlet_"):
+        from server.gauntlet import prepare_gauntlet_room
+        prepare_gauntlet_room(room_id)
+
     # Dungeon cleared rooms stay empty (no respawn)
     inst = get_dungeon_for_room(room_id)
     if inst and room_id in inst.cleared_rooms:
@@ -135,6 +140,11 @@ def on_player_enter_room(room_id: str):
     # Spawn fresh monsters
     monsters = spawn_monsters(room_id)
     game.room_monsters[room_id] = monsters
+
+    # Gauntlet: apply stat overrides to spawned monsters
+    if room_id.startswith("gauntlet_") and monsters:
+        from server.gauntlet import apply_gauntlet_overrides
+        apply_gauntlet_overrides(room_id, monsters)
 
     # Lock doors in trap rooms
     room = game.rooms.get(room_id)
@@ -622,6 +632,15 @@ def do_room_transition(player, exit_direction: str, msgs: list):
             exit_direction = None
 
         on_player_enter_room(new_room_id)
+
+        # Gauntlet: reset HP + track entry state for the new room
+        if new_room_id.startswith("gauntlet_"):
+            from server.gauntlet import on_gauntlet_enter
+            on_gauntlet_enter(player)
+        # Gauntlet: clean up session when leaving gauntlet for overworld
+        if old_room.startswith("gauntlet_") and not new_room_id.startswith("gauntlet_"):
+            from server.gauntlet import on_gauntlet_exit
+            on_gauntlet_exit(player.name)
 
         # Adjust spawn position for locked trap rooms — spawn 1 tile inward
         if new_room_id in game.locked_rooms:
