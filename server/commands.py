@@ -10,7 +10,7 @@ from server.constants import (
     ATTACK_COOLDOWN, TICK_INTERVAL, HEART_DROP_CHANCE, HEART_RESTORE_HP,
     POSITION_UPDATE_RATE, MAX_MOVE_PER_UPDATE,
     COLLISION_GRACE_PERIOD, ITEM_PICKUP_FREEZE_DURATION,
-    SEAL_FRAGMENT_HP_BONUS,
+    SEAL_FRAGMENT_HP_BONUS, SWORD_PERP_WIDTH,
 )
 from server import log
 from server.lifecycle import (
@@ -194,7 +194,7 @@ def _get_monster_visual_pos(monster, now):
     if monster.state == "walking":
         sd = monster.state_data
         elapsed = now - sd.start_time
-        progress = min(elapsed / monster.walk_time, 1.0)
+        progress = min(elapsed / sd.walk_time, 1.0)
         fx = sd.from_x
         fy = sd.from_y
         return fx + (sd.to_x - fx) * progress, fy + (sd.to_y - fy) * progress
@@ -234,24 +234,21 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
         prev_player_y = a.y
     # Monster contact damage (AABB: player 1x1 at float pos vs monster footprint)
     # Records pending collisions with a grace period for corner-scrape forgiveness
+    # monster.x/y is continuously interpolated during walks, so no visual pos needed
     if player.hp > 0:
         overlapping = set()
         for monster in get_room_monsters(player.room):
             if monster.alive and not monster.intangible:
-                mx, my = _get_monster_visual_pos(monster, now)
+                mx, my = monster.x, monster.y
                 if (a.x < mx + monster.width and a.x + 1 > mx and
                     a.y < my + monster.height and a.y + 1 > my):
                     mid = id(monster)
                     overlapping.add(mid)
                     if mid not in a.pending_collisions:
-                        prev_mx, prev_my = monster.x, monster.y
-                        if monster.state == "walking":
-                            prev_mx = monster.state_data.from_x
-                            prev_my = monster.state_data.from_y
                         a.pending_collisions[mid] = {
                             "monster": monster, "room_id": player.room, "time": now,
                             "prev_player_x": prev_player_x, "prev_player_y": prev_player_y,
-                            "prev_source_x": prev_mx, "prev_source_y": prev_my,
+                            "prev_source_x": mx, "prev_source_y": my,
                         }
         # Clear pending for monsters no longer overlapping
         for mid in list(a.pending_collisions):
@@ -430,12 +427,14 @@ def _process_face(player, data, msgs):
 def sword_hitbox(px, py, direction):
     """Compute sword AABB from player position + direction. Single source of truth."""
     dx, dy = DIRECTIONS.get(direction, (0, 0))
-    # 0.25 back into player + 0.75 forward
+    # Forward: 0.25 back into player + 0.75 forward (1.0 total along attack axis)
+    # Perpendicular: SWORD_PERP_WIDTH centered on player body
+    perp_off = (1.0 - SWORD_PERP_WIDTH) / 2  # centering offset
     return (
-        px + (0.75 if dx > 0 else -0.75 if dx < 0 else 0),
-        py + (0.75 if dy > 0 else -0.75 if dy < 0 else 0),
-        1.0 if dx != 0 else 1.0,
-        1.0 if dy != 0 else 1.0,
+        px + (0.75 if dx > 0 else -0.75 if dx < 0 else perp_off),
+        py + (0.75 if dy > 0 else -0.75 if dy < 0 else perp_off),
+        1.0 if dx != 0 else SWORD_PERP_WIDTH,
+        SWORD_PERP_WIDTH if dx != 0 else 1.0,
     )
 
 
@@ -471,13 +470,18 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
             if monster.hp > 0 and monster.knockbackable:
                 room = game.rooms.get(room_id)
                 if room:
-                    kx = round(monster.x + dx)
-                    ky = round(monster.y + dy)
+                    # Knockback 1 tile, snap to half-tile grid
+                    kx = round((monster.x + dx) * 2) / 2
+                    ky = round((monster.y + dy) * 2) / 2
                     can_knock = True
-                    for oy in range(monster.height):
-                        for ox in range(monster.width):
-                            cx, cy = kx + ox, ky + oy
-                            if cx < 0 or cx + 1 > ROOM_COLS or cy < 0 or cy + 1 > ROOM_ROWS:
+                    # Check all tiles covered by the knocked-back footprint
+                    min_tx = math.floor(kx)
+                    max_tx = math.ceil(kx + monster.width) - 1
+                    min_ty = math.floor(ky)
+                    max_ty = math.ceil(ky + monster.height) - 1
+                    for cy in range(min_ty, max_ty + 1):
+                        for cx in range(min_tx, max_tx + 1):
+                            if cx < 0 or cx >= ROOM_COLS or cy < 0 or cy >= ROOM_ROWS:
                                 can_knock = False
                             elif not _is_position_walkable(cx, cy, room):
                                 can_knock = False
@@ -489,8 +493,8 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
                         monster.move_seq += 1
                     elif monster.state == "walking":
                         # Can't knock back but snap from fractional walk coords
-                        monster.x = round(monster.x)
-                        monster.y = round(monster.y)
+                        monster.x = round(monster.x * 2) / 2
+                        monster.y = round(monster.y * 2) / 2
                         monster.move_seq += 1
             # Interrupt current action on hit — but non-knockbackable monsters
             # (bosses, heavy monsters) continue their behavior uninterrupted

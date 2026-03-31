@@ -26,8 +26,10 @@ Example behavior:
 
 import random
 
+import math
+
 from server.state import game
-from server.constants import ROOM_COLS, ROOM_ROWS
+from server.constants import ROOM_COLS, ROOM_ROWS, MOVE_STEP
 from server.models import WalkState, Projectile
 from server.net import avatars_in_room
 from server.lifecycle import set_monster_idle
@@ -154,13 +156,34 @@ class BehaviorEngine:
                     return False
         return True
 
+    def _is_walkable_at(self, x, y, w, h, room_id):
+        """Check if a w x h footprint at float position (x, y) is fully walkable."""
+        room = game.rooms.get(room_id)
+        if not room:
+            return False
+        tilemap = room["tilemap"]
+        min_tx = math.floor(x)
+        max_tx = math.ceil(x + w) - 1
+        min_ty = math.floor(y)
+        max_ty = math.ceil(y + h) - 1
+        for ty in range(min_ty, max_ty + 1):
+            for tx in range(min_tx, max_tx + 1):
+                if tx < 0 or tx >= ROOM_COLS or ty < 0 or ty >= ROOM_ROWS:
+                    return False
+                if not game.is_monster_walkable_tile(tilemap[ty][tx]):
+                    return False
+        # Guard (NPC) overlap — AABB since entity may be at fractional position
+        for g in game.guards.get(room_id, []):
+            if (x < g["x"] + 1 and x + w > g["x"] and
+                y < g["y"] + 1 and y + h > g["y"]):
+                return False
+        return True
+
     def can_move_to(self, monster, x, y, room_id):
-        """Check if a monster (possibly multi-tile) can move to position (x, y)."""
+        """Check if a monster (possibly multi-tile) can move to float position (x, y)."""
         w = getattr(monster, "width", 1)
         h = getattr(monster, "height", 1)
-        if w == 1 and h == 1:
-            return self._is_walkable(x, y, room_id)
-        return self._is_walkable_multi(x, y, w, h, room_id)
+        return self._is_walkable_at(x, y, w, h, room_id)
 
     # -------------------------------------------------------------------
     # Condition evaluators — return True/False
@@ -285,21 +308,22 @@ class BehaviorEngine:
     def resolve_move(self, rule, monster, room_id):
         """Resolve a move action. Returns {"action": "move", "x", "y"} or None.
 
-        Resolves 1 tile per call. The `distance` param (default 1) is passed through
-        so the caller can chain multiple walks back-to-back.
+        Resolves MOVE_STEP tiles per call (0.5). Normal decisions set distance=2
+        to chain two half-tile walks (1 tile total), preserving movement speed.
         """
         direction = rule.get("direction", "random")
+        s = MOVE_STEP
 
         if direction == "patrol":
             return self._resolve_patrol_move(rule, monster, room_id)
 
         if direction == "random":
-            dirs = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+            dirs = [(0, -s), (0, s), (-s, 0), (s, 0)]
             random.shuffle(dirs)
             for dx, dy in dirs:
                 nx, ny = monster.x + dx, monster.y + dy
                 if self.can_move_to(monster, nx, ny, room_id):
-                    return {"action": "move", "x": nx, "y": ny}
+                    return {"action": "move", "x": nx, "y": ny, "distance": 2}
             return None
 
         if direction == "player":
@@ -309,7 +333,7 @@ class BehaviorEngine:
             ta = target.avatar
             best_dir = None
             best_dist = float("inf")
-            dirs = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+            dirs = [(0, -s), (0, s), (-s, 0), (s, 0)]
             random.shuffle(dirs)
             for dx, dy in dirs:
                 nx, ny = monster.x + dx, monster.y + dy
@@ -320,7 +344,7 @@ class BehaviorEngine:
                     best_dist = dist
                     best_dir = (dx, dy)
             if best_dir:
-                return {"action": "move", "x": monster.x + best_dir[0], "y": monster.y + best_dir[1]}
+                return {"action": "move", "x": monster.x + best_dir[0], "y": monster.y + best_dir[1], "distance": 2}
             return None
 
         if direction == "away":
@@ -330,7 +354,7 @@ class BehaviorEngine:
             ta = target.avatar
             best_dir = None
             best_dist = -1
-            dirs = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+            dirs = [(0, -s), (0, s), (-s, 0), (s, 0)]
             random.shuffle(dirs)
             for dx, dy in dirs:
                 nx, ny = monster.x + dx, monster.y + dy
@@ -341,20 +365,21 @@ class BehaviorEngine:
                     best_dist = dist
                     best_dir = (dx, dy)
             if best_dir:
-                return {"action": "move", "x": monster.x + best_dir[0], "y": monster.y + best_dir[1]}
+                return {"action": "move", "x": monster.x + best_dir[0], "y": monster.y + best_dir[1], "distance": 2}
             return None
 
-        # Cardinal direction — 1 tile
+        # Cardinal direction — half-tile step, chained for full tile
         d = CARDINAL_DIRS.get(direction)
         if d:
-            nx, ny = monster.x + d[0], monster.y + d[1]
+            nx, ny = monster.x + d[0] * s, monster.y + d[1] * s
             if self.can_move_to(monster, nx, ny, room_id):
-                return {"action": "move", "x": nx, "y": ny}
+                return {"action": "move", "x": nx, "y": ny, "distance": 2}
         return None
 
     def _resolve_patrol_move(self, rule, monster, room_id):
         """Move 1 step along a patrol route string (e.g. 'RRDDLLUU').
 
+        Each route letter produces a half-tile step chained x2 for a full tile.
         Skips blocked steps within the same tick so the monster doesn't stall
         at walls.  Falls back to random wander if no route or all steps blocked.
         """
@@ -369,10 +394,10 @@ class BehaviorEngine:
             d = _PATROL_DIRS.get(step)
             if not d:
                 continue
-            nx, ny = monster.x + d[0], monster.y + d[1]
+            nx, ny = monster.x + d[0] * MOVE_STEP, monster.y + d[1] * MOVE_STEP
             if self.can_move_to(monster, nx, ny, room_id):
                 monster._patrol_index = (idx + 1) % len(route)
-                return {"action": "move", "x": nx, "y": ny}
+                return {"action": "move", "x": nx, "y": ny, "distance": 2}
         # All steps blocked — advance index so we don't retry the same start next tick
         monster._patrol_index = (start_idx + 1) % len(route)
         return None
@@ -495,12 +520,16 @@ class BehaviorEngine:
         """Start a smooth walk — set monster state and broadcast walk_started."""
         nx, ny = action["x"], action["y"]
         remaining = action.get("distance", 1) - 1  # distance includes this step
+        # Scale walk_time by step distance (0.5-tile step = half the time)
+        step_dist = abs(nx - monster.x) + abs(ny - monster.y)
+        walk_time = monster.walk_time * step_dist
         monster.state = "walking"
         monster.move_seq += 1
         monster.state_data = WalkState(
             from_x=monster.x, from_y=monster.y,
             to_x=nx, to_y=ny,
             start_time=now,
+            walk_time=walk_time,
             midpoint_checked=False,
             room_id=room_id,
             monster_idx=monster_idx,
@@ -513,7 +542,7 @@ class BehaviorEngine:
             "id": monster_idx,
             "from_x": monster.x, "from_y": monster.y,
             "to_x": nx, "to_y": ny,
-            "walk_time": monster.walk_time,
+            "walk_time": walk_time,
             "seq": monster.move_seq,
         }, None))
 

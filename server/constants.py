@@ -52,6 +52,8 @@ CANCEL_TIME = 0.090        # seconds — legacy (kept for backward compat)
 LATENCY_COMP = 0.066       # seconds — legacy (kept for backward compat)
 ATTACK_COOLDOWN = 0.27  # 1.5 * SWORD_ACTIVE_DURATION (0.18) — gap = 0.5 * active
 SWORD_ACTIVE_DURATION = 0.18
+SWORD_PERP_WIDTH = 0.6  # perpendicular hitbox width (was implicit 1.0 with tile-based collision)
+MOVE_STEP = 0.5         # monster movement step size in tiles (was implicit 1.0)
 
 # Half-tile free movement (NES Zelda-style)
 HALF_TILE = 0.5
