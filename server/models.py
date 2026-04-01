@@ -43,6 +43,7 @@ class Avatar:
         self.last_reported_attacking = False
         self.pending_collisions = {}   # id(monster) -> {monster, room_id, time, knockback data}
         self.spawn_stair = None        # (tx, ty) if spawned on a stair tile — cleared on move-off
+        self.last_acked_seq = 0        # last input sequence number processed (for client reconciliation)
 
 
 class Player:
@@ -66,6 +67,7 @@ class Player:
         self.death_room = None        # room_id where the player died
         self.keys = 0                 # dungeon keys held (persists across dungeon exits)
         self.active_attack = None     # dict {direction, start_time, room, hit_monsters} or None
+        self.rtt = 0.0                # round-trip time in seconds (from client ping/pong)
         self.death_x = 0.0            # x position where player died (tombstone location)
         self.death_y = 0.0            # y position where player died
         self.chose_respawn = False    # True if dead player clicked Respawn button
@@ -135,6 +137,7 @@ class Monster:
         # Monotonic counter incremented on every state change (walk, charge, knockback,
         # teleport, etc.).  Sent to clients so they can discard stale messages.
         self.move_seq = 0
+        self.position_history = deque(maxlen=10)  # [(time, x, y)] — last ~200ms for lag compensation
 
     @property
     def tick_interval(self):

@@ -40,14 +40,18 @@ function connect(name, description) {
     G.conn.ws.send(JSON.stringify({ type: "login", name, description }));
     G.conn.pingInterval = setInterval(() => {
       if (G.conn.ws && G.conn.ws.readyState === WebSocket.OPEN) {
-        G.conn.ws.send(JSON.stringify({ type: "ping" }));
+        G.conn.ws.send(JSON.stringify({ type: "ping", ct: performance.now() }));
       }
     }, 15000);
   };
 
   G.conn.ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
-    if (msg.type === "pong") return;
+    if (msg.type === "pong") {
+      // RTT measurement — ct is echoed back from our ping
+      if (msg.ct) G.conn.rtt = performance.now() - msg.ct;
+      return;
+    }
     handleMessage(msg);
   };
 
@@ -77,7 +81,13 @@ function scheduleReconnect() {
 }
 
 function createOtherPlayer(x, y, direction, color_index) {
-  return { x, y, displayX: x, displayY: y, direction, color_index, moving: false, walkState: null };
+  const now = performance.now();
+  return {
+    x, y, displayX: x, displayY: y, direction, color_index,
+    moving: false, walkState: null,
+    // Interpolation snapshot buffer — [{x, y, dir, t}, ...]
+    snapshots: [{ x, y, dir: direction, t: now }],
+  };
 }
 
 function registerCustomContent(msg) {
@@ -245,6 +255,11 @@ function handleMessage(msg) {
         direction: G.player.myPlayer ? G.player.myPlayer.direction : "down",
         color_index: G.player.myColorIndex,
       };
+      // Clear prediction state — server gave us authoritative position
+      G.player.inputBuffer = [];
+      G.player.pendingInputs = [];
+      G.player.correctionOffset.x = 0;
+      G.player.correctionOffset.y = 0;
 
       MusicPlayer.setRoom(msg.room_id, msg.biome, msg.music);
 
@@ -394,6 +409,45 @@ function handleMessage(msg) {
       break;
     }
 
+    case "state_correction": {
+      // Server-authoritative position reconciliation
+      const buf = G.player.inputBuffer;
+      const ackSeq = msg.ack_seq;
+
+      // Discard acknowledged inputs
+      while (buf.length > 0 && buf[0].seq <= ackSeq) buf.shift();
+
+      // Replay unacknowledged inputs from server position
+      let serverX = msg.x, serverY = msg.y;
+      for (const input of buf) {
+        if (input.dir && input.dt > 0) {
+          const result = simulateMove(serverX, serverY, input.dir, input.dt);
+          serverX = result.x;
+          serverY = result.y;
+        }
+      }
+
+      // Compare replayed position with current prediction
+      const dx = serverX - G.player.myPlayer.x;
+      const dy = serverY - G.player.myPlayer.y;
+      const drift = Math.abs(dx) + Math.abs(dy);
+
+      if (drift > 2.0) {
+        // Major desync — snap
+        G.player.myPlayer.x = serverX;
+        G.player.myPlayer.y = serverY;
+        G.player.correctionOffset.x = 0;
+        G.player.correctionOffset.y = 0;
+      } else if (drift > 0.01) {
+        // Small drift — smooth correction (offset absorbs the visual jump)
+        G.player.correctionOffset.x -= dx;
+        G.player.correctionOffset.y -= dy;
+        G.player.myPlayer.x = serverX;
+        G.player.myPlayer.y = serverY;
+      }
+      break;
+    }
+
     case "reconcile": {
       if (G.conn.networkLog) {
         const t = performance.now().toFixed(1);
@@ -432,11 +486,11 @@ function handleMessage(msg) {
       const op = G.room.otherPlayers[msg.name];
       if (!op) break;
 
-      // Position update (snap — netcode card will add interpolation)
-      if (msg.x !== op.x || msg.y !== op.y) {
-        op.x = msg.x;
-        op.y = msg.y;
-      }
+      // Position update — push to interpolation buffer
+      op.x = msg.x;
+      op.y = msg.y;
+      op.snapshots.push({ x: msg.x, y: msg.y, dir: msg.direction, t: performance.now() });
+      if (op.snapshots.length > INTERP_BUFFER_SIZE) op.snapshots.shift();
 
       op.direction = msg.direction;
 
@@ -516,6 +570,11 @@ function handleMessage(msg) {
         G.player.myHp = msg.hp;
         G.player.myPlayer.x = msg.x;
         G.player.myPlayer.y = msg.y;
+        // Server forcibly moved us — clear prediction state
+        G.player.inputBuffer = [];
+        G.player.pendingInputs = [];
+        G.player.correctionOffset.x = 0;
+        G.player.correctionOffset.y = 0;
         if (!msg.knockback) {
           G.player.displayX = msg.x;
           G.player.displayY = msg.y;
@@ -552,6 +611,8 @@ function handleMessage(msg) {
         }
         op.x = msg.x;
         op.y = msg.y;
+        // Reset interpolation buffer to knockback destination so it resumes cleanly
+        op.snapshots = [{ x: msg.x, y: msg.y, dir: op.direction, t: performance.now() + 200 }];
         op.hurtFlash = Date.now() + 300;
       }
       break;

@@ -474,6 +474,8 @@ def _tick_all_monsters(now, msgs):
                         monster.state = "idle"
                         monster.state_data = {}
                     continue
+                # Record position for lag compensation (before walk updates it)
+                monster.position_history.append((now, monster.x, monster.y))
                 # Walk progression — per-tick interpolation + continuous collision
                 if monster.state == "walking":
                     sd = monster.state_data

@@ -394,6 +394,43 @@ function sendToServer(msg) {
   }
 }
 
+function simulateMove(x, y, dir, dt) {
+  /** Pure movement simulation — must exactly match server logic.
+      Returns {x, y} after applying speed, axis snapping, and collision. */
+  const isHorizontal = (dir === "left" || dir === "right");
+  const speed = MOVE_SPEED * dt;
+  let newX = x + DIR_DX[dir] * speed;
+  let newY = y + DIR_DY[dir] * speed;
+
+  // Half-tile axis snapping on perpendicular axis
+  if (isHorizontal) {
+    const targetY = Math.round(y * 2) / 2;
+    if (Math.abs(y - targetY) > 0.01) {
+      const alignDelta = Math.sign(targetY - y) * Math.min(speed, Math.abs(y - targetY));
+      newY = y + alignDelta;
+    }
+  } else {
+    const targetX = Math.round(x * 2) / 2;
+    if (Math.abs(x - targetX) > 0.01) {
+      const alignDelta = Math.sign(targetX - x) * Math.min(speed, Math.abs(x - targetX));
+      newX = x + alignDelta;
+    }
+  }
+
+  // Collision with fallback
+  const checkX = isHorizontal ? newX : Math.round(x * 2) / 2;
+  const checkY = isHorizontal ? Math.round(y * 2) / 2 : newY;
+
+  if (canMoveToPosition(checkX, checkY)) {
+    return { x: newX, y: newY };
+  } else if (isHorizontal && canMoveToPosition(newX, y)) {
+    return { x: newX, y };
+  } else if (!isHorizontal && canMoveToPosition(x, newY)) {
+    return { x, y: newY };
+  }
+  return { x, y }; // blocked
+}
+
 function canMoveToPosition(x, y) {
   /** Check if a 1x1 hitbox at (x,y) can exist — wall + guard collision.
       Only checks bottom half of hitbox for Y (NES Zelda style — sprite
@@ -457,30 +494,24 @@ function checkLockedDoor(checkX, checkY, dir) {
   }
 }
 
-// State sync — send player state to server at 30fps when it changes
+// State sync — always send batched inputs to server at 30fps
 const SYNC_INTERVAL = 33; // ~30fps
 let _lastSyncTime = 0;
-const _lastSync = { x: null, y: null, dir: null, dancing: null, attacking: false };
 function syncPlayerState() {
   if (!G.player.myPlayer) return;
-  const p = G.player.myPlayer;
-  const dancing = !!G.room.dancingPlayers[G.player.myName];
-  const attacking = G.player.state === "attacking";
-  if (p.x === _lastSync.x && p.y === _lastSync.y
-      && p.direction === _lastSync.dir && dancing === _lastSync.dancing
-      && attacking === _lastSync.attacking) return;
   const now = performance.now();
   if (now - _lastSyncTime < SYNC_INTERVAL) return;
   _lastSyncTime = now;
-  const msg = { type: "player_state", x: p.x, y: p.y, direction: p.direction };
-  if (dancing) msg.dancing = true;
-  if (attacking) msg.attacking = { direction: p.direction, x: p.x, y: p.y };
+
+  // Always send — even idle frames. Server needs continuous state for edge detection.
+  const msg = {
+    type: "player_input",
+    inputs: G.player.pendingInputs,
+    atk: G.player.state === "attacking",
+    rtt: G.conn.rtt,
+  };
   sendToServer(msg);
-  _lastSync.x = p.x;
-  _lastSync.y = p.y;
-  _lastSync.dir = p.direction;
-  _lastSync.dancing = dancing;
-  _lastSync.attacking = attacking;
+  G.player.pendingInputs = [];
 }
 
 function playerTick() {
@@ -507,42 +538,23 @@ function playerTick() {
       G.player.myPlayer.direction = dir;
       G.player.isMoving = true;
 
-      const isHorizontal = (dir === "left" || dir === "right");
-      const speed = MOVE_SPEED * dt;
+      // Client-side prediction: simulate move locally
+      const oldX = G.player.myPlayer.x, oldY = G.player.myPlayer.y;
+      const result = simulateMove(oldX, oldY, dir, dt);
+      G.player.myPlayer.x = result.x;
+      G.player.myPlayer.y = result.y;
 
-      let newX = G.player.myPlayer.x + DIR_DX[dir] * speed;
-      let newY = G.player.myPlayer.y + DIR_DY[dir] * speed;
+      // Accumulate input for server
+      const seq = G.player.inputSeq++;
+      const input = { seq, dir, dt };
+      G.player.inputBuffer.push({ seq, dir, dt, predX: result.x, predY: result.y });
+      G.player.pendingInputs.push(input);
 
-      // Axis alignment: snap perpendicular coord toward nearest half-tile
-      if (isHorizontal) {
-        const targetY = Math.round(G.player.myPlayer.y * 2) / 2;
-        if (Math.abs(G.player.myPlayer.y - targetY) > 0.01) {
-          const alignDelta = Math.sign(targetY - G.player.myPlayer.y) * Math.min(speed, Math.abs(G.player.myPlayer.y - targetY));
-          newY = G.player.myPlayer.y + alignDelta;
-        }
-      } else {
-        const targetX = Math.round(G.player.myPlayer.x * 2) / 2;
-        if (Math.abs(G.player.myPlayer.x - targetX) > 0.01) {
-          const alignDelta = Math.sign(targetX - G.player.myPlayer.x) * Math.min(speed, Math.abs(G.player.myPlayer.x - targetX));
-          newX = G.player.myPlayer.x + alignDelta;
-        }
-      }
-
-      // Collision: use aligned perpendicular position for wall checks.
-      // The player is snapping to the nearest half-tile lane — check if
-      // that lane is clear so they can slip through gaps (NES Zelda style).
-      const checkX = isHorizontal ? newX : Math.round(G.player.myPlayer.x * 2) / 2;
-      const checkY = isHorizontal ? Math.round(G.player.myPlayer.y * 2) / 2 : newY;
-
-      if (canMoveToPosition(checkX, checkY)) {
-        G.player.myPlayer.x = newX;
-        G.player.myPlayer.y = newY;
-      } else if (isHorizontal && canMoveToPosition(newX, G.player.myPlayer.y)) {
-        G.player.myPlayer.x = newX;
-      } else if (!isHorizontal && canMoveToPosition(G.player.myPlayer.x, newY)) {
-        G.player.myPlayer.y = newY;
-      } else {
-        // Blocked — check if the actual blocking tile is a locked door
+      // Locked door check when blocked
+      if (result.x === oldX && result.y === oldY) {
+        const isHorizontal = (dir === "left" || dir === "right");
+        const checkX = isHorizontal ? oldX + DIR_DX[dir] * MOVE_SPEED * dt : Math.round(oldX * 2) / 2;
+        const checkY = isHorizontal ? Math.round(oldY * 2) / 2 : oldY + DIR_DY[dir] * MOVE_SPEED * dt;
         checkLockedDoor(checkX, checkY, dir);
       }
 
@@ -634,10 +646,16 @@ function gameLoop(timestamp) {
         G.player.knockbackSlide = null;
       }
     }
-    // Compute display position from canonical position + knockback offset
+    // Decay correction offset (smooth server reconciliation)
+    const co = G.player.correctionOffset;
+    co.x *= (1 - CORRECTION_RATE);
+    co.y *= (1 - CORRECTION_RATE);
+    if (Math.abs(co.x) < 0.005) co.x = 0;
+    if (Math.abs(co.y) < 0.005) co.y = 0;
+    // Compute display position from canonical position + knockback offset + correction
     if (G.player.myPlayer) {
-      G.player.displayX = G.player.myPlayer.x + G.player.knockbackOffsetX;
-      G.player.displayY = G.player.myPlayer.y + G.player.knockbackOffsetY;
+      G.player.displayX = G.player.myPlayer.x + G.player.knockbackOffsetX + co.x;
+      G.player.displayY = G.player.myPlayer.y + G.player.knockbackOffsetY + co.y;
     }
 
     for (const p of Object.values(G.room.otherPlayers)) {
@@ -654,11 +672,38 @@ function gameLoop(timestamp) {
           p.knockbackSlide = null;
         }
       } else {
-        // Snap directly — no interpolation (netcode card will add proper smoothing)
-        p.displayX = p.x;
-        p.displayY = p.y;
+        // Entity interpolation — render remote players between past server snapshots
+        const snaps = p.snapshots;
+        if (snaps && snaps.length >= 2) {
+          const renderTime = performance.now() - INTERP_DELAY;
+
+          // Find the two snapshots bracketing renderTime
+          let i = snaps.length - 1;
+          while (i > 0 && snaps[i].t > renderTime) i--;
+
+          if (i < snaps.length - 1) {
+            // Interpolate between snaps[i] and snaps[i+1]
+            const s0 = snaps[i], s1 = snaps[i + 1];
+            const span = s1.t - s0.t;
+            const t = span > 0 ? Math.min((renderTime - s0.t) / span, 1.0) : 1.0;
+            p.displayX = s0.x + (s1.x - s0.x) * t;
+            p.displayY = s0.y + (s1.y - s0.y) * t;
+            p.moving = (s0.x !== s1.x || s0.y !== s1.y) && t < 1.0;
+          } else {
+            // renderTime is past all snapshots — freeze at last known position
+            // (TCP/WebSocket guarantees delivery; no packet loss to extrapolate through)
+            const last = snaps[snaps.length - 1];
+            p.displayX = last.x;
+            p.displayY = last.y;
+            p.moving = false;
+          }
+        } else {
+          // Only 0-1 snapshots (just joined) — snap directly
+          p.displayX = p.x;
+          p.displayY = p.y;
+          p.moving = false;
+        }
         p.walkState = null;
-        p.moving = false;
       }
     }
 

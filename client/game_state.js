@@ -18,6 +18,13 @@ const HALF_TILE = 0.5;
 // (position reporting triggers when Math.round(pos*2)/2 changes — see maybeReportPosition)
 const HALF_WALK_TIME_MS = 125;           // other player animation duration (ms)
 
+// Entity interpolation — remote player smoothing
+const INTERP_DELAY = 66;                 // ms behind real-time to render remote players (~2 server ticks)
+const INTERP_BUFFER_SIZE = 6;            // max snapshots to keep per remote player
+
+// Client-side prediction + server reconciliation
+const CORRECTION_RATE = 0.15;            // per-frame lerp factor for smooth correction decay
+
 // Shared mutable game state
 const G = {
   // Connection/session
@@ -29,6 +36,7 @@ const G = {
     lastLoginName: "",
     lastLoginDesc: "",
     networkLog: true,      // log sent/received walk messages to console
+    rtt: 0,                // round-trip time in ms (measured from ping/pong)
   },
 
   // Local player identity, position, movement, combat, progression
@@ -73,6 +81,12 @@ const G = {
     keyCount: 0,                // dungeon keys held by this player
     itemPickupActive: null,     // {item_type, item_name, startTime, x, y}
     itemPickupEffects: {},      // name -> {item_type, startTime, x, y}
+
+    // Server reconciliation (input-based movement)
+    inputSeq: 0,                // monotonic input counter
+    inputBuffer: [],            // [{seq, dir, dt, predX, predY}] — unacked predicted inputs
+    pendingInputs: [],          // accumulated since last sync flush
+    correctionOffset: { x: 0, y: 0 },  // smooth visual correction (decays to 0)
 
     // Revival
     waitingForRevival: false,   // True when dead + tombstone placed, showing waiting UI

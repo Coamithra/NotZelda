@@ -8,7 +8,7 @@ from server.constants import (
     DEBUG_MODE,
     DIRECTIONS, ROOM_COLS, ROOM_ROWS, DOORWAY_TILES,
     ATTACK_COOLDOWN, TICK_INTERVAL, HEART_DROP_CHANCE, HEART_RESTORE_HP,
-    MAX_MOVE_PER_UPDATE,
+    MAX_MOVE_PER_UPDATE, PLAYER_SPEED, DT_CLAMP, MAX_INPUTS_PER_TICK,
     COLLISION_GRACE_PERIOD, ITEM_PICKUP_FREEZE_DURATION,
     SEAL_FRAGMENT_HP_BONUS, SWORD_PERP_WIDTH, PLAYER_COLLISION_MARGIN,
 )
@@ -26,7 +26,9 @@ def process_player_commands(player, now, msgs):
     """Drain and process all queued commands for a player."""
     while player.command_queue:
         cmd_type, data = player.command_queue.popleft()
-        if cmd_type == "player_state":
+        if cmd_type == "player_input":
+            _process_player_input(player, data, now, msgs)
+        elif cmd_type == "player_state":
             _process_player_state(player, data, now, msgs)
         elif cmd_type == "chat":
             _process_chat(player, data, msgs)
@@ -52,7 +54,172 @@ def _send_reconcile(player, msgs, reason=""):
 
 
 # ---------------------------------------------------------------------------
-# Movement — continuous free movement
+# Server-authoritative movement simulation
+# ---------------------------------------------------------------------------
+
+def _hits_guard(x, y, room_id):
+    """Check if 1x1 hitbox at (x,y) overlaps any guard in the room."""
+    for guard in game.guards.get(room_id, []):
+        if (x < guard["x"] + 1 and x + 1 > guard["x"] and
+            y < guard["y"] + 1 and y + 1 > guard["y"]):
+            return True
+    return False
+
+
+def _simulate_player_move(avatar, direction, dt, room, room_id):
+    """Server-side movement simulation — must exactly match client logic.
+
+    Applies speed, half-tile axis snapping, and collision with fallback.
+    Mutates avatar.x, avatar.y, avatar.direction in place.
+    """
+    speed = PLAYER_SPEED * dt
+    dx, dy = DIRECTIONS[direction]
+    new_x = avatar.x + dx * speed
+    new_y = avatar.y + dy * speed
+    is_horizontal = direction in ("left", "right")
+
+    # Half-tile axis snapping on perpendicular axis
+    if is_horizontal:
+        target_y = round(avatar.y * 2) / 2
+        if abs(avatar.y - target_y) > 0.01:
+            align = min(speed, abs(avatar.y - target_y))
+            new_y = avatar.y + math.copysign(align, target_y - avatar.y)
+    else:
+        target_x = round(avatar.x * 2) / 2
+        if abs(avatar.x - target_x) > 0.01:
+            align = min(speed, abs(avatar.x - target_x))
+            new_x = avatar.x + math.copysign(align, target_x - avatar.x)
+
+    # Collision with fallback (same logic as client canMoveToPosition)
+    check_x = new_x if is_horizontal else round(avatar.x * 2) / 2
+    check_y = round(avatar.y * 2) / 2 if is_horizontal else new_y
+
+    if _is_position_walkable(check_x, check_y, room) and not _hits_guard(check_x, check_y, room_id):
+        avatar.x = new_x
+        avatar.y = new_y
+    elif is_horizontal and _is_position_walkable(new_x, avatar.y, room) and not _hits_guard(new_x, avatar.y, room_id):
+        avatar.x = new_x
+    elif not is_horizontal and _is_position_walkable(avatar.x, new_y, room) and not _hits_guard(avatar.x, new_y, room_id):
+        avatar.y = new_y
+
+    avatar.direction = direction
+
+
+LAG_COMP_WINDOW = 0.200  # max rewind for lag compensation (seconds)
+
+
+def _process_player_input(player, data, now, msgs):
+    """Process a batch of client input frames (server-authoritative movement)."""
+    # Store client-reported RTT (capped at LAG_COMP_WINDOW)
+    client_rtt = data.get("rtt", 0)
+    if isinstance(client_rtt, (int, float)) and client_rtt > 0:
+        player.rtt = min(client_rtt / 1000, LAG_COMP_WINDOW)  # ms → seconds, capped
+
+    a = player.avatar
+    if a is None or player.hp <= 0:
+        return
+
+    inputs = data.get("inputs", [])
+    if len(inputs) > MAX_INPUTS_PER_TICK:
+        inputs = inputs[:MAX_INPUTS_PER_TICK]
+
+    room = game.rooms.get(player.room)
+    if not room:
+        return
+
+    last_seq = a.last_acked_seq
+    prev_x, prev_y = a.x, a.y
+    transitioned = False
+
+    for inp in inputs:
+        seq = inp.get("seq", 0)
+        direction = inp.get("dir")
+        dt = min(inp.get("dt", 0), DT_CLAMP)
+
+        if direction and direction in DIRECTIONS and dt > 0:
+            _simulate_player_move(a, direction, dt, room, player.room)
+
+            # Edge exit detection (room transition)
+            exit_dir = _check_edge_exit_float(a.x, a.y, direction, room)
+            if exit_dir:
+                do_room_transition(player, exit_dir, msgs)
+                transitioned = True
+                last_seq = seq
+                break
+
+            # Stair detection
+            center_tx, center_ty = int(round(a.x)), int(round(a.y))
+            if 0 <= center_tx < ROOM_COLS and 0 <= center_ty < ROOM_ROWS:
+                tile = room["tilemap"][center_ty][center_tx]
+                on_stair = tile in ("SU", "SD")
+                spawn_stair = getattr(a, "spawn_stair", None)
+                if on_stair and spawn_stair == (center_tx, center_ty):
+                    pass
+                else:
+                    if spawn_stair is not None:
+                        a.spawn_stair = None
+                    if tile == "SU" and "up" in room["exits"]:
+                        do_room_transition(player, "up", msgs)
+                        transitioned = True
+                        last_seq = seq
+                        break
+                    if tile == "SD" and "down" in room["exits"]:
+                        do_room_transition(player, "down", msgs)
+                        transitioned = True
+                        last_seq = seq
+                        break
+
+        elif direction and direction in DIRECTIONS:
+            a.direction = direction  # face-only (dt == 0)
+
+        last_seq = seq
+
+    a.last_acked_seq = last_seq
+
+    # Attack edge detection — top-level flag, checked after all movement
+    attacking = bool(data.get("atk", False))
+    if attacking and not a.last_reported_attacking:
+        _initiate_attack(player, {"direction": a.direction}, now, msgs)
+    a.last_reported_attacking = attacking
+
+    if transitioned:
+        return  # room_enter will send full state; no correction needed
+
+    # Send correction to originating player
+    msgs.append(("send", player, {
+        "type": "state_correction",
+        "ack_seq": last_seq,
+        "x": a.x,
+        "y": a.y,
+    }))
+
+    # Broadcast to other players (unchanged format)
+    if (a.x != a.last_reported_x or a.y != a.last_reported_y
+            or a.direction != a.last_reported_dir
+            or a.dancing != a.last_reported_dancing
+            or a.last_reported_attacking):
+        state_msg = {
+            "type": "player_state_update",
+            "name": player.name,
+            "x": a.x, "y": a.y,
+            "direction": a.direction,
+        }
+        if a.dancing:
+            state_msg["dancing"] = True
+        if a.last_reported_attacking and player.active_attack:
+            state_msg["attacking"] = {"direction": player.active_attack["direction"]}
+        msgs.append(("broadcast", player.room, state_msg, player.ws))
+        a.last_reported_x = a.x
+        a.last_reported_y = a.y
+        a.last_reported_dir = a.direction
+        a.last_reported_dancing = a.dancing
+
+    # Collision checks (monster contact, hearts, dungeon items, guard proximity)
+    _check_position_collisions(player, now, msgs, prev_x, prev_y)
+
+
+# ---------------------------------------------------------------------------
+# Movement — continuous free movement (legacy position-based validation)
 # ---------------------------------------------------------------------------
 
 # Exit zone ranges derived from DOORWAY_TILES (± 0.5 for hitbox overlap margin).
@@ -439,6 +606,25 @@ def sword_hitbox(px, py, direction):
     )
 
 
+def _get_rewound_pos(monster, target_time):
+    """Look up monster position at a past time from its position history.
+
+    Returns (x, y) at the time closest to target_time.
+    Falls back to current position if no history is available.
+    """
+    history = monster.position_history
+    if not history:
+        return monster.x, monster.y
+    # Find the entry closest to target_time (history is chronological)
+    best_x, best_y = history[0][1], history[0][2]
+    for t, hx, hy in history:
+        if t <= target_time:
+            best_x, best_y = hx, hy
+        else:
+            break
+    return best_x, best_y
+
+
 def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, anchor_x=None, anchor_y=None):
     """Check sword AABB against all monsters in the room, damaging new targets.
 
@@ -448,6 +634,9 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
 
     If ``anchor_x``/``anchor_y`` are provided, the hitbox is computed from that
     position (client-supplied) instead of the server-side avatar position.
+
+    Uses lag compensation: monster positions are rewound by the player's RTT
+    so hits register where the client perceived the monster.
     """
     a = player.avatar
     if a is None:
@@ -456,13 +645,20 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
     py = anchor_y if anchor_y is not None else a.y
     dx, dy = DIRECTIONS.get(direction, (0, 0))
     sword_x, sword_y, sword_w, sword_h = sword_hitbox(px, py, direction)
+    # Rewind time = now minus player's full RTT (compensate both network legs)
+    rewind_time = now - player.rtt if player.rtt > 0 else 0
     for i, monster in enumerate(get_room_monsters(room_id)):
         mid = id(monster)
         if mid in hit_monsters:
             continue
+        # Use rewound position for hit detection, current position for damage/knockback
+        if rewind_time > 0:
+            mx, my = _get_rewound_pos(monster, rewind_time)
+        else:
+            mx, my = monster.x, monster.y
         if monster.alive and not monster.intangible and (
-            sword_x < monster.x + monster.width and sword_x + sword_w > monster.x and
-            sword_y < monster.y + monster.height and sword_y + sword_h > monster.y):
+            sword_x < mx + monster.width and sword_x + sword_w > mx and
+            sword_y < my + monster.height and sword_y + sword_h > my):
             hit_monsters.add(mid)
             monster.hp -= 1
             # Knockback: push surviving non-boss monster 1 tile in attack direction
