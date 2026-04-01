@@ -7,28 +7,35 @@ Trello #89 — Pivot away from tile-based movement
 - [x] Read the card (description, comments, linked docs)
 - [x] Move card to In Progress
 - [x] Create worktree and branch
-- [ ] Copy `.env` into the worktree
+- [x] Copy `.env` into the worktree
 
 ## Phase 2: Research
-- [ ] Read current monster movement code (behavior_engine.py, models.py WalkState)
-- [ ] Read sword hitbox code (commands.py sword_hitbox())
-- [ ] Read collision/contact damage code (combat.py)
-- [ ] Read client-side walk interpolation (client.html, renderer.js)
-- [ ] Read monster walk networking (net.py, net.js)
-- [ ] Trace how monster position is stored, updated, and broadcast
-- [ ] Trace how player position differs (continuous vs tile-based)
-- [ ] Identify all code that assumes 0.5-tile grid snapping
-- [ ] Identify blast radius: what breaks if monsters move fractionally
-- [ ] Summarize findings
+- [x] Read current monster movement code (behavior_engine.py, models.py WalkState)
+- [x] Read sword hitbox code (commands.py sword_hitbox())
+- [x] Read collision/contact damage code (combat.py)
+- [x] Read client-side walk interpolation (client.html, renderer.js)
+- [x] Read monster walk networking (net.py, net.js)
+- [x] Trace how monster position is stored, updated, and broadcast
+- [x] Trace how player position differs (continuous vs tile-based)
+- [x] Identify all code that assumes 0.5-tile grid snapping
+- [x] Identify blast radius: what breaks if monsters move fractionally
+- [x] Summarize findings
 
 ## Phase 3: Design
-- [ ] Draft approach (plan doc)
-- [ ] Address netcode concern from Trello comment
-- [ ] Check for reusable patterns
-- [ ] Align with user
+- [x] Draft approach (plan doc)
+- [x] Address netcode concern from Trello comment
+- [x] Check for reusable patterns
+- [x] Align with user
 
 ## Phase 4: Implement
-- [ ] Make the changes per approved plan
+- [x] Continuous monster movement with float-position collision detection
+- [x] Revert half-tile monster steps back to full-tile steps (MOVE_STEP=1.0)
+- [x] Client sends precise float positions every frame (throttled ~30fps)
+- [x] Server accepts float positions (removed half-tile snap validation)
+- [x] Fix stair re-trigger: spawn_stair guard on Avatar
+- [x] Shrink player-vs-monster collision box by 40% (PLAYER_COLLISION_MARGIN=0.2)
+- [x] Show collision box in /viewserver debug overlay
+- [x] Remove collision grace period (smaller hitbox handles corner-scrape)
 - [ ] Run safety checks
 
 ## Phase 5: Verify

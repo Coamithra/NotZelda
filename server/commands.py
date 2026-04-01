@@ -10,7 +10,7 @@ from server.constants import (
     ATTACK_COOLDOWN, TICK_INTERVAL, HEART_DROP_CHANCE, HEART_RESTORE_HP,
     POSITION_UPDATE_RATE, MAX_MOVE_PER_UPDATE,
     COLLISION_GRACE_PERIOD, ITEM_PICKUP_FREEZE_DURATION,
-    SEAL_FRAGMENT_HP_BONUS, SWORD_PERP_WIDTH,
+    SEAL_FRAGMENT_HP_BONUS, SWORD_PERP_WIDTH, PLAYER_COLLISION_MARGIN,
 )
 from server import log
 from server.lifecycle import (
@@ -56,7 +56,7 @@ def _send_reconcile(player, msgs, reason=""):
 
 
 # ---------------------------------------------------------------------------
-# Movement — half-tile free movement
+# Movement — continuous free movement
 # ---------------------------------------------------------------------------
 
 # Exit zone ranges derived from DOORWAY_TILES (± 0.5 for hitbox overlap margin).
@@ -117,11 +117,6 @@ def _process_position_update(player, data, now, msgs):
     new_x = float(new_x)
     new_y = float(new_y)
 
-    # Validate half-tile snapped
-    if round(new_x * 2) / 2 != new_x or round(new_y * 2) / 2 != new_y:
-        _send_reconcile(player, msgs, f"not half-tile snapped: ({new_x}, {new_y})")
-        return
-
     # Anti-cheat: rate limit
     dt = now - player.last_pos_update_time
     if dt < POSITION_UPDATE_RATE * 0.5:
@@ -145,16 +140,23 @@ def _process_position_update(player, data, now, msgs):
         do_room_transition(player, exit_dir, msgs)
         return
 
-    # Stairs
+    # Stairs — skip if player just spawned on this stair tile
     center_tx, center_ty = int(round(new_x)), int(round(new_y))
     if 0 <= center_tx < ROOM_COLS and 0 <= center_ty < ROOM_ROWS:
         tile = room["tilemap"][center_ty][center_tx]
-        if tile == "SU" and "up" in room["exits"]:
-            do_room_transition(player, "up", msgs)
-            return
-        if tile == "SD" and "down" in room["exits"]:
-            do_room_transition(player, "down", msgs)
-            return
+        on_stair = tile in ("SU", "SD")
+        spawn_stair = getattr(a, "spawn_stair", None)
+        if on_stair and spawn_stair == (center_tx, center_ty):
+            pass  # still on the stair we spawned on — ignore
+        else:
+            if spawn_stair is not None:
+                a.spawn_stair = None  # moved off spawn stair
+            if tile == "SU" and "up" in room["exits"]:
+                do_room_transition(player, "up", msgs)
+                return
+            if tile == "SD" and "down" in room["exits"]:
+                do_room_transition(player, "down", msgs)
+                return
 
     # Walkability — check all tiles the 1x1 hitbox overlaps
     if not _is_position_walkable(new_x, new_y, room):
@@ -232,16 +234,17 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
         prev_player_x = a.x
     if prev_player_y is None:
         prev_player_y = a.y
-    # Monster contact damage (AABB: player 1x1 at float pos vs monster footprint)
-    # Records pending collisions with a grace period for corner-scrape forgiveness
+    # Monster contact damage (AABB: player hitbox vs monster footprint)
+    # Player hitbox is 20% smaller (PLAYER_COLLISION_MARGIN inset per side)
     # monster.x/y is continuously interpolated during walks, so no visual pos needed
     if player.hp > 0:
+        m = PLAYER_COLLISION_MARGIN
         overlapping = set()
         for monster in get_room_monsters(player.room):
             if monster.alive and not monster.intangible:
                 mx, my = monster.x, monster.y
-                if (a.x < mx + monster.width and a.x + 1 > mx and
-                    a.y < my + monster.height and a.y + 1 > my):
+                if (a.x + m < mx + monster.width and a.x + 1 - m > mx and
+                    a.y + m < my + monster.height and a.y + 1 - m > my):
                     mid = id(monster)
                     overlapping.add(mid)
                     if mid not in a.pending_collisions:
@@ -470,9 +473,9 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
             if monster.hp > 0 and monster.knockbackable:
                 room = game.rooms.get(room_id)
                 if room:
-                    # Knockback 1 tile, snap to half-tile grid
-                    kx = round((monster.x + dx) * 2) / 2
-                    ky = round((monster.y + dy) * 2) / 2
+                    # Knockback 1 tile, snap to integer grid
+                    kx = round(monster.x + dx)
+                    ky = round(monster.y + dy)
                     can_knock = True
                     # Check all tiles covered by the knocked-back footprint
                     min_tx = math.floor(kx)
@@ -493,8 +496,8 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
                         monster.move_seq += 1
                     elif monster.state == "walking":
                         # Can't knock back but snap from fractional walk coords
-                        monster.x = round(monster.x * 2) / 2
-                        monster.y = round(monster.y * 2) / 2
+                        monster.x = round(monster.x)
+                        monster.y = round(monster.y)
                         monster.move_seq += 1
             # Interrupt current action on hit — but non-knockbackable monsters
             # (bosses, heavy monsters) continue their behavior uninterrupted
@@ -619,7 +622,7 @@ def _process_attack(player, data, now, msgs):
     }, None))
 
     # Use client-supplied position for precise hitbox placement (the server
-    # may not have the latest sub-half-tile position yet)
+    # may not have the latest position yet)
     anchor_x = data.get("x")
     anchor_y = data.get("y")
     if anchor_x is not None and anchor_y is not None:

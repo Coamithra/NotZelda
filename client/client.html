@@ -457,22 +457,26 @@ function checkLockedDoor(checkX, checkY, dir) {
   }
 }
 
-function maybeReportPosition() {
-  /** Round to nearest half-tile; report when it changes.
-      At y=5.0, report fires when y crosses 4.75 (reports 4.5) or 5.25 (reports 5.5).
-      Symmetric in all directions — triggers at the midpoint of each half-tile segment. */
-  const reportX = Math.round(G.player.preciseX * 2) / 2;
-  const reportY = Math.round(G.player.preciseY * 2) / 2;
+const POSITION_REPORT_INTERVAL = 33; // ~30fps cap on position updates (ms)
+let _lastPositionReport = 0;
 
-  if (reportX !== G.player.lastReportedX || reportY !== G.player.lastReportedY) {
+function maybeReportPosition() {
+  /** Send precise float position, throttled to ~30fps. */
+  const x = G.player.preciseX;
+  const y = G.player.preciseY;
+
+  if (x !== G.player.lastReportedX || y !== G.player.lastReportedY) {
+    const now = performance.now();
+    if (now - _lastPositionReport < POSITION_REPORT_INTERVAL) return;
+    _lastPositionReport = now;
     sendToServer({
       type: "position_update",
-      x: reportX,
-      y: reportY,
+      x: x,
+      y: y,
       direction: G.player.myPlayer.direction,
     });
-    G.player.lastReportedX = reportX;
-    G.player.lastReportedY = reportY;
+    G.player.lastReportedX = x;
+    G.player.lastReportedY = y;
   }
 }
 

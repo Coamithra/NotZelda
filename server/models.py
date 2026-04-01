@@ -39,6 +39,7 @@ class Avatar:
         self.last_reported_x = x       # last position relayed to other clients
         self.last_reported_y = y
         self.pending_collisions = {}   # id(monster) -> {monster, room_id, time, knockback data}
+        self.spawn_stair = None        # (tx, ty) if spawned on a stair tile — cleared on move-off
 
 
 class Player:

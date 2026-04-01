@@ -14,6 +14,7 @@ from server.constants import (
     GUARD_DESPAWN_TIMEOUT, GUARD_DESPAWN_DISTANCE, GUARD_DESPAWN_GRACE,
     TICK_INTERVAL, COLLISION_GRACE_PERIOD,
     REVIVAL_DURATION, REVIVAL_PROXIMITY, REVIVAL_HP,
+    PLAYER_COLLISION_MARGIN,
 )
 from server.net import send_to, broadcast_to_room, avatars_in_room, player_info
 
@@ -67,9 +68,9 @@ def _apply_damage(player, damage: int, room_id: str, msgs: list,
         else:
             knock_dx = 0
             knock_dy = 1 if dy >= 0 else -1
-        # Target: fixed 1 tile knockback, snapped to nearest half-tile
-        kx = round((a.x + knock_dx) * 2) / 2
-        ky = round((a.y + knock_dy) * 2) / 2
+        # Target: fixed 1 tile knockback, snapped to integer grid
+        kx = round(a.x + knock_dx)
+        ky = round(a.y + knock_dy)
         knocked = False
         room = game.rooms.get(room_id)
         if room:
@@ -484,10 +485,11 @@ def _tick_all_monsters(now, msgs):
                     monster.y = sd.from_y + (sd.to_y - sd.from_y) * progress
                     # Contact collision — check every tick against all players
                     if not monster.intangible:
+                        m = PLAYER_COLLISION_MARGIN
                         for p, pa in avatars_in_room(room_id):
                             if p.hp > 0 and (
-                                pa.x < monster.x + monster.width and pa.x + 1 > monster.x and
-                                pa.y < monster.y + monster.height and pa.y + 1 > monster.y):
+                                pa.x + m < monster.x + monster.width and pa.x + 1 - m > monster.x and
+                                pa.y + m < monster.y + monster.height and pa.y + 1 - m > monster.y):
                                 mid = id(monster)
                                 if mid not in pa.pending_collisions:
                                     pa.pending_collisions[mid] = {
@@ -522,11 +524,11 @@ def _tick_all_monsters(now, msgs):
                           f"state={monster.state}: {e}")
                 traceback.print_exc()
                 # Reset to safe state so the monster doesn't stay corrupted.
-                # Snap position to nearest half-tile in case we crashed mid-walk
+                # Snap position to nearest tile in case we crashed mid-walk
                 # at a fractional coordinate.
                 was_walking = monster.state == "walking"
-                monster.x = round(monster.x * 2) / 2
-                monster.y = round(monster.y * 2) / 2
+                monster.x = round(monster.x)
+                monster.y = round(monster.y)
                 monster.state = "idle"
                 monster.state_data = {}
                 if was_walking:
@@ -653,8 +655,9 @@ async def _send_debug_state_snapshots():
         room_id = player.room
         # Players in this room (need name from player, position from avatar)
         players = []
+        m = PLAYER_COLLISION_MARGIN
         for p, a in avatars_in_room(room_id):
-            players.append({"name": p.name, "x": a.x, "y": a.y})
+            players.append({"name": p.name, "x": a.x, "y": a.y, "cm": m})
         # Monsters
         monsters = []
         for m in game.room_monsters.get(room_id, []):

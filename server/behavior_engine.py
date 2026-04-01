@@ -301,8 +301,7 @@ class BehaviorEngine:
     def resolve_move(self, rule, monster, room_id):
         """Resolve a move action. Returns {"action": "move", "x", "y"} or None.
 
-        Resolves MOVE_STEP tiles per call (0.5). Normal decisions set distance=2
-        to chain two half-tile walks (1 tile total), preserving movement speed.
+        Resolves MOVE_STEP tiles per call (1.0 tile).
         """
         direction = rule.get("direction", "random")
         s = MOVE_STEP
@@ -316,7 +315,7 @@ class BehaviorEngine:
             for dx, dy in dirs:
                 nx, ny = monster.x + dx, monster.y + dy
                 if self.can_move_to(monster, nx, ny, room_id):
-                    return {"action": "move", "x": nx, "y": ny, "distance": 2}
+                    return {"action": "move", "x": nx, "y": ny, "distance": 1}
             return None
 
         if direction == "player":
@@ -337,7 +336,7 @@ class BehaviorEngine:
                     best_dist = dist
                     best_dir = (dx, dy)
             if best_dir:
-                return {"action": "move", "x": monster.x + best_dir[0], "y": monster.y + best_dir[1], "distance": 2}
+                return {"action": "move", "x": monster.x + best_dir[0], "y": monster.y + best_dir[1], "distance": 1}
             return None
 
         if direction == "away":
@@ -358,21 +357,21 @@ class BehaviorEngine:
                     best_dist = dist
                     best_dir = (dx, dy)
             if best_dir:
-                return {"action": "move", "x": monster.x + best_dir[0], "y": monster.y + best_dir[1], "distance": 2}
+                return {"action": "move", "x": monster.x + best_dir[0], "y": monster.y + best_dir[1], "distance": 1}
             return None
 
-        # Cardinal direction — half-tile step, chained for full tile
+        # Cardinal direction — full tile step
         d = CARDINAL_DIRS.get(direction)
         if d:
             nx, ny = monster.x + d[0] * s, monster.y + d[1] * s
             if self.can_move_to(monster, nx, ny, room_id):
-                return {"action": "move", "x": nx, "y": ny, "distance": 2}
+                return {"action": "move", "x": nx, "y": ny, "distance": 1}
         return None
 
     def _resolve_patrol_move(self, rule, monster, room_id):
         """Move 1 step along a patrol route string (e.g. 'RRDDLLUU').
 
-        Each route letter produces a half-tile step chained x2 for a full tile.
+        Each route letter produces a full-tile step.
         Skips blocked steps within the same tick so the monster doesn't stall
         at walls.  Falls back to random wander if no route or all steps blocked.
         """
@@ -390,7 +389,7 @@ class BehaviorEngine:
             nx, ny = monster.x + d[0] * MOVE_STEP, monster.y + d[1] * MOVE_STEP
             if self.can_move_to(monster, nx, ny, room_id):
                 monster._patrol_index = (idx + 1) % len(route)
-                return {"action": "move", "x": nx, "y": ny, "distance": 2}
+                return {"action": "move", "x": nx, "y": ny, "distance": 1}
         # All steps blocked — advance index so we don't retry the same start next tick
         monster._patrol_index = (start_idx + 1) % len(route)
         return None
@@ -502,10 +501,8 @@ class BehaviorEngine:
         """Wrapper that attaches distance and direction to the resolved move."""
         result = self.resolve_move(rule, monster, room_id)
         if result is not None:
-            # Scale rule distance by 1/MOVE_STEP so "distance: 2" (tiles) becomes
-            # 4 half-tile steps. Default 1 tile = 2 half-tile steps.
             tile_dist = max(1, int(rule.get("distance", 1)))
-            result["distance"] = int(tile_dist / MOVE_STEP)
+            result["distance"] = tile_dist
             result["direction"] = rule.get("direction", "random")
         return result
 
