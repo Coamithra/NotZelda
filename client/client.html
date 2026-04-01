@@ -461,23 +461,16 @@ const POSITION_REPORT_INTERVAL = 33; // ~30fps cap on position updates (ms)
 let _lastPositionReport = 0;
 
 function maybeReportPosition() {
-  /** Send precise float position, throttled to ~30fps. */
-  const x = G.player.preciseX;
-  const y = G.player.preciseY;
-
-  if (x !== G.player.lastReportedX || y !== G.player.lastReportedY) {
-    const now = performance.now();
-    if (now - _lastPositionReport < POSITION_REPORT_INTERVAL) return;
-    _lastPositionReport = now;
-    sendToServer({
-      type: "position_update",
-      x: x,
-      y: y,
-      direction: G.player.myPlayer.direction,
-    });
-    G.player.lastReportedX = x;
-    G.player.lastReportedY = y;
-  }
+  /** Send precise float position, throttled to ~16fps. */
+  const now = performance.now();
+  if (now - _lastPositionReport < POSITION_REPORT_INTERVAL) return;
+  _lastPositionReport = now;
+  sendToServer({
+    type: "position_update",
+    x: G.player.preciseX,
+    y: G.player.preciseY,
+    direction: G.player.myPlayer.direction,
+  });
 }
 
 function playerTick() {
