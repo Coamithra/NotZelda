@@ -319,12 +319,13 @@ function handleMessage(msg) {
           G.room.tombstones[ts.name] = { x: ts.x, y: ts.y, color_index: ts.color_index };
         }
       }
-      G.player.preciseX = G.player.myPlayer.x;
-      G.player.preciseY = G.player.myPlayer.y;
       G.player.lastReportedX = G.player.myPlayer.x;
       G.player.lastReportedY = G.player.myPlayer.y;
       G.player.displayX = G.player.myPlayer.x;
       G.player.displayY = G.player.myPlayer.y;
+      G.player.knockbackOffsetX = 0;
+      G.player.knockbackOffsetY = 0;
+      G.player.knockbackSlide = null;
       setState("idle", {});
 
       // Dungeon state — track collected items and visited cells
@@ -399,8 +400,13 @@ function handleMessage(msg) {
         const t = performance.now().toFixed(1);
         console.log(`[NET IN  t=${t}] reconcile pos=(${msg.x},${msg.y}) [${G.player.state}]`);
       }
-      G.player.preciseX = G.player.displayX = G.player.myPlayer.x = msg.x;
-      G.player.preciseY = G.player.displayY = G.player.myPlayer.y = msg.y;
+      G.player.myPlayer.x = msg.x;
+      G.player.myPlayer.y = msg.y;
+      G.player.displayX = msg.x;
+      G.player.displayY = msg.y;
+      G.player.knockbackOffsetX = 0;
+      G.player.knockbackOffsetY = 0;
+      G.player.knockbackSlide = null;
       G.player.lastReportedX = msg.x;
       G.player.lastReportedY = msg.y;
       G.player.myPlayer.direction = msg.direction;
@@ -486,29 +492,31 @@ function handleMessage(msg) {
       if (msg.name === G.player.myName) {
         // Knockback dust trail (before position overwrite)
         if (msg.knockback) {
-          const oldX = G.player.preciseX, oldY = G.player.preciseY;
+          const oldX = G.player.myPlayer.x, oldY = G.player.myPlayer.y;
           for (let t = 0.33; t <= 0.66; t += 0.33) {
             const dustX = tileCenterX(oldX + (msg.x - oldX) * t);
             const dustY = (oldY + (msg.y - oldY) * t + 0.5) * TS;
             spawnBurst(dustX, dustY, 2, 1.0, 250, ["#c8b898", "#a09068"], [2 * SCALE, 3 * SCALE], { shrink: true });
           }
-          // Smooth knockback slide — keep displayX/Y at old position, animate to new
+          // Knockback offset — visual position decays from old to new over 200ms
           G.player.knockbackSlide = {
-            fromX: G.player.displayX, fromY: G.player.displayY,
-            toX: msg.x, toY: msg.y,
+            initialOffsetX: G.player.displayX - msg.x,
+            initialOffsetY: G.player.displayY - msg.y,
             startTime: performance.now(), duration: 200,
           };
+          G.player.knockbackOffsetX = G.player.displayX - msg.x;
+          G.player.knockbackOffsetY = G.player.displayY - msg.y;
         }
         G.player.myHp = msg.hp;
         G.player.myPlayer.x = msg.x;
         G.player.myPlayer.y = msg.y;
-        G.player.preciseX = msg.x;
-        G.player.preciseY = msg.y;
         G.player.lastReportedX = msg.x;
         G.player.lastReportedY = msg.y;
         if (!msg.knockback) {
           G.player.displayX = msg.x;
           G.player.displayY = msg.y;
+          G.player.knockbackOffsetX = 0;
+          G.player.knockbackOffsetY = 0;
         }
         setState("idle", {});
         G.player.hurtFlash = Date.now() + 300;
@@ -548,10 +556,13 @@ function handleMessage(msg) {
       G.player.dyingPlayerSelf = { x: msg.x, y: msg.y, frame: 0, startTime: Date.now() };
       G.player.myHp = 0;
       setState("dying", {});
-      G.player.preciseX = msg.x;
-      G.player.preciseY = msg.y;
+      G.player.myPlayer.x = msg.x;
+      G.player.myPlayer.y = msg.y;
       G.player.displayX = msg.x;
       G.player.displayY = msg.y;
+      G.player.knockbackOffsetX = 0;
+      G.player.knockbackOffsetY = 0;
+      G.player.knockbackSlide = null;
       appendChatLog(`<span class="chat-system">You died!</span>`);
       break;
 

@@ -42,8 +42,6 @@ const G = {
     stateData: {},           // state-scoped data, replaced on every transition
 
     // Free movement (sub-tile)
-    preciseX: 0,             // pixel-precise position (local only)
-    preciseY: 0,
     lastReportedX: 0,        // last position sent to server
     lastReportedY: 0,
     lastTickTime: 0,         // for deltaTime
@@ -52,7 +50,7 @@ const G = {
     animFrame: 0,
     animTimer: 0,
     isMoving: false,
-    displayX: 0,
+    displayX: 0,             // render position (computed: myPlayer.x/y + knockbackOffset)
     displayY: 0,
     lastMoveDir: null,       // for dust puff direction-change detection
 
@@ -66,7 +64,9 @@ const G = {
     myMaxHp: 6,
     hurtFlash: 0,
     invincibleUntil: 0,
-    knockbackSlide: null,
+    knockbackSlide: null,     // {initialOffsetX, initialOffsetY, startTime, duration}
+    knockbackOffsetX: 0,      // visual offset during knockback (decays to 0)
+    knockbackOffsetY: 0,
     dyingPlayerSelf: null,
     stunUntil: 0,
 

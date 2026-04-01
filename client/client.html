@@ -467,14 +467,15 @@ function maybeReportPosition() {
   _lastPositionReport = now;
   sendToServer({
     type: "position_update",
-    x: G.player.preciseX,
-    y: G.player.preciseY,
+    x: G.player.myPlayer.x,
+    y: G.player.myPlayer.y,
     direction: G.player.myPlayer.direction,
   });
 }
 
 function playerTick() {
   if (G.player.itemPickupActive) return;
+  if (G.player.knockbackSlide) { G.player.isMoving = false; return; }
   if (G.player.stunUntil && performance.now() < G.player.stunUntil) { G.player.isMoving = false; return; }
 
   const now = performance.now();
@@ -490,7 +491,7 @@ function playerTick() {
       stopDance(G.player.myName);
       // Juice: dust puff on movement start or direction change
       if (!G.player.isMoving || G.player.lastMoveDir !== dir) {
-        spawnDustPuff(G.player.preciseX, G.player.preciseY, dir);
+        spawnDustPuff(G.player.myPlayer.x, G.player.myPlayer.y, dir);
       }
       if (G.player.myPlayer.direction !== dir) {
         sendToServer({ type: "face", direction: dir });
@@ -502,46 +503,41 @@ function playerTick() {
       const isHorizontal = (dir === "left" || dir === "right");
       const speed = MOVE_SPEED * dt;
 
-      let newX = G.player.preciseX + DIR_DX[dir] * speed;
-      let newY = G.player.preciseY + DIR_DY[dir] * speed;
+      let newX = G.player.myPlayer.x + DIR_DX[dir] * speed;
+      let newY = G.player.myPlayer.y + DIR_DY[dir] * speed;
 
       // Axis alignment: snap perpendicular coord toward nearest half-tile
       if (isHorizontal) {
-        const targetY = Math.round(G.player.preciseY * 2) / 2;
-        if (Math.abs(G.player.preciseY - targetY) > 0.01) {
-          const alignDelta = Math.sign(targetY - G.player.preciseY) * Math.min(speed, Math.abs(G.player.preciseY - targetY));
-          newY = G.player.preciseY + alignDelta;
+        const targetY = Math.round(G.player.myPlayer.y * 2) / 2;
+        if (Math.abs(G.player.myPlayer.y - targetY) > 0.01) {
+          const alignDelta = Math.sign(targetY - G.player.myPlayer.y) * Math.min(speed, Math.abs(G.player.myPlayer.y - targetY));
+          newY = G.player.myPlayer.y + alignDelta;
         }
       } else {
-        const targetX = Math.round(G.player.preciseX * 2) / 2;
-        if (Math.abs(G.player.preciseX - targetX) > 0.01) {
-          const alignDelta = Math.sign(targetX - G.player.preciseX) * Math.min(speed, Math.abs(G.player.preciseX - targetX));
-          newX = G.player.preciseX + alignDelta;
+        const targetX = Math.round(G.player.myPlayer.x * 2) / 2;
+        if (Math.abs(G.player.myPlayer.x - targetX) > 0.01) {
+          const alignDelta = Math.sign(targetX - G.player.myPlayer.x) * Math.min(speed, Math.abs(G.player.myPlayer.x - targetX));
+          newX = G.player.myPlayer.x + alignDelta;
         }
       }
 
       // Collision: use aligned perpendicular position for wall checks.
       // The player is snapping to the nearest half-tile lane — check if
       // that lane is clear so they can slip through gaps (NES Zelda style).
-      const checkX = isHorizontal ? newX : Math.round(G.player.preciseX * 2) / 2;
-      const checkY = isHorizontal ? Math.round(G.player.preciseY * 2) / 2 : newY;
+      const checkX = isHorizontal ? newX : Math.round(G.player.myPlayer.x * 2) / 2;
+      const checkY = isHorizontal ? Math.round(G.player.myPlayer.y * 2) / 2 : newY;
 
       if (canMoveToPosition(checkX, checkY)) {
-        G.player.preciseX = newX;
-        G.player.preciseY = newY;
-      } else if (isHorizontal && canMoveToPosition(newX, G.player.preciseY)) {
-        G.player.preciseX = newX;
-      } else if (!isHorizontal && canMoveToPosition(G.player.preciseX, newY)) {
-        G.player.preciseY = newY;
+        G.player.myPlayer.x = newX;
+        G.player.myPlayer.y = newY;
+      } else if (isHorizontal && canMoveToPosition(newX, G.player.myPlayer.y)) {
+        G.player.myPlayer.x = newX;
+      } else if (!isHorizontal && canMoveToPosition(G.player.myPlayer.x, newY)) {
+        G.player.myPlayer.y = newY;
       } else {
         // Blocked — check if the actual blocking tile is a locked door
         checkLockedDoor(checkX, checkY, dir);
       }
-
-      G.player.displayX = G.player.preciseX;
-      G.player.displayY = G.player.preciseY;
-      G.player.myPlayer.x = G.player.preciseX;
-      G.player.myPlayer.y = G.player.preciseY;
 
       maybeReportPosition();
       break;
@@ -560,7 +556,7 @@ function playerTick() {
       const gapDone = now - G.player.stateData.startTime >= ATTACK_GAP_MS;
       if (gapDone) {
         if (G.player.keysDown["Space"] && G.player.playerFlags.has("has_sword")) {
-          sendToServer({ type: "attack", direction: G.player.myPlayer.direction, x: G.player.preciseX, y: G.player.preciseY });
+          sendToServer({ type: "attack", direction: G.player.myPlayer.direction, x: G.player.myPlayer.x, y: G.player.myPlayer.y });
           startAttack(G.player.myName, G.player.myPlayer.direction);
           spawnSlashArc(G.player.myPlayer.direction);
           setState("attacking", { startTime: performance.now() });
@@ -617,27 +613,24 @@ function gameLoop(timestamp) {
 
     // Interpolate positions — lerp for reconciliation snaps
     function easeOutQuad(t) { return t * (2 - t); }
+    // Decay knockback offset for local player
     if (G.player.knockbackSlide) {
-      // Smooth knockback slide for local player
       const ks = G.player.knockbackSlide;
       const elapsed = performance.now() - ks.startTime;
       const t = Math.min(elapsed / ks.duration, 1.0);
-      const progress = easeOutQuad(t);
-      G.player.displayX = ks.fromX + (ks.toX - ks.fromX) * progress;
-      G.player.displayY = ks.fromY + (ks.toY - ks.fromY) * progress;
+      const remaining = 1.0 - easeOutQuad(t);
+      G.player.knockbackOffsetX = ks.initialOffsetX * remaining;
+      G.player.knockbackOffsetY = ks.initialOffsetY * remaining;
       if (t >= 1.0) {
-        G.player.displayX = ks.toX;
-        G.player.displayY = ks.toY;
+        G.player.knockbackOffsetX = 0;
+        G.player.knockbackOffsetY = 0;
         G.player.knockbackSlide = null;
       }
-    } else if (G.player.myPlayer && G.player.state !== "idle") {
-      // During attacking/dying, lerp displayX/Y toward myPlayer position
-      if (G.player.displayX !== G.player.myPlayer.x || G.player.displayY !== G.player.myPlayer.y) {
-        G.player.displayX += (G.player.myPlayer.x - G.player.displayX) * MOVE_LERP;
-        G.player.displayY += (G.player.myPlayer.y - G.player.displayY) * MOVE_LERP;
-        if (Math.abs(G.player.myPlayer.x - G.player.displayX) < 0.05) G.player.displayX = G.player.myPlayer.x;
-        if (Math.abs(G.player.myPlayer.y - G.player.displayY) < 0.05) G.player.displayY = G.player.myPlayer.y;
-      }
+    }
+    // Compute display position from canonical position + knockback offset
+    if (G.player.myPlayer) {
+      G.player.displayX = G.player.myPlayer.x + G.player.knockbackOffsetX;
+      G.player.displayY = G.player.myPlayer.y + G.player.knockbackOffsetY;
     }
 
     for (const p of Object.values(G.room.otherPlayers)) {

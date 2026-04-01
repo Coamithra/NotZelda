@@ -1099,10 +1099,10 @@ function renderCollisionDebug() {
   if (G.player.myPlayer) {
     ctx.strokeStyle = "lime";
     ctx.lineWidth = 2;
-    ctx.strokeRect(G.player.preciseX * TS, (G.player.preciseY + 0.5) * TS, TS, 0.5 * TS);
+    ctx.strokeRect(G.player.myPlayer.x * TS, (G.player.myPlayer.y + 0.5) * TS, TS, 0.5 * TS);
     // Full tile outline (dimmer)
     ctx.strokeStyle = "rgba(0,255,0,0.3)";
-    ctx.strokeRect(G.player.preciseX * TS, G.player.preciseY * TS, TS, TS);
+    ctx.strokeRect(G.player.myPlayer.x * TS, G.player.myPlayer.y * TS, TS, TS);
   }
 
   // Draw monster AABBs

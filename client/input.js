@@ -53,12 +53,13 @@ document.addEventListener("keydown", (e) => {
 
   if (e.code === "Space" && !e.repeat && !G.ui.chatFocused && !G.player.spiritJarRevive && G.player.state !== "attacking" && G.player.state !== "dying") {
     e.preventDefault();
+    if (G.player.knockbackSlide) return;
     if (!G.player.playerFlags.has("has_sword")) {
       G.ui.infoMessages.push({ text: "You don't have a weapon.", expires: Date.now() + 2000 });
       return;
     }
     if (G.player.state === "idle") {
-      sendToServer({ type: "attack", direction: G.player.myPlayer.direction, x: G.player.preciseX, y: G.player.preciseY });
+      sendToServer({ type: "attack", direction: G.player.myPlayer.direction, x: G.player.myPlayer.x, y: G.player.myPlayer.y });
       startAttack(G.player.myName, G.player.myPlayer.direction);
       spawnSlashArc(G.player.myPlayer.direction);
       setState("attacking", { startTime: performance.now() });
@@ -232,6 +233,7 @@ if (G.ui.isMobile) {
   document.getElementById("mobile-sword-btn").addEventListener("touchstart", (e) => {
     e.preventDefault();
     if (!G.conn.ws || !G.player.myName || G.room.attackingPlayers[G.player.myName]) return;
+    if (G.player.knockbackSlide) return;
     if (!G.player.playerFlags.has("has_sword")) return;
     if (G.player.state !== "idle" && G.player.state !== "attacking") return;
     sendToServer({ type: "attack", direction: G.player.myPlayer.direction });
