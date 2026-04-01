@@ -99,7 +99,7 @@ def _is_position_walkable(x, y, room):
 
 
 def _process_player_state(player, data, now, msgs):
-    """Validate a client state frame (position, direction, dancing) and relay."""
+    """Validate a client state frame (position, direction, dancing, attacking) and relay."""
     a = player.avatar
     if a is None:
         return
@@ -118,6 +118,7 @@ def _process_player_state(player, data, now, msgs):
     # Anti-cheat: distance check
     dist = abs(new_x - a.x) + abs(new_y - a.y)
     if dist > MAX_MOVE_PER_UPDATE:
+        a.last_reported_attacking = False
         _send_reconcile(player, msgs, f"too far: dist={dist:.2f} from ({a.x},{a.y}) to ({new_x},{new_y})")
         return
 

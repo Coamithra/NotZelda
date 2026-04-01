@@ -408,6 +408,11 @@ function handleMessage(msg) {
       G.player.knockbackSlide = null;
       G.player.myPlayer.direction = msg.direction;
       delete G.room.attackingPlayers[G.player.myName];
+      _lastSync.x = msg.x;
+      _lastSync.y = msg.y;
+      _lastSync.dir = msg.direction;
+      _lastSync.dancing = false;
+      _lastSync.attacking = false;
       setState("idle");
       break;
     }
