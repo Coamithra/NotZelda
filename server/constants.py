@@ -59,7 +59,7 @@ MOVE_STEP = 1.0         # monster movement step size in tiles
 # Half-tile free movement (NES Zelda-style)
 HALF_TILE = 0.5
 WALK_ANIM_TIME = 0.250          # 250ms — other-player walk animation
-MAX_MOVE_PER_UPDATE = 1.25      # max distance per position_update (tiles, Manhattan)
+MAX_MOVE_PER_UPDATE = 1.25      # max distance per player_state frame (tiles, Manhattan)
 PLAYER_SPEED = 4.0              # tiles/sec (for anti-cheat speed check)
 HEART_RESTORE_HP = 2
 PLAYER_MAX_HP = 6

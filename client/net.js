@@ -426,16 +426,11 @@ function handleMessage(msg) {
       const op = G.room.otherPlayers[msg.name];
       if (!op) break;
 
-      // Position update with interpolation
+      // Position update (snap — netcode card will add interpolation)
       if (msg.x !== op.x || msg.y !== op.y) {
         delete G.room.attackingPlayers[msg.name];
         op.x = msg.x;
         op.y = msg.y;
-        op.walkState = {
-          fromX: op.displayX, fromY: op.displayY,
-          toX: msg.x, toY: msg.y,
-          startTime: performance.now(),
-        };
       }
 
       op.direction = msg.direction;

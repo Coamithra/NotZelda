@@ -103,6 +103,8 @@ def _is_position_walkable(x, y, room):
 def _process_player_state(player, data, now, msgs):
     """Validate a client state frame (position, direction, dancing) and relay."""
     a = player.avatar
+    if a is None:
+        return
     new_x = data.get("x")
     new_y = data.get("y")
     direction = data.get("direction", a.direction)
