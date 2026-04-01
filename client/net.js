@@ -517,6 +517,7 @@ function handleMessage(msg) {
           G.player.displayY = msg.y;
           G.player.knockbackOffsetX = 0;
           G.player.knockbackOffsetY = 0;
+          G.player.knockbackSlide = null;
         }
         setState("idle", {});
         G.player.hurtFlash = Date.now() + 300;
