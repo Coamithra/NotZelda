@@ -137,6 +137,7 @@ def _process_player_input(player, data, now, msgs):
         dt = min(inp.get("dt", 0), DT_CLAMP)
 
         if direction and direction in DIRECTIONS and dt > 0:
+            a.dancing = False  # movement cancels dance
             _simulate_player_move(a, direction, dt, room, player.room)
 
             # Edge exit detection (room transition)
@@ -185,13 +186,14 @@ def _process_player_input(player, data, now, msgs):
     if transitioned:
         return  # room_enter will send full state; no correction needed
 
-    # Send correction to originating player
-    msgs.append(("send", player, {
-        "type": "state_correction",
-        "ack_seq": last_seq,
-        "x": a.x,
-        "y": a.y,
-    }))
+    # Send correction to originating player (skip for idle frames with no inputs)
+    if inputs:
+        msgs.append(("send", player, {
+            "type": "state_correction",
+            "ack_seq": last_seq,
+            "x": a.x,
+            "y": a.y,
+        }))
 
     # Broadcast to other players (unchanged format)
     if (a.x != a.last_reported_x or a.y != a.last_reported_y

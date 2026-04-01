@@ -462,11 +462,11 @@ function handleMessage(msg) {
       G.player.knockbackSlide = null;
       G.player.myPlayer.direction = msg.direction;
       delete G.room.attackingPlayers[G.player.myName];
-      _lastSync.x = msg.x;
-      _lastSync.y = msg.y;
-      _lastSync.dir = msg.direction;
-      _lastSync.dancing = false;
-      _lastSync.attacking = false;
+      // Clear prediction state — server forcibly corrected us
+      G.player.inputBuffer = [];
+      G.player.pendingInputs = [];
+      G.player.correctionOffset.x = 0;
+      G.player.correctionOffset.y = 0;
       setState("idle");
       break;
     }
