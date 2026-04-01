@@ -460,23 +460,27 @@ function checkLockedDoor(checkX, checkY, dir) {
 // State sync — send player state to server at 30fps when it changes
 const SYNC_INTERVAL = 33; // ~30fps
 let _lastSyncTime = 0;
-const _lastSync = { x: null, y: null, dir: null, dancing: null };
+const _lastSync = { x: null, y: null, dir: null, dancing: null, attacking: false };
 function syncPlayerState() {
   if (!G.player.myPlayer) return;
   const p = G.player.myPlayer;
   const dancing = !!G.room.dancingPlayers[G.player.myName];
+  const attacking = G.player.state === "attacking";
   if (p.x === _lastSync.x && p.y === _lastSync.y
-      && p.direction === _lastSync.dir && dancing === _lastSync.dancing) return;
+      && p.direction === _lastSync.dir && dancing === _lastSync.dancing
+      && attacking === _lastSync.attacking) return;
   const now = performance.now();
   if (now - _lastSyncTime < SYNC_INTERVAL) return;
   _lastSyncTime = now;
   const msg = { type: "player_state", x: p.x, y: p.y, direction: p.direction };
   if (dancing) msg.dancing = true;
+  if (attacking) msg.attacking = { direction: p.direction, x: p.x, y: p.y };
   sendToServer(msg);
   _lastSync.x = p.x;
   _lastSync.y = p.y;
   _lastSync.dir = p.direction;
   _lastSync.dancing = dancing;
+  _lastSync.attacking = attacking;
 }
 
 function playerTick() {
@@ -558,10 +562,10 @@ function playerTick() {
       const gapDone = now - G.player.stateData.startTime >= ATTACK_GAP_MS;
       if (gapDone) {
         if (G.player.keysDown["Space"] && G.player.playerFlags.has("has_sword")) {
-          sendToServer({ type: "attack", direction: G.player.myPlayer.direction, x: G.player.myPlayer.x, y: G.player.myPlayer.y });
           startAttack(G.player.myName, G.player.myPlayer.direction);
           spawnSlashArc(G.player.myPlayer.direction);
           setState("attacking", { startTime: performance.now() });
+          _lastSyncTime = 0; // force immediate state sync
         } else if (dir) {
           stopDance(G.player.myName);
           setState("idle", {});

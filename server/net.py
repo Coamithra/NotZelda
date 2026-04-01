@@ -47,6 +47,8 @@ def player_info(p) -> dict:
     }
     if a.dancing:
         info["dancing"] = True
+    if p.active_attack is not None:
+        info["attacking"] = {"direction": p.active_attack["direction"]}
     if p.has_flag("has_lantern"):
         info["has_lantern"] = True
     return info

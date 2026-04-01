@@ -59,10 +59,10 @@ document.addEventListener("keydown", (e) => {
       return;
     }
     if (G.player.state === "idle") {
-      sendToServer({ type: "attack", direction: G.player.myPlayer.direction, x: G.player.myPlayer.x, y: G.player.myPlayer.y });
       startAttack(G.player.myName, G.player.myPlayer.direction);
       spawnSlashArc(G.player.myPlayer.direction);
       setState("attacking", { startTime: performance.now() });
+      _lastSyncTime = 0; // force immediate state sync
     }
     return;
   }
@@ -236,10 +236,10 @@ if (G.ui.isMobile) {
     if (G.player.knockbackSlide) return;
     if (!G.player.playerFlags.has("has_sword")) return;
     if (G.player.state !== "idle" && G.player.state !== "attacking") return;
-    sendToServer({ type: "attack", direction: G.player.myPlayer.direction, x: G.player.myPlayer.x, y: G.player.myPlayer.y });
     startAttack(G.player.myName, G.player.myPlayer.direction);
     spawnSlashArc(G.player.myPlayer.direction);
     setState("attacking", { startTime: performance.now() });
+    _lastSyncTime = 0; // force immediate state sync
   });
 
   // Re-scale when login completes and game screen appears

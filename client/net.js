@@ -312,6 +312,7 @@ function handleMessage(msg) {
       for (const p of msg.players) {
         G.room.otherPlayers[p.name] = createOtherPlayer(p.x, p.y, p.direction, p.color_index);
         if (p.dancing) startDance(p.name);
+        if (p.attacking) startAttack(p.name, p.attacking.direction);
       }
       // Populate tombstones from room data
       if (msg.tombstones) {
@@ -422,13 +423,12 @@ function handleMessage(msg) {
         break;
       }
 
-      // Unified state update for another player (position, direction, dancing)
+      // Unified state update for another player (position, direction, dancing, attacking)
       const op = G.room.otherPlayers[msg.name];
       if (!op) break;
 
       // Position update (snap — netcode card will add interpolation)
       if (msg.x !== op.x || msg.y !== op.y) {
-        delete G.room.attackingPlayers[msg.name];
         op.x = msg.x;
         op.y = msg.y;
       }
@@ -442,6 +442,11 @@ function handleMessage(msg) {
         stopDance(msg.name);
       }
 
+      // Attack state sync — fire-and-forget animation, only trigger on rising edge
+      if (msg.attacking && !G.room.attackingPlayers[msg.name]) {
+        startAttack(msg.name, msg.attacking.direction);
+      }
+
       break;
     }
 
@@ -449,6 +454,7 @@ function handleMessage(msg) {
       if (msg.name !== G.player.myName) {
         G.room.otherPlayers[msg.name] = createOtherPlayer(msg.x, msg.y, msg.direction, msg.color_index);
         if (msg.dancing) startDance(msg.name);
+        if (msg.attacking) startAttack(msg.name, msg.attacking.direction);
         if (msg.has_lantern) G.room.lanternHolders.add(msg.name);
         appendChatLog(`<span class="chat-system">${escHtml(msg.name)} entered the room</span>`);
       }
@@ -459,12 +465,6 @@ function handleMessage(msg) {
       G.room.lanternHolders.delete(msg.name);
       stopDance(msg.name);
       appendChatLog(`<span class="chat-system">${escHtml(msg.name)} left the room</span>`);
-      break;
-
-    case "attack":
-      if (msg.name !== G.player.myName) {
-        startAttack(msg.name, msg.direction);
-      }
       break;
 
     case "npc_thinking": {

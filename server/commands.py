@@ -28,8 +28,6 @@ def process_player_commands(player, now, msgs):
         cmd_type, data = player.command_queue.popleft()
         if cmd_type == "player_state":
             _process_player_state(player, data, now, msgs)
-        elif cmd_type == "attack":
-            _process_attack(player, data, now, msgs)
         elif cmd_type == "chat":
             _process_chat(player, data, msgs)
         elif cmd_type == "unlock_door":
@@ -130,6 +128,14 @@ def _process_player_state(player, data, now, msgs):
     # Dance state from client frame
     a.dancing = bool(data.get("dancing", False))
 
+    # Attack edge detection — rising edge triggers the attack
+    client_attacking = data.get("attacking")
+    if client_attacking and not a.last_reported_attacking:
+        _initiate_attack(player, client_attacking, now, msgs)
+        a.last_reported_attacking = True
+    elif not client_attacking and a.last_reported_attacking:
+        a.last_reported_attacking = False
+
     # Edge detection (room transition)
     room = game.rooms[player.room]
     exit_dir = _check_edge_exit_float(new_x, new_y, direction, room)
@@ -174,7 +180,8 @@ def _process_player_state(player, data, now, msgs):
     # Relay to other players — unified state update
     if (new_x != a.last_reported_x or new_y != a.last_reported_y
             or a.direction != a.last_reported_dir
-            or a.dancing != a.last_reported_dancing):
+            or a.dancing != a.last_reported_dancing
+            or a.last_reported_attacking):
         state_msg = {
             "type": "player_state_update",
             "name": player.name,
@@ -183,6 +190,8 @@ def _process_player_state(player, data, now, msgs):
         }
         if a.dancing:
             state_msg["dancing"] = True
+        if a.last_reported_attacking and player.active_attack:
+            state_msg["attacking"] = {"direction": player.active_attack["direction"]}
         msgs.append(("broadcast", player.room, state_msg, player.ws))
         a.last_reported_x = new_x
         a.last_reported_y = new_y
@@ -584,12 +593,15 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
                 msgs.append(("broadcast", room_id, msg_hit, None))
 
 
-def _process_attack(player, data, now, msgs):
-    """Handle a player's sword attack — initiate swing + first hit scan."""
+def _initiate_attack(player, attack_data, now, msgs):
+    """Handle a player's sword attack — initiate swing + first hit scan.
+
+    Called on the rising edge when player_state frame includes attacking.
+    attack_data is the attacking dict from the client: {direction, x, y}.
+    """
     if player.hp <= 0:
         return
     if not player.has_flag("has_sword"):
-        msgs.append(("send", player, {"type": "info", "text": "You don't have a weapon."}))
         return
     if now - player.last_attack_time < ATTACK_COOLDOWN - TICK_INTERVAL:
         return
@@ -599,20 +611,14 @@ def _process_attack(player, data, now, msgs):
 
     # Use client-supplied direction so quick turn+attack works without waiting
     # for the server to process the direction change first
-    direction = data.get("direction")
+    direction = attack_data.get("direction")
     if direction in DIRECTIONS:
         a.direction = direction
 
-    msgs.append(("broadcast", player.room, {
-        "type": "attack",
-        "name": player.name,
-        "direction": a.direction,
-    }, None))
-
     # Use client-supplied position for precise hitbox placement (the server
     # may not have the latest position yet)
-    anchor_x = data.get("x")
-    anchor_y = data.get("y")
+    anchor_x = attack_data.get("x")
+    anchor_y = attack_data.get("y")
     if anchor_x is not None and anchor_y is not None:
         anchor_x = float(anchor_x)
         anchor_y = float(anchor_y)
