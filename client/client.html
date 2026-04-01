@@ -457,20 +457,21 @@ function checkLockedDoor(checkX, checkY, dir) {
   }
 }
 
-const POSITION_REPORT_INTERVAL = 33; // ~30fps cap on position updates (ms)
-let _lastPositionReport = 0;
-
-function maybeReportPosition() {
-  /** Send precise float position, throttled to ~16fps. */
+// State sync — send position to server at 30fps when it changes
+const SYNC_INTERVAL = 33; // ~30fps
+let _lastSyncTime = 0;
+const _lastSync = { x: null, y: null, dir: null };
+function syncPosition() {
+  if (!G.player.myPlayer) return;
+  const p = G.player.myPlayer;
+  if (p.x === _lastSync.x && p.y === _lastSync.y && p.direction === _lastSync.dir) return;
   const now = performance.now();
-  if (now - _lastPositionReport < POSITION_REPORT_INTERVAL) return;
-  _lastPositionReport = now;
-  sendToServer({
-    type: "position_update",
-    x: G.player.myPlayer.x,
-    y: G.player.myPlayer.y,
-    direction: G.player.myPlayer.direction,
-  });
+  if (now - _lastSyncTime < SYNC_INTERVAL) return;
+  _lastSyncTime = now;
+  sendToServer({ type: "position_update", x: p.x, y: p.y, direction: p.direction });
+  _lastSync.x = p.x;
+  _lastSync.y = p.y;
+  _lastSync.dir = p.direction;
 }
 
 function playerTick() {
@@ -539,7 +540,6 @@ function playerTick() {
         checkLockedDoor(checkX, checkY, dir);
       }
 
-      maybeReportPosition();
       break;
     }
 
@@ -594,6 +594,7 @@ function gameLoop(timestamp) {
     if (!G.ui.chatFocused && !G.ui.transition && !G.ui.conjuring && !G.player.spiritJarRevive) {
       playerTick();
     }
+    syncPosition();
 
     // Update animations
     updateDances();

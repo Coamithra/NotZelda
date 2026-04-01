@@ -8,7 +8,7 @@ from server.constants import (
     DEBUG_MODE,
     DIRECTIONS, ROOM_COLS, ROOM_ROWS, DOORWAY_TILES,
     ATTACK_COOLDOWN, TICK_INTERVAL, HEART_DROP_CHANCE, HEART_RESTORE_HP,
-    POSITION_UPDATE_RATE, MAX_MOVE_PER_UPDATE,
+    MAX_MOVE_PER_UPDATE,
     COLLISION_GRACE_PERIOD, ITEM_PICKUP_FREEZE_DURATION,
     SEAL_FRAGMENT_HP_BONUS, SWORD_PERP_WIDTH, PLAYER_COLLISION_MARGIN,
 )
@@ -117,11 +117,6 @@ def _process_position_update(player, data, now, msgs):
     new_x = float(new_x)
     new_y = float(new_y)
 
-    # Anti-cheat: rate limit
-    dt = now - player.last_pos_update_time
-    if dt < POSITION_UPDATE_RATE * 0.5:
-        return  # silently drop (too fast)
-
     # Anti-cheat: distance check
     dist = abs(new_x - a.x) + abs(new_y - a.y)
     if dist > MAX_MOVE_PER_UPDATE:
@@ -174,8 +169,6 @@ def _process_position_update(player, data, now, msgs):
     prev_x, prev_y = a.x, a.y
     a.x = new_x
     a.y = new_y
-    player.last_pos_update_time = now
-
     # Relay to other players
     if new_x != a.last_reported_x or new_y != a.last_reported_y:
         msgs.append(("broadcast", player.room, {

@@ -319,8 +319,6 @@ function handleMessage(msg) {
           G.room.tombstones[ts.name] = { x: ts.x, y: ts.y, color_index: ts.color_index };
         }
       }
-      G.player.lastReportedX = G.player.myPlayer.x;
-      G.player.lastReportedY = G.player.myPlayer.y;
       G.player.displayX = G.player.myPlayer.x;
       G.player.displayY = G.player.myPlayer.y;
       G.player.knockbackOffsetX = 0;
@@ -407,8 +405,6 @@ function handleMessage(msg) {
       G.player.knockbackOffsetX = 0;
       G.player.knockbackOffsetY = 0;
       G.player.knockbackSlide = null;
-      G.player.lastReportedX = msg.x;
-      G.player.lastReportedY = msg.y;
       G.player.myPlayer.direction = msg.direction;
       delete G.room.attackingPlayers[G.player.myName];
       setState("idle");
@@ -510,8 +506,6 @@ function handleMessage(msg) {
         G.player.myHp = msg.hp;
         G.player.myPlayer.x = msg.x;
         G.player.myPlayer.y = msg.y;
-        G.player.lastReportedX = msg.x;
-        G.player.lastReportedY = msg.y;
         if (!msg.knockback) {
           G.player.displayX = msg.x;
           G.player.displayY = msg.y;

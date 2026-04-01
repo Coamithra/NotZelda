@@ -42,8 +42,6 @@ const G = {
     stateData: {},           // state-scoped data, replaced on every transition
 
     // Free movement (sub-tile)
-    lastReportedX: 0,        // last position sent to server
-    lastReportedY: 0,
     lastTickTime: 0,         // for deltaTime
 
     // Animation

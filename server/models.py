@@ -53,7 +53,6 @@ class Player:
         self.max_hp = PLAYER_MAX_HP
         self.last_damage_time = 0.0
         self.last_attack_time = 0.0
-        self.last_pos_update_time = 0.0   # anti-cheat: last accepted position_update timestamp
         self.guard_cooldowns: dict[str, float] = {}  # guard_key -> last_trigger_time
         self.guard_greeted: set[str] = set()         # NPC keys greeted this room visit
         self.quests: dict[str, int] = {}              # quest_id -> stage
