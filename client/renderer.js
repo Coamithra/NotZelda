@@ -1172,11 +1172,16 @@ function renderServerDebug() {
   const s = G.debug.serverState;
   ctx.globalAlpha = 0.45;
 
-  // Players — red
-  ctx.fillStyle = "#ff0000";
+  // Players — full tile (faint red) + collision box (bright red)
   for (const p of s.players) {
+    ctx.fillStyle = "#ff0000";
+    ctx.globalAlpha = 0.2;
     ctx.fillRect(p.x * TS, p.y * TS, TS, TS);
+    const cm = p.cm || 0;
+    ctx.globalAlpha = 0.45;
+    ctx.fillRect((p.x + cm) * TS, (p.y + cm) * TS, (1 - cm * 2) * TS, (1 - cm * 2) * TS);
   }
+  ctx.globalAlpha = 0.45;
 
   // Monsters — red (darker for dead)
   for (const m of s.monsters) {

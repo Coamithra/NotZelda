@@ -16,7 +16,7 @@ class WalkState:
     to_x: float
     to_y: float
     start_time: float
-    midpoint_checked: bool
+    walk_time: float        # actual duration for this step (scaled by step distance)
     room_id: str
     monster_idx: int
     remaining_distance: int
@@ -39,6 +39,7 @@ class Avatar:
         self.last_reported_x = x       # last position relayed to other clients
         self.last_reported_y = y
         self.pending_collisions = {}   # id(monster) -> {monster, room_id, time, knockback data}
+        self.spawn_stair = None        # (tx, ty) if spawned on a stair tile — cleared on move-off
 
 
 class Player:

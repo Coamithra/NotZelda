@@ -656,6 +656,14 @@ def do_room_transition(player, exit_direction: str, msgs: list):
         # Create new avatar at the spawn position
         player.avatar = Avatar(spawn_x, spawn_y, old_avatar.direction)
 
+        # Mark if spawning on a stair tile so position_update skips it
+        stx, sty = int(round(spawn_x)), int(round(spawn_y))
+        dest_room = game.rooms[new_room_id]
+        if 0 <= stx < ROOM_COLS and 0 <= sty < ROOM_ROWS:
+            stile = dest_room["tilemap"][sty][stx]
+            if stile in ("SU", "SD"):
+                player.avatar.spawn_stair = (stx, sty)
+
         # Quest event — player entered a new room
         from server.quests import quest_event
         quest_event("room_enter", player, msgs, room=new_room_id)

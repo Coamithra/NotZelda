@@ -14,6 +14,7 @@ from server.constants import (
     GUARD_DESPAWN_TIMEOUT, GUARD_DESPAWN_DISTANCE, GUARD_DESPAWN_GRACE,
     TICK_INTERVAL, COLLISION_GRACE_PERIOD,
     REVIVAL_DURATION, REVIVAL_PROXIMITY, REVIVAL_HP,
+    PLAYER_COLLISION_MARGIN,
 )
 from server.net import send_to, broadcast_to_room, avatars_in_room, player_info
 
@@ -67,9 +68,9 @@ def _apply_damage(player, damage: int, room_id: str, msgs: list,
         else:
             knock_dx = 0
             knock_dy = 1 if dy >= 0 else -1
-        # Target: fixed 1 tile knockback, snapped to nearest half-tile
-        kx = round((a.x + knock_dx) * 2) / 2
-        ky = round((a.y + knock_dy) * 2) / 2
+        # Target: fixed 1 tile knockback, snapped to integer grid
+        kx = round(a.x + knock_dx)
+        ky = round(a.y + knock_dy)
         knocked = False
         room = game.rooms.get(room_id)
         if room:
@@ -473,46 +474,31 @@ def _tick_all_monsters(now, msgs):
                         monster.state = "idle"
                         monster.state_data = {}
                     continue
-                # Walk progression — midpoint position at 50%, destination + collision at 100%
+                # Walk progression — per-tick interpolation + continuous collision
                 if monster.state == "walking":
                     sd = monster.state_data
                     elapsed = now - sd.start_time
-                    progress = min(elapsed / monster.walk_time, 1.0)
-                    # At 50%: move hitbox to midpoint between origin and destination
-                    if progress >= 0.5 and not sd.midpoint_checked:
-                        sd.midpoint_checked = True
-                        monster.x = (sd.from_x + sd.to_x) / 2
-                        monster.y = (sd.from_y + sd.to_y) / 2
-                        if not monster.intangible:
-                            for p, pa in avatars_in_room(room_id):
-                                if p.hp > 0 and (
-                                    pa.x < monster.x + monster.width and pa.x + 1 > monster.x and
-                                    pa.y < monster.y + monster.height and pa.y + 1 > monster.y):
-                                    mid = id(monster)
-                                    if mid not in pa.pending_collisions:
-                                        pa.pending_collisions[mid] = {
-                                            "monster": monster, "room_id": room_id, "time": now,
-                                            "prev_player_x": pa.x, "prev_player_y": pa.y,
-                                            "prev_source_x": sd.from_x, "prev_source_y": sd.from_y,
-                                        }
-                    # At 100%: commit to destination, check collision, complete walk
+                    progress = min(elapsed / sd.walk_time, 1.0)
+                    # Update position every tick (continuous interpolation)
+                    prev_mx, prev_my = monster.x, monster.y
+                    monster.x = sd.from_x + (sd.to_x - sd.from_x) * progress
+                    monster.y = sd.from_y + (sd.to_y - sd.from_y) * progress
+                    # Contact collision — check every tick against all players
+                    if not monster.intangible:
+                        m = PLAYER_COLLISION_MARGIN
+                        for p, pa in avatars_in_room(room_id):
+                            if p.hp > 0 and (
+                                pa.x + m < monster.x + monster.width and pa.x + 1 - m > monster.x and
+                                pa.y + m < monster.y + monster.height and pa.y + 1 - m > monster.y):
+                                mid = id(monster)
+                                if mid not in pa.pending_collisions:
+                                    pa.pending_collisions[mid] = {
+                                        "monster": monster, "room_id": room_id, "time": now,
+                                        "prev_player_x": pa.x, "prev_player_y": pa.y,
+                                        "prev_source_x": prev_mx, "prev_source_y": prev_my,
+                                    }
+                    # At 100%: snap to exact destination, complete walk
                     if progress >= 1.0:
-                        monster.x = sd.to_x
-                        monster.y = sd.to_y
-                        if not monster.intangible:
-                            mid_src_x = (sd.from_x + sd.to_x) / 2
-                            mid_src_y = (sd.from_y + sd.to_y) / 2
-                            for p, pa in avatars_in_room(room_id):
-                                if p.hp > 0 and (
-                                    pa.x < monster.x + monster.width and pa.x + 1 > monster.x and
-                                    pa.y < monster.y + monster.height and pa.y + 1 > monster.y):
-                                    mid = id(monster)
-                                    if mid not in pa.pending_collisions:
-                                        pa.pending_collisions[mid] = {
-                                            "monster": monster, "room_id": room_id, "time": now,
-                                            "prev_player_x": pa.x, "prev_player_y": pa.y,
-                                            "prev_source_x": mid_src_x, "prev_source_y": mid_src_y,
-                                        }
                         remaining = sd.remaining_distance
                         walk_dir = sd.direction
                         walk_seq = sd.seq
@@ -621,7 +607,6 @@ def _tick_projectiles(msgs):
 
 def _resolve_pending_collisions(now, msgs):
     """Check pending contact collisions — apply damage if grace period elapsed and still valid."""
-    from server.commands import _get_monster_visual_pos
     from server.lifecycle import get_room_monsters
     for player in list(game.players.values()):
         a = player.avatar
@@ -642,8 +627,8 @@ def _resolve_pending_collisions(now, msgs):
             if monster not in get_room_monsters(room_id):
                 del a.pending_collisions[mid]
                 continue
-            # Re-check AABB overlap
-            mx, my = _get_monster_visual_pos(monster, now)
+            # Re-check AABB overlap (monster.x/y is now continuously updated)
+            mx, my = monster.x, monster.y
             if not (a.x < mx + monster.width and a.x + 1 > mx and
                     a.y < my + monster.height and a.y + 1 > my):
                 del a.pending_collisions[mid]
@@ -670,8 +655,9 @@ async def _send_debug_state_snapshots():
         room_id = player.room
         # Players in this room (need name from player, position from avatar)
         players = []
+        m = PLAYER_COLLISION_MARGIN
         for p, a in avatars_in_room(room_id):
-            players.append({"name": p.name, "x": a.x, "y": a.y})
+            players.append({"name": p.name, "x": a.x, "y": a.y, "cm": m})
         # Monsters
         monsters = []
         for m in game.room_monsters.get(room_id, []):

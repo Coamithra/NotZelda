@@ -52,10 +52,13 @@ CANCEL_TIME = 0.090        # seconds — legacy (kept for backward compat)
 LATENCY_COMP = 0.066       # seconds — legacy (kept for backward compat)
 ATTACK_COOLDOWN = 0.27  # 1.5 * SWORD_ACTIVE_DURATION (0.18) — gap = 0.5 * active
 SWORD_ACTIVE_DURATION = 0.18
+SWORD_PERP_WIDTH = 0.6  # perpendicular hitbox width (was implicit 1.0 with tile-based collision)
+PLAYER_COLLISION_MARGIN = 0.2  # inset per side for player-vs-monster AABB (40% smaller)
+MOVE_STEP = 1.0         # monster movement step size in tiles
 
 # Half-tile free movement (NES Zelda-style)
 HALF_TILE = 0.5
-HALF_WALK_TIME = 0.125          # 125ms — other-player half-tile animation
+WALK_ANIM_TIME = 0.250          # 250ms — other-player walk animation
 POSITION_UPDATE_RATE = 0.04     # min seconds between updates (25/sec max)
 MAX_MOVE_PER_UPDATE = 1.25      # max distance per position_update (0.5 on each axis + margin)
 PLAYER_SPEED = 4.0              # tiles/sec (for anti-cheat speed check)
@@ -68,7 +71,7 @@ GUARD_DESPAWN_DISTANCE = 4     # Manhattan tiles — target escapes if beyond th
 GUARD_DESPAWN_GRACE = 3.0      # seconds before distance check kicks in
 HEART_DROP_CHANCE = 0.1
 INVINCIBILITY_DURATION = 1.5
-COLLISION_GRACE_PERIOD = 0.04  # seconds (~1 tick) before contact damage triggers (corner-scrape forgiveness)
+COLLISION_GRACE_PERIOD = 0.0   # seconds before contact damage triggers (no grace — smaller hitbox handles it)
 ITEM_PICKUP_FREEZE_DURATION = 2.5  # seconds — monsters pause during item pickup animation
 REVIVAL_DURATION = 6.5              # seconds — channel time to revive a tombstone
 REVIVAL_PROXIMITY = 1.0             # tile distance — how close reviver must be to tombstone
