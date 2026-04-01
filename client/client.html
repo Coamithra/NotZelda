@@ -386,7 +386,7 @@ function setState(newState, data) {
 
 function sendToServer(msg) {
   if (G.conn.ws && G.conn.ws.readyState === WebSocket.OPEN) {
-    if (G.conn.networkLog && (msg.type === "position_update" || msg.type === "face" || msg.type === "attack")) {
+    if (G.conn.networkLog && (msg.type === "player_state" || msg.type === "attack")) {
       const t = performance.now().toFixed(1);
       console.log(`[NET OUT t=${t}] ${msg.type} ${msg.direction||""} x=${msg.x} y=${msg.y} [${G.player.state}]`);
     }
@@ -457,21 +457,26 @@ function checkLockedDoor(checkX, checkY, dir) {
   }
 }
 
-// State sync — send position to server at 30fps when it changes
+// State sync — send player state to server at 30fps when it changes
 const SYNC_INTERVAL = 33; // ~30fps
 let _lastSyncTime = 0;
-const _lastSync = { x: null, y: null, dir: null };
-function syncPosition() {
+const _lastSync = { x: null, y: null, dir: null, dancing: null };
+function syncPlayerState() {
   if (!G.player.myPlayer) return;
   const p = G.player.myPlayer;
-  if (p.x === _lastSync.x && p.y === _lastSync.y && p.direction === _lastSync.dir) return;
+  const dancing = !!G.room.dancingPlayers[G.player.myName];
+  if (p.x === _lastSync.x && p.y === _lastSync.y
+      && p.direction === _lastSync.dir && dancing === _lastSync.dancing) return;
   const now = performance.now();
   if (now - _lastSyncTime < SYNC_INTERVAL) return;
   _lastSyncTime = now;
-  sendToServer({ type: "position_update", x: p.x, y: p.y, direction: p.direction });
+  const msg = { type: "player_state", x: p.x, y: p.y, direction: p.direction };
+  if (dancing) msg.dancing = true;
+  sendToServer(msg);
   _lastSync.x = p.x;
   _lastSync.y = p.y;
   _lastSync.dir = p.direction;
+  _lastSync.dancing = dancing;
 }
 
 function playerTick() {
@@ -493,9 +498,6 @@ function playerTick() {
       // Juice: dust puff on movement start or direction change
       if (!G.player.isMoving || G.player.lastMoveDir !== dir) {
         spawnDustPuff(G.player.myPlayer.x, G.player.myPlayer.y, dir);
-      }
-      if (G.player.myPlayer.direction !== dir) {
-        sendToServer({ type: "face", direction: dir });
       }
       G.player.lastMoveDir = dir;
       G.player.myPlayer.direction = dir;
@@ -594,7 +596,7 @@ function gameLoop(timestamp) {
     if (!G.ui.chatFocused && !G.ui.transition && !G.ui.conjuring && !G.player.spiritJarRevive) {
       playerTick();
     }
-    syncPosition();
+    syncPlayerState();
 
     // Update animations
     updateDances();
@@ -647,24 +649,12 @@ function gameLoop(timestamp) {
           p.displayY = ks.toY;
           p.knockbackSlide = null;
         }
-      } else if (p.walkState) {
-        const elapsed = performance.now() - p.walkState.startTime;
-        const progress = Math.min(elapsed / HALF_WALK_TIME_MS, 1.0);
-        p.displayX = p.walkState.fromX + (p.walkState.toX - p.walkState.fromX) * progress;
-        p.displayY = p.walkState.fromY + (p.walkState.toY - p.walkState.fromY) * progress;
-        if (progress >= 1.0) {
-          p.displayX = p.walkState.toX;
-          p.displayY = p.walkState.toY;
-          p.walkState = null;
-        }
-        p.moving = true;
       } else {
-        // Lerp fallback for snaps (reconciliation, room enter)
-        p.displayX += (p.x - p.displayX) * MOVE_LERP;
-        p.displayY += (p.y - p.displayY) * MOVE_LERP;
-        if (Math.abs(p.x - p.displayX) < 0.05) p.displayX = p.x;
-        if (Math.abs(p.y - p.displayY) < 0.05) p.displayY = p.y;
-        p.moving = (p.displayX !== p.x || p.displayY !== p.y);
+        // Snap directly — no interpolation (netcode card will add proper smoothing)
+        p.displayX = p.x;
+        p.displayY = p.y;
+        p.walkState = null;
+        p.moving = false;
       }
     }
 

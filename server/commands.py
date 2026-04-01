@@ -26,10 +26,8 @@ def process_player_commands(player, now, msgs):
     """Drain and process all queued commands for a player."""
     while player.command_queue:
         cmd_type, data = player.command_queue.popleft()
-        if cmd_type == "position_update":
-            _process_position_update(player, data, now, msgs)
-        elif cmd_type == "face":
-            _process_face(player, data, msgs)
+        if cmd_type == "player_state":
+            _process_player_state(player, data, now, msgs)
         elif cmd_type == "attack":
             _process_attack(player, data, now, msgs)
         elif cmd_type == "chat":
@@ -102,8 +100,8 @@ def _is_position_walkable(x, y, room):
     return True
 
 
-def _process_position_update(player, data, now, msgs):
-    """Validate a client position update and relay to other players."""
+def _process_player_state(player, data, now, msgs):
+    """Validate a client state frame (position, direction, dancing) and relay."""
     a = player.avatar
     new_x = data.get("x")
     new_y = data.get("y")
@@ -126,7 +124,9 @@ def _process_position_update(player, data, now, msgs):
     # Direction
     if direction in DIRECTIONS:
         a.direction = direction
-    a.dancing = False
+
+    # Dance state from client frame
+    a.dancing = bool(data.get("dancing", False))
 
     # Edge detection (room transition)
     room = game.rooms[player.room]
@@ -169,16 +169,23 @@ def _process_position_update(player, data, now, msgs):
     prev_x, prev_y = a.x, a.y
     a.x = new_x
     a.y = new_y
-    # Relay to other players
-    if new_x != a.last_reported_x or new_y != a.last_reported_y:
-        msgs.append(("broadcast", player.room, {
-            "type": "player_walk_half",
+    # Relay to other players — unified state update
+    if (new_x != a.last_reported_x or new_y != a.last_reported_y
+            or a.direction != a.last_reported_dir
+            or a.dancing != a.last_reported_dancing):
+        state_msg = {
+            "type": "player_state_update",
             "name": player.name,
             "x": new_x, "y": new_y,
             "direction": a.direction,
-        }, player.ws))
+        }
+        if a.dancing:
+            state_msg["dancing"] = True
+        msgs.append(("broadcast", player.room, state_msg, player.ws))
         a.last_reported_x = new_x
         a.last_reported_y = new_y
+        a.last_reported_dir = a.direction
+        a.last_reported_dancing = a.dancing
 
     # Collision checks (monster contact, hearts, dungeon items, guard proximity)
     _check_position_collisions(player, now, msgs, prev_x, prev_y)
@@ -400,20 +407,6 @@ def _check_guard_proximity_sync(player, now, msgs):
                 player.guard_greeted.add(key)
                 player.guard_cooldowns[key] = now  # keep timestamp for LLM seeding
                 msgs.append(("guard_chat", player, guard))
-
-
-def _process_face(player, data, msgs):
-    """Handle face direction change."""
-    a = player.avatar
-    direction = data.get("direction", "")
-    if direction in DIRECTIONS:
-        a.direction = direction
-        a.dancing = False
-        msgs.append(("broadcast", player.room, {
-            "type": "player_faced",
-            "name": player.name,
-            "direction": direction,
-        }, player.ws))
 
 
 # ---------------------------------------------------------------------------
@@ -692,10 +685,18 @@ def _cmd_help(player, args, msgs):
 
 
 def _cmd_dance(player, args, msgs):
-    player.avatar.dancing = True
-    msgs.append(("broadcast", player.room, {
-        "type": "dance", "name": player.name,
-    }, None))
+    a = player.avatar
+    a.dancing = True
+    # Broadcast immediately so other players see it without waiting for next state frame
+    state_msg = {
+        "type": "player_state_update",
+        "name": player.name,
+        "x": a.x, "y": a.y,
+        "direction": a.direction,
+        "dancing": True,
+    }
+    msgs.append(("broadcast", player.room, state_msg, None))  # include sender for dance confirmation
+    a.last_reported_dancing = True
 
 
 def _cmd_me(player, args, msgs):

@@ -411,13 +411,24 @@ function handleMessage(msg) {
       break;
     }
 
-    case "player_walk_half": {
-      // Another player moved half a tile — smooth interpolation
+    case "player_state_update": {
+      // Own state echoed back — only handle dance (position is authoritative locally)
+      if (msg.name === G.player.myName) {
+        if (msg.dancing && !G.room.dancingPlayers[G.player.myName]) {
+          startDance(G.player.myName);
+        } else if (!msg.dancing && G.room.dancingPlayers[G.player.myName]) {
+          stopDance(G.player.myName);
+        }
+        break;
+      }
+
+      // Unified state update for another player (position, direction, dancing)
       const op = G.room.otherPlayers[msg.name];
-      if (op) {
-        stopDance(msg.name);
+      if (!op) break;
+
+      // Position update with interpolation
+      if (msg.x !== op.x || msg.y !== op.y) {
         delete G.room.attackingPlayers[msg.name];
-        op.direction = msg.direction;
         op.x = msg.x;
         op.y = msg.y;
         op.walkState = {
@@ -426,15 +437,18 @@ function handleMessage(msg) {
           startTime: performance.now(),
         };
       }
+
+      op.direction = msg.direction;
+
+      // Dance state sync
+      if (msg.dancing && !G.room.dancingPlayers[msg.name]) {
+        startDance(msg.name);
+      } else if (!msg.dancing && G.room.dancingPlayers[msg.name]) {
+        stopDance(msg.name);
+      }
+
       break;
     }
-
-    case "player_faced":
-      if (msg.name !== G.player.myName && G.room.otherPlayers[msg.name]) {
-        stopDance(msg.name);
-        G.room.otherPlayers[msg.name].direction = msg.direction;
-      }
-      break;
 
     case "player_entered":
       if (msg.name !== G.player.myName) {
@@ -456,10 +470,6 @@ function handleMessage(msg) {
       if (msg.name !== G.player.myName) {
         startAttack(msg.name, msg.direction);
       }
-      break;
-
-    case "dance":
-      startDance(msg.name);
       break;
 
     case "npc_thinking": {
