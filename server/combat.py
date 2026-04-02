@@ -463,6 +463,8 @@ def _tick_all_monsters(now, msgs):
                     m.last_action_time = freeze_info["end"]
                 if m.state == "walking" and m.state_data.start_time < freeze_start:
                     m.state_data.start_time += freeze_dur
+                elif m.state == "knockback" and m.state_data["start_time"] < freeze_start:
+                    m.state_data["start_time"] += freeze_dur
                 elif m.state in ("charging", "teleporting", "area"):
                     m.state_data["end_time"] += freeze_dur
             del game.room_pickup_freeze[room_id]
@@ -519,6 +521,20 @@ def _tick_all_monsters(now, msgs):
                                 next_move["distance"] = remaining
                                 next_move["direction"] = walk_dir
                                 behavior_engine.engine.start_walk(monster, room_id, i, next_move, msgs, now)
+                # Knockback progression — server-side easeOutQuad interpolation
+                if monster.state == "knockback":
+                    sd = monster.state_data
+                    elapsed = now - sd["start_time"]
+                    t = min(elapsed / sd["duration"], 1.0)
+                    eased = t * (2 - t)  # easeOutQuad
+                    monster.x = sd["from_x"] + (sd["to_x"] - sd["from_x"]) * eased
+                    monster.y = sd["from_y"] + (sd["to_y"] - sd["from_y"]) * eased
+                    if t >= 1.0:
+                        monster.x = sd["to_x"]
+                        monster.y = sd["to_y"]
+                        monster.state = "idle"
+                        monster.state_data = {}
+                        monster.last_action_time = now
                 # State machine (behavior eval, warmup countdown)
                 behavior_engine.engine.tick_monster_state(monster, room_id, i, now, msgs)
             except Exception as e:

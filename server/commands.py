@@ -11,6 +11,7 @@ from server.constants import (
     MAX_MOVE_PER_UPDATE, PLAYER_SPEED, DT_CLAMP, MAX_INPUTS_PER_TICK,
     COLLISION_GRACE_PERIOD, ITEM_PICKUP_FREEZE_DURATION,
     SEAL_FRAGMENT_HP_BONUS, SWORD_PERP_WIDTH, PLAYER_COLLISION_MARGIN,
+    KNOCKBACK_DURATION,
 )
 from server import log
 from server.lifecycle import (
@@ -666,6 +667,8 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
             # Knockback: push surviving non-boss monster 1 tile in attack direction
             knock_x = None
             knock_y = None
+            knock_from_x = monster.x
+            knock_from_y = monster.y
             if monster.hp > 0 and monster.knockbackable:
                 room = game.rooms.get(room_id)
                 if room:
@@ -685,20 +688,32 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
                             elif not _is_position_walkable(cx, cy, room):
                                 can_knock = False
                     if can_knock:
-                        monster.x = kx
-                        monster.y = ky
+                        # Server-side knockback: set state, tick loop interpolates
+                        knock_from_x = round(monster.x)
+                        knock_from_y = round(monster.y)
                         knock_x = kx
                         knock_y = ky
                         monster.move_seq += 1
+                        monster.state = "knockback"
+                        monster.state_data = {
+                            "from_x": knock_from_x, "from_y": knock_from_y,
+                            "to_x": kx, "to_y": ky,
+                            "start_time": now, "duration": KNOCKBACK_DURATION,
+                        }
+                        monster.x = knock_from_x
+                        monster.y = knock_from_y
                     elif monster.state == "walking":
                         # Can't knock back but snap from fractional walk coords
                         monster.x = round(monster.x)
                         monster.y = round(monster.y)
                         monster.move_seq += 1
             # Interrupt current action on hit — but non-knockbackable monsters
-            # (bosses, heavy monsters) continue their behavior uninterrupted
+            # (bosses, heavy monsters) continue their behavior uninterrupted.
+            # Knockback state is already set above — don't override it.
             if monster.hp > 0 and monster.knockbackable:
-                if monster.state != "idle":
+                if monster.state == "knockback":
+                    monster.last_action_time = now
+                elif monster.state != "idle":
                     set_monster_idle(monster, room_id, i, msgs)
                 else:
                     monster.last_action_time = now
@@ -726,6 +741,9 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
                 if knock_x is not None:
                     msg_killed["knock_x"] = knock_x
                     msg_killed["knock_y"] = knock_y
+                    msg_killed["knock_from_x"] = knock_from_x
+                    msg_killed["knock_from_y"] = knock_from_y
+                    msg_killed["knock_duration"] = KNOCKBACK_DURATION
                 msgs.append(("broadcast", room_id, msg_killed, None))
                 # Kill message (chat log only, no popup)
                 monster_name = monster.kind.replace("_", " ").title()
@@ -789,6 +807,9 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
                 if knock_x is not None:
                     msg_hit["knock_x"] = knock_x
                     msg_hit["knock_y"] = knock_y
+                    msg_hit["knock_from_x"] = knock_from_x
+                    msg_hit["knock_from_y"] = knock_from_y
+                    msg_hit["knock_duration"] = KNOCKBACK_DURATION
                 msgs.append(("broadcast", room_id, msg_hit, None))
 
 

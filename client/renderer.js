@@ -222,9 +222,7 @@ function updateProjectiles() {
 
 function updateAttackEffects() {
   const now = Date.now();
-  G.fx.areaWarnings = G.fx.areaWarnings.filter(w => now - w.startTime < w.duration);
   G.fx.chargeTrails = G.fx.chargeTrails.filter(t => now - t.startTime < 400);
-  G.fx.chargePreps = G.fx.chargePreps.filter(p => now - p.startTime < 2000);
   G.fx.monsterAttackFlashes = G.fx.monsterAttackFlashes.filter(f => now - f.startTime < 200);
 }
 
@@ -248,40 +246,52 @@ function renderProjectiles() {
   }
 }
 
-function renderAreaWarnings() {
-  const now = Date.now();
-  for (const w of G.fx.areaWarnings) {
-    const elapsed = now - w.startTime;
-    const progress = elapsed / w.duration;
-    const pulse = 0.15 + 0.15 * Math.sin(elapsed / 80);
-    G.ui.ctx.globalAlpha = pulse;
-    G.ui.ctx.fillStyle = progress > 0.85 ? "#ff4400" : "#ff8800";
-    const aw = w.width || 1, ah = w.height || 1;
-    for (let dy = -w.range; dy <= w.range + ah - 1; dy++) {
-      for (let dx = -w.range; dx <= w.range + aw - 1; dx++) {
-        // Manhattan distance from nearest tile in the boss footprint
-        const nearX = Math.max(0, Math.min(dx, aw - 1));
-        const nearY = Math.max(0, Math.min(dy, ah - 1));
-        if (Math.abs(dx - nearX) + Math.abs(dy - nearY) <= w.range) {
-          const tx = w.x + dx, ty = w.y + dy;
-          if (tx >= 0 && tx < COLS && ty >= 0 && ty < ROWS) {
-            G.ui.ctx.fillRect(tx * TS, ty * TS, TS, TS);
-          }
+function _renderWarningCircle(x, y, range, aw, ah, progress, elapsed) {
+  const pulse = 0.15 + 0.15 * Math.sin(elapsed / 80);
+  G.ui.ctx.globalAlpha = pulse;
+  G.ui.ctx.fillStyle = progress > 0.85 ? "#ff4400" : "#ff8800";
+  for (let dy = -range; dy <= range + ah - 1; dy++) {
+    for (let dx = -range; dx <= range + aw - 1; dx++) {
+      const nearX = Math.max(0, Math.min(dx, aw - 1));
+      const nearY = Math.max(0, Math.min(dy, ah - 1));
+      if (Math.abs(dx - nearX) + Math.abs(dy - nearY) <= range) {
+        const tx = x + dx, ty = y + dy;
+        if (tx >= 0 && tx < COLS && ty >= 0 && ty < ROWS) {
+          G.ui.ctx.fillRect(tx * TS, ty * TS, TS, TS);
         }
       }
     }
-    G.ui.ctx.globalAlpha = 1;
+  }
+  G.ui.ctx.globalAlpha = 1;
+}
+
+function renderAreaWarnings() {
+  const now = performance.now();
+  for (const m of G.room.monsters) {
+    if (!m.action) continue;
+    const a = m.action;
+    if (a.type === "area_warmup") {
+      const elapsed = now - a.startTime;
+      const progress = a.effectiveDuration > 0 ? Math.min(elapsed / a.effectiveDuration, 1.0) : 1.0;
+      _renderWarningCircle(a.x, a.y, a.range, a.areaWidth, a.areaHeight, progress, elapsed);
+    } else if (a.type === "teleport_warmup" && a.damageRadius > 0 && a.targetX !== undefined) {
+      const elapsed = now - a.startTime;
+      const progress = a.effectiveDuration > 0 ? Math.min(elapsed / a.effectiveDuration, 1.0) : 1.0;
+      _renderWarningCircle(a.targetX, a.targetY, a.damageRadius, 1, 1, progress, elapsed);
+    }
   }
 }
 
 function renderChargePreps() {
-  const now = Date.now();
-  for (const p of G.fx.chargePreps) {
-    const age = now - p.startTime;
+  const now = performance.now();
+  for (const m of G.room.monsters) {
+    if (!m.action || m.action.type !== "charge_warmup") continue;
+    const a = m.action;
+    const age = now - a.startTime;
     const pulse = 0.25 + 0.15 * Math.sin(age / 80);
     G.ui.ctx.globalAlpha = pulse;
     G.ui.ctx.fillStyle = "#ff4422";
-    for (const [tx, ty] of p.lane) {
+    for (const [tx, ty] of a.lane) {
       G.ui.ctx.fillRect(tx * TS + 1*SCALE, ty * TS + 1*SCALE, TS - 2*SCALE, TS - 2*SCALE);
     }
     G.ui.ctx.globalAlpha = 1;
@@ -755,7 +765,13 @@ function renderPlayers() {
   }
 
   for (const m of G.room.monsters) {
-    all.push({ x: m.displayX, y: m.displayY, isMonster: true, kind: m.kind, hitFlash: m.hitFlash, teleportAlpha: m.teleportAlpha, chargePrep: m.chargePrep, width: m.width || 1, height: m.height || 1, walkHop: m.walkHop, spawnTime: m.spawnTime });
+    // Derive teleportAlpha and chargePrep from unified action for rendering
+    const isTpWarmup = m.action && m.action.type === "teleport_warmup";
+    const tpAlpha = isTpWarmup
+      ? Math.max(0, 1 - Math.min((performance.now() - m.action.startTime) / m.action.effectiveDuration, 1.0))
+      : undefined;
+    const cpPrep = (m.action && m.action.type === "charge_warmup") ? m.action.startTime : null;
+    all.push({ x: m.displayX, y: m.displayY, isMonster: true, kind: m.kind, hitFlash: m.hitFlash, teleportAlpha: tpAlpha, chargePrep: cpPrep, width: m.width || 1, height: m.height || 1, walkHop: m.walkHop, spawnTime: m.spawnTime });
   }
 
   all.sort((a, b) => a.y - b.y);

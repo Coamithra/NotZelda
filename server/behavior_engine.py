@@ -635,6 +635,7 @@ class BehaviorEngine:
             "dy": dy,
             "lane": lane,
             "seq": monster.move_seq,
+            "duration": monster.state_data["duration"],
         }, None))
 
     def _exec_charge(self, monster, room_id, monster_idx, action, msgs):
@@ -856,6 +857,10 @@ class BehaviorEngine:
             # Walk progression handled by _tick_all_monsters in combat.py
             return
 
+        if state == "knockback":
+            # Knockback progression handled by _tick_all_monsters in combat.py
+            return
+
         if state in ("charging", "teleporting", "area"):
             # Warmup — time-based end
             sd = monster.state_data
@@ -901,10 +906,12 @@ class BehaviorEngine:
         if warmup > 0 and action_name in self._warmup_handlers:
             state_name = {"charge": "charging", "teleport": "teleporting", "area": "area"}
             monster.state = state_name.get(action_name, "idle")
+            warmup_duration = warmup * monster.decision_time
             monster.state_data = {
-                "end_time": now + warmup * monster.decision_time,
+                "end_time": now + warmup_duration,
                 "action_name": action_name,
                 "action": result,
+                "duration": warmup_duration,
             }
             handler = self._warmup_handlers.get(action_name)
             if handler:

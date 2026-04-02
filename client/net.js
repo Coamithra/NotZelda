@@ -118,6 +118,12 @@ function registerCustomContent(msg) {
   }
 }
 
+// Dead reckoning: shorten animation by RTT/2 to compensate for message travel time.
+function computeEffectiveDuration(serverDurationMs) {
+  const halfRtt = (G.conn.rtt || 0) / 2;
+  return Math.max(serverDurationMs - halfRtt, 16);
+}
+
 function guessTransitionDir(fromId, toId, exitDir, fromExits) {
   if (exitDir) return exitDir;
   if (fromExits) {
@@ -299,24 +305,28 @@ function handleMessage(msg) {
       G.room.activeRevival = null;
       G.fx.bossDeathEffect = null;
       G.fx.projectiles = [];
-      G.fx.areaWarnings = [];
       G.fx.chargeTrails = [];
-      G.fx.chargePreps = [];
       G.fx.monsterAttackFlashes = [];
       G.room.monsters = (msg.monsters || []).map((m, idx) => {
         const mon = {
           id: m.id, kind: m.kind, x: m.x, y: m.y, displayX: m.x, displayY: m.y,
           width: m.width || 1, height: m.height || 1,
-          walkTime: (m.walk_time || 2.0) * 1000,  // per-monster walk duration in ms
-          walkState: null, stateSeq: m.seq || 0,
+          action: null, stateSeq: m.seq || 0,
+          correctionOffset: { x: 0, y: 0 },
           spawnTime: Date.now() + idx * 40,  // Juice: staggered spawn pop
         };
         if (m.walking) {
-          mon.walkState = {
+          // Room enter mid-walk: reconstruct walk action from server progress.
+          // walk_time_step is the actual step duration (may differ from base walk_time).
+          const walkTimeMs = (m.walk_time_step || m.walk_time || 2.0) * 1000;
+          const alreadyElapsed = m.walk_progress * walkTimeMs;
+          mon.action = {
+            type: "walk",
             fromX: m.walk_from.x, fromY: m.walk_from.y,
             toX: m.walk_to.x, toY: m.walk_to.y,
-            startTime: performance.now() - (m.walk_progress * mon.walkTime),
-            walkTime: mon.walkTime,
+            startTime: performance.now() - alreadyElapsed,
+            effectiveDuration: walkTimeMs,  // no RTT adjustment (progress already compensates)
+            duration: walkTimeMs,
             seq: mon.stateSeq,
           };
           mon.x = m.walk_to.x;
@@ -669,17 +679,25 @@ function handleMessage(msg) {
       const walkMon = G.room.monsters.find(m => m.id === msg.id);
       if (walkMon && (msg.seq == null || msg.seq >= walkMon.stateSeq)) {
         walkMon.stateSeq = msg.seq || (walkMon.stateSeq + 1);
-        walkMon.walkState = {
+        const durationMs = msg.walk_time * 1000;
+        // Capture old display position for correction offset
+        const oldDX = walkMon.displayX;
+        const oldDY = walkMon.displayY;
+        walkMon.action = {
+          type: "walk",
           fromX: msg.from_x, fromY: msg.from_y,
           toX: msg.to_x, toY: msg.to_y,
           startTime: performance.now(),
-          walkTime: msg.walk_time * 1000,
+          effectiveDuration: computeEffectiveDuration(durationMs),
+          duration: durationMs,
           seq: walkMon.stateSeq,
         };
-        // Cancel any charge prep — walk supersedes it
-        walkMon.chargePrep = null;
-        G.fx.chargePreps = G.fx.chargePreps.filter(p => p.id !== msg.id);
-        // Set logical position to target (walk will commit midway)
+        // Correction offset: smooth visual transition from old position
+        const ffProgress = Math.min((G.conn.rtt || 0) / 2 / durationMs, 1.0);
+        const newDX = msg.from_x + (msg.to_x - msg.from_x) * ffProgress;
+        const newDY = msg.from_y + (msg.to_y - msg.from_y) * ffProgress;
+        walkMon.correctionOffset = { x: oldDX - newDX, y: oldDY - newDY };
+        // Set logical position to target
         walkMon.x = msg.to_x;
         walkMon.y = msg.to_y;
       }
@@ -692,10 +710,12 @@ function handleMessage(msg) {
         // Only commit if this completion matches the walk we're currently
         // animating.  A charge, knockback, or newer walk will have bumped
         // stateSeq, making this message stale.
-        if (wcMon.walkState && wcMon.walkState.seq === (msg.seq != null ? msg.seq : wcMon.stateSeq)) {
-          wcMon.displayX = wcMon.walkState.toX;
-          wcMon.displayY = wcMon.walkState.toY;
-          wcMon.walkState = null;
+        if (wcMon.action && wcMon.action.type === "walk" &&
+            wcMon.action.seq === (msg.seq != null ? msg.seq : wcMon.stateSeq)) {
+          wcMon.displayX = wcMon.action.toX;
+          wcMon.displayY = wcMon.action.toY;
+          wcMon.action = null;
+          wcMon.correctionOffset = { x: 0, y: 0 };
         }
       }
       break;
@@ -707,9 +727,8 @@ function handleMessage(msg) {
         mon.x = msg.x; mon.y = msg.y;
         mon.displayX = msg.x; mon.displayY = msg.y;
         mon.stateSeq = msg.seq || (mon.stateSeq + 1);
-        mon.walkState = null;  // instant move — clear any walk
-        mon.chargePrep = null;
-        G.fx.chargePreps = G.fx.chargePreps.filter(p => p.id !== msg.id);
+        mon.action = null;
+        mon.correctionOffset = { x: 0, y: 0 };
       }
       break;
     }
@@ -718,7 +737,7 @@ function handleMessage(msg) {
       const idx = G.room.monsters.findIndex(m => m.id === msg.id);
       if (idx !== -1) {
         const mon = G.room.monsters[idx];
-        mon.walkState = null;
+        mon.action = null;
         const isBoss = (mon.width || 1) > 1 || (mon.height || 1) > 1;
         G.room.dyingMonsters.push({ kind: mon.kind, x: msg.x, y: msg.y, frame: 0, nextTime: Date.now() + (isBoss ? 400 : DYING_MONSTER_FRAME_MS), width: mon.width || 1, height: mon.height || 1 });
         G.room.monsters.splice(idx, 1);
@@ -786,15 +805,20 @@ function handleMessage(msg) {
         // Only sync position and cancel walk if monster was knocked back
         // (bosses are non-knockbackable — they continue walking through hits)
         if (msg.knock_x != null) {
-          hitMon.x = msg.x;
-          hitMon.y = msg.y;
-          hitMon.walkState = null;
-          hitMon.knockbackSlide = {
-            fromX: hitMon.displayX, fromY: hitMon.displayY,
+          hitMon.x = msg.knock_x;
+          hitMon.y = msg.knock_y;
+          const durationMs = (msg.knock_duration || 0.2) * 1000;
+          hitMon.action = {
+            type: "knockback",
+            fromX: msg.knock_from_x ?? hitMon.displayX,
+            fromY: msg.knock_from_y ?? hitMon.displayY,
             toX: msg.knock_x, toY: msg.knock_y,
-            startTime: performance.now(), duration: 200,
+            startTime: performance.now(),
+            effectiveDuration: computeEffectiveDuration(durationMs),
+            duration: durationMs,
+            seq: hitMon.stateSeq,
           };
-          // Charge prep is cleaned up by warmup_cancel (same batch)
+          hitMon.correctionOffset = { x: 0, y: 0 };
         }
         // Juice: hit sparks
         const cx = hitMon.displayX * TS + (hitMon.width || 1) * TS / 2;
@@ -811,7 +835,7 @@ function handleMessage(msg) {
 
     case "monster_spawned":
       registerCustomContent(msg);
-      G.room.monsters.push({ id: msg.id, kind: msg.kind, x: msg.x, y: msg.y, displayX: msg.x, displayY: msg.y, width: msg.width || 1, height: msg.height || 1, walkTime: (msg.walk_time || 2.0) * 1000, walkState: null, stateSeq: 0, spawnTime: Date.now() });
+      G.room.monsters.push({ id: msg.id, kind: msg.kind, x: msg.x, y: msg.y, displayX: msg.x, displayY: msg.y, width: msg.width || 1, height: msg.height || 1, action: null, stateSeq: 0, correctionOffset: { x: 0, y: 0 }, spawnTime: Date.now() });
       break;
 
     // --- Stage 5: Monster attack messages ---
@@ -856,12 +880,16 @@ function handleMessage(msg) {
       const prepMon = G.room.monsters.find(m => m.id === msg.id);
       if (prepMon) {
         if (msg.seq != null && msg.seq < prepMon.stateSeq) break; // stale
-        prepMon.chargePrep = Date.now();
-        // Cancel any in-progress walk — charge warmup supersedes it
-        prepMon.walkState = null;
+        const durationMs = (msg.duration || 2.0) * 1000;
+        prepMon.action = {
+          type: "charge_warmup",
+          lane: msg.lane,
+          startTime: performance.now(),
+          effectiveDuration: computeEffectiveDuration(durationMs),
+          duration: durationMs,
+          seq: prepMon.stateSeq,
+        };
       }
-      G.fx.chargePreps = G.fx.chargePreps.filter(p => p.id !== msg.id);
-      G.fx.chargePreps.push({ id: msg.id, lane: msg.lane, startTime: Date.now() });
       break;
     }
 
@@ -874,10 +902,8 @@ function handleMessage(msg) {
         chargedMon.displayX = msg.x;
         chargedMon.displayY = msg.y;
         chargedMon.stateSeq = msg.seq || (chargedMon.stateSeq + 1);
-        chargedMon.walkState = null;
-        // Clear the charge prep visuals — the charge has executed
-        chargedMon.chargePrep = null;
-        G.fx.chargePreps = G.fx.chargePreps.filter(p => p.id !== msg.id);
+        chargedMon.action = null;
+        chargedMon.correctionOffset = { x: 0, y: 0 };
       }
       G.fx.chargeTrails.push({ path: msg.path, startTime: Date.now() });
       break;
@@ -886,19 +912,16 @@ function handleMessage(msg) {
     case "teleport_start": {
       const tpMon = G.room.monsters.find(m => m.id === msg.id);
       if (tpMon) {
-        tpMon.teleportAlpha = 1;
-        const fadeOut = () => {
-          if (tpMon.teleportAlpha > 0) {
-            tpMon.teleportAlpha -= 0.1;
-            setTimeout(fadeOut, 30);
-          } else {
-            tpMon.teleportAlpha = 0;
-          }
+        const durationMs = (msg.delay || 0.5) * 1000;
+        tpMon.action = {
+          type: "teleport_warmup",
+          targetX: msg.target_x, targetY: msg.target_y,
+          damageRadius: msg.damage_radius || 0,
+          startTime: performance.now(),
+          effectiveDuration: computeEffectiveDuration(durationMs),
+          duration: durationMs,
+          seq: tpMon.stateSeq,
         };
-        fadeOut();
-      }
-      if (msg.target_x !== undefined) {
-        G.fx.areaWarnings.push({ id: msg.id, x: msg.target_x, y: msg.target_y, range: msg.damage_radius || 0, startTime: Date.now(), duration: (msg.delay || 0.5) * 1000 });
       }
       break;
     }
@@ -912,14 +935,29 @@ function handleMessage(msg) {
         tpEndMon.displayX = msg.x;
         tpEndMon.displayY = msg.y;
         tpEndMon.stateSeq = msg.seq || (tpEndMon.stateSeq + 1);
-        tpEndMon.walkState = null;
+        tpEndMon.action = null;
+        tpEndMon.correctionOffset = { x: 0, y: 0 };
       }
       break;
     }
 
-    case "area_warning":
-      G.fx.areaWarnings.push({ id: msg.id, x: msg.x, y: msg.y, width: msg.width || 1, height: msg.height || 1, range: msg.range, startTime: Date.now(), duration: (msg.duration || 0.75) * 1000 });
+    case "area_warning": {
+      const awMon = G.room.monsters.find(m => m.id === msg.id);
+      if (awMon) {
+        const durationMs = (msg.duration || 0.75) * 1000;
+        awMon.action = {
+          type: "area_warmup",
+          x: msg.x, y: msg.y,
+          range: msg.range,
+          areaWidth: msg.width || 1, areaHeight: msg.height || 1,
+          startTime: performance.now(),
+          effectiveDuration: computeEffectiveDuration(durationMs),
+          duration: durationMs,
+          seq: awMon.stateSeq,
+        };
+      }
       break;
+    }
 
     case "area_attack":
       G.fx.monsterAttackFlashes.push({ x: msg.x, y: msg.y, width: msg.width || 1, height: msg.height || 1, range: msg.range, startTime: Date.now() });
@@ -927,25 +965,17 @@ function handleMessage(msg) {
 
     case "warmup_cancel": {
       const cancelMon = G.room.monsters.find(m => m.id === msg.id);
-      if (cancelMon) cancelMon.chargePrep = null;
-      G.fx.chargePreps = G.fx.chargePreps.filter(p => p.id !== msg.id);
-      G.fx.areaWarnings = G.fx.areaWarnings.filter(w => w.id !== msg.id);
+      if (cancelMon && cancelMon.action &&
+          (cancelMon.action.type === "charge_warmup" || cancelMon.action.type === "area_warmup")) {
+        cancelMon.action = null;
+      }
       break;
     }
 
     case "monster_fade_in": {
-      G.fx.areaWarnings = G.fx.areaWarnings.filter(w => w.id !== msg.id);
       const fadeMon = G.room.monsters.find(m => m.id === msg.id);
-      if (fadeMon && fadeMon.teleportAlpha < 1) {
-        const fadeIn = () => {
-          if (fadeMon.teleportAlpha < 1) {
-            fadeMon.teleportAlpha += 0.1;
-            setTimeout(fadeIn, 30);
-          } else {
-            fadeMon.teleportAlpha = 1;
-          }
-        };
-        fadeIn();
+      if (fadeMon && fadeMon.action && fadeMon.action.type === "teleport_warmup") {
+        fadeMon.action = null;
       }
       break;
     }

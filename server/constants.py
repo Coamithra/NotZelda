@@ -55,6 +55,7 @@ SWORD_ACTIVE_DURATION = 0.18
 SWORD_PERP_WIDTH = 0.6  # perpendicular hitbox width (was implicit 1.0 with tile-based collision)
 PLAYER_COLLISION_MARGIN = 0.2  # inset per side for player-vs-monster AABB (40% smaller)
 MOVE_STEP = 1.0         # monster movement step size in tiles
+KNOCKBACK_DURATION = 0.2  # seconds — server-side knockback slide duration
 
 # Half-tile free movement (NES Zelda-style)
 HALF_TILE = 0.5

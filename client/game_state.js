@@ -24,6 +24,7 @@ const INTERP_BUFFER_SIZE = 6;            // max snapshots to keep per remote pla
 
 // Client-side prediction + server reconciliation
 const CORRECTION_RATE = 0.15;            // per-frame lerp factor for smooth correction decay
+const MONSTER_CORRECTION_RATE = 0.2;     // per-frame decay for monster dead reckoning offset
 
 // Shared mutable game state
 const G = {
@@ -174,9 +175,7 @@ const G = {
     floatingTexts: [],        // [{x, y, text, startTime, color}]
     damageVignette: 0,        // timestamp for red edge flash
     projectiles: [],       // [{id, x, y, displayX, displayY, dx, dy, color}]
-    areaWarnings: [],      // [{x, y, range, startTime, duration}]
     chargeTrails: [],      // [{path, startTime}]
-    chargePreps: [],       // [{id, lane, startTime}]
     monsterAttackFlashes: [], // [{x, y, startTime}]
     bossDeathEffect: null, // {startTime, duration} — dramatic screen flash/shake on boss kill
   },

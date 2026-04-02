@@ -33,6 +33,15 @@ def _on_state_exited(monster, old_state, room_id, monster_idx, msgs):
             "type": "monster_walk_complete", "id": monster_idx,
             "seq": monster.state_data.seq,
         }, None))
+    elif old_state == "knockback":
+        # Knockback interrupted — snap to current position
+        monster.x = round(monster.x)
+        monster.y = round(monster.y)
+        msgs.append(("broadcast", room_id, {
+            "type": "monster_moved", "id": monster_idx,
+            "x": monster.x, "y": monster.y,
+            "seq": monster.move_seq,
+        }, None))
 
 
 def set_monster_idle(monster, room_id, monster_idx, msgs):
@@ -266,11 +275,12 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
             if m.state == "walking":
                 sd = m.state_data
                 elapsed = now - sd.start_time
-                progress = min(elapsed / m.walk_time, 1.0)
+                progress = min(elapsed / sd.walk_time, 1.0)
                 mdata["walking"] = True
                 mdata["walk_from"] = {"x": sd.from_x, "y": sd.from_y}
                 mdata["walk_to"] = {"x": sd.to_x, "y": sd.to_y}
                 mdata["walk_progress"] = progress
+                mdata["walk_time_step"] = sd.walk_time
             monsters.append(mdata)
     exits = room["exits"]
     msg = {
