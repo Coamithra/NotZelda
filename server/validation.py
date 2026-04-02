@@ -66,8 +66,8 @@ def validate_monster(data: dict) -> list[str]:
         if not isinstance(wt, (int, float)) or wt < 0.1 or wt > 5.0:
             errors.append("stats.walk_time must be 0.1-5.0")
         dt = stats.get("decision_time")
-        if not isinstance(dt, (int, float)) or dt < 0.2 or dt > 10.0:
-            errors.append("stats.decision_time must be 0.2-10.0")
+        if not isinstance(dt, (int, float)) or dt < 0 or dt > 10.0:
+            errors.append("stats.decision_time must be 0-10.0")
         dmg = stats.get("damage")
         if not isinstance(dmg, (int, float)) or dmg < 1 or dmg > 20:
             errors.append("stats.damage must be 1-20")
@@ -182,8 +182,8 @@ def _validate_behavior(behavior: dict) -> list[str]:
         if warmup is not None and (not isinstance(warmup, (int, float)) or warmup < 0 or warmup > 20):
             errors.append(f"behavior.rules[{ri}] warmup must be 0-20")
         cooldown = rule.get("cooldown")
-        if cooldown is not None and (not isinstance(cooldown, (int, float)) or cooldown < 0 or cooldown > 50):
-            errors.append(f"behavior.rules[{ri}] cooldown must be 0-50")
+        if cooldown is not None and (not isinstance(cooldown, (int, float)) or cooldown < 0 or cooldown > 200):
+            errors.append(f"behavior.rules[{ri}] cooldown must be 0-200")
 
         # Action-specific params
         if action == "projectile":

@@ -14,7 +14,4 @@ DW DF DF DF DF DF DF DF DF DF DF DF DF DF DW
 DW DF DF DF DF DF DF DF DF DF DF DF DF DF DW
 DW DW DW DW DW DW DF DF DF DW DW DW DW DW DW
 ---
-monster bat 3 2
-monster bat 11 2
-monster bat 3 8
-monster bat 11 8
+monsters bat 12

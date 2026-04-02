@@ -227,6 +227,7 @@ def load_dungeon_templates(directory: str = "rooms/dungeon1", type_id: str = "d1
 
         guards = []
         monsters = []
+        monster_groups = []
         if len(parts) >= 3:
             for line in parts[2].strip().splitlines():
                 line = line.strip()
@@ -246,15 +247,21 @@ def load_dungeon_templates(directory: str = "rooms/dungeon1", type_id: str = "d1
                         "sprite": tokens[4],
                         "dialog": dlg, "personality": pers,
                     })
+                elif tokens[0] == "monsters" and len(tokens) >= 3:
+                    # Dynamic group: monsters <kind> <base_count>
+                    monster_groups.append({"kind": tokens[1], "count": int(tokens[2])})
                 elif tokens[0] == "monster" and len(tokens) >= 4:
                     monsters.append({"kind": tokens[1], "x": int(tokens[2]), "y": int(tokens[3])})
 
-        game.dungeon_templates[type_id][template_id] = {
+        template_data = {
             "name": header.get("name", template_id),
             "tilemap": tilemap,
             "guards": guards,
             "monsters": monsters,
         }
+        if monster_groups:
+            template_data["monster_groups"] = monster_groups
+        game.dungeon_templates[type_id][template_id] = template_data
         count += 1
 
     log.debug(f"[DUNGEON] Loaded {count} dungeon templates from {directory}/ for type '{type_id}'")

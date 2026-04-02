@@ -18,6 +18,8 @@ DUNGEON_TYPES = {
         "treasure_template": "d1_treasure",
         "min_locks": 1,
         "max_locks": 6,
+        "difficulty_distribution": {"easy": 0.50, "challenging": 0.30, "hard": 0.20},
+        "difficulty_scaling": {"easy": 0.5, "challenging": 1.0, "hard": 1.5},
     },
     "d2": {
         "name": "Water Temple",

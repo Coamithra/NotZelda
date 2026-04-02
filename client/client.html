@@ -755,8 +755,8 @@ function gameLoop(timestamp) {
             break;
         }
 
-        // Auto-clear completed actions
-        if (progress >= 1.0) {
+        // Auto-clear completed actions (teleport_warmup waits for teleport_end)
+        if (progress >= 1.0 && a.type !== "teleport_warmup") {
           if (a.type === "walk") { m.displayX = a.toX; m.displayY = a.toY; }
           if (a.type === "knockback") { m.displayX = a.toX; m.displayY = a.toY; }
           m.action = null;

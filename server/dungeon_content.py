@@ -71,11 +71,17 @@ def _template_to_room_data(template: dict) -> dict:
     for m in template.get("monsters", []):
         placements.append({"kind": m["kind"], "x": m["x"], "y": m["y"]})
 
-    return {
+    result = {
         "name": template.get("name", "Dungeon Room"),
         "tilemap": [list(row) for row in template["tilemap"]],
         "monster_placements": placements,
     }
+    if template.get("monster_groups"):
+        result["monster_groups"] = [
+            {"kind": g["kind"], "count": g["count"]}
+            for g in template["monster_groups"]
+        ]
+    return result
 
 
 def _build_monster_data(kind: str) -> dict:
@@ -197,6 +203,7 @@ def load_precreated_content(
         # Determine tags based on content
         tags = ["dungeon"]
         kinds = {m["kind"] for m in room_data["monster_placements"]}
+        kinds |= {g["kind"] for g in room_data.get("monster_groups", [])}
         if "skeleton" in kinds:
             tags.append("undead")
         if "bat" in kinds:

@@ -15,7 +15,9 @@ RW RF RF RF RF ST RF RD RF ST RF RF RF RF RW
 RW RF RF RF RF RF RF RD RF RF RF RF RF RF RW
 RW RW RW RW RW RW RW RW RW RW RW RW RW RW RW
 ---
-monster bat 2 3
-monster skeleton 9 5
-monster bat 5 9
-monster skeleton 11 8
+monster skeleton 3 6
+monster bat 12 9
+monster bat 9 3
+monster bat 2 1
+monster bat 12 4
+monster bat 11 5

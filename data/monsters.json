@@ -265,9 +265,11 @@
     ],
     "stats": {
       "hp": 1,
-      "walk_time": 0.2,
-      "decision_time": 1.0,
-      "damage": 1
+      "walk_time": 0.18,
+      "decision_time": 0.55,
+      "damage": 1,
+      "pack_min": 10,
+      "pack_max": 13
     },
     "behavior": {
       "rules": [
@@ -894,9 +896,11 @@
     ],
     "stats": {
       "hp": 2,
-      "walk_time": 0.25,
-      "decision_time": 2.0,
-      "damage": 3
+      "walk_time": 0.35,
+      "decision_time": 0,
+      "damage": 2,
+      "pack_min": 3,
+      "pack_max": 5
     },
     "behavior": {
       "rules": [
@@ -909,7 +913,8 @@
         {
           "if": "always",
           "do": "move",
-          "direction": "random"
+          "direction": "random",
+          "cooldown": 60
         }
       ]
     },
@@ -1587,7 +1592,9 @@
       "hp": 3,
       "walk_time": 0.35,
       "decision_time": 2.5,
-      "damage": 1
+      "damage": 1,
+      "pack_min": 2,
+      "pack_max": 3
     },
     "behavior": {
       "rules": [
@@ -1850,8 +1857,10 @@
     "stats": {
       "hp": 2,
       "walk_time": 0.25,
-      "decision_time": 2.5,
-      "damage": 2
+      "decision_time": 2.0,
+      "damage": 2,
+      "pack_min": 3,
+      "pack_max": 4
     },
     "behavior": {
       "rules": [
@@ -1862,7 +1871,8 @@
           "target": "player",
           "drift": 2,
           "damage": 2,
-          "warmup": 1,
+          "damage_radius": 2,
+          "warmup": 0.75,
           "cooldown": 4
         },
         {

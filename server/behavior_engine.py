@@ -430,7 +430,7 @@ class BehaviorEngine:
         range: max teleport distance from monster.
         """
         target_mode = rule.get("target", "player")
-        drift = rule.get("drift", 1)
+        drift = int(rule.get("drift", 1))
         max_range = rule.get("range", 8)
         damage = rule.get("damage", monster.damage)
 
@@ -724,14 +724,16 @@ class BehaviorEngine:
         }, None))
 
         # Damage players within damage_radius of landing position
+        # Snap to tile coords to match the client's tile-based warning zone
         damage_radius = action.get("damage_radius", 1)
         if damage > 0 and damage_radius >= 0:
             w, h = monster.width, monster.height
             for p, a in avatars_in_room(room_id):
                 if p.hp > 0:
-                    nearest_x = max(monster.x, min(a.x, monster.x + w - 1))
-                    nearest_y = max(monster.y, min(a.y, monster.y + h - 1))
-                    if abs(a.x - nearest_x) + abs(a.y - nearest_y) <= damage_radius:
+                    ax, ay = int(a.x), int(a.y)
+                    nearest_x = max(monster.x, min(ax, monster.x + w - 1))
+                    nearest_y = max(monster.y, min(ay, monster.y + h - 1))
+                    if abs(ax - nearest_x) + abs(ay - nearest_y) <= damage_radius:
                         self._apply_damage(p, damage, room_id, msgs, monster.x, monster.y)
 
     def _warmup_area(self, monster, room_id, monster_idx, action, msgs):
@@ -776,9 +778,11 @@ class BehaviorEngine:
         for p, a in avatars_in_room(room_id):
             if p.hp > 0:
                 # Manhattan distance from nearest tile in the boss footprint
-                nearest_x = max(ax, min(a.x, ax + aw - 1))
-                nearest_y = max(ay, min(a.y, ay + ah - 1))
-                dist = abs(a.x - nearest_x) + abs(a.y - nearest_y)
+                # Snap to tile coords to match the client's tile-based warning zone
+                px, py = int(a.x), int(a.y)
+                nearest_x = max(ax, min(px, ax + aw - 1))
+                nearest_y = max(ay, min(py, ay + ah - 1))
+                dist = abs(px - nearest_x) + abs(py - nearest_y)
                 if dist <= range_val:
                     self._apply_damage(p, damage, room_id, msgs, ax, ay)
 

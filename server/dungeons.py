@@ -57,6 +57,9 @@ class DungeonInstance:
         self.dark_cells = set()        # cells flagged as dark rooms
         self.lantern_cell = None       # (col, row) where the lantern spawns
 
+        # Difficulty tiers — decided at creation time (easy/challenging/hard)
+        self.cell_difficulty = {}          # cell -> "easy"|"challenging"|"hard"
+
         # Trap rooms — decided at creation time so key placement can use it
         self.trap_cells = set()            # cells that will become trap rooms on resolution
 
@@ -214,25 +217,55 @@ def _pick_extra_edges(active_cells, tree_edges, exclude=None):
     return set(random.sample(non_tree, min(extra_count, len(non_tree))))
 
 
-def _identify_trap_rooms(cell_assignments, boss, entrance, sanctum):
+def _assign_difficulty_tiers(active_cells, entrance, boss, sanctum, treasure, type_config):
+    """Assign easy/challenging/hard tier to each non-special dungeon cell.
+
+    Distribution is configured per dungeon type in dungeon_types.py.
+    Cells are shuffled randomly — difficulty is not distance-based.
+    Special cells (entrance, boss, sanctum, treasure) are excluded.
+
+    Returns dict of cell -> "easy"|"challenging"|"hard".
+    """
+    dist = type_config.get("difficulty_distribution",
+                           {"easy": 0.50, "challenging": 0.30, "hard": 0.20})
+    special = {entrance, boss, sanctum, treasure}
+    regular = [c for c in active_cells if c not in special]
+    random.shuffle(regular)
+
+    n = len(regular)
+    n_easy = round(n * dist["easy"])
+    n_hard = round(n * dist["hard"])
+    n_challenging = n - n_easy - n_hard  # remainder goes to challenging
+
+    tiers = {}
+    for i, cell in enumerate(regular):
+        if i < n_easy:
+            tiers[cell] = "easy"
+        elif i < n_easy + n_challenging:
+            tiers[cell] = "challenging"
+        else:
+            tiers[cell] = "hard"
+    # Entrance gets easy tier so its template monsters still spawn
+    tiers[entrance] = "easy"
+    return tiers
+
+
+def _identify_trap_rooms(cell_difficulty, boss, entrance, sanctum):
     """Identify which rooms become trap rooms (lock-in until cleared).
 
-    Boss room is always a trap. Other rooms with enough monsters have a
-    random chance.  Entrance and sanctum are never traps.
+    Hard = always trapped. Challenging = 1/3 chance. Easy = never.
+    Boss room is always a trap. Entrance and sanctum are never traps.
 
     Returns a set of cells.
     """
     trap_cells = {boss}
-    for cell, assignment in cell_assignments.items():
+    for cell, tier in cell_difficulty.items():
         if cell in (entrance, boss, sanctum):
             continue
-        entry = assignment.get("entry")
-        data = assignment.get("slot_data") or (
-            entry.data if entry and hasattr(entry, "data") else None)
-        if data:
-            n_monsters = len(data.get("monster_placements", []))
-            if n_monsters >= TRAP_ROOM_MIN_MONSTERS and random.random() < TRAP_ROOM_CHANCE:
-                trap_cells.add(cell)
+        if tier == "hard":
+            trap_cells.add(cell)
+        elif tier == "challenging" and random.random() < TRAP_ROOM_CHANCE:
+            trap_cells.add(cell)
     return trap_cells
 
 
@@ -383,6 +416,108 @@ _INWARD_OFFSET = {
 
 TRAP_ROOM_CHANCE = 1 / 3
 TRAP_ROOM_MIN_MONSTERS = 3
+_MONSTER_MIN_SPACING = 2  # minimum Manhattan distance between dynamically placed monsters
+
+
+def _find_monster_positions(room_id, count, exits):
+    """Find valid walkable positions for dynamically placed monsters.
+
+    Uses BFS reachability from doorways, excludes doorway inner ring and
+    edge tiles.  Tries to space monsters apart (Manhattan >= 2), relaxes
+    if needed.  Returns list of (x, y) tuples.
+    """
+    room = game.rooms.get(room_id)
+    if not room:
+        return []
+    tilemap = room["tilemap"]
+
+    # BFS seeds from active exits + stairs
+    seeds = []
+    for direction in exits:
+        if direction in DOORWAY_TILES:
+            seeds.extend(DOORWAY_TILES[direction])
+    for ry, trow in enumerate(tilemap):
+        for rx, tile in enumerate(trow):
+            if tile == "SU":
+                seeds.append((ry, rx))
+
+    reachable = bfs_reachable(tilemap, game.is_walkable_tile, seeds) if seeds else set()
+
+    # Doorway exclusion zones (inner ring)
+    exclusion = set()
+    for direction in exits:
+        if direction in _INNER_RING:
+            exclusion.update((c, r) for c, r in _INNER_RING[direction])
+
+    # bfs_reachable returns (row, col); convert to (col, row)
+    candidates = [(c, r) for (r, c) in reachable
+                  if 1 <= r <= 9 and 1 <= c <= 13
+                  and (c, r) not in exclusion]
+    random.shuffle(candidates)
+
+    # Pick positions with spacing
+    positions = []
+    occupied = set()
+    for cx, cy in candidates:
+        if len(positions) >= count:
+            break
+        if any(abs(cx - ox) + abs(cy - oy) < _MONSTER_MIN_SPACING
+               for ox, oy in occupied):
+            continue
+        positions.append((cx, cy))
+        occupied.add((cx, cy))
+
+    # Relax spacing if we couldn't place enough
+    if len(positions) < count:
+        for cx, cy in candidates:
+            if len(positions) >= count:
+                break
+            if (cx, cy) not in occupied:
+                positions.append((cx, cy))
+                occupied.add((cx, cy))
+
+    return positions
+
+
+def _resolve_dynamic_monsters(room_id, monster_groups, difficulty_tier, type_config, exits):
+    """Convert monster_groups to concrete placements based on difficulty tier.
+
+    Scales each group's count by the tier multiplier, places them dynamically.
+    Returns list of {"kind", "x", "y"} dicts (same format as monster_placements).
+    """
+    scaling = type_config.get("difficulty_scaling",
+                              {"easy": 0.5, "challenging": 1.0, "hard": 1.5})
+    multiplier = scaling.get(difficulty_tier, 1.0)
+
+    # Calculate total monsters needed across all groups
+    groups_with_counts = []
+    total_needed = 0
+    for group in monster_groups:
+        scaled = group["count"] * multiplier
+        # Probabilistic rounding
+        final = int(scaled) + (1 if random.random() < (scaled % 1) else 0)
+        final = max(1, final)
+        groups_with_counts.append((group["kind"], final))
+        total_needed += final
+
+    # Find positions for all monsters at once (better spacing)
+    positions = _find_monster_positions(room_id, total_needed, exits)
+
+    placements = []
+    pos_idx = 0
+    for kind, count in groups_with_counts:
+        for _ in range(count):
+            if pos_idx < len(positions):
+                x, y = positions[pos_idx]
+                pos_idx += 1
+            else:
+                # Fallback: place at room center-ish
+                x, y = 7, 5
+            placements.append({"kind": kind, "x": x, "y": y})
+
+    log.debug(f"[DUNGEON] {room_id} dynamic monsters ({difficulty_tier}, {multiplier}x): "
+              f"{[(k, c) for k, c in groups_with_counts]} -> {len(placements)} placed")
+    return placements
 
 
 def _apply_trap_room(room_id, tilemap, exits):
@@ -495,7 +630,7 @@ def _fix_post_wall_reachability(room_id, tilemap, exits):
 # Room resolution
 # ---------------------------------------------------------------------------
 
-def _resolve_room_from_entry(room_id, entry_data, exits, cell, music_track, is_entrance, biome="dungeon", music_override=None, wall_tile="DW", is_trap=False, locked_directions=None):
+def _resolve_room_from_entry(room_id, entry_data, exits, cell, music_track, is_entrance, biome="dungeon", music_override=None, wall_tile="DW", is_trap=False, locked_directions=None, difficulty_tier=None, type_config=None):
     """Materialize a library entry's data into a live game.rooms[] entry.
 
     entry_data: dict with 'name', 'tilemap' (list[list[str]]), 'monster_placements'
@@ -548,13 +683,22 @@ def _resolve_room_from_entry(room_id, entry_data, exits, cell, music_track, is_e
         "music": music_override or music_track,
     }
 
-    # Register monster templates from placements
+    # Register monster templates from fixed placements
     placements = entry_data.get("monster_placements", [])
     if placements:
         game.monster_templates[room_id] = [
             {"kind": p["kind"], "x": p["x"], "y": p["y"]}
             for p in placements
         ]
+
+    # Dynamic monster groups — scale count by difficulty tier, place dynamically
+    monster_groups = entry_data.get("monster_groups", [])
+    if monster_groups and difficulty_tier and type_config:
+        dynamic = _resolve_dynamic_monsters(
+            room_id, monster_groups, difficulty_tier, type_config, exits)
+        if dynamic:
+            existing = game.monster_templates.get(room_id, [])
+            game.monster_templates[room_id] = existing + dynamic
 
     # After walling off exits, fix room connectivity and monster reachability.
     # AI rooms assume all 4 exits open — walling unused ones can disconnect
@@ -701,11 +845,6 @@ def create_dungeon(type_id) -> DungeonInstance | None:
     boss_cell = topo.parent_of(sanctum, "entrance")
     topo.mark(boss_cell, "boss")
 
-    # --- Trap rooms: lock-in until cleared ---
-    trap_cells = _identify_trap_rooms(cell_assignments, boss_cell, entrance, sanctum)
-    for cell in trap_cells:
-        topo.mark(cell, "trap")
-
     # --- Treasure chest: far from both boss and entrance ---
     # (contains lantern in d1, TBD for other dungeons)
     treasure_cell = max(topo.cells, key=lambda c: (
@@ -715,6 +854,16 @@ def create_dungeon(type_id) -> DungeonInstance | None:
         topo.dist(c, "boss") + topo.dist(c, "entrance"),  # maximize remoteness
     ))
     topo.mark(treasure_cell, "treasure")
+
+    # --- Difficulty tiers: easy/challenging/hard ---
+    cell_difficulty = _assign_difficulty_tiers(
+        active_cells, entrance, boss_cell, sanctum, treasure_cell,
+        type_config)
+
+    # --- Trap rooms: lock-in until cleared (tier-based) ---
+    trap_cells = _identify_trap_rooms(cell_difficulty, boss_cell, entrance, sanctum)
+    for cell in trap_cells:
+        topo.mark(cell, "trap")
 
     # --- Darkness ---
     if type_id == "d1":
@@ -861,6 +1010,7 @@ def create_dungeon(type_id) -> DungeonInstance | None:
         boss_track=boss_track,
     )
     instance.cell_assignments = cell_assignments
+    instance.cell_difficulty = cell_difficulty
     instance.custom_slots = custom_slots
     instance.topo = topo
     instance.connections = topo.connections
@@ -894,7 +1044,10 @@ def create_dungeon(type_id) -> DungeonInstance | None:
               f"slots={num_slots} ({filled_slots}filled/{empty_slots}empty), "
               f"entrance={entrance_room_id}, boss={boss_id}, sanctum={sanctum_id}, "
               f"music={music_track}, boss_music={boss_track}, connections={len(topo.connections)}, "
-              f"locked_doors={len(locked_doors)}, keys={len(key_cells)}")
+              f"locked_doors={len(locked_doors)}, keys={len(key_cells)}, "
+              f"difficulty={sum(1 for t in cell_difficulty.values() if t=='easy')}e/"
+              f"{sum(1 for t in cell_difficulty.values() if t=='challenging')}c/"
+              f"{sum(1 for t in cell_difficulty.values() if t=='hard')}h")
     broadcast_debug(f"Dungeon {type_id} created: {layout['name']} ({len(active_rooms)} rooms, "
                     f"boss={boss_id}, sanctum={sanctum_id})")
 
@@ -935,6 +1088,11 @@ def _dump_dungeon_debug(instance, active_cells, connections, locked_doors,
             tag.append("TRES")
         if c in dark_cells:
             tag.append("DARK")
+        tier = instance.cell_difficulty.get(c)
+        if tier:
+            tag.append(tier[0].upper())  # E/C/H
+        if c in instance.trap_cells:
+            tag.append("TRAP")
         # Mark critical path cells (entrance→treasure shortest path)
         topo = instance.topo
         if topo:
@@ -1054,10 +1212,12 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
         if edge in still_locked:
             locked_directions.add(direction)
 
+    difficulty_tier = instance.cell_difficulty.get(cell)
     locked_originals = _resolve_room_from_entry(
         room_id, entry_data, exits, cell, instance.music_track, is_entrance,
         biome=biome, music_override=music_override, wall_tile=wall_tile,
-        is_trap=is_trap, locked_directions=locked_directions)
+        is_trap=is_trap, locked_directions=locked_directions,
+        difficulty_tier=difficulty_tier, type_config=type_config)
 
     if locked_originals:
         instance.locked_door_originals[room_id] = locked_originals

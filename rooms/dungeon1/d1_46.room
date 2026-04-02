@@ -14,7 +14,5 @@ SC DF DF DF DF DF DF DF DF DF DF DF DF DF SC
 DW DF DF DF DF DF DF DF DF DF DF DF DF DF DW
 DW DW SC DW DW DW DF DF DF DW DW DW SC DW DW
 ---
-monster skeleton 3 2
-monster skeleton 11 2
-monster skeleton 7 8
-monster bat 7 5
+monsters skeleton 3
+monsters bat 4

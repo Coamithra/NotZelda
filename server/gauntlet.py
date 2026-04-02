@@ -48,9 +48,30 @@ HARDER_IS_HIGHER = {
     "count": True,
     "damage": True,
     "hp": True,
+    "damage_radius": True,   # bigger AOE = harder
+    "range": True,           # detects/attacks from further = harder
     "walk_time": False,      # lower = faster = harder
     "decision_time": False,  # lower = more frequent = harder
+    "cooldown": False,       # lower = less pause = harder
+    "warmup": False,         # lower = less warning = harder
+    "drift": False,          # lower = teleports closer = harder
 }
+
+# Per-monster gauntlet tuning ranges loaded from data/gauntlet.json
+_GAUNTLET_CONFIG = {}
+
+def _load_gauntlet_config():
+    """Load per-monster tuning ranges from data/gauntlet.json."""
+    global _GAUNTLET_CONFIG
+    import json
+    from pathlib import Path
+    path = Path(__file__).parent.parent / "data" / "gauntlet.json"
+    if path.exists():
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data.pop("_doc", None)
+        _GAUNTLET_CONFIG = data
+
+_load_gauntlet_config()
 
 
 class GauntletSession:
@@ -64,6 +85,7 @@ class GauntletSession:
         self.entry_hp = 0
         self.entry_time = 0.0
         self.deaths = 0          # spirit jar revives this wave
+        self.original_count = 0    # initial count (for full resets)
         self.consecutive_good = 0  # reset to max-hard after 2 in a row
         self.started = datetime.now()
         self.header_written = False
@@ -374,6 +396,16 @@ def _log_result(session, hp_lost, elapsed, outcome):
 # Chat commands
 # ---------------------------------------------------------------------------
 
+def cmd_rmgauntlet(player, args, msgs):
+    """/rmgauntlet — delete gauntlet_results.txt"""
+    import os
+    try:
+        os.remove(RESULTS_FILE)
+        msgs.append((player, {"type": "chat", "text": "Gauntlet results cleared."}))
+    except FileNotFoundError:
+        msgs.append((player, {"type": "chat", "text": "No gauntlet results file to delete."}))
+
+
 def cmd_gauntlet(player, args, msgs):
     """/gauntlet [stop|status|<kind> <count>]"""
     args = args.strip().lower()
@@ -408,6 +440,7 @@ def cmd_gauntlet(player, args, msgs):
     # Build max-hard starting config + binary search bounds
     defaults = game.monster_stats[kind]
     session = GauntletSession(player.name, player.room)
+    session.original_count = count
     session.config = _max_hard_config(kind, count, defaults)
     _init_bounds(session, defaults)
     _sessions[player.name] = session
@@ -439,36 +472,68 @@ def cmd_gauntlet(player, args, msgs):
         "type": "info",
         "text": (
             f"THE GAUNTLET BEGINS! {kind} x{count} | "
-            f"walk={c['walk_time']:.2f} dec={c['decision_time']:.2f} "
-            f"dmg={c['damage']} hp={c['hp']} | "
+            f"{_format_config(c)} | "
             f"/gt to tune, /gauntlet stop to exit"
         ),
     }))
 
 
+def _format_config(c):
+    """Format config params for display, skipping 'kind'."""
+    parts = []
+    for k, v in c.items():
+        if k == "kind":
+            continue
+        parts.append(f"{k}={v:.2f}" if isinstance(v, float) else f"{k}={v}")
+    return " ".join(parts)
+
+
 def _max_hard_config(kind, count, defaults):
-    """Starting config: everything cranked to maximum difficulty."""
+    """Starting config from gauntlet.json, or computed defaults."""
+    monster_cfg = _GAUNTLET_CONFIG.get(kind)
+    if monster_cfg:
+        config = {"kind": kind}
+        for param, bounds in monster_cfg.items():
+            config[param] = bounds["hard"]
+        config["count"] = count  # user-specified count overrides config
+        return config
+
+    # Fallback: computed defaults for monsters not in gauntlet.json
     walk = round(max(0.08, defaults.get("walk_time", 0.25) * 0.4), 3)
-    return {
+    base_dt = defaults.get("decision_time", 1.0)
+    config = {
         "kind": kind,
         "count": count,
         "walk_time": walk,
-        "decision_time": walk,  # no idle gap — continuous movement
-        "damage": 2,  # 1 heart — card says max 1 heart
+        "damage": 2,
         "hp": defaults.get("hp", 1),
     }
+    if base_dt > 0:
+        config["decision_time"] = walk
+    return config
 
 
 def _init_bounds(session, defaults):
     """Set hard ceiling and easy floor for each tuneable param."""
     session.hard_config = {k: v for k, v in session.config.items() if k != "kind"}
+    kind = session.config.get("kind", "bat")
+    monster_cfg = _GAUNTLET_CONFIG.get(kind)
+    if monster_cfg:
+        session.easy_config = {}
+        for param, bounds in monster_cfg.items():
+            session.easy_config[param] = bounds["easy"]
+        return
+
+    # Fallback: computed defaults for monsters not in gauntlet.json
+    base_dt = defaults.get("decision_time", 1.0)
     session.easy_config = {
         "count": 1,
         "walk_time": max(0.5, defaults.get("walk_time", 0.25) * 2),
-        "decision_time": max(2.0, defaults.get("decision_time", 1.0) * 2),
         "damage": 1,
         "hp": max(1, defaults.get("hp", 1)),
     }
+    if base_dt > 0:
+        session.easy_config["decision_time"] = max(2.0, base_dt * 2)
 
 
 def _auto_adjust(session, outcome, msgs_out):
@@ -487,7 +552,7 @@ def _auto_adjust(session, outcome, msgs_out):
         if session.consecutive_good >= 2:
             # Found a sweet spot twice — reset to max hard for a fresh search
             defaults = game.monster_stats.get(kind, {})
-            hard = _max_hard_config(kind, session.hard_config.get("count", 25), defaults)
+            hard = _max_hard_config(kind, session.original_count, defaults)
             config.update({k: v for k, v in hard.items() if k != "kind"})
             _init_bounds(session, defaults)
             session.consecutive_good = 0
@@ -704,9 +769,9 @@ def _cmd_hard(player, session, parts, msgs):
     """Reset to max-hard config, optionally switching monster type."""
     kind = parts[0] if parts else session.config.get("kind", "bat")
     try:
-        count = int(parts[1]) if len(parts) >= 2 else session.config.get("count", 25)
+        count = int(parts[1]) if len(parts) >= 2 else session.original_count
     except ValueError:
-        count = session.config.get("count", 25)
+        count = session.original_count
 
     if kind not in game.monster_stats:
         kinds = ", ".join(sorted(game.monster_stats.keys()))
@@ -716,15 +781,12 @@ def _cmd_hard(player, session, parts, msgs):
         return
 
     defaults = game.monster_stats[kind]
+    session.original_count = count
     session.config = _max_hard_config(kind, count, defaults)
     _init_bounds(session, defaults)
     session.consecutive_good = 0
     c = session.config
     msgs.append(("send", player, {
         "type": "info",
-        "text": (
-            f"HARD RESET: {kind} x{count} | "
-            f"walk={c['walk_time']:.2f} dec={c['decision_time']:.2f} "
-            f"dmg={c['damage']} hp={c['hp']}"
-        ),
+        "text": f"HARD RESET: {kind} x{count} | {_format_config(c)}",
     }))

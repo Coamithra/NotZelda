@@ -598,14 +598,14 @@ def _check_guard_proximity_sync(player, now, msgs):
 def sword_hitbox(px, py, direction):
     """Compute sword AABB from player position + direction. Single source of truth."""
     dx, dy = DIRECTIONS.get(direction, (0, 0))
-    # Forward: 0.25 back into player + 0.75 forward (1.0 total along attack axis)
+    # Forward: starts at player edge, extends 0.75 ahead (no backswing into player)
     # Perpendicular: SWORD_PERP_WIDTH centered on player body
     perp_off = (1.0 - SWORD_PERP_WIDTH) / 2  # centering offset
     return (
-        px + (0.75 if dx > 0 else -0.75 if dx < 0 else perp_off),
-        py + (0.75 if dy > 0 else -0.75 if dy < 0 else perp_off),
-        1.0 if dx != 0 else SWORD_PERP_WIDTH,
-        SWORD_PERP_WIDTH if dx != 0 else 1.0,
+        px + (1.0 if dx > 0 else -0.75 if dx < 0 else perp_off),
+        py + (1.0 if dy > 0 else -0.75 if dy < 0 else perp_off),
+        0.75 if dx != 0 else SWORD_PERP_WIDTH,
+        SWORD_PERP_WIDTH if dx != 0 else 0.75,
     )
 
 
@@ -1059,6 +1059,7 @@ DEBUG_COMMANDS = {
     "keylayout": _cmd_keylayout,
     "gauntlet": lambda p, a, m: __import__("server.gauntlet", fromlist=["cmd_gauntlet"]).cmd_gauntlet(p, a, m),
     "gt": lambda p, a, m: __import__("server.gauntlet", fromlist=["cmd_gt"]).cmd_gt(p, a, m),
+    "rmgauntlet": lambda p, a, m: __import__("server.gauntlet", fromlist=["cmd_rmgauntlet"]).cmd_rmgauntlet(p, a, m),
 }
 
 

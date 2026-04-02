@@ -16,5 +16,8 @@ RW RF RF RF RF RF RF RD RF RF RF RF RF RF RW
 RW RW RW RW RW RW DR DR DR RW RW RW RW RW RW
 ---
 npc Castle_Guardian 7 3 guard None shall pass... oh wait, the door's already broken. | Last guardian of the ruined castle. Speaks with faded authority and dry humor. Knows the castle fell to dark magic. Still guards the entrance out of duty, even though the door is smashed.
-monster skeleton 11 3
-monster skeleton 3 8
+monster skeleton 3 7
+monster bat 5 3
+monster bat 12 3
+monster bat 10 9
+monster bat 13 7
