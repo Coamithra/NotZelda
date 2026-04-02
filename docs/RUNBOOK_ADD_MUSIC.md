@@ -41,6 +41,12 @@ Format: `(relative_path, title, theme)`
 python tools/tag_music.py
 ```
 
+To tag a single track instead of all, pass a filename fragment:
+
+```
+python tools/tag_music.py desert_c
+```
+
 This sets ID3 tags (title, artist="Legends of Amara", comment="Made with Suno") and embeds a pixel-art cover generated from the tile layout. Previews saved to `tools/artwork_preview/`.
 
 ## 3. Add the server route
