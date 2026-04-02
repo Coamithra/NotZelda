@@ -8,6 +8,7 @@ Put the MP3 in the appropriate `music/` subdirectory:
 - `music/overworld/` — overworld area themes
 - `music/dungeon1/` — Dark Dungeon ambient + boss
 - `music/dungeon2/` — Water Temple ambient + boss
+- `music/dungeon3/` — Desert Tomb ambient + boss
 - `music/other/` — menu, credits, etc.
 
 Use **underscores** in filenames, not spaces (e.g. `castle_ruins.mp3`).

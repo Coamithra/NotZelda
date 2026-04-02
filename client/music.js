@@ -29,6 +29,8 @@ const MusicPlayer = (function () {
     "watertemple3": "music_watertemple3.mp3",
     "watertemple_boss1": "music_watertemple_boss1.mp3",
     "watertemple_boss2": "music_watertemple_boss2.mp3",
+    "desert_a":  "music_desert_a.mp3",
+    "desert_b":  "music_desert_b.mp3",
   };
 
   // Fallback: map biome names to music tracks (for rooms without explicit music field)

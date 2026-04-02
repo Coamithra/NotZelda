@@ -27,6 +27,7 @@ TILES = {
     "WA": ("#2a6aaa", "#3a7abb"),   # water
     "SH": ("#5a9acc", "#6aaadd"),   # shallow water
     "ST": ("#9a9a9a", "#8a8a8a"),   # stone
+    "SA": ("#c8a85a", "#b89848"),   # sand
 }
 
 # --- 3x3 tile layouts for each theme ---
@@ -60,6 +61,11 @@ LAYOUTS = {
         ["DW", "ST", "DW"],
         ["ST", "DF", "ST"],
         ["DW", "ST", "DW"],
+    ],
+    "desert": [
+        ["SA", "SA", "ST"],
+        ["SA", "ST", "SA"],
+        ["ST", "SA", "SA"],
     ],
     "menu": [
         ["TR", "GR", "WA"],
@@ -167,6 +173,9 @@ TRACKS = [
     ("dungeon2/watertemple_boss1_choir.mp3","Water Temple Boss I (Choir)", "water_boss"),
     ("dungeon2/watertemple_boss2.mp3",      "Water Temple Boss II",        "water_boss"),
     ("dungeon2/watertemple_boss2_choir.mp3","Water Temple Boss II (Choir)","water_boss"),
+    # Desert Tomb — ambient
+    ("dungeon3/desert_a.mp3",     "Desert Tomb I",         "desert"),
+    ("dungeon3/desert_b.mp3",     "Desert Tomb II",        "desert"),
     # Menu
     ("other/menu.mp3",            "Title Screen",          "menu"),
 ]
