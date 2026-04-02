@@ -33,9 +33,11 @@ Open `tools/tag_music.py` and:
 ("overworld/castle_ruins.mp3", "Castle Ruins", "castle"),
 ```
 
-Format: `(relative_path, title, theme)`
+Format: `(relative_path, title, theme)` — the title becomes the ID3 title tag.
 
-**c)** Run the tagger:
+**c)** Check the `ARTIST` and `COMMENT` constants at the top of the file. Defaults are `"Legends of Amara"` and `"Made with Suno"` — change if the track has a different artist or origin.
+
+**d)** Run the tagger:
 
 ```
 python tools/tag_music.py
@@ -47,7 +49,7 @@ To tag a single track instead of all, pass a filename fragment:
 python tools/tag_music.py desert_c
 ```
 
-This sets ID3 tags (title, artist="Legends of Amara", comment="Made with Suno") and embeds a pixel-art cover generated from the tile layout. Previews saved to `tools/artwork_preview/`.
+This overwrites existing MP3 metadata (cleaning up Suno defaults etc.) with the title, artist, and comment from the script, and embeds a pixel-art cover generated from the tile layout. Previews saved to `tools/artwork_preview/`.
 
 ## 3. Add the server route
 
