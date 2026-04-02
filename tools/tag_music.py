@@ -7,7 +7,7 @@ generated from actual game tile colors.
 Usage:  python tools/tag_music.py
 """
 
-import io, random
+import io, random, sys
 from pathlib import Path
 from PIL import Image, ImageDraw
 from mutagen.id3 import ID3, TIT2, TPE1, COMM, APIC, ID3NoHeaderError
@@ -176,6 +176,7 @@ TRACKS = [
     # Desert Tomb — ambient
     ("dungeon3/desert_a.mp3",     "Desert Tomb I",         "desert"),
     ("dungeon3/desert_b.mp3",     "Desert Tomb II",        "desert"),
+    ("dungeon3/desert_c.mp3",     "Desert Tomb III",       "desert"),
     # Menu
     ("other/menu.mp3",            "Title Screen",          "menu"),
 ]
@@ -221,17 +222,27 @@ def tag_track(rel_path, title, theme, artwork_cache):
 
 
 def main():
-    print(f"Tagging {len(TRACKS)} tracks...\n")
+    # Optional: pass a filename fragment to tag just one track
+    # Usage: python tools/tag_music.py desert_c
+    filter_str = sys.argv[1] if len(sys.argv) > 1 else None
+    to_tag = TRACKS
+    if filter_str:
+        to_tag = [(r, t, th) for r, t, th in TRACKS if filter_str in r]
+        if not to_tag:
+            print(f"No tracks matching '{filter_str}'")
+            return
+
+    print(f"Tagging {len(to_tag)} track(s)...\n")
     artwork_cache = {}
     ok = 0
-    for rel_path, title, theme in TRACKS:
+    for rel_path, title, theme in to_tag:
         success = tag_track(rel_path, title, theme, artwork_cache)
         status = "OK" if success else "SKIP"
         print(f"  [{status}] {title:<30s}  ({rel_path})")
         if success:
             ok += 1
 
-    print(f"\nDone: {ok}/{len(TRACKS)} tracks tagged.")
+    print(f"\nDone: {ok}/{len(to_tag)} tracks tagged.")
     print(f"  Artist:  {ARTIST}")
     print(f"  Comment: {COMMENT}")
     print(f"  Artwork: {SIZE}x{SIZE}px pixel-art covers (6 themes)")
