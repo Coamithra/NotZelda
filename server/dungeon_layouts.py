@@ -188,92 +188,189 @@ DUNGEON_LAYOUTS = [
 ]
 
 # ---------------------------------------------------------------------------
-# Water temple layouts — 3x3 grids (5-9 rooms)
+# Water temple layouts — 8x8 grids (~20-24 rooms)
+# Inspired by aquatic/nautical shapes
 # ---------------------------------------------------------------------------
 
 D2_LAYOUTS = [
     {
+        # Trident — three prongs with shaft (22 rooms)
         "name": "trident",
         "grid": [
-            "XXX.....",
-            ".X......",
-            "XXX.....",
-            "........",
-            "........",
-            "........",
-            "........",
+            "X..X..X.",
+            "X..X..X.",
+            "X..X..X.",
+            ".XXXXXX.",
+            "...XX...",
+            "...XX...",
+            "...XX...",
             "........",
         ],
-        "entrance": (1, 2),
+        "entrance": (3, 6),
     },
     {
-        "name": "cross",
+        # Whirlpool — spiral inward (22 rooms)
+        "name": "whirlpool",
         "grid": [
+            "........",
+            ".XXXXX..",
+            ".X...X..",
+            ".X.X.X..",
+            ".X.XXX..",
             ".X......",
-            "XXX.....",
-            ".X......",
-            "........",
-            "........",
-            "........",
-            "........",
+            ".XXXXXX.",
             "........",
         ],
-        "entrance": (1, 2),
+        "entrance": (6, 6),
     },
     {
-        "name": "bend",
+        # Anchor — nautical shape (21 rooms)
+        "name": "anchor",
         "grid": [
-            "X.......",
-            "XX......",
-            "XXX.....",
-            "........",
-            "........",
-            "........",
-            "........",
-            "........",
-        ],
-        "entrance": (0, 0),
-    },
-    {
-        "name": "flood",
-        "grid": [
-            "XXX.....",
-            "XXX.....",
-            "XXX.....",
-            "........",
-            "........",
-            "........",
-            "........",
+            "...XX...",
+            "..XXXX..",
+            "...XX...",
+            "...XX...",
+            "...XX...",
+            "..XXXX..",
+            ".XX..XX.",
             "........",
         ],
-        "entrance": (1, 2),
+        "entrance": (3, 0),
     },
     {
+        # Depths — wide cavern (23 rooms)
         "name": "depths",
         "grid": [
-            "X.X.....",
-            "X.X.....",
-            "XXX.....",
             "........",
-            "........",
-            "........",
+            "..XXXX..",
+            ".XXXXXX.",
+            ".XXXXXX.",
+            "..XXXX..",
+            "...XX...",
             "........",
             "........",
         ],
-        "entrance": (1, 2),
+        "entrance": (3, 5),
     },
     {
-        "name": "current",
+        # Serpent — S-curve through water (21 rooms)
+        "name": "serpent",
         "grid": [
-            "XX......",
-            ".XX.....",
-            "..X.....",
             "........",
+            ".XXX....",
+            "..XXXX..",
+            "....XXX.",
+            ".XXX....",
+            "..XXXX..",
+            "....XX..",
             "........",
+        ],
+        "entrance": (1, 1),
+    },
+    {
+        # Coral — branching reef (22 rooms)
+        "name": "coral",
+        "grid": [
             "........",
+            "..XX.XX.",
+            "..XXXXX.",
+            "..XX....",
+            ".XXXX...",
+            ".XX.XX..",
+            "....XX..",
+            "........",
+        ],
+        "entrance": (4, 6),
+    },
+    {
+        # Tidal Pool — enclosed basin (24 rooms)
+        "name": "tidal_pool",
+        "grid": [
+            "........",
+            ".XXXXXX.",
+            ".X....X.",
+            ".X.XX.X.",
+            ".X.XX.X.",
+            ".X....X.",
+            ".XXXXXX.",
+            "........",
+        ],
+        "entrance": (3, 6),
+    },
+    {
+        # Jellyfish — bell with tentacles (22 rooms)
+        "name": "jellyfish",
+        "grid": [
+            "..XXXX..",
+            ".XXXXXX.",
+            "..XXXX..",
+            "..X..X..",
+            ".X..X.X.",
+            "X....X..",
             "........",
             "........",
         ],
-        "entrance": (0, 0),
+        "entrance": (3, 4),
+    },
+    {
+        # Shell — nautilus curve (20 rooms)
+        "name": "shell",
+        "grid": [
+            "........",
+            "..XXXX..",
+            ".XX..XX.",
+            ".X..XXX.",
+            ".XX.XX..",
+            "..XXX...",
+            "...X....",
+            "........",
+        ],
+        "entrance": (3, 6),
+    },
+    {
+        # Wave — cresting water (22 rooms)
+        "name": "wave",
+        "grid": [
+            "........",
+            "X.......",
+            "XX.XXX..",
+            "XXXXXXX.",
+            ".XXXXXXX",
+            "..XXX.XX",
+            ".......X",
+            "........",
+        ],
+        "entrance": (0, 1),
+    },
+    {
+        # Kraken — beast with arms (23 rooms)
+        "name": "kraken",
+        "grid": [
+            "........",
+            "..XXXX..",
+            "..XXXX..",
+            ".XXXXXX.",
+            "XX....XX",
+            "X......X",
+            "........",
+            "........",
+        ],
+        "entrance": (3, 3),
+    },
+    {
+        # Abyss — deep vertical shaft (20 rooms)
+        "name": "abyss",
+        "grid": [
+            ".XXXXXX.",
+            "..XXXX..",
+            "...XX...",
+            "..XXXX..",
+            "...XX...",
+            "..XXXX..",
+            ".XXXXXX.",
+            "........",
+        ],
+        "entrance": (3, 6),
     },
 ]

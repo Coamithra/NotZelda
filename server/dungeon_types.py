@@ -34,11 +34,10 @@ DUNGEON_TYPES = {
         "boss_template": "d2_boss",
         "treasure_template": "d2_treasure",
         "wall_tile": "TW",
-        "room_capacity": 12,
-        "monster_capacity": 3,
-        "tile_capacity": 4,
-        "min_locks": 0,
-        "max_locks": 3,
+        "min_locks": 1,
+        "max_locks": 5,
+        "difficulty_distribution": {"easy": 0.40, "challenging": 0.35, "hard": 0.25},
+        "difficulty_scaling": {"easy": 0.5, "challenging": 1.0, "hard": 1.5},
     },
 }
 
