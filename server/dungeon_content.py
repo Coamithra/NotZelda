@@ -25,7 +25,7 @@ PRECREATED_CONTENT = {
     },
     "d2": {
         "monsters": ["water_serpent", "drowned_one"],
-        "boss": "temple_guardian",
+        "boss": "abyssal_toad",
         "tiles": ["TW", "TF", "CR"],
     },
 }
