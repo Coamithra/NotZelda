@@ -373,9 +373,10 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
                 existing = msg.get("dungeon_items", [])
                 existing.extend([{"x": it["x"], "y": it["y"], "item_type": it["item_type"]} for it in visible])
                 msg["dungeon_items"] = existing
-            # Send already-collected lantern chests as opened (persists across visits)
+            # Send already-collected chest items as opened (persists across visits)
             collected_chests = [it for it in pp_items
-                                if it["item_type"] == "lantern" and player.has_flag("has_lantern")]
+                                if it["item_type"] in ("lantern", "tide_medallion")
+                                and player.has_flag(f"has_{it['item_type']}")]
             if collected_chests:
                 msg["opened_chests"] = [{"x": it["x"], "y": it["y"]} for it in collected_chests]
 
@@ -389,6 +390,11 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
             lantern_holders = [p.name for p, a in avatars_in_room(player.room) if p.has_flag("has_lantern")]
             if lantern_holders:
                 msg["lantern_holders"] = lantern_holders
+    # Tell client which players in this room have the Tide Medallion (water-walking)
+    if inst:
+        medallion_holders = [p.name for p, a in avatars_in_room(player.room) if p.has_flag("has_tide_medallion")]
+        if medallion_holders:
+            msg["medallion_holders"] = medallion_holders
 
     # Attach dungeon type for client-side ambient effects
     if inst:

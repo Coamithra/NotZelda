@@ -51,6 +51,8 @@ def player_info(p) -> dict:
         info["attacking"] = {"direction": p.active_attack["direction"]}
     if p.has_flag("has_lantern"):
         info["has_lantern"] = True
+    if p.has_flag("has_tide_medallion"):
+        info["has_tide_medallion"] = True
     return info
 
 

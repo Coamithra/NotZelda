@@ -114,6 +114,7 @@ function registerCustomContent(msg) {
       }
       // Register walkable custom tiles so client-side prediction works
       if (recipe.walkable) WALKABLE.add(tileId);
+      if (recipe.water) WATER_TILES.add(tileId);
     }
   }
 }
@@ -294,6 +295,11 @@ function handleMessage(msg) {
       G.room.dark = msg.dark || false;
       G.room.lightSources = msg.light_sources || [];
       G.room.lanternHolders = new Set(msg.lantern_holders || []);
+      G.room.medallionHolders = new Set(msg.medallion_holders || []);
+      // Re-apply water-walking tiles to WALKABLE on room enter / reconnect
+      if (G.player.playerFlags.has("has_tide_medallion")) {
+        for (const t of WATER_TILES) WALKABLE.add(t);
+      }
       G.player.itemPickupActive = null;
       G.player.itemPickupEffects = {};
       G.player.dyingPlayerSelf = null;
@@ -525,6 +531,7 @@ function handleMessage(msg) {
         if (msg.dancing) startDance(msg.name);
         if (msg.attacking) startAttack(msg.name, msg.attacking.direction);
         if (msg.has_lantern) G.room.lanternHolders.add(msg.name);
+        if (msg.has_tide_medallion) G.room.medallionHolders.add(msg.name);
         appendChatLog(`<span class="chat-system">${escHtml(msg.name)} entered the room</span>`);
       }
       break;
@@ -532,6 +539,7 @@ function handleMessage(msg) {
     case "player_left":
       delete G.room.otherPlayers[msg.name];
       G.room.lanternHolders.delete(msg.name);
+      G.room.medallionHolders.delete(msg.name);
       stopDance(msg.name);
       appendChatLog(`<span class="chat-system">${escHtml(msg.name)} left the room</span>`);
       break;
@@ -1012,7 +1020,7 @@ function handleMessage(msg) {
         };
         // Remove from ground items (dungeon items only)
         // Per-player items (lantern, seal_fragment) stay on ground for other players
-        const perPlayerItems = new Set(["lantern", "seal_fragment"]);
+        const perPlayerItems = new Set(["lantern", "tide_medallion", "seal_fragment"]);
         if (perPlayerItems.has(msg.item_type)) {
           // Remove for THIS player only (visual) — server keeps it for others
           const px = G.player.displayX, py = G.player.displayY;
@@ -1020,8 +1028,8 @@ function handleMessage(msg) {
           G.room.dungeonGroundItems = G.room.dungeonGroundItems.filter(it => {
             if (!removed && it.item_type === msg.item_type && Math.abs(it.x - px) < 1 && Math.abs(it.y - py) < 1) {
               removed = true;
-              // Lantern: transition chest to opened state at this position
-              if (msg.item_type === "lantern") {
+              // Chest items: transition chest to opened state at this position
+              if (msg.item_type === "lantern" || msg.item_type === "tide_medallion") {
                 G.room.openedChests.push({x: it.x, y: it.y});
               }
               return false;
@@ -1055,6 +1063,12 @@ function handleMessage(msg) {
             G.player.playerFlags.add("has_lantern");
             G.room.lanternHolders.add(G.player.myName);
           }, 500);
+        } else if (msg.item_type === "tide_medallion") {
+          setTimeout(() => {
+            G.player.playerFlags.add("has_tide_medallion");
+            G.room.medallionHolders.add(G.player.myName);
+            for (const t of WATER_TILES) WALKABLE.add(t);
+          }, 500);
         } else if (msg.item_type === "seal_fragment") {
           setTimeout(() => { G.player.playerFlags.add("has_seal_fragment"); }, 500);
         }
@@ -1082,9 +1096,11 @@ function handleMessage(msg) {
           y: effPlayer.displayY,
         };
       }
-      // Track lantern holders for darkness rendering
+      // Track lantern/medallion holders for rendering
       if (msg.item_type === "lantern") {
         G.room.lanternHolders.add(msg.name);
+      } else if (msg.item_type === "tide_medallion") {
+        G.room.medallionHolders.add(msg.name);
       }
       appendChatLog(`<span class="chat-item">${escHtml(msg.name)} obtained ${escHtml(msg.item_name)}!</span>`);
       break;

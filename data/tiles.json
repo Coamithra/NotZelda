@@ -633,6 +633,7 @@
   "WA": {
     "name": "water",
     "walkable": false,
+    "water": true,
     "colors": {
       "base": "#2a6aaa",
       "alt": "#3a7abb"

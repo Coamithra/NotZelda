@@ -67,7 +67,7 @@ def _hits_guard(x, y, room_id):
     return False
 
 
-def _simulate_player_move(avatar, direction, dt, room, room_id):
+def _simulate_player_move(avatar, direction, dt, room, room_id, player=None):
     """Server-side movement simulation — must exactly match client logic.
 
     Applies speed, half-tile axis snapping, and collision with fallback.
@@ -95,12 +95,12 @@ def _simulate_player_move(avatar, direction, dt, room, room_id):
     check_x = new_x if is_horizontal else round(avatar.x * 2) / 2
     check_y = round(avatar.y * 2) / 2 if is_horizontal else new_y
 
-    if _is_position_walkable(check_x, check_y, room) and not _hits_guard(check_x, check_y, room_id):
+    if _is_position_walkable(check_x, check_y, room, player) and not _hits_guard(check_x, check_y, room_id):
         avatar.x = new_x
         avatar.y = new_y
-    elif is_horizontal and _is_position_walkable(new_x, avatar.y, room) and not _hits_guard(new_x, avatar.y, room_id):
+    elif is_horizontal and _is_position_walkable(new_x, avatar.y, room, player) and not _hits_guard(new_x, avatar.y, room_id):
         avatar.x = new_x
-    elif not is_horizontal and _is_position_walkable(avatar.x, new_y, room) and not _hits_guard(avatar.x, new_y, room_id):
+    elif not is_horizontal and _is_position_walkable(avatar.x, new_y, room, player) and not _hits_guard(avatar.x, new_y, room_id):
         avatar.y = new_y
 
     avatar.direction = direction
@@ -139,7 +139,7 @@ def _process_player_input(player, data, now, msgs):
 
         if direction and direction in DIRECTIONS and dt > 0:
             a.dancing = False  # movement cancels dance
-            _simulate_player_move(a, direction, dt, room, player.room)
+            _simulate_player_move(a, direction, dt, room, player.room, player)
 
             # Edge exit detection (room transition)
             exit_dir = _check_edge_exit_float(a.x, a.y, direction, room)
@@ -247,12 +247,14 @@ def _check_edge_exit_float(x, y, direction, room):
     return None
 
 
-def _is_position_walkable(x, y, room):
+def _is_position_walkable(x, y, room, player=None):
     """Check if a 1x1 hitbox at (x,y) is walkable.
     Only checks the bottom half (y+0.5 to y+1) so the sprite's top half
-    can overlap walls — NES Zelda style, regardless of direction."""
+    can overlap walls — NES Zelda style, regardless of direction.
+    If player is provided, water tiles are walkable when they have the Tide Medallion."""
     tilemap = room["tilemap"]
     check_y_start = y + 0.5
+    has_medallion = player is not None and player.has_flag("has_tide_medallion")
 
     min_tx = int(math.floor(x + 0.001))
     max_tx = int(math.floor(x + 1.0 - 0.001))
@@ -263,7 +265,10 @@ def _is_position_walkable(x, y, room):
         for tx in range(min_tx, max_tx + 1):
             if tx < 0 or tx >= ROOM_COLS or ty < 0 or ty >= ROOM_ROWS:
                 continue  # off-grid handled by edge detection
-            if not game.is_walkable_tile(tilemap[ty][tx]):
+            tile = tilemap[ty][tx]
+            if not game.is_walkable_tile(tile):
+                if has_medallion and game.custom_tile_recipes.get(tile, {}).get("water"):
+                    continue
                 return False
     return True
 
@@ -527,6 +532,8 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
                     player.grant_flag(flag_name)
                     if item_type == "lantern":
                         item_name = "Magic Lantern"
+                    elif item_type == "tide_medallion":
+                        item_name = "Tide Medallion"
                     elif item_type == "seal_fragment":
                         item_name = "Seal Fragment"
                         # +1 heart container

@@ -134,6 +134,7 @@ const G = {
     dark: false,                    // current room is dark
     lightSources: [],               // [[col, row], ...] — sconce/brazier positions
     lanternHolders: new Set(),      // player names with lanterns in this room
+    medallionHolders: new Set(),    // player names with Tide Medallion in this room
 
     // Corpses
     roomCorpses: [],          // [{kind, x, y, width, height}]

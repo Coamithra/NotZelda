@@ -951,8 +951,8 @@ def create_dungeon(type_id) -> DungeonInstance | None:
 
     item_cells = {}
 
-    # Treasure chest item (lantern for d1, pending for d2)
-    treasure_item_type = {"d1": "lantern"}.get(type_id, "lantern")
+    # Treasure chest item (lantern for d1, tide_medallion for d2)
+    treasure_item_type = {"d1": "lantern", "d2": "tide_medallion"}.get(type_id, "lantern")
     item_cells[treasure_item_type] = treasure_cell
 
     # Map
@@ -1024,7 +1024,7 @@ def create_dungeon(type_id) -> DungeonInstance | None:
     instance.zone_of = zone_of
     instance.zone_cells = zone_cells
     instance.dark_cells = dark_cells
-    instance.lantern_cell = treasure_cell if treasure_item_type == "lantern" else None
+    instance.lantern_cell = treasure_cell if treasure_item_type in ("lantern", "tide_medallion") else None
 
     game.active_dungeons[type_id] = instance
     for room_id in active_rooms:

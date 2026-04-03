@@ -544,6 +544,49 @@ function drawItemSealFragment(ctx, px, py, S) {
   ctx.fillRect(px+4*S, py+5*S, S, S);
 }
 
+function drawItemTideMedallion(ctx, px, py, S) {
+  // Blue-teal circular medallion with wave motif
+  const outer = "#1a5c8a", inner = "#2a8cba", bright = "#44bbdd";
+  const gold = "#d4a830", goldBright = "#f0d060";
+  const wave = "#88ddff", waveDark = "#2277aa";
+  const glow = "rgba(40,140,200,0.35)";
+  // Glow aura
+  ctx.fillStyle = glow;
+  ctx.fillRect(px, py+S, 8*S, 8*S);
+  ctx.fillRect(px+S, py, 6*S, 10*S);
+  // Gold border ring
+  ctx.fillStyle = gold;
+  ctx.fillRect(px+2*S, py, 4*S, S);
+  ctx.fillRect(px+S, py+S, S, S);   ctx.fillRect(px+6*S, py+S, S, S);
+  ctx.fillRect(px, py+2*S, S, 6*S); ctx.fillRect(px+7*S, py+2*S, S, 6*S);
+  ctx.fillRect(px+S, py+8*S, S, S); ctx.fillRect(px+6*S, py+8*S, S, S);
+  ctx.fillRect(px+2*S, py+9*S, 4*S, S);
+  ctx.fillStyle = goldBright;
+  ctx.fillRect(px+3*S, py, 2*S, S);
+  ctx.fillRect(px, py+3*S, S, 2*S);
+  // Inner disc
+  ctx.fillStyle = outer;
+  ctx.fillRect(px+2*S, py+S, 4*S, S);
+  ctx.fillRect(px+S, py+2*S, 6*S, 6*S);
+  ctx.fillRect(px+2*S, py+8*S, 4*S, S);
+  ctx.fillStyle = inner;
+  ctx.fillRect(px+2*S, py+2*S, 4*S, 6*S);
+  ctx.fillRect(px+3*S, py+S, 2*S, S);
+  ctx.fillRect(px+3*S, py+8*S, 2*S, S);
+  // Wave pattern (3 horizontal waves)
+  ctx.fillStyle = wave;
+  ctx.fillRect(px+2*S, py+3*S, 2*S, S); ctx.fillRect(px+5*S, py+3*S, S, S);
+  ctx.fillRect(px+2*S, py+5*S, S, S);   ctx.fillRect(px+4*S, py+5*S, 2*S, S);
+  ctx.fillRect(px+3*S, py+7*S, 2*S, S);
+  ctx.fillStyle = waveDark;
+  ctx.fillRect(px+4*S, py+4*S, 2*S, S);
+  ctx.fillRect(px+2*S, py+6*S, 2*S, S);
+  // Center bright spot
+  ctx.fillStyle = bright;
+  ctx.fillRect(px+3*S, py+4*S, S, S);
+  ctx.fillRect(px+4*S, py+3*S, S, S);
+}
+
 const ITEM_DRAW_FNS = {
   sword: drawItemSword,
   map: drawItemMap,
@@ -552,6 +595,7 @@ const ITEM_DRAW_FNS = {
   key: drawItemKey,
   spirit_jar: drawItemSpiritJar,
   lantern: drawItemLantern,
+  tide_medallion: drawItemTideMedallion,
   seal_fragment: drawItemSealFragment,
 };
 

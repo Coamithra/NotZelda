@@ -23,6 +23,8 @@ function tileCenterY(y) { return y * TS + TS / 2; }
 
 // Walkable set — populated from server tile data on room enter
 const WALKABLE = new Set();
+// Water tiles — tiles with "water": true, walkable only with Tide Medallion
+const WATER_TILES = new Set();
 
 // Water mist cache (renderer-internal, not part of G namespace)
 let _mistStrength;
@@ -105,6 +107,50 @@ function renderWaterMist() {
   const tintAlpha = 0.03 + 0.01 * Math.sin(t * 0.6);
   ctx.fillStyle = `rgba(100, 160, 220, ${tintAlpha})`;
   ctx.fillRect(0, 0, CW, CH);
+  ctx.restore();
+}
+
+// --- Water-walk ripple effect ---
+function renderWaterWalkEffect() {
+  if (!G.room.currentRoom || !G.room.currentRoom.tilemap) return;
+  const tm = G.room.currentRoom.tilemap;
+  const ctx = G.ui.ctx;
+  const t = performance.now() / 1000;
+
+  // Collect all water-walking players in this room
+  const walkers = [];
+  if (G.player.playerFlags.has("has_tide_medallion")) {
+    walkers.push({ x: G.player.displayX, y: G.player.displayY });
+  }
+  for (const op of Object.values(G.room.otherPlayers)) {
+    if (G.room.medallionHolders.has(op.name)) {
+      walkers.push({ x: op.displayX, y: op.displayY });
+    }
+  }
+  if (walkers.length === 0) return;
+
+  ctx.save();
+  for (const w of walkers) {
+    // Check if standing on a water tile (bottom-half hitbox, foot tile)
+    const footTy = Math.floor(w.y + 0.75);
+    const footTx = Math.floor(w.x + 0.5);
+    if (footTy < 0 || footTy >= ROWS || footTx < 0 || footTx >= COLS) continue;
+    if (!WATER_TILES.has(tm[footTy][footTx])) continue;
+
+    // Draw expanding ripple rings at feet
+    const cx = (w.x + 0.5) * TS;
+    const cy = (w.y + 0.85) * TS;
+    for (let ring = 0; ring < 3; ring++) {
+      const phase = (t * 1.2 + ring * 0.33) % 1.0;
+      const radius = (8 + phase * 18) * SCALE;
+      const alpha = 0.35 * (1.0 - phase);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, radius, radius * 0.5, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(140, 200, 255, ${alpha})`;
+      ctx.lineWidth = 1.5 * SCALE;
+      ctx.stroke();
+    }
+  }
   ctx.restore();
 }
 
