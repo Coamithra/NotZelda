@@ -462,8 +462,9 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
             "player": player_cell,
             "other_players": _dungeon_other_players(inst, exclude_player=player),
         }
-        # Send lantern cell for compass chest marker (only if player hasn't collected it)
-        if inst.lantern_cell and not player.has_flag("has_lantern"):
+        # Send treasure chest cell for compass marker (only if player hasn't collected it)
+        treasure_flag = {"d1": "has_lantern", "d2": "has_tide_medallion"}.get(dungeon_id, "has_lantern")
+        if inst.lantern_cell and not player.has_flag(treasure_flag):
             debug["minimap"]["lantern_cell"] = list(inst.lantern_cell)
         if is_debug:
             # Serialize connections as [[c1,r1,c2,r2], ...]

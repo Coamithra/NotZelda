@@ -948,12 +948,14 @@ def _cmd_cheat(player, args, msgs):
     else:
         player.grant_flag("has_sword")
         player.grant_flag("has_lantern")
+        player.grant_flag("has_tide_medallion")
         player.grant_flag("invulnerable")
         player.hp = player.max_hp
         msgs.append(("send", player, {"type": "item_obtained", "item_type": "sword", "item_name": "Sword"}))
         msgs.append(("send", player, {"type": "item_obtained", "item_type": "lantern", "item_name": "Magic Lantern"}))
+        msgs.append(("send", player, {"type": "item_obtained", "item_type": "tide_medallion", "item_name": "Tide Medallion"}))
         msgs.append(("send", player, {"type": "hp_update", "hp": player.hp, "max_hp": player.max_hp}))
-        msgs.append(("send", player, {"type": "info", "text": "Cheat mode: sword + lantern + invulnerability"}))
+        msgs.append(("send", player, {"type": "info", "text": "Cheat mode: sword + lantern + medallion + invulnerability"}))
 
 
 def _cmd_lantern(player, args, msgs):
