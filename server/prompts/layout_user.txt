@@ -2,5 +2,5 @@ Generate a dungeon room layout with theme "{{theme}}" and difficulty {{difficult
 {{existing_names_section}}
 Available tiles: {{tile_summary}}
 {{prefer_tiles_line}}
-Available monsters: {{monster_summary}}
+Available monsters (pack size = challenging count for a full room of that type): {{monster_summary}}
 {{prefer_monsters_line}}

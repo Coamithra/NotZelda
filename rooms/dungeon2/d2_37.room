@@ -14,5 +14,5 @@ TW TF KP KP TF CR TF TF TF CR TF KP KP TF TW
 AL TF TF TF TF TF TF TF TF TF TF TF TF TF AL
 TW TW TW TW TW TW TF TF TF TW TW TW TW TW TW
 ---
-monsters water_serpent 2
-monsters drowned_one 1
+monsters water_serpent 0.56
+monsters drowned_one 0.44

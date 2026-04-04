@@ -306,8 +306,8 @@ def load_dungeon_templates(directory: str = "rooms/dungeon1", type_id: str = "d1
                         "dialog": dlg, "personality": pers,
                     })
                 elif tokens[0] == "monsters" and len(tokens) >= 3:
-                    # Dynamic group: monsters <kind> <base_count>
-                    monster_groups.append({"kind": tokens[1], "count": int(tokens[2])})
+                    # Dynamic group: monsters <kind> <pack_fraction>
+                    monster_groups.append({"kind": tokens[1], "count": float(tokens[2])})
                 elif tokens[0] == "monster" and len(tokens) >= 4:
                     monsters.append({"kind": tokens[1], "x": int(tokens[2]), "y": int(tokens[3])})
 

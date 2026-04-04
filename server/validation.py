@@ -302,6 +302,10 @@ def register_monster_type(data: dict) -> tuple[bool, list[str]]:
         stat_entry["height"] = int(stats["height"])
     if stats.get("boss"):
         stat_entry["boss"] = True
+    if stats.get("pack_min"):
+        stat_entry["pack_min"] = int(stats["pack_min"])
+    if stats.get("pack_max"):
+        stat_entry["pack_max"] = int(stats["pack_max"])
     game.monster_stats[kind] = stat_entry
 
     game.custom_sprites[kind] = sprite

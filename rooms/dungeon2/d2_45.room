@@ -14,5 +14,5 @@ TW TF CR TF SH WA WA WA SH TF TF TF CR TF TW
 TW TF TF TF SH WA WA WA WA SH TF TF TF TF AL
 TW TW TW TW TW TW TF TF TF TW TW TW TW TW TW
 ---
-monsters water_serpent 3
-monsters drowned_one 1
+monsters water_serpent 0.65
+monsters drowned_one 0.35

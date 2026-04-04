@@ -14,5 +14,5 @@ DW DF DF DF DF SC DF DF DF SC DF DF DF DF DW
 DW DF DF DF DF DF DF DF DF DF DF DF DF DF DW
 DW DW DW DW DW DW DF DF DF DW DW DW DW DW DW
 ---
-monsters bat 6
-monsters skeleton 1
+monsters bat 0.68
+monsters skeleton 0.32

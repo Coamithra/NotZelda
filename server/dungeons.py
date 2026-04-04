@@ -482,22 +482,35 @@ def _find_monster_positions(room_id, count, exits):
 def _resolve_dynamic_monsters(room_id, monster_groups, difficulty_tier, type_config, exits):
     """Convert monster_groups to concrete placements based on difficulty tier.
 
-    Scales each group's count by the tier multiplier, places them dynamically.
+    Each group has a pack fraction (0.0-1.0+) which is multiplied by the
+    monster's pack size (pack_min..pack_max) to get the challenging-tier count,
+    then scaled by the difficulty tier multiplier.
+
     Returns list of {"kind", "x", "y"} dicts (same format as monster_placements).
     """
     scaling = type_config.get("difficulty_scaling",
                               {"easy": 0.5, "challenging": 1.0, "hard": 1.5})
     multiplier = scaling.get(difficulty_tier, 1.0)
 
+    # Default pack size for monsters without pack_min/pack_max
+    DEFAULT_PACK_MIN, DEFAULT_PACK_MAX = 3, 5
+
     # Calculate total monsters needed across all groups
     groups_with_counts = []
     total_needed = 0
     for group in monster_groups:
-        scaled = group["count"] * multiplier
+        fraction = group["count"]
+        kind = group["kind"]
+        stats = game.monster_stats.get(kind, {})
+        pack_min = stats.get("pack_min", DEFAULT_PACK_MIN)
+        pack_max = stats.get("pack_max", DEFAULT_PACK_MAX)
+        pack_size = random.randint(pack_min, pack_max)
+        base_count = fraction * pack_size
+        scaled = base_count * multiplier
         # Probabilistic rounding
         final = int(scaled) + (1 if random.random() < (scaled % 1) else 0)
         final = max(1, final)
-        groups_with_counts.append((group["kind"], final))
+        groups_with_counts.append((kind, final))
         total_needed += final
 
     # Find positions for all monsters at once (better spacing)
@@ -1393,7 +1406,13 @@ def get_active_content_lists(type_id):
     if monster_lib:
         for e in monster_lib.real_entries:
             if e.id not in dep_monsters:
-                monsters.append({"kind": e.id, "tags": e.tags})
+                m = {"kind": e.id, "tags": e.tags}
+                stats = game.monster_stats.get(e.id, {})
+                if "pack_min" in stats:
+                    m["pack_min"] = stats["pack_min"]
+                if "pack_max" in stats:
+                    m["pack_max"] = stats["pack_max"]
+                monsters.append(m)
 
     tiles = []
     tile_lib = libs.get("tiles")
@@ -1415,6 +1434,8 @@ def _get_referenced_ids(room_library):
         data = entry.data
         for p in data.get("monster_placements", []):
             referenced_monsters.add(p["kind"])
+        for g in data.get("monster_groups", []):
+            referenced_monsters.add(g["kind"])
         for row in data.get("tilemap", []):
             for tid in row:
                 if isinstance(tid, str):

@@ -454,30 +454,26 @@ def validate_layout(data: dict, valid_tile_ids: set[str],
     if unreachable:
         errors.append(f"Doorways not connected — unreachable: {', '.join(unreachable)}")
 
-    # -- monster_placements --
-    placements = data.get("monster_placements", [])
-    if not isinstance(placements, list):
-        errors.append("monster_placements must be a list")
+    # -- monster_groups (pack fractions) --
+    groups = data.get("monster_groups", [])
+    if not isinstance(groups, list):
+        errors.append("monster_groups must be a list")
     else:
-        for pi, p in enumerate(placements):
-            if not isinstance(p, dict):
-                errors.append(f"monster_placements[{pi}] must be a dict")
+        fraction_sum = 0.0
+        for gi, g in enumerate(groups):
+            if not isinstance(g, dict):
+                errors.append(f"monster_groups[{gi}] must be a dict")
                 continue
-            x = p.get("x")
-            y = p.get("y")
-            if not isinstance(x, (int, float)) or x < 0 or x > 14:
-                errors.append(f"monster_placements[{pi}].x must be 0-14")
-            if not isinstance(y, (int, float)) or y < 0 or y > 10:
-                errors.append(f"monster_placements[{pi}].y must be 0-10")
-            if (isinstance(x, (int, float)) and isinstance(y, (int, float))):
-                ix, iy = int(x), int(y)
-                if 0 <= iy < 11 and 0 <= ix < 15:
-                    tile_at = tilemap[iy][ix]
-                    if tile_at not in walkable_tiles:
-                        errors.append(f"monster_placements[{pi}] at ({ix},{iy}) is on non-walkable tile {tile_at!r}")
-            k = p.get("kind")
+            k = g.get("kind")
             if k and k not in valid_monster_kinds:
-                errors.append(f"monster_placements[{pi}].kind {k!r} not in available monsters")
+                errors.append(f"monster_groups[{gi}].kind {k!r} not in available monsters")
+            frac = g.get("fraction")
+            if not isinstance(frac, (int, float)) or frac <= 0:
+                errors.append(f"monster_groups[{gi}].fraction must be a positive number")
+            else:
+                fraction_sum += frac
+        if groups and abs(fraction_sum - 1.0) > 0.15:
+            errors.append(f"monster_groups fractions sum to {fraction_sum:.2f}, should be ~1.0 (will be auto-normalized)")
 
     if len(errors) > 15:
         errors = errors[:15] + [f"... and {len(errors) - 15} more errors"]
@@ -537,6 +533,43 @@ def _build_walkability_set(data: dict, existing_walkable: set[str]) -> set[str]:
         if isinstance(t, dict) and t.get("walkable", False):
             walkable.add(t.get("id", ""))
     return walkable
+
+
+def patch_monster_groups(data: dict) -> list[str]:
+    """Normalize monster_groups fractions to sum to 1.0.
+    Returns list of patch descriptions."""
+    patches = []
+    groups = data.get("monster_groups")
+    if not groups or not isinstance(groups, list):
+        return patches
+
+    # Remove invalid entries
+    valid = [g for g in groups if isinstance(g, dict)
+             and isinstance(g.get("fraction"), (int, float)) and g["fraction"] > 0]
+    if len(valid) != len(groups):
+        patches.append(f"Removed {len(groups) - len(valid)} invalid monster_groups entries")
+        groups = valid
+        data["monster_groups"] = groups
+
+    if not groups:
+        return patches
+
+    total = sum(g["fraction"] for g in groups)
+    if total <= 0:
+        return patches
+
+    if abs(total - 1.0) > 0.01:
+        patches.append(f"Normalized monster_groups fractions from {total:.2f} to 1.0")
+        for g in groups:
+            g["fraction"] = round(g["fraction"] / total, 2)
+        # Fix rounding drift on the largest fraction
+        new_total = sum(g["fraction"] for g in groups)
+        diff = round(1.0 - new_total, 2)
+        if diff != 0:
+            largest = max(groups, key=lambda g: g["fraction"])
+            largest["fraction"] = round(largest["fraction"] + diff, 2)
+
+    return patches
 
 
 def patch_monster_placements(data: dict, walkable: set[str]) -> list[str]:
@@ -1206,11 +1239,17 @@ def _build_layout_prompt(theme: str, difficulty: int,
     if new_tile_ids:
         prefer_tiles_line = f"PREFER using these newly created tiles: {', '.join(new_tile_ids)}"
 
-    # Monsters — flat list from libraries (no hardcoded builtins)
-    all_monsters = [
-        f"{m.get('kind', '?')} (tags: {', '.join(m.get('tags', []))})"
-        for m in available_monsters[:30]
-    ]
+    # Monsters — include pack sizes so the AI knows relative difficulty
+    all_monsters = []
+    for m in available_monsters[:30]:
+        kind = m.get('kind', '?')
+        tags = ', '.join(m.get('tags', []))
+        pack_min = m.get('pack_min')
+        pack_max = m.get('pack_max')
+        if pack_min and pack_max:
+            all_monsters.append(f"{kind} (pack: {pack_min}-{pack_max}, tags: {tags})")
+        else:
+            all_monsters.append(f"{kind} (tags: {tags})")
     monster_summary = ", ".join(all_monsters) if all_monsters else "(none available)"
 
     prefer_monsters_line = ""
@@ -1237,9 +1276,9 @@ async def generate_layout(
     new_monster_kinds: list[str] | None = None,
     existing_room_names: list[str] | None = None,
 ) -> dict | None:
-    """Generate a room layout: name, tilemap, monster placements.
+    """Generate a room layout: name, tilemap, monster groups.
 
-    Returns: {"name", "tilemap", "monster_placements"} or None.
+    Returns: {"name", "tilemap", "monster_groups"} or None.
     """
     if AI_BACKEND == "api" and not os.environ.get("ANTHROPIC_API_KEY"):
         log.debug("[GEN] No ANTHROPIC_API_KEY set — skipping layout generation")
@@ -1276,7 +1315,7 @@ async def generate_layout(
         patches.extend(patch_duplicate_name(data, existing_room_names or []))
         patches.extend(patch_doorway_tiles(data, all_walkable))
         patches.extend(patch_unreachable_doorways(data, all_walkable))
-        patches.extend(patch_monster_placements(data, all_walkable))
+        patches.extend(patch_monster_groups(data))
         return patches
 
     return await _call_ai(
@@ -1403,7 +1442,7 @@ async def generate_room(
     taken_tile_ids: all currently registered tile IDs (for collision detection).
 
     Returns the validated room dict, or None on failure.
-    Each dict has: name, tilemap, new_tiles, new_monsters, monster_placements.
+    Each dict has: name, tilemap, new_tiles, new_monsters, monster_groups.
     """
     async def _progress(step, detail=""):
         if progress:
@@ -1511,7 +1550,10 @@ async def generate_room(
     # --- Step 3: Generate layout ---
     await _progress("layout", "Designing room layout...")
     all_monsters = existing_monsters + [
-        {"kind": m["kind"], "tags": m.get("tags", [])} for m in new_monsters
+        {"kind": m["kind"], "tags": m.get("tags", []),
+         **({"pack_min": m["stats"]["pack_min"], "pack_max": m["stats"]["pack_max"]}
+            if "stats" in m and "pack_min" in m.get("stats", {}) else {})}
+        for m in new_monsters
     ]
     all_tiles = existing_tiles + [
         {"id": t["id"], "walkable": t.get("walkable", False), "tags": t.get("tags", [])}
@@ -1532,18 +1574,24 @@ async def generate_room(
         log.debug("[GEN] Layout generation failed — giving up")
         return None
 
-    # Assemble final result (same format as before)
+    # Assemble final result — monster_groups use pack fractions
+    # Convert AI's {"kind", "fraction"} to runtime {"kind", "count"} format
+    ai_groups = layout.get("monster_groups", [])
+    monster_groups = [
+        {"kind": g["kind"], "count": g["fraction"]}
+        for g in ai_groups if isinstance(g, dict)
+    ]
     result = {
         "name": layout["name"],
         "tilemap": layout["tilemap"],
         "new_tiles": new_tiles,
         "new_monsters": new_monsters,
-        "monster_placements": layout["monster_placements"],
+        "monster_groups": monster_groups,
     }
     await _progress("done", f"Room complete: \"{result['name']}\"")
     log.debug(f"[GEN] Room complete: \"{result['name']}\" "
                f"({len(new_monsters)} new monsters, {len(new_tiles)} new tiles, "
-               f"{len(result['monster_placements'])} placements)")
+               f"{len(monster_groups)} monster groups)")
     return result
 
 
@@ -1617,7 +1665,7 @@ async def _test_standalone():
     if layout:
         print(f"  Name: {layout['name']}")
         print(f"  Tilemap: {len(layout['tilemap'])} rows")
-        print(f"  Placements: {layout.get('monster_placements', [])}")
+        print(f"  Monster groups: {layout.get('monster_groups', [])}")
     else:
         print("  FAILED")
 
@@ -1628,7 +1676,7 @@ async def _test_standalone():
         print(f"  Name: {result['name']}")
         print(f"  New monsters: {[m['kind'] for m in result.get('new_monsters', [])]}")
         print(f"  New tiles: {[t['id'] for t in result.get('new_tiles', [])]}")
-        print(f"  Placements: {result.get('monster_placements', [])}")
+        print(f"  Monster groups: {result.get('monster_groups', [])}")
     else:
         print("  FAILED")
 
