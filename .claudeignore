@@ -1,0 +1,15 @@
+# Binary assets (video, images)
+tools/artwork_preview/
+tools/*.avi
+docs/images/
+docs/*.png
+
+# Runtime-generated data (not source of truth)
+data/*_library.json
+data/api_usage.json
+data/deprecated.json
+data/deprecation.json
+data/gauntlet.json
+
+# Local-only files
+local_ignore/
