@@ -92,19 +92,24 @@ def load_room_files(directory: str = "rooms"):
                     if tile == "SU":
                         tilemap[ry][rx] = repl
 
-        # Scan for stairs tiles
+        # Scan for stairs and portal tiles
         su_pos = None
         sd_pos = None
+        po_pos = None
         for ry, row in enumerate(tilemap):
             for rx, tile in enumerate(row):
                 if tile == "SU" and su_pos is None:
                     su_pos = (rx, ry)
                 elif tile == "SD" and sd_pos is None:
                     sd_pos = (rx, ry)
+                elif tile == "PO" and po_pos is None:
+                    po_pos = (rx, ry)
         if su_pos:
             spawn_points["down"] = su_pos   # entering from above -> land at stairs up
         if sd_pos:
             spawn_points["up"] = sd_pos     # entering from below -> land at stairs down
+        if po_pos:
+            spawn_points["portal"] = po_pos  # entering via portal -> land on portal tile
 
         room = {
             "name": header.get("name", room_id),
@@ -156,7 +161,7 @@ def load_room_files(directory: str = "rooms"):
             reveal_tilemap = reveal_tilemap[:11]
             room["reveal_tilemap"] = reveal_tilemap
 
-            # Scan reveal tilemap for stair spawn points (hidden stairs)
+            # Scan reveal tilemap for stair/portal spawn points (hidden stairs/portals)
             for ry, r in enumerate(reveal_tilemap):
                 for rx, tile in enumerate(r):
                     if tile == "SU" and su_pos is None:
@@ -165,6 +170,9 @@ def load_room_files(directory: str = "rooms"):
                     elif tile == "SD" and sd_pos is None:
                         sd_pos = (rx, ry)
                         spawn_points["up"] = sd_pos
+                    elif tile == "PO" and po_pos is None:
+                        po_pos = (rx, ry)
+                        spawn_points["portal"] = po_pos
 
         game.rooms[room_id] = room
 

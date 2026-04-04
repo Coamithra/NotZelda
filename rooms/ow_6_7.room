@@ -1,13 +1,13 @@
 name: Quiet Prairie
 biome: plains
 music: overworld
-exits: west=ow_6_6 north=ow_5_7 south=ow_7_7
+exits: west=ow_6_6 north=ow_5_7 south=ow_7_7 portal=town_square
 ---
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 TR GR GR GR GR GR GR RD GR GR GR GR GR GR TR
 TR GR GR GR GR GR GR RD GR GR GR GR GR GR TR
 TR GR BO BO GR GR GR RD GR GR GR GR GR GR TR
-GR GR BO BO BO GR GR RD GR GR GR GR GR GR TR
+GR GR BO BO BO GR GR RD GR GR PO GR GR GR TR
 GR RD RD RD RD RD RD RD GR GR GR GR GR GR TR
 GR GR BO BO BO GR GR RD GR GR GR GR GR GR TR
 TR GR BO BO GR GR GR RD GR GR TG TG TG GR TR

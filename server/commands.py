@@ -156,7 +156,7 @@ def _process_player_input(player, data, now, msgs):
                 reveal = room.get("reveal_tilemap")
                 if reveal and player.has_flag("has_lantern"):
                     tile = reveal[center_ty][center_tx]
-                on_stair = tile in ("SU", "SD")
+                on_stair = tile in ("SU", "SD", "PO")
                 spawn_stair = getattr(a, "spawn_stair", None)
                 if on_stair and spawn_stair == (center_tx, center_ty):
                     pass
@@ -170,6 +170,11 @@ def _process_player_input(player, data, now, msgs):
                         break
                     if tile == "SD" and "down" in room["exits"]:
                         do_room_transition(player, "down", msgs)
+                        transitioned = True
+                        last_seq = seq
+                        break
+                    if tile == "PO" and "portal" in room["exits"]:
+                        do_room_transition(player, "portal", msgs)
                         transitioned = True
                         last_seq = seq
                         break
@@ -333,7 +338,7 @@ def _process_player_state(player, data, now, msgs):
         reveal = room.get("reveal_tilemap")
         if reveal and player.has_flag("has_lantern"):
             tile = reveal[center_ty][center_tx]
-        on_stair = tile in ("SU", "SD")
+        on_stair = tile in ("SU", "SD", "PO")
         spawn_stair = getattr(a, "spawn_stair", None)
         if on_stair and spawn_stair == (center_tx, center_ty):
             pass  # still on the stair we spawned on — ignore
@@ -345,6 +350,9 @@ def _process_player_state(player, data, now, msgs):
                 return
             if tile == "SD" and "down" in room["exits"]:
                 do_room_transition(player, "down", msgs)
+                return
+            if tile == "PO" and "portal" in room["exits"]:
+                do_room_transition(player, "portal", msgs)
                 return
 
     # Walkability — check all tiles the 1x1 hitbox overlaps

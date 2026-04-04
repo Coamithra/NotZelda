@@ -1,14 +1,14 @@
 name: Sunlit Clearing
 biome: town
 music: village
-exits: north=forest_path south=ow_0_7 down=d1_entrance:debug:GR
+exits: north=forest_path south=ow_0_7
 ---
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 TR TR GR GR GR GR GR GR GR GR GR GR GR TR TR
 TR GR GR FL GR GR GR GR GR GR FL GR GR GR TR
 TR GR GR GR GR FL GR GR GR GR GR GR GR TR TR
 TR GR FL GR GR GR GR GR GR FL GR GR GR GR TR
-TR GR GR GR GR GR GR SD GR GR GR FL GR TR TR
+TR GR GR GR GR GR GR GR GR GR GR FL GR TR TR
 TR MB MB MB MB MB MB MB MB MB MB MB MB MB TR
 TR GR FL GR GR GR GR GR GR GR GR GR FL TR TR
 TR TR GR GR GR GR FL GR GR GR GR GR GR TR TR

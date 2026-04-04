@@ -1,18 +1,18 @@
 name: Forest Path
 biome: town
 music: village
-exits: north=town_square south=clearing down=d2_entrance:debug:GR
+exits: north=town_square south=clearing
 ---
 TR TR TR TR TR TR GR DT GR TR TR TR TR TR TR
 TR TR GR GR GR DT DT DT GR GR GR GR TR TR TR
 TR GR GR GR DT DT DT DT DT GR GR GR GR TR TR
 TR GR GR DT DT DT GR DT DT DT GR GR GR GR TR
 TR GR GR DT DT GR TR GR DT DT GR GR GR TR TR
-TR GR DT DT GR TR TR TR GR SD DT GR GR GR TR
+TR GR DT DT GR TR TR TR GR DT DT GR GR GR TR
 TR GR DT DT GR GR TR GR GR GR DT GR GR TR TR
 TR GR GR DT DT GR GR GR GR DT DT GR GR GR TR
 TR TR GR GR DT DT DT DT DT DT GR GR GR TR TR
 TR GR GR GR GR DT DT DT GR GR GR GR TR TR TR
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 ---
-monster swift_wolf 7 4 debug
+

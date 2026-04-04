@@ -10155,5 +10155,33 @@
       ["stone", 7, 14, 2, 2]
     ],
     "tags": ["water_temple", "decoration", "obstacle"]
+  },
+  "PO": {
+    "name": "portal",
+    "walkable": true,
+    "colors": {
+      "base": "#1a1a2e",
+      "ring": "#6a3a9a",
+      "glow": "#9a5adf",
+      "core": "#c488ff",
+      "bright": "#e0c0ff"
+    },
+    "layers": [
+      ["base", 0, 0, 16, 16],
+      ["ring", 3, 2, 10, 12],
+      ["glow", 4, 3, 8, 10],
+      ["core", 5, 4, 6, 8],
+      ["bright", 6, 5, 4, 6],
+      ["glow", 7, 6, 2, 4],
+      ["ring", 2, 1, 1, 2],
+      ["ring", 13, 1, 1, 2],
+      ["ring", 2, 13, 1, 2],
+      ["ring", 13, 13, 1, 2],
+      ["glow", 7, 2, 2, 1],
+      ["glow", 7, 13, 2, 1],
+      ["glow", 3, 7, 1, 2],
+      ["glow", 12, 7, 1, 2],
+      ["bright", 7, 7, 2, 2]
+    ]
   }
 }
