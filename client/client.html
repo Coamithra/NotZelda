@@ -437,6 +437,8 @@ function canMoveToPosition(x, y) {
       top half can overlap walls regardless of direction). */
   if (!G.room.currentRoom) return false;
   const tilemap = G.room.currentRoom.tilemap;
+  const reveal = G.room.revealTilemap;
+  const hasLantern = reveal && G.player.playerFlags.has("has_lantern");
 
   const checkYStart = y + 0.5;
 
@@ -448,7 +450,7 @@ function canMoveToPosition(x, y) {
   for (let ty = minTy; ty <= maxTy; ty++) {
     for (let tx = minTx; tx <= maxTx; tx++) {
       if (tx < 0 || tx >= COLS || ty < 0 || ty >= ROWS) continue;
-      const tile = tilemap[ty][tx];
+      const tile = hasLantern ? reveal[ty][tx] : tilemap[ty][tx];
       if (!WALKABLE.has(tile)) return false;
     }
   }
@@ -796,6 +798,7 @@ function gameLoop(timestamp) {
     renderTransition(Date.now());
   } else {
     renderRoom();
+    renderRevealedTiles();
     renderBrightTiles();
     renderWaterMist();
     renderWaterWalkEffect();

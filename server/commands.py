@@ -149,10 +149,13 @@ def _process_player_input(player, data, now, msgs):
                 last_seq = seq
                 break
 
-            # Stair detection
+            # Stair detection (check reveal tilemap for hidden stairs when player has lantern)
             center_tx, center_ty = int(round(a.x)), int(round(a.y))
             if 0 <= center_tx < ROOM_COLS and 0 <= center_ty < ROOM_ROWS:
                 tile = room["tilemap"][center_ty][center_tx]
+                reveal = room.get("reveal_tilemap")
+                if reveal and player.has_flag("has_lantern"):
+                    tile = reveal[center_ty][center_tx]
                 on_stair = tile in ("SU", "SD")
                 spawn_stair = getattr(a, "spawn_stair", None)
                 if on_stair and spawn_stair == (center_tx, center_ty):
@@ -251,8 +254,11 @@ def _is_position_walkable(x, y, room, player=None):
     """Check if a 1x1 hitbox at (x,y) is walkable.
     Only checks the bottom half (y+0.5 to y+1) so the sprite's top half
     can overlap walls — NES Zelda style, regardless of direction.
-    If player is provided, water tiles are walkable when they have the Tide Medallion."""
+    If player is provided, water tiles are walkable when they have the Tide Medallion.
+    If room has a reveal_tilemap and player has the lantern, uses revealed terrain."""
     tilemap = room["tilemap"]
+    reveal = room.get("reveal_tilemap")
+    has_lantern = player is not None and player.has_flag("has_lantern") and reveal is not None
     check_y_start = y + 0.5
     has_medallion = player is not None and player.has_flag("has_tide_medallion")
 
@@ -265,7 +271,7 @@ def _is_position_walkable(x, y, room, player=None):
         for tx in range(min_tx, max_tx + 1):
             if tx < 0 or tx >= ROOM_COLS or ty < 0 or ty >= ROOM_ROWS:
                 continue  # off-grid handled by edge detection
-            tile = tilemap[ty][tx]
+            tile = reveal[ty][tx] if has_lantern else tilemap[ty][tx]
             if not game.is_walkable_tile(tile):
                 if has_medallion and game.custom_tile_recipes.get(tile, {}).get("water"):
                     continue
@@ -320,9 +326,13 @@ def _process_player_state(player, data, now, msgs):
         return
 
     # Stairs — skip if player just spawned on this stair tile
+    # Check reveal tilemap for hidden stairs when player has lantern
     center_tx, center_ty = int(round(new_x)), int(round(new_y))
     if 0 <= center_tx < ROOM_COLS and 0 <= center_ty < ROOM_ROWS:
         tile = room["tilemap"][center_ty][center_tx]
+        reveal = room.get("reveal_tilemap")
+        if reveal and player.has_flag("has_lantern"):
+            tile = reveal[center_ty][center_tx]
         on_stair = tile in ("SU", "SD")
         spawn_stair = getattr(a, "spawn_stair", None)
         if on_stair and spawn_stair == (center_tx, center_ty):

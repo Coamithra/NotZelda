@@ -116,6 +116,56 @@ def load_room_files(directory: str = "rooms"):
         }
         if header.get("locked", "").lower() == "true":
             room["locked"] = True
+
+        # Dark room support — float opacity (e.g. "0.5") or boolean ("true" = 1.0)
+        dark_val = header.get("dark", "")
+        if dark_val:
+            try:
+                room["dark"] = float(dark_val)
+            except ValueError:
+                if dark_val.lower() == "true":
+                    room["dark"] = True
+
+        # Scan for bright tiles → light sources (only if room is dark)
+        if room.get("dark"):
+            light_sources = []
+            for r_idx, row in enumerate(tilemap):
+                for c_idx, tile_code in enumerate(row):
+                    tile_props = game.custom_tile_recipes.get(tile_code, {})
+                    if tile_props.get("bright"):
+                        light_sources.append([c_idx, r_idx])
+            if light_sources:
+                room["light_sources"] = light_sources
+
+        # Parse optional 4th section — reveal tilemap (hidden terrain under water)
+        if len(parts) >= 4:
+            reveal_text = parts[3].strip()
+            reveal_tilemap = []
+            for row_line in reveal_text.splitlines():
+                row_line = row_line.strip()
+                if not row_line:
+                    continue
+                codes = row_line.split()
+                r = list(codes)
+                while len(r) < 15:
+                    r.append("GR")
+                r = r[:15]
+                reveal_tilemap.append(r)
+            while len(reveal_tilemap) < 11:
+                reveal_tilemap.append(["GR"] * 15)
+            reveal_tilemap = reveal_tilemap[:11]
+            room["reveal_tilemap"] = reveal_tilemap
+
+            # Scan reveal tilemap for stair spawn points (hidden stairs)
+            for ry, r in enumerate(reveal_tilemap):
+                for rx, tile in enumerate(r):
+                    if tile == "SU" and su_pos is None:
+                        su_pos = (rx, ry)
+                        spawn_points["down"] = su_pos
+                    elif tile == "SD" and sd_pos is None:
+                        sd_pos = (rx, ry)
+                        spawn_points["up"] = sd_pos
+
         game.rooms[room_id] = room
 
         # Parse entity section (after second ---)

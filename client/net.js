@@ -296,6 +296,7 @@ function handleMessage(msg) {
       G.room.lightSources = msg.light_sources || [];
       G.room.lanternHolders = new Set(msg.lantern_holders || []);
       G.room.medallionHolders = new Set(msg.medallion_holders || []);
+      G.room.revealTilemap = msg.reveal_tilemap || null;
       // Re-apply water-walking tiles to WALKABLE on room enter / reconnect
       if (G.player.playerFlags.has("has_tide_medallion")) {
         for (const t of WATER_TILES) WALKABLE.add(t);

@@ -380,7 +380,7 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
             if collected_chests:
                 msg["opened_chests"] = [{"x": it["x"], "y": it["y"]} for it in collected_chests]
 
-    # Dark room data
+    # Dark room data (dungeon rooms)
     if inst:
         room_data = game.rooms.get(player.room, {})
         if room_data.get("dark"):
@@ -390,6 +390,19 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
             lantern_holders = [p.name for p, a in avatars_in_room(player.room) if p.has_flag("has_lantern")]
             if lantern_holders:
                 msg["lantern_holders"] = lantern_holders
+
+    # Dark room data (overworld rooms with dark header)
+    if not inst and room.get("dark"):
+        msg["dark"] = room["dark"]
+        msg["light_sources"] = room.get("light_sources", [])
+        lantern_holders = [p.name for p, a in avatars_in_room(player.room) if p.has_flag("has_lantern")]
+        if lantern_holders:
+            msg["lantern_holders"] = lantern_holders
+
+    # Reveal tilemap (overworld rooms with hidden terrain under water)
+    if not inst and room.get("reveal_tilemap"):
+        msg["reveal_tilemap"] = room["reveal_tilemap"]
+
     # Tell client which players in this room have the Tide Medallion (water-walking)
     if inst:
         medallion_holders = [p.name for p, a in avatars_in_room(player.room) if p.has_flag("has_tide_medallion")]
@@ -674,10 +687,14 @@ def do_room_transition(player, exit_direction: str, msgs: list):
         player.avatar = Avatar(spawn_x, spawn_y, old_avatar.direction)
 
         # Mark if spawning on a stair tile so player_state processing skips it
+        # Also check reveal tilemap for hidden stairs (lantern-gated rooms)
         stx, sty = int(round(spawn_x)), int(round(spawn_y))
         dest_room = game.rooms[new_room_id]
         if 0 <= stx < ROOM_COLS and 0 <= sty < ROOM_ROWS:
             stile = dest_room["tilemap"][sty][stx]
+            reveal = dest_room.get("reveal_tilemap")
+            if reveal:
+                stile = reveal[sty][stx]
             if stile in ("SU", "SD"):
                 player.avatar.spawn_stair = (stx, sty)
 

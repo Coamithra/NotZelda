@@ -40,6 +40,45 @@ function renderRoom() {
   }
 }
 
+function renderRevealedTiles() {
+  const reveal = G.room.revealTilemap;
+  if (!reveal || !G.room.currentRoom) return;
+  const tm = G.room.currentRoom.tilemap;
+
+  // Collect lantern holders with positions
+  const lights = [];
+  if (G.player.playerFlags.has("has_lantern")) {
+    lights.push({ x: G.player.displayX, y: G.player.displayY });
+  }
+  for (const name of G.room.lanternHolders) {
+    if (name === G.player.myName) continue;
+    const op = G.room.otherPlayers[name];
+    if (op) lights.push({ x: op.displayX, y: op.displayY });
+  }
+  if (lights.length === 0) return;
+
+  const radiusSq = LANTERN_RADIUS * LANTERN_RADIUS;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (tm[r][c] === reveal[r][c]) continue; // no difference — skip
+      // Check if this tile is within any lantern holder's radius
+      const tcx = c + 0.5;
+      const tcy = r + 0.5;
+      let lit = false;
+      for (const l of lights) {
+        const lx = l.x + 0.5; // player center
+        const ly = l.y + 0.5;
+        const dx = tcx - lx;
+        const dy = tcy - ly;
+        if (dx * dx + dy * dy <= radiusSq) { lit = true; break; }
+      }
+      if (lit) {
+        G.ui.ctx.drawImage(getTileCanvas(reveal[r][c], TS, TILE, SCALE), c * TS, r * TS);
+      }
+    }
+  }
+}
+
 function renderBrightTiles() {
   if (!G.room.currentRoom) return;
   const tm = G.room.currentRoom.tilemap;
@@ -218,9 +257,10 @@ function renderDarkness() {
   }
 
   // Composite the darkness onto the main canvas
+  // Support variable opacity — numeric dark value (e.g. 0.5) or default 0.93
   dCtx.globalCompositeOperation = "source-over"; // reset
   ctx.save();
-  ctx.globalAlpha = 0.93;
+  ctx.globalAlpha = typeof G.room.dark === "number" ? G.room.dark : 0.93;
   ctx.drawImage(_darkCanvas, 0, 0);
   ctx.restore();
 }
