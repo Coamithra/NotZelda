@@ -14,4 +14,6 @@ DW DF DF DF DF DF DF DF DF DF DF DF DF DF DW
 SC DF DF DF DF DF DF DF DF DF DF DF DF DF SC
 DW SC DW SC DW DW DF DF DF DW DW SC DW SC DW
 ---
-monsters bat 1.0
+
+monsters dungeon_slime 0.55
+monsters bat 0.45

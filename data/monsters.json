@@ -267,8 +267,8 @@
     ],
     "stats": {
       "hp": 1,
-      "walk_time": 0.18,
-      "decision_time": 0.55,
+      "walk_time": 0.22,
+      "decision_time": 0.70,
       "damage": 1,
       "pack_min": 10,
       "pack_max": 13
@@ -900,8 +900,8 @@
     ],
     "stats": {
       "hp": 2,
-      "walk_time": 0.35,
-      "decision_time": 0,
+      "walk_time": 0.40,
+      "decision_time": 0.45,
       "damage": 2,
       "pack_min": 3,
       "pack_max": 5
@@ -918,7 +918,7 @@
           "if": "always",
           "do": "move",
           "direction": "random",
-          "cooldown": 60
+          "cooldown": 5
         }
       ]
     },
@@ -1596,8 +1596,8 @@
     ],
     "stats": {
       "hp": 3,
-      "walk_time": 0.35,
-      "decision_time": 2.5,
+      "walk_time": 0.50,
+      "decision_time": 1.2,
       "damage": 1,
       "pack_min": 2,
       "pack_max": 3
@@ -1863,7 +1863,7 @@
     "stats": {
       "hp": 2,
       "walk_time": 0.25,
-      "decision_time": 2.0,
+      "decision_time": 2.4,
       "damage": 2,
       "pack_min": 3,
       "pack_max": 4
@@ -1879,7 +1879,7 @@
           "damage": 2,
           "damage_radius": 2,
           "warmup": 0.75,
-          "cooldown": 4
+          "cooldown": 5
         },
         {
           "if": "player_within",

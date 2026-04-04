@@ -107,8 +107,8 @@ def spawn_monsters(room_id: str) -> list[Monster]:
     monsters = []
     for t in templates:
         m = Monster(t["x"], t["y"], t["kind"])
-        # Stagger first tick by 0-4 intervals so monsters don't move in sync
-        m.last_action_time = now + random.randint(0, 4) * 0.25
+        # Spawn pause (1-2s) so player can survey the room, plus stagger
+        m.last_action_time = now + 1.0 + random.random()
         monsters.append(m)
     return monsters
 

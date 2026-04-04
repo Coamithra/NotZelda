@@ -14,5 +14,8 @@ SC DF DF DF DF DF DF DF DF DF DF DF DF DF SC
 DW DF DF DF DF DF DF DF DF DF DF DF DF DF DW
 DW DW SC DW DW DW DF DF DF DW DW DW SC DW DW
 ---
-monsters skeleton 0.68
-monsters bat 0.32
+
+monsters skeleton 0.3
+monsters dungeon_slime 0.3
+monsters phantom 0.25
+monsters bat 0.15

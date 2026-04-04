@@ -91,7 +91,7 @@ SEAL_FRAGMENT_HP_BONUS = 2          # +1 heart container = +2 HP
 TICK_INTERVAL = 1.0 / 30     # ~33ms — unified game tick rate
 
 # Monsters
-ROOM_RESET_COOLDOWN = 10.0
+ROOM_RESET_COOLDOWN = 300.0
 PROJECTILE_TICK_RATE = 0.15
 
 DUNGEON_MUSIC_TRACKS = [

@@ -860,9 +860,10 @@ def create_dungeon(type_id) -> DungeonInstance | None:
 
     # --- Treasure chest: far from both boss and entrance ---
     # (contains lantern in d1, TBD for other dungeons)
-    treasure_cell = max(topo.cells, key=lambda c: (
+    # Hard-exclude sanctum — only the seal shard belongs there
+    treasure_candidates = [c for c in topo.cells if not topo.has_mark(c, "sanctum")]
+    treasure_cell = max(treasure_candidates, key=lambda c: (
         topo.lacks_mark(c, "boss"),             # avoid the boss room
-        topo.lacks_mark(c, "sanctum"),          # avoid the sanctum
         c != topo.entrance,                     # avoid the entrance
         topo.dist(c, "boss") + topo.dist(c, "entrance"),  # maximize remoteness
     ))
@@ -939,21 +940,25 @@ def create_dungeon(type_id) -> DungeonInstance | None:
 
     # --- Map & compass: zone-aware ---
     # Step 1: rank zones by remoteness from entrance and boss
+    # Exclude sanctum/boss cells from availability — sanctum is seal-shard only
     zone_scores = {}
     for z in topo.zone_ids:
         remoteness = topo.zone_dist(z, "entrance") + topo.zone_dist(z, "boss")
         available = sum(1 for c in topo.cells_in_zone(z)
                         if topo.lacks_mark(c, "treasure")
-                        and topo.lacks_mark(c, "key"))
+                        and topo.lacks_mark(c, "key")
+                        and topo.lacks_mark(c, "sanctum")
+                        and topo.lacks_mark(c, "boss"))
         zone_scores[z] = (available > 0, remoteness, available)
 
     ranked_zones = sorted(topo.zone_ids, key=lambda z: zone_scores[z], reverse=True)
 
-    # Step 2: pick best cell in a zone
+    # Step 2: pick best cell in a zone (sanctum/boss hard-excluded)
     def _pick_cell_in_zone(zone_id):
-        return max(topo.cells_in_zone(zone_id), key=lambda c: (
-            topo.lacks_mark(c, "boss"),          # avoid the boss room
-            topo.lacks_mark(c, "sanctum"),        # avoid the sanctum
+        candidates = [c for c in topo.cells_in_zone(zone_id)
+                       if not topo.has_mark(c, "sanctum")
+                       and not topo.has_mark(c, "boss")]
+        return max(candidates, key=lambda c: (
             topo.lacks_mark(c, "treasure"),        # avoid the treasure room
             topo.lacks_mark(c, "key"),             # avoid rooms with keys
             topo.lacks_mark(c, "map"),             # avoid rooms with map (for compass)
