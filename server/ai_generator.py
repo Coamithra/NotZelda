@@ -811,6 +811,7 @@ def auto_patch(data: dict, existing_walkable: set[str],
     patches.extend(patch_doorway_tiles(data, walkable))
     patches.extend(patch_unreachable_doorways(data, walkable))
     patches.extend(patch_monster_placements(data, walkable))
+    patches.extend(patch_monster_groups(data))
     for m in data.get("new_monsters", []):
         if isinstance(m, dict) and isinstance(m.get("behavior"), dict):
             patches.extend(patch_monster_rules(m["behavior"]))

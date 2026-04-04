@@ -404,12 +404,18 @@ async def handle_generate_layout(body: bytes) -> tuple[str, int]:
                 return json.dumps({"error": "Layout generation failed"}), 500
 
             # Wrap as a room result for the preview to work
+            # Convert AI's {"kind", "fraction"} to runtime {"kind", "count"}
+            ai_groups = layout.get("monster_groups", [])
+            monster_groups = [
+                {"kind": g["kind"], "count": g["fraction"]}
+                for g in ai_groups if isinstance(g, dict)
+            ]
             result = {
                 "name": layout["name"],
                 "tilemap": layout["tilemap"],
                 "new_tiles": [],
                 "new_monsters": [],
-                "monster_placements": layout["monster_placements"],
+                "monster_groups": monster_groups,
             }
 
             # Register as a room
@@ -485,10 +491,18 @@ def _count_room_references(item_id: str, item_type: str) -> int:
     for entry in room_lib.real_entries:
         data = entry.data
         if item_type == "monster":
+            found = False
             for p in data.get("monster_placements", []):
                 if p["kind"] == item_id:
-                    count += 1
+                    found = True
                     break
+            if not found:
+                for g in data.get("monster_groups", []):
+                    if g["kind"] == item_id:
+                        found = True
+                        break
+            if found:
+                count += 1
         elif item_type == "tile":
             for row in data.get("tilemap", []):
                 if item_id in row:

@@ -460,8 +460,8 @@ function createRoomItem(entry) {
   info.appendChild(name);
   const meta = document.createElement('div');
   meta.className = 'meta';
-  const mCount = (entry.data.monster_placements || []).length;
-  meta.textContent = `${mCount} monsters`;
+  const mCount = (entry.data.monster_placements || []).length + (entry.data.monster_groups || []).length;
+  meta.textContent = `${mCount} monster group${mCount !== 1 ? 's' : ''}`;
   info.appendChild(meta);
   div.appendChild(info);
 
@@ -775,18 +775,30 @@ function showRoomDetails(entry) {
   html += `<br><span style="color:#666;font-size:11px">Created ${relativeTime(entry.created_at)}</span></div>`;
 
   // Stats
-  const mCount = (d.monster_placements || []).length;
+  const placementCount = (d.monster_placements || []).length;
+  const groupCount = (d.monster_groups || []).length;
   const newM = (d.new_monsters || []).length;
   const newT = (d.new_tiles || []).length;
   html += `<div class="detail-section"><h4>Content</h4>`;
-  html += `<div class="stat-row"><span class="stat-label">Monsters</span><span class="stat-val">${mCount} placed</span></div>`;
+  if (groupCount) html += `<div class="stat-row"><span class="stat-label">Monster groups</span><span class="stat-val">${groupCount}</span></div>`;
+  if (placementCount) html += `<div class="stat-row"><span class="stat-label">Fixed placements</span><span class="stat-val">${placementCount}</span></div>`;
   html += `<div class="stat-row"><span class="stat-label">New monsters</span><span class="stat-val">${newM}</span></div>`;
   html += `<div class="stat-row"><span class="stat-label">New tiles</span><span class="stat-val">${newT}</span></div>`;
   html += `</div>`;
 
-  // Monster placements
+  // Monster groups (pack fractions)
+  if (d.monster_groups && d.monster_groups.length) {
+    html += `<div class="detail-section"><h4>Monster Groups</h4><ul class="placement-list">`;
+    for (const g of d.monster_groups) {
+      const frac = g.count !== undefined ? g.count : g.fraction;
+      html += `<li>${g.kind}: ${(frac * 100).toFixed(0)}% of pack</li>`;
+    }
+    html += `</ul></div>`;
+  }
+
+  // Legacy monster placements (old AI rooms)
   if (d.monster_placements && d.monster_placements.length) {
-    html += `<div class="detail-section"><h4>Monster Placements</h4><ul class="placement-list">`;
+    html += `<div class="detail-section"><h4>Fixed Placements</h4><ul class="placement-list">`;
     for (const p of d.monster_placements) {
       html += `<li>${p.kind} at (${p.x}, ${p.y})</li>`;
     }
