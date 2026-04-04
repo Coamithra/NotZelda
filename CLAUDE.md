@@ -35,7 +35,8 @@ When pushing to git make sure to update CLAUDE.md first!
 ├── music/                 # MP3 tracks, organized by area
 │   ├── overworld/         # Village, tavern, chapel, overworld tracks
 │   ├── dungeon1/          # Dungeon ambient (b,d-f), boss1/2/3 + choir variants
-│   └── dungeon2/          # Water temple ambient + boss tracks
+│   ├── dungeon2/          # Water temple ambient + boss tracks
+│   └── dungeon3/          # Desert tomb ambient + boss tracks
 ├── rooms/                 # .room data files + dungeon template subdirs
 │   ├── dungeon1/          # d1 (Dark Dungeon) room templates (64 + boss + treasure)
 │   └── dungeon2/          # d2 (Water Temple) room templates (7 + boss + treasure)

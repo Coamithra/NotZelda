@@ -32,6 +32,8 @@ const MusicPlayer = (function () {
     "desert_a":  "music_desert_a.mp3",
     "desert_b":  "music_desert_b.mp3",
     "desert_c":  "music_desert_c.mp3",
+    "desert_boss1": "music_desert_boss1.mp3",
+    "desert_boss2": "music_desert_boss2.mp3",
   };
 
   // Fallback: map biome names to music tracks (for rooms without explicit music field)

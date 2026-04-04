@@ -332,6 +332,10 @@ STATIC_FILES = {
     "/music_desert_a.mp3":     ("music/dungeon3/desert_a.mp3", "audio/mpeg"),
     "/music_desert_b.mp3":     ("music/dungeon3/desert_b.mp3", "audio/mpeg"),
     "/music_desert_c.mp3":     ("music/dungeon3/desert_c.mp3", "audio/mpeg"),
+    "/music_desert_boss1.mp3":       ("music/dungeon3/desert_boss1.mp3", "audio/mpeg"),
+    "/music_desert_boss1_choir.mp3": ("music/dungeon3/desert_boss1_choir.mp3", "audio/mpeg"),
+    "/music_desert_boss2.mp3":       ("music/dungeon3/desert_boss2.mp3", "audio/mpeg"),
+    "/music_desert_boss2_choir.mp3": ("music/dungeon3/desert_boss2_choir.mp3", "audio/mpeg"),
 }
 
 

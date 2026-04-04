@@ -67,6 +67,11 @@ LAYOUTS = {
         ["SA", "ST", "SA"],
         ["ST", "SA", "SA"],
     ],
+    "desert_boss": [
+        ["SA", "SA", "SA"],
+        ["SA", "ST", "SA"],
+        ["SA", "SA", "SA"],
+    ],
     "menu": [
         ["TR", "GR", "WA"],
         ["GR", "ST", "SH"],
@@ -118,6 +123,8 @@ def make_artwork(theme):
         tint = (200, 40, 40)       # red tint for boss
     elif theme == "water_boss":
         tint = (180, 40, 60)       # reddish tint for water boss
+    elif theme == "desert_boss":
+        tint = (200, 60, 30)       # fiery orange tint for desert boss
 
     img = Image.new("RGB", (SIZE, SIZE))
     draw = ImageDraw.Draw(img)
@@ -177,6 +184,11 @@ TRACKS = [
     ("dungeon3/desert_a.mp3",     "Desert Tomb I",         "desert"),
     ("dungeon3/desert_b.mp3",     "Desert Tomb II",        "desert"),
     ("dungeon3/desert_c.mp3",     "Desert Tomb III",       "desert"),
+    # Desert Tomb — boss
+    ("dungeon3/desert_boss1.mp3",      "Desert Tomb Boss I",          "desert_boss"),
+    ("dungeon3/desert_boss1_choir.mp3","Desert Tomb Boss I (Choir)",  "desert_boss"),
+    ("dungeon3/desert_boss2.mp3",      "Desert Tomb Boss II",         "desert_boss"),
+    ("dungeon3/desert_boss2_choir.mp3","Desert Tomb Boss II (Choir)", "desert_boss"),
     # Menu
     ("other/menu.mp3",            "Title Screen",          "menu"),
 ]

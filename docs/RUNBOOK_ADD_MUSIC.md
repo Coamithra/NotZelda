@@ -77,7 +77,22 @@ In `client/music.js`:
 "castle": "music_castle_ruins.mp3",
 ```
 
-## 5. Assign to rooms
+## 5. Add to the OST page
+
+In `client/ost.html`, add a track entry to the `TRACKS` array in the `<script>` block:
+
+```javascript
+{ title: "Castle Ruins", area: "Ruined Castle", url: "music_castle_ruins.mp3" },
+```
+
+- Use a `section` property on the first track of a new group to start a new section header:
+  ```javascript
+  { section: "The Dark Dungeon", title: "Dungeon Ambient I", area: "Dark Dungeon — Exploration", url: "music_dungeon2.mp3" },
+  ```
+- Choir tracks are not listed separately — only the main boss/ambient tracks appear.
+- The page is served at `/ost`.
+
+## 6. Assign to rooms
 
 Either:
 - Set `music=castle_ruins` in the `.room` file header (explicit per-room), or
@@ -89,5 +104,6 @@ Either:
 - [ ] Track + theme added to `tools/tag_music.py`, tagger run
 - [ ] Static route added in `mud_server.py`
 - [ ] Track registered in `client/music.js` MUSIC_TRACKS
+- [ ] Track entry added to `client/ost.html` TRACKS array
 - [ ] Biome fallback or room-level `music=` field set
 - [ ] Commit the MP3 + code changes
