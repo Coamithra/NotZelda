@@ -597,6 +597,9 @@ const ITEM_DRAW_FNS = {
   lantern: drawItemLantern,
   tide_medallion: drawItemTideMedallion,
   seal_fragment: drawItemSealFragment,
+  heart_container: function(ctx, px, py, S) {
+    drawItemHeart(ctx, px + 2*S, py + 2*S, S * 0.6);
+  },
 };
 
 // ── Treasure Chest (large, two states) ──────────────────────────────

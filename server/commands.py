@@ -593,6 +593,53 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
                     }, None))
                     break
 
+    # Overworld item pickup (per-player, stays on ground for others)
+    if player.hp > 0:
+        ow_items = game.overworld_items.get(player.room, [])
+        for item in ow_items:
+            if player.has_flag(item["flag"]):
+                continue
+            if abs(a.x - item["x"]) < 0.75 and abs(a.y - item["y"]) < 0.75:
+                player.grant_flag(item["flag"])
+                item_type = item["item_type"]
+                if item_type == "heart_container":
+                    item_name = "Heart Container"
+                    player.max_hp += SEAL_FRAGMENT_HP_BONUS
+                    player.hp = player.max_hp
+                    msgs.append(("send", player, {
+                        "type": "hp_update", "hp": player.hp, "max_hp": player.max_hp,
+                    }))
+                else:
+                    item_name = item_type.replace("_", " ").title()
+                msgs.append(("send", player, {
+                    "type": "item_obtained",
+                    "item_type": item_type,
+                    "item_name": item_name,
+                }))
+                msgs.append(("broadcast", player.room, {
+                    "type": "item_effect",
+                    "item_type": item_type,
+                    "item_name": item_name,
+                    "name": player.name,
+                }, player.ws))
+                # Freeze monsters during pickup animation
+                freeze_end = now + ITEM_PICKUP_FREEZE_DURATION
+                existing = game.room_pickup_freeze.get(player.room)
+                if not existing:
+                    game.room_pickup_freeze[player.room] = {
+                        "start": now, "end": freeze_end,
+                    }
+                elif freeze_end > existing["end"]:
+                    existing["end"] = freeze_end
+                for p in game.players.values():
+                    if p.room == player.room and p.avatar:
+                        p.avatar.pending_collisions.clear()
+                msgs.append(("broadcast", player.room, {
+                    "type": "room_freeze",
+                    "duration": ITEM_PICKUP_FREEZE_DURATION,
+                }, None))
+                break
+
     # Guard proximity chat (float-aware)
     if player.hp > 0:
         _check_guard_proximity_sync(player, now, msgs)
@@ -979,6 +1026,10 @@ def _cmd_cheat(player, args, msgs):
 def _cmd_lantern(player, args, msgs):
     if player.has_flag("has_lantern"):
         player.flags.discard("has_lantern")
+        msgs.append(("send", player, {"type": "flag_removed", "flag": "has_lantern"}))
+        msgs.append(("broadcast", player.room, {
+            "type": "lantern_removed", "name": player.name,
+        }, None))
         msgs.append(("send", player, {"type": "info", "text": "Lantern removed"}))
     else:
         player.grant_flag("has_lantern")

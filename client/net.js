@@ -391,7 +391,7 @@ function handleMessage(msg) {
       } else {
         // Left the dungeon
         G.room.dungeonState = null;
-        G.room.dungeonGroundItems = [];
+        if (!msg.dungeon_items) G.room.dungeonGroundItems = [];
       }
 
       if (cameFromConjuring) {
@@ -1021,7 +1021,7 @@ function handleMessage(msg) {
         };
         // Remove from ground items (dungeon items only)
         // Per-player items (lantern, seal_fragment) stay on ground for other players
-        const perPlayerItems = new Set(["lantern", "tide_medallion", "seal_fragment"]);
+        const perPlayerItems = new Set(["lantern", "tide_medallion", "seal_fragment", "heart_container"]);
         if (perPlayerItems.has(msg.item_type)) {
           // Remove for THIS player only (visual) — server keeps it for others
           const px = G.player.displayX, py = G.player.displayY;
@@ -1194,6 +1194,16 @@ function handleMessage(msg) {
         G.ui.infoMessages.push({ text: line, expires: Date.now() + 5000 });
         appendChatLog(`<span class="chat-system">${escHtml(line)}</span>`);
       }
+      break;
+    }
+
+    case "flag_removed": {
+      G.player.playerFlags.delete(msg.flag);
+      break;
+    }
+
+    case "lantern_removed": {
+      G.room.lanternHolders.delete(msg.name);
       break;
     }
 

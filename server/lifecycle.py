@@ -403,6 +403,15 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
     if not inst and room.get("reveal_tilemap") and player.has_flag("has_lantern"):
         msg["reveal_tilemap"] = room["reveal_tilemap"]
 
+    # Overworld ground items (per-player, filtered by collected flags)
+    ow_items = game.overworld_items.get(player.room, [])
+    if ow_items:
+        visible = [it for it in ow_items if not player.has_flag(it["flag"])]
+        if visible:
+            existing = msg.get("dungeon_items", [])
+            existing.extend([{"x": it["x"], "y": it["y"], "item_type": it["item_type"]} for it in visible])
+            msg["dungeon_items"] = existing
+
     # Tell client which players in this room have the Tide Medallion (water-walking)
     medallion_holders = [p.name for p, a in avatars_in_room(player.room) if p.has_flag("has_tide_medallion")]
     if medallion_holders:

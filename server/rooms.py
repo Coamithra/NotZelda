@@ -230,6 +230,16 @@ def load_room_files(directory: str = "rooms"):
                     if room_id not in game.monster_templates:
                         game.monster_templates[room_id] = []
                     game.monster_templates[room_id].append({"kind": kind, "x": mx, "y": my})
+                elif tokens[0] == "item" and len(tokens) >= 4:
+                    item_type = tokens[1]
+                    ix = int(tokens[2])
+                    iy = int(tokens[3])
+                    flag = f"ow_item_{room_id}_{ix}_{iy}"
+                    if room_id not in game.overworld_items:
+                        game.overworld_items[room_id] = []
+                    game.overworld_items[room_id].append({
+                        "item_type": item_type, "x": ix, "y": iy, "flag": flag,
+                    })
 
         count += 1
 
