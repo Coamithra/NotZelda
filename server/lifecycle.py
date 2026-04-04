@@ -400,14 +400,13 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
             msg["lantern_holders"] = lantern_holders
 
     # Reveal tilemap (overworld rooms with hidden terrain under water)
-    if not inst and room.get("reveal_tilemap"):
+    if not inst and room.get("reveal_tilemap") and player.has_flag("has_lantern"):
         msg["reveal_tilemap"] = room["reveal_tilemap"]
 
     # Tell client which players in this room have the Tide Medallion (water-walking)
-    if inst:
-        medallion_holders = [p.name for p, a in avatars_in_room(player.room) if p.has_flag("has_tide_medallion")]
-        if medallion_holders:
-            msg["medallion_holders"] = medallion_holders
+    medallion_holders = [p.name for p, a in avatars_in_room(player.room) if p.has_flag("has_tide_medallion")]
+    if medallion_holders:
+        msg["medallion_holders"] = medallion_holders
 
     # Attach dungeon type for client-side ambient effects
     if inst:
@@ -693,7 +692,7 @@ def do_room_transition(player, exit_direction: str, msgs: list):
         if 0 <= stx < ROOM_COLS and 0 <= sty < ROOM_ROWS:
             stile = dest_room["tilemap"][sty][stx]
             reveal = dest_room.get("reveal_tilemap")
-            if reveal:
+            if reveal and player.has_flag("has_lantern"):
                 stile = reveal[sty][stx]
             if stile in ("SU", "SD"):
                 player.avatar.spawn_stair = (stx, sty)

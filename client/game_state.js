@@ -131,10 +131,11 @@ const G = {
     monsterFreeze: null,        // {start, duration} — monsters paused during item pickup
 
     // Darkness
-    dark: false,                    // current room is dark
+    dark: false,                    // current room is dark (true or numeric opacity)
     lightSources: [],               // [[col, row], ...] — sconce/brazier positions
     lanternHolders: new Set(),      // player names with lanterns in this room
     medallionHolders: new Set(),    // player names with Tide Medallion in this room
+    revealTilemap: null,            // [[tile_code, ...], ...] — hidden terrain under water
 
     // Corpses
     roomCorpses: [],          // [{kind, x, y, width, height}]

@@ -146,11 +146,11 @@ def load_room_files(directory: str = "rooms"):
                 if not row_line:
                     continue
                 codes = row_line.split()
-                r = list(codes)
-                while len(r) < 15:
-                    r.append("GR")
-                r = r[:15]
-                reveal_tilemap.append(r)
+                row = list(codes)
+                while len(row) < 15:
+                    row.append("GR")
+                row = row[:15]
+                reveal_tilemap.append(row)
             while len(reveal_tilemap) < 11:
                 reveal_tilemap.append(["GR"] * 15)
             reveal_tilemap = reveal_tilemap[:11]
