@@ -1,7 +1,7 @@
 {
     "_comment": "SFX manifest for AI generation. Each key is the output filename (without extension). 'prompt' is the text description for AudioGen. 'duration' is seconds (1-10 recommended). 'category' organizes output into subdirectories.",
     "sword_slash": {
-        "prompt": "sharp sword slash swoosh through air",
+        "prompt": "quick blade whoosh",
         "duration": 1,
         "category": "combat"
     },
@@ -16,8 +16,8 @@
         "category": "combat"
     },
     "monster_death": {
-        "prompt": "monster defeated dissolving poof magical burst",
-        "duration": 1.5,
+        "prompt": "short crunch crack snap breaking bones quick impact",
+        "duration": 0.8,
         "category": "combat"
     },
     "door_open": {
@@ -74,5 +74,30 @@
         "prompt": "soft pop bubble appearing UI notification",
         "duration": 0.5,
         "category": "ui"
+    },
+    "player_death": {
+        "prompt": "dramatic defeat impact dark fading echo somber",
+        "duration": 3,
+        "category": "combat"
+    },
+    "revival_success": {
+        "prompt": "magical healing chime ascending sparkle restoration bright",
+        "duration": 5,
+        "category": "combat"
+    },
+    "sword_hit_flesh": {
+        "prompt": "blunt meaty impact hit thud slap on flesh body",
+        "duration": 0.8,
+        "category": "combat"
+    },
+    "stairs_up": {
+        "prompt": "footsteps climbing stone stairs ascending echo",
+        "duration": 1.5,
+        "category": "environment"
+    },
+    "stairs_down": {
+        "prompt": "footsteps descending stone stairs going down echo",
+        "duration": 1.5,
+        "category": "environment"
     }
 }

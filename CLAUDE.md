@@ -32,7 +32,9 @@ When pushing to git make sure to update CLAUDE.md first!
 ├── client/                # Browser-served HTML + JS
 ├── server/                # Python modules imported by mud_server
 │   └── prompts/           # AI prompt templates ({{placeholder}} syntax)
-├── music/                 # MP3 tracks by area + AI-generated SFX in sfx/
+├── audio/                 # All game audio
+│   ├── music/             # MP3 tracks by area (overworld, dungeon1-3, other)
+│   └── sfx/               # AI-generated WAV sound effects by category
 ├── rooms/                 # .room data files + dungeon template subdirs
 ├── data/                  # tiles.json, monsters.json, npc_sprites.json
 ├── tools/                 # Dev utilities (renderers, content viewer, tests)

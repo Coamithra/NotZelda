@@ -1,6 +1,6 @@
 """Generate sound effects from text prompts using Meta's AudioGen model.
 
-Reads data/sfx_manifest.json and batch-generates WAV files into music/sfx/.
+Reads data/sfx_manifest.json and batch-generates WAV files into audio/sfx/.
 Requires: pip install audiocraft (PyTorch 2.1+, Python 3.9+)
 
 Usage:
@@ -19,7 +19,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST_PATH = ROOT / "data" / "sfx_manifest.json"
-OUTPUT_DIR = ROOT / "music" / "sfx"
+OUTPUT_DIR = ROOT / "audio" / "sfx"
 
 
 def load_manifest() -> dict:

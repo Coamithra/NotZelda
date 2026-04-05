@@ -1,4 +1,68 @@
 // ---------------------------------------------------------------------------
+// Sound effects — one-shot WAV playback
+// ---------------------------------------------------------------------------
+
+const SfxPlayer = (function () {
+  let enabled = true;
+  const VOLUME = 0.5;
+  const cache = {};  // name -> Audio (preloaded)
+
+  const SFX_FILES = {
+    sword_slash:    "sfx_sword_slash.wav",
+    sword_hit:      "sfx_sword_hit.wav",
+    sword_hit_flesh:"sfx_sword_hit_flesh.wav",
+    player_hurt:    "sfx_player_hurt.wav",
+    monster_death:  "sfx_monster_death.wav",
+    boss_roar:      "sfx_boss_roar.wav",
+    player_death:   "sfx_player_death.wav",
+    revival_success:"sfx_revival_success.wav",
+    door_open:      "sfx_door_open.wav",
+    door_locked:    "sfx_door_locked.wav",
+    footstep_grass: "sfx_footstep_grass.wav",
+    footstep_stone: "sfx_footstep_stone.wav",
+    water_splash:   "sfx_water_splash.wav",
+    portal_enter:   "sfx_portal_enter.wav",
+    chest_open:     "sfx_chest_open.wav",
+    key_pickup:     "sfx_key_pickup.wav",
+    item_pickup:    "sfx_item_pickup.wav",
+    npc_chat_open:  "sfx_npc_chat_open.wav",
+    stairs_up:      "sfx_stairs_up.wav",
+    stairs_down:    "sfx_stairs_down.wav",
+  };
+
+  function play(name) {
+    if (!enabled) return;
+    const url = SFX_FILES[name];
+    if (!url) return;
+    // Clone from cache for overlapping playback, or create new
+    if (cache[name]) {
+      const sfx = cache[name].cloneNode();
+      sfx.volume = VOLUME;
+      sfx.play().catch(function () {});
+    } else {
+      const sfx = new Audio(url);
+      sfx.volume = VOLUME;
+      sfx.play().catch(function () {});
+      cache[name] = sfx;
+    }
+  }
+
+  function preload() {
+    for (const [name, url] of Object.entries(SFX_FILES)) {
+      const a = new Audio();
+      a.preload = "auto";
+      a.src = url;
+      cache[name] = a;
+    }
+  }
+
+  function toggle() { enabled = !enabled; return enabled; }
+  function isEnabled() { return enabled; }
+
+  return { play, preload, toggle, isEnabled };
+})();
+
+// ---------------------------------------------------------------------------
 // Background music — per-room MP3 playback with crossfade
 // ---------------------------------------------------------------------------
 

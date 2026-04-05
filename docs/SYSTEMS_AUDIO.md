@@ -2,20 +2,21 @@
 
 ## Overview
 
-Game audio lives in `music/` organized by area. Background music is hand-picked MP3s. Sound effects are AI-generated using Meta's [AudioGen](https://github.com/facebookresearch/audiocraft) model (1.5B params), run locally on GPU.
+Game audio lives in `audio/` organized into `music/` (BGM) and `sfx/` (sound effects). Background music is hand-picked MP3s. Sound effects are AI-generated using Meta's [AudioGen](https://github.com/facebookresearch/audiocraft) model (1.5B params), run locally on GPU.
 
 ## Directory Layout
 
 ```
-music/
-├── overworld/          # Overworld area BGM (MP3)
-├── dungeon1/           # Dungeon 1 BGM
-├── dungeon2/           # Dungeon 2 BGM
-├── dungeon3/           # Dungeon 3 BGM
-├── other/              # Misc BGM
+audio/
+├── music/
+│   ├── overworld/      # Overworld area BGM (MP3)
+│   ├── dungeon1/       # Dungeon 1 BGM
+│   ├── dungeon2/       # Dungeon 2 BGM
+│   ├── dungeon3/       # Dungeon 3 BGM
+│   └── other/          # Misc BGM
 └── sfx/                # AI-generated sound effects (WAV)
     ├── combat/         # sword_slash, sword_hit, player_hurt, monster_death, boss_roar
-    ├── environment/    # door_open, door_locked, footsteps, water_splash, portal_enter
+    ├── environment/    # door_open, door_locked, footsteps, water_splash, portal_enter, stairs
     ├── items/          # chest_open, key_pickup, item_pickup
     └── ui/             # npc_chat_open
 ```
@@ -38,7 +39,7 @@ All sound effects are declared in `data/sfx_manifest.json`. Each entry has:
 
 - **prompt** — text description fed to AudioGen
 - **duration** — length in seconds (0.5-10 recommended)
-- **category** — subdirectory under `music/sfx/`
+- **category** — subdirectory under `audio/sfx/`
 
 To add a new sound effect, add an entry to the manifest and re-run the generator.
 
