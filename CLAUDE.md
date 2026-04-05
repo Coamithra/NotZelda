@@ -20,6 +20,8 @@ When pushing to git make sure to update CLAUDE.md first!
 
 **After any changes to `server/ai_generator.py`, `tools/content_viewer.py`, or `.env`, run `python tools/test_api_leak.py` to verify the Anthropic API key cannot leak into CLI subprocess calls.** The game uses the Claude CLI (subscription-based) for AI generation — the API must never be called directly. All 4 tests must pass.
 
+**Test suites** in `tools/`: `test_api_leak.py` (4 tests — API key safety), `test_content_library.py` (23 tests — library CRUD/persistence), `test_npc_prompts.py` (NPC prompt generation), `test_treasure_trap.py` (7 tests — trap room lock/unlock, item hiding during lockdown, treasure cell eligibility). Run all with `python tools/test_<name>.py`.
+
 **Avoid calling the Anthropic API directly unless expressly permitted by the user.** If you must call it (e.g. for testing), always set `metadata={"user_id": "claude-code"}` so the call is identifiable in the Console. Claude API docs: https://platform.claude.com/docs/en/api/overview
 
 **All AI prompt text must live in `server/prompts/*.txt` files**, loaded at runtime via `_load_prompt()`. Never inline prompt strings in Python code. Use `{{placeholder}}` syntax for template variables.
