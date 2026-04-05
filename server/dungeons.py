@@ -1268,10 +1268,16 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
                 if game.is_walkable_tile(bd_tilemap[r][c]):
                     bd_tilemap[r][c] = "BD"
                     placed_any = True
+                else:
+                    # Tile is blocked (locked door) — set BD as the unlock restore tile
+                    originals = instance.locked_door_originals.get(room_id, {})
+                    if (r, c) in originals:
+                        originals[(r, c)] = "BD"
+                        placed_any = True
             if placed_any:
                 log.debug(f"[DUNGEON] Placed boss doorway (BD) across doorway in {room_id}")
             else:
-                # Doorway blocked (locked or trapped) — place one tile inward
+                # Doorway fully blocked — place one tile inward
                 ir, ic = _INWARD_FROM_DOORWAY[direction]
                 if game.is_walkable_tile(bd_tilemap[ir][ic]):
                     bd_tilemap[ir][ic] = "BD"
