@@ -465,6 +465,8 @@ class _GameServerProtocol(WebSocketServerProtocol):
         """Read HTTP request line, accepting both GET and POST methods."""
         try:
             request_line = await read_line(self.reader)
+        except asyncio.CancelledError:
+            raise
         except EOFError as exc:
             raise websockets.exceptions.InvalidMessage(
                 "connection closed while reading HTTP request line"
@@ -487,7 +489,10 @@ class _GameServerProtocol(WebSocketServerProtocol):
             )
 
         path = raw_path.decode("ascii", "surrogateescape")
-        headers = await read_headers(self.reader)
+        try:
+            headers = await read_headers(self.reader)
+        except asyncio.CancelledError:
+            raise
 
         self.path = path
         self.request_headers = headers
@@ -501,9 +506,14 @@ class _GameServerProtocol(WebSocketServerProtocol):
         return path, headers
 
     async def process_request(self, path, request_headers):
-        """Route HTTP requests. Overrides the parent method (not the callback)."""
+        """Route HTTP requests. Overrides the parent method (not the callback).
+
+        Note: POST body (if any) is not read. This is safe because
+        process_request always returns non-None for POST paths, triggering
+        AbortHandshake which closes the connection immediately.
+        """
         path = path.split("?")[0]  # strip query string for cache-busting support
-        method = getattr(self, "_http_method", "GET")
+        method = getattr(self, "_http_method", "GET")  # always set by read_http_request; GET fallback is safe
         if path == "/ws":
             return None
         if path == "/get-log":
