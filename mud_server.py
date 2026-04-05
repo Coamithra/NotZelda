@@ -7,6 +7,7 @@ Then open http://localhost:8080 in your browser.
 
 import asyncio
 import base64
+import hmac
 import json
 import os
 import re
@@ -412,29 +413,43 @@ def _build_library_stats() -> dict:
     }
 
 
+def _check_admin_auth(request_headers):
+    """Validate Basic Auth against ADMIN_PASSWORD. Returns None on success, or HTTP error response tuple."""
+    admin_pw = os.environ.get("ADMIN_PASSWORD", "")
+    if not admin_pw:
+        return HTTPStatus.NOT_FOUND, [], b"Not Found"
+    auth = request_headers.get("Authorization", "")
+    if not auth.startswith("Basic "):
+        return HTTPStatus.UNAUTHORIZED, [("WWW-Authenticate", 'Basic realm="Admin"')], b"Unauthorized"
+    try:
+        provided = base64.b64decode(auth[6:]).decode()
+    except Exception:
+        return HTTPStatus.UNAUTHORIZED, [("WWW-Authenticate", 'Basic realm="Admin"')], b"Unauthorized"
+    if not hmac.compare_digest(provided, f"admin:{admin_pw}"):
+        return HTTPStatus.UNAUTHORIZED, [("WWW-Authenticate", 'Basic realm="Admin"')], b"Unauthorized"
+    return None
+
+
 async def process_request(path, request_headers):
     path = path.split("?")[0]  # strip query string for cache-busting support
     if path == "/ws":
         return None
     if path == "/get-log":
+        auth_err = _check_admin_auth(request_headers)
+        if auth_err:
+            return auth_err
         body = game.log_file.read_bytes() if game.log_file.exists() else b""
         return HTTPStatus.OK, [("Content-Type", "text/plain; charset=utf-8")], body
     if path == "/clear-log":
+        auth_err = _check_admin_auth(request_headers)
+        if auth_err:
+            return auth_err
         game.log_file.write_text("", encoding="utf-8")
         return HTTPStatus.OK, [("Content-Type", "text/plain; charset=utf-8")], b"Log cleared."
     if path == "/admin/library-stats":
-        admin_pw = os.environ.get("ADMIN_PASSWORD", "")
-        if not admin_pw:
-            return HTTPStatus.NOT_FOUND, [], b"Not Found"
-        auth = request_headers.get("Authorization", "")
-        if not auth.startswith("Basic "):
-            return HTTPStatus.UNAUTHORIZED, [("WWW-Authenticate", 'Basic realm="Admin"')], b"Unauthorized"
-        try:
-            provided = base64.b64decode(auth[6:]).decode()
-        except Exception:
-            return HTTPStatus.UNAUTHORIZED, [("WWW-Authenticate", 'Basic realm="Admin"')], b"Unauthorized"
-        if provided != f"admin:{admin_pw}":
-            return HTTPStatus.UNAUTHORIZED, [("WWW-Authenticate", 'Basic realm="Admin"')], b"Unauthorized"
+        auth_err = _check_admin_auth(request_headers)
+        if auth_err:
+            return auth_err
         try:
             body = json.dumps(_build_library_stats(), indent=2).encode()
         except Exception as e:
