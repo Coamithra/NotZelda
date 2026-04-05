@@ -365,7 +365,7 @@ function handleMessage(msg) {
         const mm = msg.dungeon_debug && msg.dungeon_debug.minimap;
         const currentCell = mm && mm.player;
         const otherPlayers = mm ? (mm.other_players || []) : [];
-        const lanternCell = mm && mm.lantern_cell;
+        const treasureCell = mm && mm.treasure_cell;
         if (!G.room.dungeonState) {
           G.room.dungeonState = {
             collected: new Set(msg.dungeon_collected),
@@ -374,7 +374,7 @@ function handleMessage(msg) {
             currentCell: currentCell,
             lockedEdges: msg.locked_edges || [],
             otherPlayers: otherPlayers,
-            lanternCell: lanternCell || null,
+            treasureCell: treasureCell || null,
           };
         } else {
           G.room.dungeonState.collected = new Set(msg.dungeon_collected);
@@ -383,9 +383,9 @@ function handleMessage(msg) {
           G.room.dungeonState.bossCell = msg.dungeon_boss_cell || G.room.dungeonState.bossCell;
           G.room.dungeonState.lockedEdges = msg.locked_edges || G.room.dungeonState.lockedEdges || [];
           G.room.dungeonState.otherPlayers = otherPlayers;
-          // lanternCell is null once collected — don't overwrite with stale value
-          if (lanternCell) G.room.dungeonState.lanternCell = lanternCell;
-          else G.room.dungeonState.lanternCell = null;
+          // treasureCell is null once collected — don't overwrite with stale value
+          if (treasureCell) G.room.dungeonState.treasureCell = treasureCell;
+          else G.room.dungeonState.treasureCell = null;
         }
         if (msg.keys !== undefined) G.player.keyCount = msg.keys;
       } else {
