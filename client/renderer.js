@@ -452,8 +452,8 @@ const ITEM_PICKUP_DURATION = 2500;
 
 function renderDungeonGroundItems() {
   for (const item of G.room.dungeonGroundItems) {
-    if (item.item_type === "lantern") {
-      // Lantern lives inside a treasure chest — draw closed chest
+    if (item.item_type === "lantern" || item.item_type === "tide_medallion") {
+      // Treasure items live inside a chest — draw closed chest
       drawGroundChest(G.ui.ctx, item.x * TS, item.y * TS, false, SCALE);
     } else {
       drawGroundItem(G.ui.ctx, item.x * TS, item.y * TS, item.item_type, SCALE);

@@ -356,7 +356,7 @@ def _process_player_state(player, data, now, msgs):
                 return
 
     # Walkability — check all tiles the 1x1 hitbox overlaps
-    if not _is_position_walkable(new_x, new_y, room):
+    if not _is_position_walkable(new_x, new_y, room, player):
         _send_reconcile(player, msgs, f"unwalkable at ({new_x}, {new_y})")
         return
 

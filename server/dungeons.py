@@ -897,7 +897,7 @@ def create_dungeon(type_id) -> DungeonInstance | None:
         dark_cells = set(eligible[:round(len(eligible) * DEFAULT_DARK_FRACTION)])
     for c in dark_cells:
         topo.mark(c, "dark")
-    # Note: rooms with bright tiles (braziers/sconces) are auto-flagged dark
+    # Note: D1 rooms with bright tiles (braziers/sconces) are auto-flagged dark
     # at room resolution time in resolve_dungeon_room, not here.
 
     # --- Locked doors (just doors + zones, no key placement) ---
@@ -1255,9 +1255,9 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
                 has_bright_tiles = True
                 light_sources.append([c_idx, r_idx])
 
-    # A room is dark if explicitly in dark_cells, OR has bright tiles (atmosphere).
+    # A room is dark if explicitly in dark_cells, OR (D1 only) has bright tiles (atmosphere).
     # Bright-tile rooms on the critical path are still dark — the sconces provide enough light.
-    is_dark = cell in instance.dark_cells or has_bright_tiles
+    is_dark = cell in instance.dark_cells or (has_bright_tiles and instance.dungeon_id == "d1")
     if is_dark:
         room_data["dark"] = True
         room_data["light_sources"] = light_sources
@@ -1273,7 +1273,7 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
     used_positions = set()
 
     # Per-player items (lantern) — always placed, tracked separately
-    per_player_types = {"lantern"}
+    per_player_types = {"lantern", "tide_medallion"}
     for item_type, item_cell in instance.item_cells.items():
         if item_type in per_player_types:
             if cell == item_cell:
