@@ -1240,6 +1240,29 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
     if locked_originals:
         instance.locked_door_originals[room_id] = locked_originals
 
+    # Place boss doorway warning tile on the approach side (rooms looking toward the boss)
+    if (instance.boss_cell
+            and cell != instance.boss_cell
+            and cell != instance.sanctum_cell):
+        bd_tilemap = game.rooms[room_id]["tilemap"]
+        for direction, (dc, dr) in _DIR_OFFSETS.items():
+            neighbor = (col + dc, row + dr)
+            if neighbor != instance.boss_cell:
+                continue
+            if direction not in exits:
+                continue
+            # Try center doorway tile first
+            r, c = DOORWAY_TILES[direction][1]
+            if game.is_walkable_tile(bd_tilemap[r][c]):
+                bd_tilemap[r][c] = "BD"
+            else:
+                # Doorway blocked (locked or trapped) — place one tile inward
+                inward = {"north": (1, 7), "south": (9, 7),
+                          "west": (5, 1), "east": (5, 13)}
+                ir, ic = inward[direction]
+                if game.is_walkable_tile(bd_tilemap[ir][ic]):
+                    bd_tilemap[ir][ic] = "BD"
+
     assignment["resolved"] = True
     instance.resolved_rooms.add(room_id)
 
