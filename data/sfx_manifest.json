@@ -1,0 +1,78 @@
+{
+    "_comment": "SFX manifest for AI generation. Each key is the output filename (without extension). 'prompt' is the text description for AudioGen. 'duration' is seconds (1-10 recommended). 'category' organizes output into subdirectories.",
+    "sword_slash": {
+        "prompt": "sharp sword slash swoosh through air",
+        "duration": 1,
+        "category": "combat"
+    },
+    "sword_hit": {
+        "prompt": "metal sword hitting metal armor clang impact",
+        "duration": 1,
+        "category": "combat"
+    },
+    "player_hurt": {
+        "prompt": "short impact thud with pain grunt",
+        "duration": 1,
+        "category": "combat"
+    },
+    "monster_death": {
+        "prompt": "monster defeated dissolving poof magical burst",
+        "duration": 1.5,
+        "category": "combat"
+    },
+    "door_open": {
+        "prompt": "heavy wooden door creaking open slowly",
+        "duration": 2,
+        "category": "environment"
+    },
+    "door_locked": {
+        "prompt": "door handle rattling locked door thud",
+        "duration": 1,
+        "category": "environment"
+    },
+    "chest_open": {
+        "prompt": "treasure chest lid opening wooden creak with sparkle",
+        "duration": 1.5,
+        "category": "items"
+    },
+    "key_pickup": {
+        "prompt": "small metallic key pickup jingle chime",
+        "duration": 1,
+        "category": "items"
+    },
+    "item_pickup": {
+        "prompt": "positive short chime item collect sound effect",
+        "duration": 0.8,
+        "category": "items"
+    },
+    "footstep_grass": {
+        "prompt": "single footstep on grass soft step",
+        "duration": 0.5,
+        "category": "environment"
+    },
+    "footstep_stone": {
+        "prompt": "single footstep on stone floor hard step",
+        "duration": 0.5,
+        "category": "environment"
+    },
+    "water_splash": {
+        "prompt": "small water splash stepping into shallow water",
+        "duration": 1,
+        "category": "environment"
+    },
+    "portal_enter": {
+        "prompt": "magical portal whoosh teleport energy swirl",
+        "duration": 1.5,
+        "category": "environment"
+    },
+    "boss_roar": {
+        "prompt": "large monster boss roar deep intimidating growl",
+        "duration": 2,
+        "category": "combat"
+    },
+    "npc_chat_open": {
+        "prompt": "soft pop bubble appearing UI notification",
+        "duration": 0.5,
+        "category": "ui"
+    }
+}
