@@ -7,6 +7,7 @@ Then open http://localhost:8080 in your browser.
 
 import asyncio
 import base64
+import hmac
 import json
 import os
 import re
@@ -424,7 +425,7 @@ def _check_admin_auth(request_headers):
         provided = base64.b64decode(auth[6:]).decode()
     except Exception:
         return HTTPStatus.UNAUTHORIZED, [("WWW-Authenticate", 'Basic realm="Admin"')], b"Unauthorized"
-    if provided != f"admin:{admin_pw}":
+    if not hmac.compare_digest(provided, f"admin:{admin_pw}"):
         return HTTPStatus.UNAUTHORIZED, [("WWW-Authenticate", 'Basic realm="Admin"')], b"Unauthorized"
     return None
 
