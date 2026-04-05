@@ -819,12 +819,32 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
                 msgs.append(("broadcast", room_id, msg_killed, None))
                 # Kill message (chat log only, no popup)
                 monster_name = monster.kind.replace("_", " ").title()
-                msgs.append(("send", player, {
-                    "type": "log", "text": f"You defeated the {monster_name}!",
-                }))
-                msgs.append(("broadcast", room_id, {
-                    "type": "log", "text": f"{player.name} defeated the {monster_name}!",
-                }, player.ws))
+                if monster.is_boss:
+                    # Boss kill — dramatic wording, broadcast to entire dungeon
+                    msgs.append(("send", player, {
+                        "type": "log",
+                        "text": f"\u2694 You vanquished the mighty {monster_name}!",
+                        "boss": True,
+                    }))
+                    if dinst:
+                        broadcast_to_dungeon(dinst, {
+                            "type": "log",
+                            "text": f"\u2694 {player.name} has vanquished the mighty {monster_name}!",
+                            "boss": True,
+                        }, msgs, exclude=player.ws)
+                    else:
+                        msgs.append(("broadcast", room_id, {
+                            "type": "log",
+                            "text": f"\u2694 {player.name} has vanquished the mighty {monster_name}!",
+                            "boss": True,
+                        }, player.ws))
+                else:
+                    msgs.append(("send", player, {
+                        "type": "log", "text": f"You defeated the {monster_name}!",
+                    }))
+                    msgs.append(("broadcast", room_id, {
+                        "type": "log", "text": f"{player.name} defeated the {monster_name}!",
+                    }, player.ws))
                 # Heart drop (disabled in gauntlet for clean damage tracking)
                 if not room_id.startswith("gauntlet_") and random.random() < HEART_DROP_CHANCE:
                     hid = game.next_heart_id

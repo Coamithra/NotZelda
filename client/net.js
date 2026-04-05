@@ -1209,7 +1209,8 @@ function handleMessage(msg) {
 
     case "log": {
       // Chat log only, no popup overlay
-      appendChatLog(`<span class="chat-system">${escHtml(msg.text)}</span>`);
+      const cls = msg.boss ? "chat-boss" : "chat-system";
+      appendChatLog(`<span class="${cls}">${escHtml(msg.text)}</span>`);
       break;
     }
 
