@@ -78,7 +78,7 @@ Detailed implementation notes for each game system:
 - **Room transitions**: avatar set to `None` during `do_room_transition()`. `avatars_in_room()` excludes avatar-less players.
 - **Dungeon room resolution is synchronous** — no JIT AI generation. Custom rooms from library pool or precreated fallback.
 - **Tile properties** in `custom_tile_recipes[tile_id]` — no separate walkability sets.
-- **`websockets` must stay at 12.0** — v16+ breaks `process_request` API.
+- **`websockets` must stay at 12.0** — v16+ breaks `process_request` API. HTTP routing lives in `_GameServerProtocol.process_request()` (a subclass of `WebSocketServerProtocol`), not a standalone function, because websockets 12.0 only accepts GET — the subclass overrides `read_http_request()` to also accept POST for `/clear-log`.
 - **WebSocket bypasses nginx** — client connects `wss://` directly to Python on port 8443 (TLS via Python `ssl`). nginx only serves static files.
 
 ## Running

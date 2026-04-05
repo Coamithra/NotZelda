@@ -55,7 +55,7 @@ print(f"Saved {len(data.splitlines())} lines to {out}")
 
 print("Clearing server log ...")
 try:
-    req = urllib.request.Request(f"{SERVER}/clear-log", headers=auth_headers)
+    req = urllib.request.Request(f"{SERVER}/clear-log", data=b"", headers=auth_headers)
     with urllib.request.urlopen(req, timeout=10) as resp:
         print(resp.read().decode())
 except urllib.error.HTTPError as e:
@@ -63,6 +63,8 @@ except urllib.error.HTTPError as e:
         print("Warning: could not clear log — 401 Unauthorized, check ADMIN_PASSWORD.")
     elif e.code == 404:
         print("Warning: could not clear log — 404, ADMIN_PASSWORD may not be set on server.")
+    elif e.code == 405:
+        print("Warning: could not clear log — 405 Method Not Allowed (server requires POST).")
     else:
         print(f"Warning: could not clear log: {e}")
 except Exception as e:
