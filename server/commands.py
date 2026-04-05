@@ -821,6 +821,8 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
                 monster_name = monster.kind.replace("_", " ").title()
                 if monster.is_boss:
                     # Boss kill — dramatic wording, broadcast to entire dungeon
+                    # Note: uses monster.is_boss (not the compound `is_boss` which
+                    # requires dinst) so non-dungeon bosses still get dramatic text.
                     msgs.append(("send", player, {
                         "type": "log",
                         "text": f"\u2694 You vanquished the mighty {monster_name}!",
