@@ -32,7 +32,7 @@ When pushing to git make sure to update CLAUDE.md first!
 ├── client/                # Browser-served HTML + JS
 ├── server/                # Python modules imported by mud_server
 │   └── prompts/           # AI prompt templates ({{placeholder}} syntax)
-├── music/                 # MP3 tracks, organized by area
+├── music/                 # MP3 tracks by area + AI-generated SFX in sfx/
 ├── rooms/                 # .room data files + dungeon template subdirs
 ├── data/                  # tiles.json, monsters.json, npc_sprites.json
 ├── tools/                 # Dev utilities (renderers, content viewer, tests)
@@ -63,6 +63,7 @@ Detailed implementation notes for each game system:
 - [Dungeons](docs/SYSTEMS_DUNGEONS.md) — topology, item/key placement, difficulty tiers, trap rooms, locked doors, dark rooms, dungeon map/compass
 - [NPCs](docs/SYSTEMS_NPC.md) — chat backends, prompt tuning, gifts, guards, conversation seeding, quest events
 - [Items & Player](docs/SYSTEMS_ITEMS.md) — lantern, tide medallion, spirit jar, treasure chest, seal fragment, revival, item pickup, reveal tilemap, portal tiles
+- [Audio & SFX](docs/SYSTEMS_AUDIO.md) — AudioGen SFX pipeline, manifest format, generation tool, prompt tips
 
 ## Key Gotchas
 

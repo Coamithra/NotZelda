@@ -77,9 +77,8 @@ def generate(manifest: dict, force: bool, only: list[str] | None, use_cpu: bool)
     # Lazy-import heavy deps so --list and --help stay fast
     try:
         import torch
-        import torchaudio  # noqa: F401 — needed by audiocraft at runtime
+        import torchaudio
         from audiocraft.models import AudioGen
-        from audiocraft.data.audio import audio_write
     except ImportError:
         print("Error: audiocraft not installed. Run:")
         print("  pip install audiocraft")
@@ -90,7 +89,7 @@ def generate(manifest: dict, force: bool, only: list[str] | None, use_cpu: bool)
         device = "cpu"
     elif torch.cuda.is_available():
         device = "cuda"
-        vram_gb = torch.cuda.get_device_properties(0).total_mem / (1024 ** 3)
+        vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
         print(f"GPU: {torch.cuda.get_device_name(0)} ({vram_gb:.1f} GB VRAM)")
     else:
         device = "cpu"
@@ -116,10 +115,7 @@ def generate(manifest: dict, force: bool, only: list[str] | None, use_cpu: bool)
         wav = model.generate([prompt])
         elapsed = time.time() - t1
 
-        # audio_write appends .wav automatically
-        stem = str(out.with_suffix(""))
-        audio_write(stem, wav[0].cpu(), model.sample_rate,
-                    strategy="loudness", loudness_compressor=True)
+        torchaudio.save(str(out), wav[0].cpu(), model.sample_rate)
         size_kb = out.stat().st_size / 1024
         print(f"    -> {out.relative_to(ROOT)} ({size_kb:.0f} KB, {elapsed:.1f}s)")
 
