@@ -29,9 +29,15 @@ def _on_state_exited(monster, old_state, room_id, monster_idx, msgs):
             "type": "monster_fade_in", "id": monster_idx,
         }, None))
     elif old_state == "walking":
+        # Walk was interrupted (not naturally completed) — sync actual position.
+        # Sending monster_walk_complete here would make the client snap to the
+        # walk *destination*, but the monster never reached it.
+        monster.x = round(monster.x)
+        monster.y = round(monster.y)
         msgs.append(("broadcast", room_id, {
-            "type": "monster_walk_complete", "id": monster_idx,
-            "seq": monster.state_data.seq,
+            "type": "monster_moved", "id": monster_idx,
+            "x": monster.x, "y": monster.y,
+            "seq": monster.move_seq,
         }, None))
     elif old_state == "knockback":
         # Knockback interrupted — snap to current position
