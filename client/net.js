@@ -153,6 +153,7 @@ function handleMessage(msg) {
       G.ui.gameScreen.classList.add("active");
       if (G.debug.debugMode && G.ui.serverLog) G.ui.serverLog.classList.add("active");
       MusicPlayer.start();
+      SfxPlayer.preload();
       if (!G.ui.gameLoopStarted) {
         G.ui.gameLoopStarted = true;
         requestAnimationFrame(gameLoop);
@@ -415,6 +416,8 @@ function handleMessage(msg) {
       } else if (oldCanvas && prevRoom && prevRoom.room_id !== msg.room_id) {
         const transDir = guessTransitionDir(prevRoom.room_id, msg.room_id, msg.exit_direction, prevExits);
         const isFade = transDir === "up" || transDir === "down";
+        if (transDir === "up") SfxPlayer.play("stairs_up");
+        if (transDir === "down") SfxPlayer.play("stairs_down");
         G.ui.transition = {
           type: isFade ? "fade" : "slide",
           direction: transDir,
@@ -548,6 +551,7 @@ function handleMessage(msg) {
     case "npc_thinking": {
       // Show animated "..." thinking bubble above the NPC
       G.room.npcThinking[msg.name] = Date.now();
+      SfxPlayer.play("npc_chat_open");
       break;
     }
 
@@ -605,6 +609,7 @@ function handleMessage(msg) {
         G.player.hurtFlash = Date.now() + 300;
         G.player.invincibleUntil = Date.now() + 1500;
         G.player.stunUntil = performance.now() + 200;
+        SfxPlayer.play("player_hurt");
         // Juice: screen shake + damage vignette
         triggerShake(4, 200);
         G.fx.damageVignette = Date.now() + VIGNETTE_DURATION;
@@ -638,6 +643,7 @@ function handleMessage(msg) {
     }
 
     case "you_died":
+      SfxPlayer.play("player_death");
       G.player.dyingPlayerSelf = { x: msg.x, y: msg.y, frame: 0, startTime: Date.now() };
       G.player.myHp = 0;
       setState("dying", {});
@@ -763,10 +769,12 @@ function handleMessage(msg) {
         // Juice: hit pause + screen shake
         G.fx.hitPause = Date.now() + 60;
         triggerShake(2, 120);
+        SfxPlayer.play("monster_death");
         // Boss death: dramatic screen flash + shake
         if (isBoss) {
           G.fx.bossDeathEffect = { startTime: Date.now(), duration: 2000 };
           triggerShake(6, 1000);
+          SfxPlayer.play("boss_roar");
         }
       }
       break;
@@ -792,6 +800,7 @@ function handleMessage(msg) {
           return !match1 && !match2;
         });
       }
+      SfxPlayer.play("door_open");
       G.ui.infoMessages.push({ text: "The doors have opened!", expires: Date.now() + 3000 });
       break;
     }
@@ -809,6 +818,8 @@ function handleMessage(msg) {
     case "monster_hit": {
       const hitMon = G.room.monsters.find(m => m.id === msg.id);
       if (hitMon) {
+        const isBossHit = (hitMon.width || 1) > 1 || (hitMon.height || 1) > 1;
+        SfxPlayer.play(isBossHit ? "sword_hit" : "sword_hit_flesh");
         hitMon.hitFlash = Date.now() + 200;
         hitMon.stateSeq = msg.seq || (hitMon.stateSeq + 1);
         // Only sync position and cancel walk if monster was knocked back
@@ -919,6 +930,7 @@ function handleMessage(msg) {
     }
 
     case "teleport_start": {
+      SfxPlayer.play("portal_enter");
       const tpMon = G.room.monsters.find(m => m.id === msg.id);
       if (tpMon) {
         const durationMs = (msg.delay || 0.5) * 1000;
@@ -1011,6 +1023,10 @@ function handleMessage(msg) {
 
     case "item_obtained": {
       if (msg.item_type) {
+        // SFX: context-specific pickup sound
+        if (msg.item_type === "key") SfxPlayer.play("key_pickup");
+        else if (msg.item_type === "lantern" || msg.item_type === "tide_medallion") SfxPlayer.play("chest_open");
+        else SfxPlayer.play("item_pickup");
         // Item pickup animation (dungeon items, sword, etc.)
         G.player.itemPickupActive = {
           item_type: msg.item_type,
@@ -1277,6 +1293,7 @@ function handleMessage(msg) {
     }
 
     case "you_revived":
+      SfxPlayer.play("revival_success");
       G.player.waitingForRevival = false;
       G.player.revivalProgress = null;
       G.player.dyingPlayerSelf = null;

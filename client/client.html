@@ -579,6 +579,7 @@ function playerTick() {
       const gapDone = now - G.player.stateData.startTime >= ATTACK_GAP_MS;
       if (gapDone) {
         if (G.player.keysDown["Space"] && G.player.playerFlags.has("has_sword")) {
+          SfxPlayer.play("sword_slash");
           startAttack(G.player.myName, G.player.myPlayer.direction);
           spawnSlashArc(G.player.myPlayer.direction);
           setState("attacking", { startTime: performance.now() });

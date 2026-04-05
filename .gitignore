@@ -10,6 +10,7 @@ data/*
 !data/tiles.json
 !data/monsters.json
 !data/npc_sprites.json
+!data/sfx_manifest.json
 tmp_prompts/
 desktop.ini
 .trees/

@@ -907,7 +907,7 @@ if __name__ == "__main__":
     generate_video(video_only)
 
     # Try to add music
-    music_file = "music/overworld/overworld.mp3"
+    music_file = "audio/music/overworld/overworld.mp3"
     if os.path.exists(music_file):
         final_output = "tools/legends_of_amara_trailer.mp4"
         result = mux_audio(video_only, music_file, final_output)

@@ -59,6 +59,7 @@ document.addEventListener("keydown", (e) => {
       return;
     }
     if (G.player.state === "idle") {
+      SfxPlayer.play("sword_slash");
       startAttack(G.player.myName, G.player.myPlayer.direction);
       spawnSlashArc(G.player.myPlayer.direction);
       setState("attacking", { startTime: performance.now() });
@@ -236,6 +237,7 @@ if (G.ui.isMobile) {
     if (G.player.knockbackSlide) return;
     if (!G.player.playerFlags.has("has_sword")) return;
     if (G.player.state !== "idle" && G.player.state !== "attacking") return;
+    SfxPlayer.play("sword_slash");
     startAttack(G.player.myName, G.player.myPlayer.direction);
     spawnSlashArc(G.player.myPlayer.direction);
     setState("attacking", { startTime: performance.now() });

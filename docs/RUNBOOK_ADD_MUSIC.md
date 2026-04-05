@@ -4,12 +4,12 @@ Step-by-step guide for adding a new MP3 to the game.
 
 ## 1. Place the file
 
-Put the MP3 in the appropriate `music/` subdirectory:
-- `music/overworld/` — overworld area themes
-- `music/dungeon1/` — Dark Dungeon ambient + boss
-- `music/dungeon2/` — Water Temple ambient + boss
-- `music/dungeon3/` — Desert Tomb ambient + boss
-- `music/other/` — menu, credits, etc.
+Put the MP3 in the appropriate `audio/music/` subdirectory:
+- `audio/music/overworld/` — overworld area themes
+- `audio/music/dungeon1/` — Dark Dungeon ambient + boss
+- `audio/music/dungeon2/` — Water Temple ambient + boss
+- `audio/music/dungeon3/` — Desert Tomb ambient + boss
+- `audio/music/other/` — menu, credits, etc.
 
 Use **underscores** in filenames, not spaces (e.g. `castle_ruins.mp3`).
 
@@ -56,10 +56,10 @@ This overwrites existing MP3 metadata (cleaning up Suno defaults etc.) with the 
 In `mud_server.py`, add a static file route in the `STATIC_FILES` dict (around line 289):
 
 ```python
-"/music_castle_ruins.mp3": ("music/overworld/castle_ruins.mp3", "audio/mpeg"),
+"/music_castle_ruins.mp3": ("audio/music/overworld/castle_ruins.mp3", "audio/mpeg"),
 ```
 
-Pattern: `"/music_{name}.mp3": ("music/{subdir}/{filename}.mp3", "audio/mpeg")`
+Pattern: `"/music_{name}.mp3": ("audio/music/{subdir}/{filename}.mp3", "audio/mpeg")`
 
 ## 4. Register in the client music system
 
@@ -100,7 +100,7 @@ Either:
 
 ## Summary checklist
 
-- [ ] MP3 placed in `music/{subdir}/` with underscored filename
+- [ ] MP3 placed in `audio/music/{subdir}/` with underscored filename
 - [ ] Track + theme added to `tools/tag_music.py`, tagger run
 - [ ] Static route added in `mud_server.py`
 - [ ] Track registered in `client/music.js` MUSIC_TRACKS
