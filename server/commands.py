@@ -761,8 +761,8 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
                                 can_knock = False
                     if can_knock:
                         # Server-side knockback: set state, tick loop interpolates
-                        knock_from_x = round(monster.x)
-                        knock_from_y = round(monster.y)
+                        knock_from_x = monster.x
+                        knock_from_y = monster.y
                         knock_x = kx
                         knock_y = ky
                         monster.move_seq += 1

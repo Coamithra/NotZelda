@@ -830,8 +830,8 @@ function handleMessage(msg) {
           const durationMs = (msg.knock_duration || 0.2) * 1000;
           hitMon.action = {
             type: "knockback",
-            fromX: msg.knock_from_x ?? hitMon.displayX,
-            fromY: msg.knock_from_y ?? hitMon.displayY,
+            fromX: hitMon.displayX,
+            fromY: hitMon.displayY,
             toX: msg.knock_x, toY: msg.knock_y,
             startTime: performance.now(),
             effectiveDuration: computeEffectiveDuration(durationMs),
