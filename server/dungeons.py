@@ -1261,11 +1261,15 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
                 continue
             if direction not in exits:
                 continue
-            # Try center doorway tile first
-            r, c = DOORWAY_TILES[direction][1]
-            if game.is_walkable_tile(bd_tilemap[r][c]):
-                bd_tilemap[r][c] = "BD"
-                log.debug(f"[DUNGEON] Placed boss doorway (BD) in {room_id} at ({r},{c})")
+            # Place BD on all 3 doorway tiles
+            tiles = DOORWAY_TILES[direction]
+            placed_any = False
+            for r, c in tiles:
+                if game.is_walkable_tile(bd_tilemap[r][c]):
+                    bd_tilemap[r][c] = "BD"
+                    placed_any = True
+            if placed_any:
+                log.debug(f"[DUNGEON] Placed boss doorway (BD) across doorway in {room_id}")
             else:
                 # Doorway blocked (locked or trapped) — place one tile inward
                 ir, ic = _INWARD_FROM_DOORWAY[direction]
