@@ -414,6 +414,15 @@ _INWARD_OFFSET = {
     "east":  (-1, 0),
 }
 
+# One tile inward from the center doorway — used when the doorway tile itself
+# is blocked (locked/trapped) and we need to place a marker just inside the room.
+_INWARD_FROM_DOORWAY = {
+    "north": (1, 7),
+    "south": (9, 7),
+    "west":  (5, 1),
+    "east":  (5, 13),
+}
+
 TRAP_ROOM_CHANCE = 1 / 3
 TRAP_ROOM_MIN_MONSTERS = 3
 _MONSTER_MIN_SPACING = 2  # minimum Manhattan distance between dynamically placed monsters
@@ -1240,7 +1249,8 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
     if locked_originals:
         instance.locked_door_originals[room_id] = locked_originals
 
-    # Place boss doorway warning tile on the approach side (rooms looking toward the boss)
+    # Place boss doorway warning tile on the approach side (rooms looking toward the boss).
+    # boss_cell/sanctum_cell are tuples or None; != against a tuple is always True for None.
     if (instance.boss_cell
             and cell != instance.boss_cell
             and cell != instance.sanctum_cell):
@@ -1255,13 +1265,13 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
             r, c = DOORWAY_TILES[direction][1]
             if game.is_walkable_tile(bd_tilemap[r][c]):
                 bd_tilemap[r][c] = "BD"
+                log.debug(f"[DUNGEON] Placed boss doorway (BD) in {room_id} at ({r},{c})")
             else:
                 # Doorway blocked (locked or trapped) — place one tile inward
-                inward = {"north": (1, 7), "south": (9, 7),
-                          "west": (5, 1), "east": (5, 13)}
-                ir, ic = inward[direction]
+                ir, ic = _INWARD_FROM_DOORWAY[direction]
                 if game.is_walkable_tile(bd_tilemap[ir][ic]):
                     bd_tilemap[ir][ic] = "BD"
+                    log.debug(f"[DUNGEON] Placed boss doorway (BD) in {room_id} at ({ir},{ic}) (inward)")
 
     assignment["resolved"] = True
     instance.resolved_rooms.add(room_id)
