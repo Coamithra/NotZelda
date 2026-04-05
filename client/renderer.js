@@ -1929,9 +1929,9 @@ function renderDungeonMinimap() {
       G.ui.ctx.fillStyle = "rgba(220, 40, 40, 0.9)";
       G.ui.ctx.fillRect(cx + 3, cy + 3, cellSize - 6, cellSize - 6);
     }
-    // Treasure chest marker (compass collected, lantern not yet picked up)
-    if (!isDebug && hasCompass && ds.lanternCell &&
-        cell.c === ds.lanternCell[0] && cell.r === ds.lanternCell[1]) {
+    // Treasure chest marker (compass collected, treasure not yet picked up)
+    if (!isDebug && hasCompass && ds.treasureCell &&
+        cell.c === ds.treasureCell[0] && cell.r === ds.treasureCell[1]) {
       const pulse = 0.7 + 0.3 * Math.sin(Date.now() / 400);
       G.ui.ctx.fillStyle = `rgba(220, 180, 40, ${pulse})`;
       G.ui.ctx.fillRect(cx + 2, cy + 2, cellSize - 4, cellSize - 4);

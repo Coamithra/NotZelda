@@ -55,7 +55,6 @@ class DungeonInstance:
 
         # Darkness
         self.dark_cells = set()        # cells flagged as dark rooms
-        self.lantern_cell = None       # (col, row) where the lantern spawns
 
         # Difficulty tiers — decided at creation time (easy/challenging/hard)
         self.cell_difficulty = {}          # cell -> "easy"|"challenging"|"hard"
@@ -1051,7 +1050,6 @@ def create_dungeon(type_id) -> DungeonInstance | None:
     instance.zone_of = zone_of
     instance.zone_cells = zone_cells
     instance.dark_cells = dark_cells
-    instance.lantern_cell = treasure_cell if treasure_item_type in ("lantern", "tide_medallion") else None
 
     game.active_dungeons[type_id] = instance
     for room_id in active_rooms:
