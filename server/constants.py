@@ -53,7 +53,7 @@ LATENCY_COMP = 0.066       # seconds — legacy (kept for backward compat)
 ATTACK_COOLDOWN = 0.27  # 1.5 * SWORD_ACTIVE_DURATION (0.18) — gap = 0.5 * active
 SWORD_ACTIVE_DURATION = 0.18
 SWORD_PERP_WIDTH = 0.6  # perpendicular hitbox width (was implicit 1.0 with tile-based collision)
-PLAYER_COLLISION_MARGIN = 0.2  # inset per side for player-vs-monster AABB (40% smaller)
+PLAYER_COLLISION_MARGIN = 0.275  # inset per side for player-vs-monster AABB (0.45 tile box)
 MOVE_STEP = 1.0         # monster movement step size in tiles
 KNOCKBACK_DURATION = 0.2  # seconds — server-side knockback slide duration
 
