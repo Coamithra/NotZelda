@@ -184,21 +184,27 @@ def _build_spanning_tree(active_cells, entrance):
         else:
             stack.pop()
 
-    # Defense: connect any disconnected components
+    # Defense: connect any disconnected components via grid-adjacent bridges
     unvisited = cell_set - visited
     if unvisited:
         log.debug(f"[DUNGEON] BUG: {len(unvisited)} cells unreachable from "
                   f"entrance {entrance} — bridging disconnected components")
         while unvisited:
-            # Find closest (Manhattan) pair between visited and unvisited
-            best_v, best_u = min(
-                ((v, u) for v in visited for u in unvisited),
-                key=lambda p: abs(p[0][0] - p[1][0]) + abs(p[0][1] - p[1][1])
-            )
-            tree_edges.add(frozenset((best_v, best_u)))
+            # Only bridge grid-adjacent pairs (distance 1) so doors work
+            adjacent_pairs = [
+                (v, u) for v in visited for u in unvisited
+                if abs(v[0] - u[0]) + abs(v[1] - u[1]) == 1
+            ]
+            if not adjacent_pairs:
+                log.debug(f"[DUNGEON] BUG: {len(unvisited)} cells have no "
+                          f"grid-adjacent bridge to visited cells — layout "
+                          f"is structurally broken, skipping them")
+                break
+            bridge_v, bridge_u = random.choice(adjacent_pairs)
+            tree_edges.add(frozenset((bridge_v, bridge_u)))
             # DFS through the newly connected component
-            visited.add(best_u)
-            stack = [best_u]
+            visited.add(bridge_u)
+            stack = [bridge_u]
             while stack:
                 cell = stack[-1]
                 neighbors = [n for n in adj.get(cell, []) if n not in visited]

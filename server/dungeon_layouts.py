@@ -194,7 +194,7 @@ DUNGEON_LAYOUTS = [
 
 D2_LAYOUTS = [
     {
-        # Trident — three prongs with shaft (23 rooms)
+        # Trident — three prongs with shaft (22 rooms)
         "name": "trident",
         "grid": [
             "X..X..X.",
@@ -254,7 +254,7 @@ D2_LAYOUTS = [
         "entrance": (3, 5),
     },
     {
-        # Serpent — S-curve through water (22 rooms)
+        # Serpent — S-curve through water (20 rooms)
         "name": "serpent",
         "grid": [
             "........",
