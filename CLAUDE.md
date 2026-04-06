@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Legends of Amara** — a browser-based multiplayer MUD rendered as a Zelda-style top-down visual game. Players connect via browser, log in with a name/description, walk around tile-based rooms with arrow keys/WASD, and chat via speech bubbles.
+**Legends of Amara** — a browser-based multiplayer Zelda-style top-down visual game. Players connect via browser, log in with a name/description, walk around tile-based rooms with arrow keys/WASD, chat via speech bubbles, fight monsters and gain treasures.
 
 For detailed module descriptions and game system documentation, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-**Project tracking:** [Trello — Legends of Amara](https://trello.com/b/FEqdR6QL/legends-of-amara). Bugs, features, and refactoring are tracked there. Use the `trello` CLI (installed from `C:\Programming\TrelloCLI`) for card operations — `trello cards <list>`, `trello card <id>`, `trello move <id> <list>`, `trello comment <id> <text>`, etc. Config in `~/.trello-cli.json`.
+**Project tracking:** [Trello — Legends of Amara](https://trello.com/b/FEqdR6QL/legends-of-amara). Bugs, features, and refactoring are tracked there. Use the `trello` CLI (installed from `C:\Programming\TrelloCLI`) with subcommand groups — `trello card ls <list>`, `trello card show <id>`, `trello card move <id> <list>`, `trello comment add <id> <text>`, etc. Config in `~/.trello-cli.json`. **Use real newlines in card descriptions, not `\n` escape sequences** — the CLI passes strings literally.
 
 **Contributing workflow:** See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for the step-by-step runbook for tackling any Trello card (pick up → worktree → research → design → implement → verify → review & ship). All feature work happens in git worktrees under `.trees/` — the root checkout stays on `master`.
 
@@ -21,6 +21,8 @@ When pushing to git make sure to update CLAUDE.md first!
 **After any changes to `server/ai_generator.py`, `tools/content_viewer.py`, or `.env`, run `python tools/test_api_leak.py` to verify the Anthropic API key cannot leak into CLI subprocess calls.** The game uses the Claude CLI (subscription-based) for AI generation — the API must never be called directly. All 4 tests must pass.
 
 **Test suites** in `tools/`: `test_api_leak.py` (4 tests — API key safety), `test_content_library.py` (23 tests — library CRUD/persistence), `test_npc_prompts.py` (NPC prompt generation), `test_treasure_trap.py` (10 tests — trap room lock/unlock, item hiding during lockdown, treasure cell eligibility, challenging tier randomness). Run all with `python tools/test_<name>.py`.
+
+**Integration tests** in `tools/`: `test_movement.py` (7 tests — spawn, walk, wall collision, room exit), `test_combat.py` (7 tests — sword hit, cooldown, kill, contact damage, knockback, projectile), `test_monster_scripts.py` (7 tests — wander, timing, projectile, charge, patrol, all-behaviors sweep), `test_multiplayer.py` (7 tests — presence, enter/leave, chat, combat visibility, revival), `test_reachability.py` (7 tests — BFS, dungeon generation across all types, boss/item reachability, key solvability with exploration simulation, disconnected room detection). Run all with `python tools/run_integration_tests.py` or individually. Uses `test_harness.py` (MockWebSocket, GameClock, headless tick simulation). Dungeon tests iterate all `DUNGEON_TYPES` automatically.
 
 **Avoid calling the Anthropic API directly unless expressly permitted by the user.** If you must call it (e.g. for testing), always set `metadata={"user_id": "claude-code"}` so the call is identifiable in the Console. Claude API docs: https://platform.claude.com/docs/en/api/overview
 
@@ -80,6 +82,12 @@ Detailed implementation notes for each game system:
 - **Tile properties** in `custom_tile_recipes[tile_id]` — no separate walkability sets.
 - **`websockets` must stay at 12.0** — v16+ breaks `process_request` API. HTTP routing lives in `_GameServerProtocol.process_request()` (a subclass of `WebSocketServerProtocol`), not a standalone function, because websockets 12.0 only accepts GET — the subclass overrides `read_http_request()` to also accept POST for `/clear-log`.
 - **WebSocket bypasses nginx** — client connects `wss://` directly to Python on port 8443 (TLS via Python `ssl`). nginx only serves static files.
+
+## Workflow Preferences
+
+- **Prefer self-hosted/local tools** over cloud APIs when quality is comparable. The user has an RTX 4070 Ti (12GB) and prefers owning the toolchain. Lead with open-source options first; suggest cloud APIs only as fallback.
+- **Preserve client-side feel.** When there's a client/server mismatch, adjust the server to match what feels good on the client — not the other way around. Only change client feel if the user explicitly asks.
+- **Don't time client UI on server messages.** Client should hold its current visual state (overlays, death screens, transitions) until the actual WebSocket message arrives. Never use `setTimeout` to anticipate server responses.
 
 ## Running
 
