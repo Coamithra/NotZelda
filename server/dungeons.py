@@ -155,6 +155,10 @@ def _build_spanning_tree(active_cells, entrance):
     """
     cell_set = set(active_cells)
 
+    if entrance not in cell_set:
+        log.debug(f"[DUNGEON] BUG: entrance {entrance} not in active_cells — "
+                  f"spanning tree will be incomplete")
+
     # Build adjacency list from grid neighbors
     adj = {c: [] for c in cell_set}
     for (col, row) in cell_set:
@@ -170,7 +174,7 @@ def _build_spanning_tree(active_cells, entrance):
 
     while stack:
         cell = stack[-1]
-        neighbors = [n for n in adj[cell] if n not in visited]
+        neighbors = [n for n in adj.get(cell, []) if n not in visited]
         if neighbors:
             random.shuffle(neighbors)
             next_cell = neighbors[0]
@@ -179,6 +183,34 @@ def _build_spanning_tree(active_cells, entrance):
             stack.append(next_cell)
         else:
             stack.pop()
+
+    # Defense: connect any disconnected components
+    unvisited = cell_set - visited
+    if unvisited:
+        log.debug(f"[DUNGEON] BUG: {len(unvisited)} cells unreachable from "
+                  f"entrance {entrance} — bridging disconnected components")
+        while unvisited:
+            # Find closest (Manhattan) pair between visited and unvisited
+            best_v, best_u = min(
+                ((v, u) for v in visited for u in unvisited),
+                key=lambda p: abs(p[0][0] - p[1][0]) + abs(p[0][1] - p[1][1])
+            )
+            tree_edges.add(frozenset((best_v, best_u)))
+            # DFS through the newly connected component
+            visited.add(best_u)
+            stack = [best_u]
+            while stack:
+                cell = stack[-1]
+                neighbors = [n for n in adj.get(cell, []) if n not in visited]
+                if neighbors:
+                    random.shuffle(neighbors)
+                    next_cell = neighbors[0]
+                    tree_edges.add(frozenset((cell, next_cell)))
+                    visited.add(next_cell)
+                    stack.append(next_cell)
+                else:
+                    stack.pop()
+            unvisited = cell_set - visited
 
     return tree_edges
 

@@ -194,13 +194,13 @@ DUNGEON_LAYOUTS = [
 
 D2_LAYOUTS = [
     {
-        # Trident — three prongs with shaft (22 rooms)
+        # Trident — three prongs with shaft (23 rooms)
         "name": "trident",
         "grid": [
             "X..X..X.",
             "X..X..X.",
             "X..X..X.",
-            ".XXXXXX.",
+            "XXXXXXX.",
             "...XX...",
             "...XX...",
             "...XX...",
@@ -254,14 +254,14 @@ D2_LAYOUTS = [
         "entrance": (3, 5),
     },
     {
-        # Serpent — S-curve through water (21 rooms)
+        # Serpent — S-curve through water (22 rooms)
         "name": "serpent",
         "grid": [
             "........",
             ".XXX....",
             "..XXXX..",
             "....XXX.",
-            ".XXX....",
+            ".XXXX...",
             "..XXXX..",
             "....XX..",
             "........",
@@ -284,13 +284,13 @@ D2_LAYOUTS = [
         "entrance": (4, 6),
     },
     {
-        # Tidal Pool — enclosed basin (24 rooms)
+        # Tidal Pool — enclosed basin (25 rooms)
         "name": "tidal_pool",
         "grid": [
             "........",
             ".XXXXXX.",
             ".X....X.",
-            ".X.XX.X.",
+            ".XXXX.X.",
             ".X.XX.X.",
             ".X....X.",
             ".XXXXXX.",
@@ -305,13 +305,13 @@ D2_LAYOUTS = [
             "..XXXX..",
             ".XXXXXX.",
             "..XXXX..",
-            "..X..X..",
-            ".X..X.X.",
-            "X....X..",
+            ".XX..XX.",
+            ".X....X.",
+            ".X....X.",
             "........",
             "........",
         ],
-        "entrance": (3, 4),
+        "entrance": (1, 5),
     },
     {
         # Shell — nautilus curve (20 rooms)
