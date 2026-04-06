@@ -1,11 +1,11 @@
 name: Stark Plateau
 biome: mountain
 music: chapel
-exits: east=ow_2_2 south=ow_3_1
+exits: east=ow_2_2 south=ow_3_1 down=mtn_cave_stark_1
 ---
 MT MT MT MT MT MT MT MT MT MT MT MT MT MT MT
 MT ST ST ST ST ST ST ST ST MT MT MT ST ST MT
-MT ST ST CL ST ST ST ST ST MT CV MT ST ST MT
+MT ST ST CL ST ST ST ST ST MT SD MT ST ST MT
 MT ST CL ST CL ST ST ST ST ST CV ST ST ST MT
 MT ST ST CL ST ST ST ST ST MT MT MT ST ST ST
 MT ST ST ST ST ST ST DT DT DT DT DT DT DT ST

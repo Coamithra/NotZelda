@@ -224,7 +224,7 @@ def on_gauntlet_enter(player):
         return
     player.flags.discard("invulnerable")  # no cheating in the gauntlet!
     player.hp = min(6, player.max_hp)  # 3 hearts
-    player.flags.add("has_spirit_jar")
+    player.spirit_jar_count = 1
     session.entry_hp = player.hp
     session.entry_time = time.monotonic()
     session.deaths = 0
@@ -278,7 +278,7 @@ def on_gauntlet_death(player, now, msgs):
     player.room = next_room
     player.hp = min(6, player.max_hp)
     player.flags.discard("invulnerable")
-    player.flags.add("has_spirit_jar")
+    player.spirit_jar_count = 1
     player.avatar = Avatar(1.0, 5.0, "right")
     player.command_queue.clear()
     player.active_attack = None
@@ -336,7 +336,7 @@ def on_gauntlet_room_cleared(player, room_id, msgs):
 
     # Reset HP for next room
     player.hp = min(6, player.max_hp)
-    player.flags.add("has_spirit_jar")
+    player.spirit_jar_count = 1
 
 
 def on_gauntlet_exit(player_name):
@@ -458,7 +458,7 @@ def cmd_gauntlet(player, args, msgs):
     player.avatar = Avatar(1.0, 5.0, "right")
     player.flags.discard("invulnerable")  # no cheating in the gauntlet!
     player.hp = min(6, player.max_hp)
-    player.flags.add("has_spirit_jar")
+    player.spirit_jar_count = 1
 
     on_player_enter_room(room_id)
 

@@ -1,0 +1,22 @@
+name: Darkstone Heart
+biome: cave
+music: chapel
+dark: true
+exits: north=mtn_cave_stark_4
+---
+MT MT MT MT MT MT CV CV CV MT MT MT MT MT MT
+MT MT MT MT CV CV CV CV CV CV CV MT MT MT MT
+MT MT MT CV CV CV CV CV CV CV CV CV MT MT MT
+MT MT CV CV CV BO CV CV CV BO CV CV CV MT MT
+MT CV CV CV CV CV CV CV CV CV CV CV CV CV MT
+MT CV CV CV CV CV CV CV CV CV CV CV CV CV MT
+MT CV CV CV BO CV CV CV CV CV BO CV CV CV MT
+MT MT CV CV CV CV CV CV CV CV CV CV CV MT MT
+MT MT MT CV CV CV CV CV CV CV CV CV MT MT MT
+MT MT MT MT MT CV CV CV CV CV MT MT MT MT MT
+MT MT MT MT MT MT MT MT MT MT MT MT MT MT MT
+---
+monster cave_spider 4 4
+monster cave_spider 10 4
+monster cave_spider 7 7
+item heart_container 7 5

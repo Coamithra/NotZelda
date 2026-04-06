@@ -4682,5 +4682,109 @@
         ]
       ]
     }
+  },
+  "cave_spider": {
+    "kind": "cave_spider",
+    "stats": {
+      "hp": 2,
+      "walk_time": 0.18,
+      "decision_time": 1.2,
+      "damage": 2,
+      "pack_min": 2,
+      "pack_max": 4
+    },
+    "behavior": {
+      "rules": [
+        {
+          "if": "player_within",
+          "range": 4,
+          "do": "move",
+          "direction": "player"
+        },
+        {
+          "if": "always",
+          "do": "hold",
+          "cooldown": 3
+        }
+      ]
+    },
+    "sprite": {
+      "colors": {
+        "body": "#2a2a2a",
+        "dark": "#1a1a1a",
+        "legs": "#3a3a3a",
+        "eyes": "#cc2222",
+        "mark": "#882222"
+      },
+      "yOff": [0, -1],
+      "frames": [
+        [
+          ["body", 5, 6, 6, 5],
+          ["dark", 6, 7, 4, 3],
+          ["mark", 7, 8, 2, 2],
+          ["legs", 2, 7, 3, 1],
+          ["legs", 11, 7, 3, 1],
+          ["legs", 1, 9, 3, 1],
+          ["legs", 12, 9, 3, 1],
+          ["legs", 2, 11, 3, 1],
+          ["legs", 11, 11, 3, 1],
+          ["legs", 3, 13, 2, 1],
+          ["legs", 11, 13, 2, 1],
+          ["eyes", 6, 5, 1, 1],
+          ["eyes", 9, 5, 1, 1],
+          ["dark", 5, 4, 2, 2],
+          ["dark", 9, 4, 2, 2]
+        ],
+        [
+          ["body", 5, 6, 6, 5],
+          ["dark", 6, 7, 4, 3],
+          ["mark", 7, 8, 2, 2],
+          ["legs", 2, 8, 3, 1],
+          ["legs", 11, 8, 3, 1],
+          ["legs", 1, 10, 3, 1],
+          ["legs", 12, 10, 3, 1],
+          ["legs", 2, 12, 3, 1],
+          ["legs", 11, 12, 3, 1],
+          ["legs", 3, 14, 2, 1],
+          ["legs", 11, 14, 2, 1],
+          ["eyes", 6, 5, 1, 1],
+          ["eyes", 9, 5, 1, 1],
+          ["dark", 5, 4, 2, 2],
+          ["dark", 9, 4, 2, 2]
+        ]
+      ]
+    },
+    "death_sprite": {
+      "colors": {
+        "body": "#2a2a2a",
+        "dark": "#1a1a1a",
+        "legs": "#3a3a3a"
+      },
+      "frames": [
+        [
+          ["body", 5, 8, 6, 4],
+          ["legs", 2, 9, 3, 1],
+          ["legs", 11, 9, 3, 1],
+          ["dark", 6, 9, 4, 2]
+        ],
+        [
+          ["body", 4, 10, 8, 3],
+          ["legs", 1, 11, 3, 1],
+          ["legs", 12, 11, 3, 1],
+          ["dark", 6, 11, 4, 1]
+        ],
+        [
+          ["dark", 3, 12, 10, 2],
+          ["legs", 2, 13, 2, 1],
+          ["legs", 12, 13, 2, 1]
+        ],
+        [
+          ["dark", 4, 13, 8, 1],
+          ["legs", 3, 13, 1, 1],
+          ["legs", 12, 13, 1, 1]
+        ]
+      ]
+    },
+    "tags": ["cave", "melee"]
   }
 }

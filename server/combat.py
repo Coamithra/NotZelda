@@ -311,9 +311,9 @@ def _spirit_jar_revive(player, now, msgs):
     room_id = player.death_room
     x, y = player.death_x, player.death_y
 
-    # Consume the spirit jar
-    player.flags.discard("has_spirit_jar")
-    # Clear gift tracking flag so the Ghost NPC can re-gift
+    # Consume one spirit jar
+    player.spirit_jar_count = max(0, player.spirit_jar_count - 1)
+    # Clear gift tracking flags so NPCs can re-gift
     for flag in list(player.flags):
         if flag.startswith("gift_") and flag.endswith("_spirit_jar"):
             player.flags.discard(flag)
@@ -365,7 +365,7 @@ def _tick_players(now, msgs):
             if player.death_room and player.death_room.startswith("gauntlet_"):
                 from server.gauntlet import on_gauntlet_death
                 on_gauntlet_death(player, now, msgs)
-            elif player.has_flag("has_spirit_jar"):
+            elif player.spirit_jar_count > 0:
                 _spirit_jar_revive(player, now, msgs)
             elif player.chose_respawn:
                 _respawn_player(player, msgs)

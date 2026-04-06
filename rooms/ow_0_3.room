@@ -1,12 +1,12 @@
 name: Windswept Overlook
 biome: mountain
 music: chapel
-exits: south=ow_1_3 east=ow_0_4
+exits: south=ow_1_3 east=ow_0_4 down=mtn_cave_windswept_1
 ---
 MT MT MT MT MT MT MT MT MT MT MT MT MT MT MT
 MT ST ST ST ST ST ST ST ST MT ST ST ST ST MT
 MT ST ST CL CL ST ST ST ST MT MT MT ST ST MT
-MT ST CL ST ST CL ST ST ST MT CV MT ST ST MT
+MT ST CL ST ST CL ST ST ST MT SD MT ST ST MT
 MT ST ST ST ST ST ST ST ST ST CV ST ST ST ST
 MT ST ST ST ST MT ST DT DT DT DT DT DT DT ST
 MT ST ST ST MT MT ST DT ST ST ST ST ST ST ST

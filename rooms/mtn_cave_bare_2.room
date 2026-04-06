@@ -1,0 +1,21 @@
+name: Bleakstone Den
+biome: cave
+music: chapel
+dark: true
+exits: west=mtn_cave_bare_1
+---
+MT MT MT MT MT MT MT MT MT MT MT MT MT MT MT
+MT MT MT MT CV CV CV CV CV CV MT MT MT MT MT
+MT MT MT CV CV CV CV BO CV CV CV MT MT MT MT
+MT MT CV CV CV CV CV CV CV CV CV CV MT MT MT
+CV CV CV CV BO CV CV CV CV CV BO CV CV MT MT
+CV CV CV CV CV CV CV CV CV CV CV CV CV CV MT
+CV CV CV CV CV CV CV CV BO CV CV CV CV CV MT
+MT MT CV CV CV CV CV CV CV CV CV CV CV MT MT
+MT MT MT CV CV BO CV CV CV CV CV CV MT MT MT
+MT MT MT MT MT CV CV CV CV CV MT MT MT MT MT
+MT MT MT MT MT MT MT MT MT MT MT MT MT MT MT
+---
+monster cave_spider 8 3
+monster cave_spider 5 7
+item spirit_jar 7 5

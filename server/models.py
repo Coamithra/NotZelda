@@ -66,6 +66,7 @@ class Player:
         self.death_time = 0.0         # time.monotonic() when death occurred
         self.death_room = None        # room_id where the player died
         self.keys = 0                 # dungeon keys held (persists across dungeon exits)
+        self.spirit_jar_count = 0     # stackable spirit jars (consumed on death)
         self.active_attack = None     # dict {direction, start_time, room, hit_monsters} or None
         self.rtt = 0.0                # round-trip time in seconds (from client ping/pong)
         self.death_x = 0.0            # x position where player died (tombstone location)

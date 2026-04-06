@@ -1,0 +1,21 @@
+name: Howling Cavern
+biome: cave
+music: chapel
+dark: true
+exits: up=ow_0_3 south=mtn_cave_windswept_2
+---
+MT MT MT MT MT MT MT MT MT MT MT MT MT MT MT
+MT MT CV CV CV CV CV CV CV MT MT CV CV MT MT
+MT CV CV CV CV BO CV CV CV CV MT CV CV CV MT
+MT CV CV CV CV CV CV CV CV CV CV CV BO CV MT
+MT CV CV BO CV CV CV CV CV CV CV CV CV CV MT
+MT CV CV CV CV CV SU CV CV BO CV CV CV MT MT
+MT MT CV CV CV CV CV CV CV CV CV CV MT MT MT
+MT MT CV CV CV BO CV CV CV CV CV CV CV MT MT
+MT MT MT CV CV CV CV CV CV BO CV CV CV MT MT
+MT MT MT MT MT CV CV CV CV CV CV MT MT MT MT
+MT MT MT MT MT MT CV CV CV MT MT MT MT MT MT
+---
+monster cave_spider 4 2
+monster cave_spider 10 3
+monster cave_spider 7 8

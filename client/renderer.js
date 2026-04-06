@@ -235,9 +235,14 @@ function renderDarkness() {
     dCtx.fillRect(cx - r, cy - r, r * 2, r * 2);
   }
 
+  // Light flicker — subtle oscillation for atmosphere
+  const now = performance.now() / 1000;
+  const FLICKER_AMP = 0.12; // tiles of radius variation
+  const playerFlicker = Math.sin(now * 2.3) * FLICKER_AMP + Math.sin(now * 5.7) * (FLICKER_AMP * 0.3);
+
   // Local player light
   const hasLantern = G.player.playerFlags.has("has_lantern");
-  const playerRadius = hasLantern ? LANTERN_RADIUS : NO_LANTERN_RADIUS;
+  const playerRadius = (hasLantern ? LANTERN_RADIUS : NO_LANTERN_RADIUS) + playerFlicker;
   const px = G.player.displayX * TS + TS / 2;
   const py = G.player.displayY * TS + TS / 2;
   punchLight(px, py, playerRadius);
@@ -247,13 +252,19 @@ function renderDarkness() {
     if (name === G.player.myName) continue;
     const op = G.room.otherPlayers[name];
     if (op) {
-      punchLight(op.displayX * TS + TS / 2, op.displayY * TS + TS / 2, LANTERN_RADIUS);
+      // Offset phase per player so lights don't flicker in sync
+      const h = name.charCodeAt(0) * 0.7;
+      const otherFlicker = Math.sin(now * 2.3 + h) * FLICKER_AMP + Math.sin(now * 5.7 + h) * (FLICKER_AMP * 0.3);
+      punchLight(op.displayX * TS + TS / 2, op.displayY * TS + TS / 2, LANTERN_RADIUS + otherFlicker);
     }
   }
 
   // Static light sources (sconces, braziers, fireplaces)
-  for (const [col, row] of G.room.lightSources) {
-    punchLight(col * TS + TS / 2, row * TS + TS / 2, BRIGHT_TILE_RADIUS);
+  for (let i = 0; i < G.room.lightSources.length; i++) {
+    const [col, row] = G.room.lightSources[i];
+    // Each light source gets its own phase offset
+    const torchFlicker = Math.sin(now * 3.1 + i * 2.0) * FLICKER_AMP + Math.sin(now * 7.3 + i * 1.3) * (FLICKER_AMP * 0.4);
+    punchLight(col * TS + TS / 2, row * TS + TS / 2, BRIGHT_TILE_RADIUS + torchFlicker);
   }
 
   // Composite the darkness onto the main canvas
@@ -1373,7 +1384,8 @@ function renderKeyHUD() {
 }
 
 function renderSpiritJarHUD() {
-  if (!G.player.playerFlags.has("has_spirit_jar")) return;
+  const count = G.player.spiritJarCount || 0;
+  if (count <= 0) return;
   const ctx = G.ui.ctx;
   // Position below key HUD (or at y=34 if no keys shown)
   const hasKeys = G.room.dungeonState && G.player.keyCount > 0;
@@ -1394,6 +1406,12 @@ function renderSpiritJarHUD() {
   ctx.fillStyle = "#66ffaa";
   ctx.fillRect(x+5+3*s, y+4+5*s, 2*s, s);
   ctx.fillRect(x+5+4*s, y+4+4*s, s, s);
+  // Show count if more than 1
+  if (count > 1) {
+    ctx.font = "bold 10px monospace";
+    ctx.fillStyle = "#e6b422";
+    ctx.fillText("x" + count, x + 16, y + 18);
+  }
 }
 
 function getExitDirs() {
@@ -1422,6 +1440,7 @@ function renderTransition(now) {
       renderRoom();
       renderBrightTiles();
       renderPlayers();
+      renderDarkness();
       renderUI();
       G.ui.ctx.fillStyle = `rgba(0,0,0,${(1 - progress) * 2})`;
       G.ui.ctx.fillRect(0, 0, CW, CH);
@@ -1442,6 +1461,7 @@ function renderTransition(now) {
     renderRoom();
     renderBrightTiles();
     renderPlayers();
+    renderDarkness();
     renderUI();
     G.ui.ctx.restore();
 

@@ -1,0 +1,21 @@
+name: Howling Passage
+biome: cave
+music: chapel
+dark: true
+exits: north=mtn_cave_windswept_1 east=mtn_cave_windswept_3
+---
+MT MT MT MT MT MT CV CV CV MT MT MT MT MT MT
+MT MT MT CV CV CV CV CV CV CV MT MT MT MT MT
+MT MT CV CV CV CV CV CV BO CV CV CV MT MT MT
+MT CV CV CV BO CV CV CV CV CV CV CV CV MT MT
+MT CV CV CV CV CV CV CV CV BO CV CV CV CV CV
+MT MT CV CV CV CV CV BO CV CV CV CV CV CV CV
+MT CV CV CV CV CV CV CV CV CV CV CV CV CV CV
+MT CV CV BO CV CV CV CV CV CV BO CV CV MT MT
+MT MT CV CV CV CV CV CV CV CV CV CV MT MT MT
+MT MT MT MT CV CV CV CV CV CV MT MT MT MT MT
+MT MT MT MT MT MT MT MT MT MT MT MT MT MT MT
+---
+monster cave_spider 6 2
+monster cave_spider 3 5
+monster cave_spider 10 7

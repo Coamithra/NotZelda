@@ -490,7 +490,7 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
                         item_name = "Small Key"
                     elif item_type == "spirit_jar":
                         # Spirit jar is per-player (like keys), not shared
-                        player.grant_flag("has_spirit_jar")
+                        player.spirit_jar_count += 1
                         item_name = "Spirit Jar"
                     else:
                         dinst.collected_items.add(item_type)
@@ -609,6 +609,9 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
                     msgs.append(("send", player, {
                         "type": "hp_update", "hp": player.hp, "max_hp": player.max_hp,
                     }))
+                elif item_type == "spirit_jar":
+                    item_name = "Spirit Jar"
+                    player.spirit_jar_count += 1
                 else:
                     item_name = item_type.replace("_", " ").title()
                 msgs.append(("send", player, {

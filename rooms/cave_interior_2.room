@@ -1,20 +1,19 @@
 name: Deep Tunnels
 biome: cave
 music: chapel
+dark: true
 exits: up=ow_0_4
 ---
 MT MT MT MT MT MT MT MT MT MT MT MT MT MT MT
 MT MT MT MT MT CV CV MT MT CV MT MT MT MT MT
 MT MT CV CV CV CV CV CV CV CV CV CV CV CV MT
-MT MT CV CV CV CV CV CV CV CV CV CV CV CV MT
+MT MT CV CV CV SC CV CV CV CV CV CV CV CV MT
 MT MT CV CV CV CV CV CV CV CV CV CV CV MT MT
 MT MT CV CV CV CV CV SU CV CV CV CV CV CV MT
 MT CV CV CV CV CV CV CV CV CV CV CV CV CV MT
-MT MT CV CV CV CV CV CV CV CV CV CV CV CV MT
+MT MT CV CV CV CV CV CV CV SC CV CV CV CV MT
 MT CV CV CV CV CV CV CV CV CV CV CV CV MT MT
 MT MT MT MT MT MT CV MT MT MT MT CV MT MT MT
 MT MT MT MT MT MT MT MT MT MT MT MT MT MT MT
 ---
-monster bat 5 5
-monster bat 9 4
-monster bat 7 8
+npc Hermit 7 3 elder You know, people will give you things if you talk to them just right... | A mysterious old hermit who lives alone in a dark cave beneath Craggy Shelf. He is wise, cryptic, and kind. He knows many secrets of the land. He knows that if you say the right words to the people in Corneria, they might give you some treasure. His own special word is "apple pie" — he will gladly tell any adventurer who asks what his special word is. If someone says "apple pie" to him, he is delighted and rewards them. He speaks in short, thoughtful sentences. | Hermit's Spirit Jar:The adventurer says the words "apple pie" to the Hermit.

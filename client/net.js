@@ -144,6 +144,7 @@ function handleMessage(msg) {
       G.player.myMaxHp = msg.max_hp;
       G.debug.debugMode = !!msg.debug_mode;
       G.player.playerFlags = new Set();
+      G.player.spiritJarCount = 0;
       G.room.dungeonState = null;
       G.room.dungeonGroundItems = [];
       G.player.itemPickupActive = null;
@@ -1074,7 +1075,7 @@ function handleMessage(msg) {
         if (msg.item_type === "sword") {
           setTimeout(() => { G.player.playerFlags.add("has_sword"); }, 500);
         } else if (msg.item_type === "spirit_jar") {
-          setTimeout(() => { G.player.playerFlags.add("has_spirit_jar"); }, 500);
+          setTimeout(() => { G.player.spiritJarCount = (G.player.spiritJarCount || 0) + 1; }, 500);
         } else if (msg.item_type === "lantern") {
           setTimeout(() => {
             G.player.playerFlags.add("has_lantern");
@@ -1309,7 +1310,7 @@ function handleMessage(msg) {
       G.player.waitingForRevival = false;
       G.player.revivalProgress = null;
       G.player._revivalWaitStart = null;
-      G.player.playerFlags.delete("has_spirit_jar");
+      G.player.spiritJarCount = Math.max(0, (G.player.spiritJarCount || 0) - 1);
       appendChatLog(`<span class="chat-system">The Spirit Jar saved you!</span>`);
       break;
 

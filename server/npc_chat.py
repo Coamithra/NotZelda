@@ -102,6 +102,7 @@ GIFT_EFFECTS = {
     "Sword": {"effect": "sword", "flag": "has_sword"},
     "Barmaid's Heart Container": {"effect": "heart"},
     "Ghost's Spirit Jar": {"effect": "spirit_jar", "flag": "has_spirit_jar"},
+    "Hermit's Spirit Jar": {"effect": "spirit_jar", "flag": "has_spirit_jar"},
     # Items without an entry here get a generic "You obtained X!" message.
 }
 
@@ -300,12 +301,13 @@ def _build_system_prompt(guard: dict, room_id: str, player_name: str, player_des
     gift = guard.get("gift")
     if gift:
         prompt_name = "a " + gift["display_name"].lower()
-        # Check both the gift tracking flag and any gameplay flag
+        # Check the gift tracking flag (and gameplay flag for non-stackable items)
         already_has = bool(player_flags and gift["flag"] in player_flags)
         if not already_has and player_flags:
             effect_info = GIFT_EFFECTS.get(gift["display_name"], {})
             gameplay_flag = effect_info.get("flag") if isinstance(effect_info, dict) else None
-            if gameplay_flag and gameplay_flag in player_flags:
+            # Spirit jars are stackable — don't block based on gameplay flag
+            if gameplay_flag and gameplay_flag != "has_spirit_jar" and gameplay_flag in player_flags:
                 already_has = True
         if already_has:
             gift_section = "\n\n" + _load_prompt("npc_gift_already_given.txt",
@@ -706,12 +708,15 @@ async def _grant_npc_gift(player, guard: dict):
     gameplay_flag = effect_info.get("flag") if isinstance(effect_info, dict) else None
 
     # Check gameplay flag too (player may have gotten the item another way)
-    if gameplay_flag and player.has_flag(gameplay_flag):
+    # Spirit jars are stackable — skip this block for them
+    if gameplay_flag and gameplay_flag != "has_spirit_jar" and player.has_flag(gameplay_flag):
         player.grant_flag(flag)  # Mark gift as given so NPC won't try again
         return
 
     player.grant_flag(flag)
-    if gameplay_flag:
+    if gameplay_flag == "has_spirit_jar":
+        player.spirit_jar_count += 1
+    elif gameplay_flag:
         player.grant_flag(gameplay_flag)
     log.event("NPC_GIFT", f"{guard['name']} gave {display_name} to {player.name}")
 

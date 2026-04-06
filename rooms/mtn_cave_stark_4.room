@@ -1,0 +1,21 @@
+name: Darkstone Cavern
+biome: cave
+music: chapel
+dark: true
+exits: west=mtn_cave_stark_3 south=mtn_cave_stark_5
+---
+MT MT MT MT MT MT MT MT MT MT MT MT MT MT MT
+MT MT CV CV CV CV MT MT MT CV CV CV CV MT MT
+MT CV CV CV BO CV CV MT CV CV BO CV CV CV MT
+MT CV CV CV CV CV CV CV CV CV CV CV CV CV MT
+CV CV CV CV CV CV CV CV CV BO CV CV CV CV MT
+CV CV CV CV BO CV CV CV CV CV CV CV MT MT MT
+CV CV CV CV CV CV CV CV CV CV CV MT MT MT MT
+MT CV CV CV CV CV CV BO CV CV CV CV MT MT MT
+MT MT CV CV CV CV CV CV CV CV CV CV CV MT MT
+MT MT MT MT MT CV CV CV CV CV CV CV MT MT MT
+MT MT MT MT MT MT CV CV CV MT MT MT MT MT MT
+---
+monster cave_spider 9 2
+monster cave_spider 3 5
+monster cave_spider 8 8
