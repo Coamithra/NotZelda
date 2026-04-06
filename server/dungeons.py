@@ -1004,6 +1004,8 @@ def create_dungeon(type_id) -> DungeonInstance | None:
         candidates = [c for c in topo.cells_in_zone(zone_id)
                        if not topo.has_mark(c, "sanctum")
                        and not topo.has_mark(c, "boss")]
+        if not candidates:
+            candidates = list(topo.cells_in_zone(zone_id))
         return max(candidates, key=lambda c: (
             topo.lacks_mark(c, "treasure"),        # avoid the treasure room
             topo.lacks_mark(c, "key"),             # avoid rooms with keys
