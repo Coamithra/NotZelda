@@ -57,6 +57,11 @@ LAYOUTS = {
         ["WA", "SH", "WA"],
         ["WA", "WA", "WA"],
     ],
+    "cave": [
+        ["DW", "ST", "DW"],
+        ["ST", "DW", "ST"],
+        ["DW", "ST", "DW"],
+    ],
     "castle": [
         ["DW", "ST", "DW"],
         ["ST", "DF", "ST"],
@@ -158,6 +163,7 @@ TRACKS = [
     ("overworld/tavern.mp3",      "Tavern",                "overworld"),
     ("overworld/chapel.mp3",      "Chapel",                "overworld"),
     ("overworld/overworld.mp3",   "Overworld",             "overworld"),
+    ("overworld/cave_marbles.mp3","Cave Marbles",            "cave"),
     ("overworld/castle_ruins.mp3","Castle Ruins",           "castle"),
     # Dark Dungeon — ambient
     ("dungeon1/dungeon_b.mp3",    "Dark Dungeon I",        "dungeon"),

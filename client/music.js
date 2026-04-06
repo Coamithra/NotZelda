@@ -80,6 +80,7 @@ const MusicPlayer = (function () {
     "tavern":     "music_tavern.mp3",
     "chapel":     "music_chapel.mp3",
     "overworld":  "music_overworld.mp3",
+    "cave_marbles": "music_cave_marbles.mp3",
     "castle_ruins": "music_castle_ruins.mp3",
     "dungeon2":   "music_dungeon2.mp3",
     "dungeon4":   "music_dungeon4.mp3",
@@ -103,9 +104,9 @@ const MusicPlayer = (function () {
   // Fallback: map biome names to music tracks (for rooms without explicit music field)
   const BIOME_MUSIC = {
     "forest":     "music_overworld.mp3",
-    "mountain":   "music_chapel.mp3",
-    "cave":       "music_chapel.mp3",
-    "graveyard":  "music_chapel.mp3",
+    "mountain":   "music_overworld.mp3",
+    "cave":       "music_cave_marbles.mp3",
+    "graveyard":  "music_overworld.mp3",
     "castle":     "music_castle_ruins.mp3",
     "desert":     "music_overworld.mp3",
     "swamp":      "music_overworld.mp3",
