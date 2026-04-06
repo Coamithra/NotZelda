@@ -7,7 +7,7 @@ and key placement correctness.
 import sys
 import random
 from pathlib import Path
-from collections import deque
+from collections import Counter, deque
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -277,7 +277,7 @@ def _explore_dungeon(instance):
     result = ExploreResult(instance)
     entrance = tuple(instance.layout["entrance"])
     locked_doors = set(instance.locked_doors)
-    key_set = set(instance.key_cells)
+    key_counts = Counter(instance.key_cells)  # cell -> number of keys
 
     result.locked_doors = set(locked_doors)
     for edge in instance.connections:
@@ -310,12 +310,12 @@ def _explore_dungeon(instance):
 
         while frontier:
             cell = frontier.popleft()
-            # Pick up key if present
-            if cell in key_set:
-                keys_held += 1
-                key_set.discard(cell)
+            # Pick up all keys at this cell (may be >1)
+            if cell in key_counts:
+                n = key_counts.pop(cell)
+                keys_held += n
                 made_progress = True
-                result.trace.append(f"Round {round_num}: picked up key at {cell} (held={keys_held})")
+                result.trace.append(f"Round {round_num}: picked up {n} key(s) at {cell} (held={keys_held})")
             # Expand neighbors
             for edge, neighbor in adj.get(cell, []):
                 if edge in locked_doors and edge not in opened_doors:
@@ -341,9 +341,10 @@ def _explore_dungeon(instance):
                 f"Round {round_num}: opened door {cells[0]}<->{cells[1]} (keys_left={keys_held})")
 
         if not made_progress and reachable_locked:
+            remaining_keys = sum(key_counts.values())
             result.trace.append(
                 f"Round {round_num}: STUCK — {len(reachable_locked)} locked doors visible, "
-                f"0 keys held, {len(key_set)} keys remaining behind doors")
+                f"0 keys held, {remaining_keys} keys remaining behind doors")
 
     result.keys_held = keys_held
     return result
