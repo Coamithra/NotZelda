@@ -13,7 +13,7 @@ from PIL import Image, ImageDraw
 from mutagen.id3 import ID3, TIT2, TPE1, COMM, APIC, ID3NoHeaderError
 
 ROOT = Path(__file__).resolve().parent.parent
-MUSIC = ROOT / "music"
+MUSIC = ROOT / "audio" / "music"
 
 ARTIST = "Legends of Amara"
 COMMENT = "Made with Suno"
