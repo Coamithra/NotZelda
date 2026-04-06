@@ -4516,7 +4516,7 @@
   "swift_wolf": {
     "kind": "swift_wolf",
     "stats": {
-      "hp": 2,
+      "hp": 100,
       "walk_time": 0.2,
       "decision_time": 1.0,
       "damage": 1,
