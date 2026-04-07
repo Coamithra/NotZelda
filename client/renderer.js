@@ -1197,14 +1197,6 @@ function renderUI() {
   G.ui.ctx.fillStyle = "rgba(255,255,255,0.3)";
   G.ui.ctx.fillText(version, CW - vw - 10, 20);
 
-  const exits = getExitDirs();
-  G.ui.ctx.font = "bold 20px monospace";
-  G.ui.ctx.fillStyle = "rgba(255,255,255,0.4)";
-  if (exits.has("north")) G.ui.ctx.fillText("\u25B2", CW/2 - 8, 20);
-  if (exits.has("south")) G.ui.ctx.fillText("\u25BC", CW/2 - 8, CH - 6);
-  if (exits.has("west"))  G.ui.ctx.fillText("\u25C0", 4, CH/2 + 6);
-  if (exits.has("east"))  G.ui.ctx.fillText("\u25B6", CW - 18, CH/2 + 6);
-
   const now = Date.now();
   G.ui.infoMessages = G.ui.infoMessages.filter(m => now < m.expires);
   G.ui.ctx.font = "12px monospace";
@@ -1430,18 +1422,6 @@ function renderSpiritJarHUD() {
     ctx.fillStyle = "#e6b422";
     ctx.fillText("x" + count, x + 16, y + 18);
   }
-}
-
-function getExitDirs() {
-  if (!G.room.currentRoom || !G.room.currentRoom.room_id) return new Set();
-  const tm = G.room.currentRoom.tilemap;
-  const dirs = new Set();
-  const w = (t) => WALKABLE.has(t);
-  if (w(tm[0][6]) || w(tm[0][7]) || w(tm[0][8])) dirs.add("north");
-  if (w(tm[10][6]) || w(tm[10][7]) || w(tm[10][8])) dirs.add("south");
-  if (w(tm[4][0]) || w(tm[5][0]) || w(tm[6][0])) dirs.add("west");
-  if (w(tm[4][14]) || w(tm[5][14]) || w(tm[6][14])) dirs.add("east");
-  return dirs;
 }
 
 function renderTransition(now) {

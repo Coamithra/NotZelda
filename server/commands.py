@@ -19,7 +19,7 @@ from server.lifecycle import (
     broadcast_choir_start, broadcast_choir_stop,
     unlock_room, set_monster_idle,
 )
-from server.dungeons import get_dungeon_for_room, _run_content_deprecation, start_background_regen, broadcast_to_dungeon
+from server.dungeons import get_dungeon_for_room, is_dungeon_room, _run_content_deprecation, start_background_regen, broadcast_to_dungeon
 from server.npc_chat import find_adjacent_npc
 
 from server.constants import GHOST_ELIGIBLE
@@ -144,7 +144,7 @@ def _process_player_input(player, data, now, msgs):
             _simulate_player_move(a, direction, dt, room, player.room, player)
 
             # Edge exit detection (room transition)
-            exit_dir = _check_edge_exit_float(a.x, a.y, direction, room)
+            exit_dir = _check_edge_exit_float(a.x, a.y, direction, room, player.room)
             if exit_dir:
                 do_room_transition(player, exit_dir, msgs)
                 transitioned = True
@@ -243,17 +243,26 @@ _EXIT_X_MIN, _EXIT_X_MAX = min(_ns_cols) - 0.5, max(_ns_cols) + 0.5
 _EXIT_Y_MIN, _EXIT_Y_MAX = min(_ew_rows) - 0.5, max(_ew_rows) + 0.5
 
 
-def _check_edge_exit_float(x, y, direction, room):
-    """Check if a float position at room edge corresponds to an exit."""
+def _check_edge_exit_float(x, y, direction, room, room_id):
+    """Check if a float position at room edge corresponds to an exit.
+
+    Overworld rooms allow exit along the full edge (any walkable tile).
+    Dungeon/gauntlet rooms restrict exits to the standard 3-tile doorway.
+    """
     exits = room["exits"]
-    if direction == "up" and y < 0 and "north" in exits and _EXIT_X_MIN <= x <= _EXIT_X_MAX:
-        return "north"
-    if direction == "down" and y > ROOM_ROWS - 1 and "south" in exits and _EXIT_X_MIN <= x <= _EXIT_X_MAX:
-        return "south"
-    if direction == "left" and x < 0 and "west" in exits and _EXIT_Y_MIN <= y <= _EXIT_Y_MAX:
-        return "west"
-    if direction == "right" and x > ROOM_COLS - 1 and "east" in exits and _EXIT_Y_MIN <= y <= _EXIT_Y_MAX:
-        return "east"
+    restrict = is_dungeon_room(room_id) or room_id.startswith("gauntlet_")
+    if direction == "up" and y < 0 and "north" in exits:
+        if not restrict or _EXIT_X_MIN <= x <= _EXIT_X_MAX:
+            return "north"
+    if direction == "down" and y > ROOM_ROWS - 1 and "south" in exits:
+        if not restrict or _EXIT_X_MIN <= x <= _EXIT_X_MAX:
+            return "south"
+    if direction == "left" and x < 0 and "west" in exits:
+        if not restrict or _EXIT_Y_MIN <= y <= _EXIT_Y_MAX:
+            return "west"
+    if direction == "right" and x > ROOM_COLS - 1 and "east" in exits:
+        if not restrict or _EXIT_Y_MIN <= y <= _EXIT_Y_MAX:
+            return "east"
     return None
 
 
@@ -274,10 +283,17 @@ def _is_position_walkable(x, y, room, player=None):
     min_ty = int(math.floor(check_y_start + 0.001))
     max_ty = int(math.floor(y + 1.0 - 0.001))
 
+    exits = room.get("exits", {})
     for ty in range(min_ty, max_ty + 1):
         for tx in range(min_tx, max_tx + 1):
             if tx < 0 or tx >= ROOM_COLS or ty < 0 or ty >= ROOM_ROWS:
-                continue  # off-grid handled by edge detection
+                # Block off-grid movement when there's no exit in that direction
+                if (tx < 0 and "west" not in exits) or \
+                   (tx >= ROOM_COLS and "east" not in exits) or \
+                   (ty < 0 and "north" not in exits) or \
+                   (ty >= ROOM_ROWS and "south" not in exits):
+                    return False
+                continue
             tile = reveal[ty][tx] if has_lantern else tilemap[ty][tx]
             if not game.is_walkable_tile(tile):
                 if has_medallion and game.custom_tile_recipes.get(tile, {}).get("water"):
@@ -327,7 +343,7 @@ def _process_player_state(player, data, now, msgs):
 
     # Edge detection (room transition)
     room = game.rooms[player.room]
-    exit_dir = _check_edge_exit_float(new_x, new_y, direction, room)
+    exit_dir = _check_edge_exit_float(new_x, new_y, direction, room, player.room)
     if exit_dir:
         do_room_transition(player, exit_dir, msgs)
         return

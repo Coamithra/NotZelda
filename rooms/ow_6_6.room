@@ -5,15 +5,15 @@ exits: west=ow_6_5 east=ow_6_7 south=ow_7_6
 ---
 TR TR TR TR TR TR TR TR TR TR TR TR TR TR TR
 TR GR GR GR GR GR GR GR GR GR GR GR GR GR TR
-TR GR GR GR GR GR GR GR GR GR TG GR GR GR TR
-TR GR GR GR GR GR GR GR GR GR GR GR GR GR TR
+GR GR GR GR GR GR GR GR GR GR TG GR GR GR GR
+GR GR GR GR GR GR GR GR GR GR GR GR GR GR GR
 GR GR GR GR GR RD RD RD GR GR GR GR GR GR GR
-GR RD RD RD RD RD GR GR RD RD RD RD RD RD GR
-GR GR GR GR GR RD RD RD GR GR GR GR GR GR GR
-TR GR FL GR GR GR GR GR GR GR GR GR GR GR TR
-TR GR GR FL GR GR GR RD GR GR FL GR GR GR TR
+GR RD RD RD RD RD GR GR RD RD RD RD RD RD TR
+GR GR GR GR GR RD RD RD GR GR GR GR GR GR TR
+GR GR FL GR GR GR GR GR GR GR GR GR GR GR TR
+GR GR GR FL GR GR GR RD GR GR FL GR GR GR TR
 TR GR GR GR GR GR GR RD GR GR GR GR GR GR TR
-TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
+TR TR TR TR TR TR TR TR TR TR GR GR TR TR TR
 ---
 npc Signpost_Reader 6 4 merchant The road forks here. East to the lake, south to the castle. | Traveling merchant who reads signposts aloud to anyone passing by. Chatty and helpful. Knows all the roads and where they lead. Sells directions more than goods.
 monster slime 10 7

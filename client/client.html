@@ -448,9 +448,16 @@ function canMoveToPosition(x, y) {
   const minTy = Math.floor(checkYStart + 0.001);
   const maxTy = Math.floor(y + 1.0 - 0.001);
 
+  const exits = G.room.currentRoom.exits || {};
   for (let ty = minTy; ty <= maxTy; ty++) {
     for (let tx = minTx; tx <= maxTx; tx++) {
-      if (tx < 0 || tx >= COLS || ty < 0 || ty >= ROWS) continue;
+      if (tx < 0 || tx >= COLS || ty < 0 || ty >= ROWS) {
+        // Block off-grid movement when there's no exit in that direction
+        if ((tx < 0 && !exits.west) || (tx >= COLS && !exits.east) ||
+            (ty < 0 && !exits.north) || (ty >= ROWS && !exits.south))
+          return false;
+        continue;
+      }
       const tile = hasLantern ? reveal[ty][tx] : tilemap[ty][tx];
       if (!WALKABLE.has(tile)) return false;
     }

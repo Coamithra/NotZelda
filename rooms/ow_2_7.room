@@ -3,16 +3,16 @@ biome: plains
 music: overworld
 exits: north=ow_1_7 south=ow_3_7 east=ow_2_8 west=ow_2_6
 ---
-TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
+TR TR TR TR TR TR TR GR GR TR TR TR TR TR TR
 TR GR GR GR GR GR GR RD GR GR GR GR GR GR TR
 TR GR BO BO BO GR GR RD GR GR GR GR GR GR TR
 TR GR BO ST ST BO GR RD GR GR GR GR FL GR TR
-GR GR BO ST GR BO GR RD GR GR GR GR GR GR GR
-GR RD RD RD RD RD RD RD RD RD RD RD RD RD GR
-GR GR GR GR GR GR GR RD GR GR TG GR GR GR GR
+TR GR BO ST GR BO GR RD GR GR GR GR GR GR GR
+TR RD RD RD RD RD RD RD RD RD RD RD RD RD GR
+TR GR GR GR GR GR GR RD GR GR TG GR GR GR GR
 TR GR GR GR GR GR GR RD GR TG FL TG GR GR TR
-TR GR GR TR GR GR GR RD GR GR TG GR GR GR TR
-TR GR GR GR GR GR GR RD GR GR GR GR GR GR TR
+GR GR GR TR GR GR GR RD GR GR TG GR GR GR TR
+GR GR GR GR GR GR GR RD GR GR GR GR GR GR TR
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 ---
 npc Farmer 3 3 farmer My grandfather's farmstead. Nothing left but the foundation now. | Nostalgic farmer visiting his family's ruined homestead. Speaks wistfully about the old days. Grows crops near the river now. Knows the land and weather patterns well.
