@@ -149,6 +149,10 @@ function handleMessage(msg) {
       G.player.myHp = msg.hp;
       G.player.myMaxHp = msg.max_hp;
       G.debug.debugMode = !!msg.debug_mode;
+      G.debug.builtinTileIds = msg.builtin_tile_ids || [];
+      G.debug.drawMode = false;
+      G.debug.drawLMB = null;
+      G.debug.drawRMB = null;
       G.player.playerFlags = new Set();
       G.player.spiritJarCount = 0;
       G.room.dungeonState = null;
@@ -438,6 +442,8 @@ function handleMessage(msg) {
           duration: isFade ? 500 : 300,
         };
       }
+      // Refresh draw palette for new room
+      if (G.debug.drawMode && typeof updateDrawPalette === "function") updateDrawPalette();
       break;
     }
 
@@ -838,6 +844,35 @@ function handleMessage(msg) {
         for (const [r, c, tile] of msg.changes) {
           G.room.currentRoom.tilemap[r][c] = tile;
         }
+      }
+      break;
+    }
+
+    case "draw_mode":
+      G.debug.drawMode = !!msg.active;
+      if (!msg.active) { G.debug.drawHover = null; G.ui.canvas.style.cursor = ""; }
+      // Register all built-in tile recipes so the palette can render them
+      if (msg.all_tiles) {
+        for (const [tileId, recipe] of Object.entries(msg.all_tiles)) {
+          if (!customTiles[tileId]) {
+            customTiles[tileId] = recipe;
+            delete tileCanvases[tileId]; // bust cache if stale
+          }
+          if (recipe.walkable) WALKABLE.add(tileId);
+          if (recipe.water) WATER_TILES.add(tileId);
+        }
+      }
+      if (typeof updateDrawPalette === "function") updateDrawPalette();
+      break;
+
+    case "tile_drawn": {
+      // Draw-mode tile update — apply changes to local tilemap
+      if (G.room.currentRoom && G.room.currentRoom.tilemap && msg.changes) {
+        for (const [r, c, tile] of msg.changes) {
+          G.room.currentRoom.tilemap[r][c] = tile;
+        }
+        // Refresh palette to show any newly introduced tiles
+        if (G.debug.drawMode && typeof updateDrawPalette === "function") updateDrawPalette();
       }
       break;
     }
@@ -1302,6 +1337,7 @@ function handleMessage(msg) {
         G.room.activeRevival = null;
       }
       break;
+    }
 
     case "revival_started": {
       const revDuration = (msg.duration || 10) * 1000;  // server sends seconds

@@ -247,6 +247,38 @@ def load_room_files(directory: str = "rooms"):
     log.debug(f"[ROOMS] Total rooms: {len(game.rooms)}")
 
 
+def save_room_tilemap(room_id: str) -> bool:
+    """Rewrite the tilemap section of a .room file from in-memory state.
+
+    Preserves header and entity sections; only the tilemap (section 1) is rewritten.
+    Returns True if saved, False if no file exists for this room.
+    """
+    rooms_dir = Path(__file__).parent.parent / "rooms"
+    room_file = rooms_dir / f"{room_id}.room"
+    if not room_file.exists():
+        return False
+
+    room = game.rooms.get(room_id)
+    if not room:
+        return False
+
+    text = room_file.read_text(encoding="utf-8")
+    parts = text.split("---")
+    if len(parts) < 2:
+        return False
+
+    # Rebuild tilemap section from in-memory state
+    tilemap = room["tilemap"]
+    tilemap_lines = []
+    for row in tilemap:
+        tilemap_lines.append(" ".join(row))
+    parts[1] = "\n" + "\n".join(tilemap_lines) + "\n"
+
+    room_file.write_text("---".join(parts), encoding="utf-8")
+    log.debug(f"[DRAW] Saved tilemap for {room_id}")
+    return True
+
+
 def load_dungeon_templates(directory: str = "rooms/dungeon1", type_id: str = "d1"):
     """Load dungeon room templates from .room files for a dungeon type (no exits parsed)."""
     rooms_dir = Path(__file__).parent.parent / directory

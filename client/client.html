@@ -153,6 +153,55 @@
     align-self: center;
   }
 
+  /* ---------- Draw palette ---------- */
+  #draw-palette {
+    display: none;
+    width: 720px;
+    background: #0d1117;
+    border: 2px solid #30363d;
+    border-top: none;
+    padding: 6px 8px;
+    font-size: 12px;
+    color: #8b949e;
+  }
+  #draw-binds {
+    display: flex; gap: 12px; margin-bottom: 6px; align-items: center;
+  }
+  .draw-bind {
+    display: flex; align-items: center; gap: 4px;
+    padding: 2px 6px; border-radius: 3px;
+    background: #161b22; border: 1px solid #30363d;
+  }
+  .draw-bind .bind-label { font-weight: bold; font-size: 11px; min-width: 28px; }
+  .draw-bind .bind-preview { border: 1px solid #484f58; image-rendering: pixelated; }
+  .draw-bind .bind-name { color: #c9d1d9; font-size: 11px; }
+  #draw-bind-lmb .bind-label { color: #58a6ff; }
+  #draw-bind-rmb .bind-label { color: #f0883e; }
+  .draw-section-label {
+    font-size: 11px; color: #484f58; text-transform: uppercase;
+    letter-spacing: 0.5px; margin: 4px 0 2px;
+  }
+  .draw-tile-grid {
+    display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 4px;
+  }
+  .draw-tile-btn {
+    width: 34px; height: 34px; cursor: pointer;
+    border: 2px solid transparent; border-radius: 2px;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  .draw-tile-btn:hover { border-color: #8b949e; }
+  .draw-tile-btn.sel-lmb { border-color: #58a6ff; }
+  .draw-tile-btn.sel-rmb { border-color: #f0883e; }
+  .draw-tile-btn.sel-lmb.sel-rmb { border-color: #d2a8ff; }
+  .draw-tile-btn canvas { image-rendering: pixelated; }
+  #draw-all-section summary {
+    cursor: pointer; user-select: none;
+    font-size: 11px; color: #484f58; text-transform: uppercase;
+    letter-spacing: 0.5px; margin: 4px 0 2px;
+  }
+  #draw-all-section summary:hover { color: #8b949e; }
+
   /* ---------- Mobile D-pad ---------- */
   #dpad {
     display: none;
@@ -281,6 +330,26 @@
       <input id="chat-input" type="text" placeholder="Press Enter to chat..." autocomplete="off">
       <span id="chat-hint">ESC to close</span>
     </div>
+    <div id="draw-palette">
+      <div id="draw-binds">
+        <div class="draw-bind" id="draw-bind-lmb">
+          <span class="bind-label">LMB</span>
+          <canvas class="bind-preview" width="32" height="32"></canvas>
+          <span class="bind-name">-</span>
+        </div>
+        <div class="draw-bind" id="draw-bind-rmb">
+          <span class="bind-label">RMB</span>
+          <canvas class="bind-preview" width="32" height="32"></canvas>
+          <span class="bind-name">-</span>
+        </div>
+      </div>
+      <div class="draw-section-label">Room Tiles</div>
+      <div id="draw-room-tiles" class="draw-tile-grid"></div>
+      <details id="draw-all-section">
+        <summary></summary>
+        <div id="draw-all-tiles" class="draw-tile-grid"></div>
+      </details>
+    </div>
   </div>
   <div id="server-log"></div>
 </div>
@@ -384,6 +453,102 @@ function setState(newState, data) {
   G.player.state = newState;
   G.player.stateData = data || {};
 }
+
+// ---------------------------------------------------------------------------
+// Draw palette — tile selector for draw mode
+// ---------------------------------------------------------------------------
+
+function _drawPaletteTileBtn(tileId) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "draw-tile-btn";
+  wrapper.dataset.tile = tileId;
+  if (tileId === G.debug.drawLMB) wrapper.classList.add("sel-lmb");
+  if (tileId === G.debug.drawRMB) wrapper.classList.add("sel-rmb");
+
+  const preview = document.createElement("canvas");
+  preview.width = 32; preview.height = 32;
+  const src = getTileCanvas(tileId, TS, TILE, SCALE);
+  preview.getContext("2d").drawImage(src, 0, 0, 32, 32);
+  wrapper.appendChild(preview);
+
+  const recipe = customTiles[tileId];
+  wrapper.title = recipe ? `${tileId}: ${recipe.name || tileId}` : tileId;
+  return wrapper;
+}
+
+function updateDrawPalette() {
+  const palette = document.getElementById("draw-palette");
+  if (!G.debug.drawMode || !G.room.currentRoom) {
+    palette.style.display = "none";
+    return;
+  }
+  palette.style.display = "block";
+
+  // Collect tiles used in the current room
+  const tm = G.room.currentRoom.tilemap;
+  const roomTileSet = new Set();
+  for (const row of tm) for (const t of row) roomTileSet.add(t);
+  const roomTiles = [...roomTileSet].sort();
+
+  // Room tiles grid
+  const roomGrid = document.getElementById("draw-room-tiles");
+  roomGrid.innerHTML = "";
+  for (const tileId of roomTiles) {
+    roomGrid.appendChild(_drawPaletteTileBtn(tileId));
+  }
+
+  // All built-in tiles grid
+  const allGrid = document.getElementById("draw-all-tiles");
+  allGrid.innerHTML = "";
+  const builtins = G.debug.builtinTileIds || [];
+  const summary = document.querySelector("#draw-all-section summary");
+  summary.textContent = `All Tiles (${builtins.length})`;
+  for (const tileId of builtins) {
+    allGrid.appendChild(_drawPaletteTileBtn(tileId));
+  }
+
+  // Update binding displays
+  _updateBindDisplay("draw-bind-lmb", G.debug.drawLMB);
+  _updateBindDisplay("draw-bind-rmb", G.debug.drawRMB);
+}
+
+function _updateBindDisplay(elemId, tileId) {
+  const el = document.getElementById(elemId);
+  const canvas = el.querySelector(".bind-preview");
+  const nameEl = el.querySelector(".bind-name");
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, 32, 32);
+  if (tileId) {
+    const src = getTileCanvas(tileId, TS, TILE, SCALE);
+    ctx.drawImage(src, 0, 0, 32, 32);
+    const recipe = customTiles[tileId];
+    nameEl.textContent = recipe ? (recipe.name || tileId) : tileId;
+  } else {
+    nameEl.textContent = "-";
+  }
+}
+
+function _handlePaletteTileClick(e, button) {
+  const btn = e.target.closest(".draw-tile-btn");
+  if (!btn) return;
+  const tileId = btn.dataset.tile;
+  if (!tileId) return;
+  if (button === 0) {
+    G.debug.drawLMB = (G.debug.drawLMB === tileId) ? null : tileId;
+  } else if (button === 2) {
+    G.debug.drawRMB = (G.debug.drawRMB === tileId) ? null : tileId;
+  }
+  updateDrawPalette();
+}
+
+// Palette click handlers (LMB + RMB)
+document.getElementById("draw-palette").addEventListener("click", (e) => {
+  _handlePaletteTileClick(e, 0);
+});
+document.getElementById("draw-palette").addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  _handlePaletteTileClick(e, 2);
+});
 
 function sendToServer(msg) {
   if (G.conn.ws && G.conn.ws.readyState === WebSocket.OPEN) {
@@ -845,6 +1010,7 @@ function gameLoop(timestamp) {
     }
 
     renderRoom();
+    renderDrawMode();
     renderRevealedTiles();
     renderBrightTiles();
     renderWaterMist();

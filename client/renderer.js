@@ -1214,6 +1214,58 @@ function renderUI() {
 
 }
 
+function renderDrawMode() {
+  if (!G.debug.drawMode || !G.room.currentRoom) return;
+  const ctx = G.ui.ctx;
+  const tm = G.room.currentRoom.tilemap;
+
+  // Semi-transparent grid overlay
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+  ctx.lineWidth = 1;
+  for (let c = 0; c <= COLS; c++) {
+    ctx.beginPath(); ctx.moveTo(c * TS, 0); ctx.lineTo(c * TS, CH); ctx.stroke();
+  }
+  for (let r = 0; r <= ROWS; r++) {
+    ctx.beginPath(); ctx.moveTo(0, r * TS); ctx.lineTo(CW, r * TS); ctx.stroke();
+  }
+
+  // Tint non-walkable tiles
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (!WALKABLE.has(tm[r][c])) {
+        ctx.fillStyle = "rgba(255, 60, 60, 0.12)";
+        ctx.fillRect(c * TS, r * TS, TS, TS);
+      }
+    }
+  }
+
+  // Highlight tile under cursor — show preview of LMB tile
+  const h = G.debug.drawHover;
+  if (h) {
+    const lmb = G.debug.drawLMB;
+    const rmb = G.debug.drawRMB;
+    // Blue outline for LMB, orange for RMB (show LMB by default)
+    ctx.strokeStyle = lmb ? "#58a6ff" : "#8b949e";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(h.col * TS + 1, h.row * TS + 1, TS - 2, TS - 2);
+    // Preview the LMB tile semi-transparently if bound
+    if (lmb) {
+      ctx.globalAlpha = 0.45;
+      ctx.drawImage(getTileCanvas(lmb, TS, TILE, SCALE), h.col * TS, h.row * TS);
+      ctx.globalAlpha = 1.0;
+    }
+  }
+
+  // DRAW MODE indicator + bound tiles
+  ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+  ctx.fillRect(CW - 130, 2, 128, 22);
+  ctx.font = "bold 14px monospace";
+  ctx.fillStyle = "#ff0";
+  ctx.textAlign = "right";
+  ctx.fillText("DRAW MODE", CW - 8, 18);
+  ctx.textAlign = "left";
+}
+
 function renderCollisionDebug() {
   if (!G.debug.debugCollision) return;
   const ctx = G.ui.ctx;

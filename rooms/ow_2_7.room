@@ -3,7 +3,7 @@ biome: plains
 music: overworld
 exits: north=ow_1_7 south=ow_3_7 east=ow_2_8 west=ow_2_6
 ---
-TR TR TR TR TR TR TR GR GR TR TR TR TR TR TR
+TR TR TR TR TR TR TR GR TR TR TR TR TR TR TR
 TR GR GR GR GR GR GR RD GR GR GR GR GR GR TR
 TR GR BO BO BO GR GR RD GR GR GR GR GR GR TR
 TR GR BO ST ST BO GR RD GR GR GR GR FL GR TR

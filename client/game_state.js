@@ -198,5 +198,10 @@ const G = {
     dungeonDebug: null,    // {lib_monsters, lib_tiles, lib_rooms, room_source, minimap?} — from server
     viewServer: false,     // /viewserver toggle: show server-side entity positions
     serverState: null,     // latest debug_state snapshot from server
+    drawMode: false,       // /draw toggle: click tiles to swap wall/walkable
+    drawHover: null,       // {row, col} — tile under mouse cursor when draw mode active
+    drawLMB: null,         // tile code bound to left mouse button
+    drawRMB: null,         // tile code bound to right mouse button
+    builtinTileIds: [],    // built-in tile IDs from server (for "All Tiles" palette)
   },
 };

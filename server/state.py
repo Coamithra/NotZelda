@@ -61,6 +61,10 @@ class GameState:
         self.last_deprecation_time = 0.0  # timestamp of last deprecation pass
         self.regen_tasks = {}              # type_id -> asyncio.Task
 
+        # Debug draw mode — tracks tile overrides for undo
+        # (room_id, row, col) -> {"original": tile_code, "linked": (room_id, row, col) or None}
+        self.draw_overrides = {}
+
         # Activity log path
         self.log_file = Path(__file__).parent.parent / "event_log.txt"
 

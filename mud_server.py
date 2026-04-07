@@ -197,6 +197,7 @@ async def handle_connection(websocket):
         login_msg = {"type": "login_ok", "name": name, "color_index": color_index, "hp": PLAYER_MAX_HP, "max_hp": PLAYER_MAX_HP}
         if DEBUG_MODE:
             login_msg["debug_mode"] = True
+            login_msg["builtin_tile_ids"] = sorted(game.builtin_tile_ids)
             player.grant_flag("has_sword")
             player.grant_flag("has_lantern")
             player.grant_flag("invulnerable")
@@ -223,7 +224,7 @@ async def handle_connection(websocket):
                     if "ct" in data:
                         pong["ct"] = data["ct"]  # echo client timestamp for RTT measurement
                     await player.ws.send(json.dumps(pong))
-                elif msg_type in ("player_input", "player_state", "chat", "unlock_door", "respawn_request"):
+                elif msg_type in ("player_input", "player_state", "chat", "unlock_door", "respawn_request", "draw_tile"):
                     player.command_queue.append((msg_type, data))
             except json.JSONDecodeError:
                 log.debug(f"[WARN] {name}: bad JSON: {raw[:200]}")

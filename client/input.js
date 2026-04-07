@@ -279,16 +279,52 @@ function _isInRespawnBtn(cx, cy) {
 }
 
 G.ui.canvas.addEventListener("mousemove", (e) => {
-  if (!G.player.waitingForRevival) { G.player._respawnBtnHover = false; return; }
   const { x, y } = _canvasCoords(e);
+  // Draw mode hover tracking
+  if (G.debug.drawMode) {
+    G.ui.canvas.style.cursor = "crosshair";
+    const col = Math.floor(x / TS);
+    const row = Math.floor(y / TS);
+    if (col >= 0 && col < COLS && row >= 0 && row < ROWS) {
+      G.debug.drawHover = { row, col };
+    } else {
+      G.debug.drawHover = null;
+    }
+  } else if (G.ui.canvas.style.cursor === "crosshair") {
+    G.ui.canvas.style.cursor = "";
+  }
+  // Respawn button hover
+  if (!G.player.waitingForRevival) { G.player._respawnBtnHover = false; return; }
   G.player._respawnBtnHover = _isInRespawnBtn(x, y);
 });
 
+function _drawCanvasPlace(e, button) {
+  if (!G.debug.drawMode || !G.room.currentRoom) return false;
+  const tile = button === 0 ? G.debug.drawLMB : G.debug.drawRMB;
+  if (!tile) return true; // draw mode active but no binding — swallow the click
+  const { x, y } = _canvasCoords(e);
+  const col = Math.floor(x / TS);
+  const row = Math.floor(y / TS);
+  if (col >= 0 && col < COLS && row >= 0 && row < ROWS) {
+    sendToServer({ type: "draw_tile", row, col, tile });
+  }
+  return true;
+}
+
 G.ui.canvas.addEventListener("click", (e) => {
+  if (_drawCanvasPlace(e, 0)) return;
+  // Respawn button
   if (!G.player.waitingForRevival) return;
   const { x, y } = _canvasCoords(e);
   if (_isInRespawnBtn(x, y)) {
     sendToServer({ type: "respawn_request" });
+  }
+});
+
+G.ui.canvas.addEventListener("contextmenu", (e) => {
+  if (G.debug.drawMode) {
+    e.preventDefault();
+    _drawCanvasPlace(e, 2);
   }
 });
 

@@ -37,6 +37,8 @@ def process_player_commands(player, now, msgs):
             _process_chat(player, data, msgs)
         elif cmd_type == "unlock_door":
             _process_unlock_door(player, data, msgs)
+        elif cmd_type == "draw_tile":
+            _process_draw_tile(player, data, msgs)
 
 
 # ---------------------------------------------------------------------------
@@ -1185,6 +1187,178 @@ def _cmd_keylayout(player, args, msgs):
 
 
 # ---------------------------------------------------------------------------
+# Draw mode — debug tile editing
+# ---------------------------------------------------------------------------
+
+def _cmd_draw(player, args, msgs):
+    """Toggle draw mode for the player (debug only)."""
+    player._draw_mode = not getattr(player, '_draw_mode', False)
+    mode = "ON" if player._draw_mode else "OFF"
+    draw_msg = {"type": "draw_mode", "active": player._draw_mode}
+    if player._draw_mode:
+        # Send all built-in tile recipes so the palette can render every tile
+        all_tiles = {tid: game.custom_tile_recipes[tid]
+                     for tid in game.builtin_tile_ids
+                     if tid in game.custom_tile_recipes}
+        draw_msg["all_tiles"] = all_tiles
+    msgs.append(("send", player, draw_msg))
+    msgs.append(("send", player, {"type": "info", "text": f"Draw mode {mode}"}))
+
+
+def _get_predominant_tiles(room):
+    """Find the most common wall and walkable tiles on the room's outer edge."""
+    from collections import Counter
+    tilemap = room["tilemap"]
+    wall_counts = Counter()
+    walk_counts = Counter()
+    # Top and bottom rows
+    for c in range(ROOM_COLS):
+        for r in (0, ROOM_ROWS - 1):
+            tile = tilemap[r][c]
+            if game.is_walkable_tile(tile):
+                walk_counts[tile] += 1
+            else:
+                wall_counts[tile] += 1
+    # Left and right columns (excluding corners already counted)
+    for r in range(1, ROOM_ROWS - 1):
+        for c in (0, ROOM_COLS - 1):
+            tile = tilemap[r][c]
+            if game.is_walkable_tile(tile):
+                walk_counts[tile] += 1
+            else:
+                wall_counts[tile] += 1
+    wall_tile = wall_counts.most_common(1)[0][0] if wall_counts else "WS"
+    walk_tile = walk_counts.most_common(1)[0][0] if walk_counts else "GR"
+    return wall_tile, walk_tile
+
+
+def _get_edge_neighbor(room, row, col):
+    """If (row, col) is on the room edge with an exit, return (neighbor_room_id, neighbor_row, neighbor_col)."""
+    exits = room.get("exits", {})
+    if row == 0 and "north" in exits:
+        return (exits["north"], ROOM_ROWS - 1, col)
+    if row == ROOM_ROWS - 1 and "south" in exits:
+        return (exits["south"], 0, col)
+    if col == 0 and "west" in exits:
+        return (exits["west"], row, ROOM_COLS - 1)
+    if col == ROOM_COLS - 1 and "east" in exits:
+        return (exits["east"], row, 0)
+    return None
+
+
+def _process_draw_tile(player, data, msgs):
+    """Handle draw_tile — place a specific tile with smart undo and edge sync.
+
+    Protocol: {type: "draw_tile", row, col, tile: "TR"}
+    Smart undo: placing same tile twice on an overridden pos restores the original.
+    Edge sync: placing on the room edge auto-updates the neighbor room's corresponding tile.
+    """
+    if not DEBUG_MODE or not getattr(player, '_draw_mode', False):
+        return
+    from server.rooms import save_room_tilemap
+
+    row, col = data.get("row"), data.get("col")
+    tile = data.get("tile")
+    if row is None or col is None or not tile:
+        return
+    if not (0 <= row < ROOM_ROWS and 0 <= col < ROOM_COLS):
+        return
+
+    room_id = player.room
+    room = game.rooms.get(room_id)
+    if not room:
+        return
+
+    tilemap = room["tilemap"]
+    current = tilemap[row][col]
+    key = (room_id, row, col)
+
+    # Smart undo: placing same tile that's already there on an overridden position
+    if key in game.draw_overrides and current == tile:
+        override = game.draw_overrides.pop(key)
+        tilemap[row][col] = override["original"]
+        msgs.append(("broadcast", room_id, {
+            "type": "tile_drawn", "changes": [[row, col, override["original"]]],
+        }, None))
+        save_room_tilemap(room_id)
+        # Undo linked neighbor
+        linked = override.get("linked")
+        if linked:
+            _undo_linked_neighbor(linked, msgs, save_room_tilemap)
+        return
+
+    # No-op: tile is already there and never overridden
+    if current == tile and key not in game.draw_overrides:
+        return
+
+    # --- Place the tile ---
+    if key not in game.draw_overrides:
+        game.draw_overrides[key] = {"original": current, "linked": None}
+    else:
+        # Already overridden — clean up old neighbor link before re-syncing
+        old_linked = game.draw_overrides[key].get("linked")
+        if old_linked:
+            _undo_linked_neighbor(old_linked, msgs, save_room_tilemap)
+            game.draw_overrides[key]["linked"] = None
+
+    tilemap[row][col] = tile
+    msgs.append(("broadcast", room_id, {
+        "type": "tile_drawn", "changes": [[row, col, tile]],
+    }, None))
+    save_room_tilemap(room_id)
+
+    # Edge sync: smart-select a matching tile type in the neighbor room
+    neighbor_info = _get_edge_neighbor(room, row, col)
+    if neighbor_info:
+        n_room_id, n_row, n_col = neighbor_info
+        n_room = game.rooms.get(n_room_id)
+        if n_room:
+            _sync_edge_neighbor(key, n_room_id, n_row, n_col, n_room,
+                                tile, msgs, save_room_tilemap)
+
+
+def _undo_linked_neighbor(linked_key, msgs, save_fn):
+    """Restore a linked neighbor tile to its original state."""
+    if linked_key not in game.draw_overrides:
+        return
+    n_override = game.draw_overrides.pop(linked_key)
+    n_room_id, n_row, n_col = linked_key
+    n_room = game.rooms.get(n_room_id)
+    if not n_room:
+        return
+    n_room["tilemap"][n_row][n_col] = n_override["original"]
+    msgs.append(("broadcast", n_room_id, {
+        "type": "tile_drawn", "changes": [[n_row, n_col, n_override["original"]]],
+    }, None))
+    save_fn(n_room_id)
+
+
+def _sync_edge_neighbor(source_key, n_room_id, n_row, n_col, n_room,
+                        placed_tile, msgs, save_fn):
+    """Smart-sync the neighbor room's edge tile based on what was placed."""
+    n_key = (n_room_id, n_row, n_col)
+    n_current = n_room["tilemap"][n_row][n_col]
+    is_walkable = game.is_walkable_tile(placed_tile)
+    n_wall, n_walk = _get_predominant_tiles(n_room)
+    n_new = n_walk if is_walkable else n_wall
+
+    if n_current == n_new:
+        return  # neighbor already has the right type
+
+    if n_key not in game.draw_overrides:
+        game.draw_overrides[n_key] = {"original": n_current, "linked": source_key}
+    else:
+        game.draw_overrides[n_key]["linked"] = source_key
+    game.draw_overrides[source_key]["linked"] = n_key
+
+    n_room["tilemap"][n_row][n_col] = n_new
+    msgs.append(("broadcast", n_room_id, {
+        "type": "tile_drawn", "changes": [[n_row, n_col, n_new]],
+    }, None))
+    save_fn(n_room_id)
+
+
+# ---------------------------------------------------------------------------
 # Command registry
 # ---------------------------------------------------------------------------
 
@@ -1205,6 +1379,7 @@ DEBUG_COMMANDS = {
     "choir": _cmd_choir,
     "key": _cmd_key,
     "keylayout": _cmd_keylayout,
+    "draw": _cmd_draw,
     "gauntlet": lambda p, a, m: __import__("server.gauntlet", fromlist=["cmd_gauntlet"]).cmd_gauntlet(p, a, m),
     "gt": lambda p, a, m: __import__("server.gauntlet", fromlist=["cmd_gt"]).cmd_gt(p, a, m),
     "rmgauntlet": lambda p, a, m: __import__("server.gauntlet", fromlist=["cmd_rmgauntlet"]).cmd_rmgauntlet(p, a, m),
