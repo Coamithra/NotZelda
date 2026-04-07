@@ -664,9 +664,11 @@ function gameLoop(timestamp) {
       G.player.displayY = G.player.myPlayer.y + G.player.knockbackOffsetY + co.y;
     }
 
-    // Combine active players: normal room + spectated room (death camera)
-    const _allPlayers = Object.values(G.room.otherPlayers);
-    if (G.player.spectateData) _allPlayers.push(...Object.values(G.player.spectateData.players));
+    // Interpolate active players — when spectating, only process the room being rendered
+    const _spectating = G.player.waitingForRevival && G.player.spectateData;
+    const _allPlayers = _spectating
+      ? Object.values(G.player.spectateData.players)
+      : Object.values(G.room.otherPlayers);
     for (const p of _allPlayers) {
       if (p.knockbackSlide) {
         const ks = p.knockbackSlide;
@@ -728,9 +730,9 @@ function gameLoop(timestamp) {
     }
 
     // Unified monster action interpolation with dead reckoning
-    // Combine active monsters: normal room + spectated room (death camera)
-    const _allMonsters = G.player.spectateData
-      ? [...G.room.monsters, ...G.player.spectateData.monsters]
+    // When spectating, only interpolate the spectated room's monsters
+    const _allMonsters = _spectating
+      ? G.player.spectateData.monsters
       : G.room.monsters;
     for (const m of _allMonsters) {
       if (m.action) {

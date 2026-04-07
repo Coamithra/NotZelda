@@ -1363,9 +1363,9 @@ function handleMessage(msg) {
         monsters: (msg.monsters || []).map((m, idx) => ({
           id: m.id ?? idx, kind: m.kind, x: m.x, y: m.y,
           displayX: m.x, displayY: m.y,
-          walk_time: m.walk_time || 0.25, seq: m.seq || 0,
+          walk_time: m.walk_time || 0.25, seq: m.seq || 0, stateSeq: m.seq || 0,
           width: m.width || 1, height: m.height || 1,
-          alive: true,
+          alive: true, action: null,
           walking: m.walking ? {
             from: m.walk_from, to: m.walk_to,
             progress: m.walk_progress || 0,
