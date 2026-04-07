@@ -72,6 +72,8 @@ class Player:
         self.death_x = 0.0            # x position where player died (tombstone location)
         self.death_y = 0.0            # y position where player died
         self.chose_respawn = False    # True if dead player clicked Respawn button
+        self.spectating = None        # name of player being spectated (death camera), or None
+        self.spectate_room = None     # room_id of the room being spectated, or None
         self.avatar = Avatar(8.0, 5.0, "down")
 
     def quest(self, qid: str) -> int:

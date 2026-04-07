@@ -637,6 +637,14 @@ function renderRevivalWaiting() {
     ctx.fillText(revTxt, CW / 2 - ctx.measureText(revTxt).width / 2, barY + barH + 20);
   }
 
+  // "Watching: PlayerName" label when spectating another room
+  if (G.player.spectateData) {
+    ctx.font = "12px monospace";
+    ctx.fillStyle = "rgba(200, 200, 200, 0.7)";
+    const watchTxt = `Watching: ${G.player.spectateData.target_name}`;
+    ctx.fillText(watchTxt, CW / 2 - ctx.measureText(watchTxt).width / 2, CH / 2 - 35);
+  }
+
   // Respawn button — fade in with the waiting text
   const btnAlpha = Math.min(crossfade, 1.0);
   ctx.globalAlpha = btnAlpha;

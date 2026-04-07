@@ -17,6 +17,10 @@ async def send_to(player, msg: dict):
 
 async def broadcast_to_room(room_id: str, msg: dict, exclude=None):
     targets = [p for p in game.players.values() if p.room == room_id and p.ws != exclude]
+    # Also send to dead players spectating this room (death camera)
+    for p in game.spectators.get(room_id, set()):
+        if p.ws != exclude and p not in targets:
+            targets.append(p)
     await asyncio.gather(*(send_to(t, msg) for t in targets))
 
 

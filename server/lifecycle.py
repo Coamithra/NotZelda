@@ -731,6 +731,9 @@ def do_room_transition(player, exit_direction: str, msgs: list):
         # Player left a dungeon for a different area — notify remaining
         if old_inst and old_inst is not new_inst:
             broadcast_dungeon_player_positions(old_inst, player, msgs)
+
+        # Death camera — update spectators tracking this player or in old room
+        _update_spectators_on_transition(player, old_room, new_room_id, msgs)
     except Exception:
         # If anything fails mid-transition, restore avatar at spawn so the
         # player isn't permanently stuck as a ghost.
@@ -739,3 +742,26 @@ def do_room_transition(player, exit_direction: str, msgs: list):
             fallback = game.rooms[STARTING_ROOM]["spawn_points"]["default"]
             player.avatar = Avatar(float(fallback[0]), float(fallback[1]))
         raise
+
+
+def _update_spectators_on_transition(moved_player, old_room, new_room, msgs):
+    """Update death camera spectators when a living player changes rooms.
+
+    Two cases:
+    1. Dead players spectating moved_player — follow them to the new room.
+    2. Dead players whose death_room is old_room — the last ally may have left,
+       so they may need to start spectating.
+    """
+    from server.combat import _start_spectating, _stop_spectating, _check_spectate_needed
+
+    # Case 1: Dead players specifically spectating this player
+    for p in list(game.players.values()):
+        if p.dead and p.spectating == moved_player.name:
+            # Target moved rooms — send new spectate_room data
+            _start_spectating(p, moved_player, msgs)
+
+    # Case 2: Dead players in old_room who aren't spectating yet —
+    # if old_room is now empty of living allies, they need to start spectating
+    for p in list(game.players.values()):
+        if p.dead and p.death_room == old_room and p.name in game.tombstones:
+            _check_spectate_needed(p, msgs)

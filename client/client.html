@@ -664,7 +664,10 @@ function gameLoop(timestamp) {
       G.player.displayY = G.player.myPlayer.y + G.player.knockbackOffsetY + co.y;
     }
 
-    for (const p of Object.values(G.room.otherPlayers)) {
+    // Combine active players: normal room + spectated room (death camera)
+    const _allPlayers = Object.values(G.room.otherPlayers);
+    if (G.player.spectateData) _allPlayers.push(...Object.values(G.player.spectateData.players));
+    for (const p of _allPlayers) {
       if (p.knockbackSlide) {
         const ks = p.knockbackSlide;
         const elapsed = performance.now() - ks.startTime;
@@ -725,7 +728,11 @@ function gameLoop(timestamp) {
     }
 
     // Unified monster action interpolation with dead reckoning
-    for (const m of G.room.monsters) {
+    // Combine active monsters: normal room + spectated room (death camera)
+    const _allMonsters = G.player.spectateData
+      ? [...G.room.monsters, ...G.player.spectateData.monsters]
+      : G.room.monsters;
+    for (const m of _allMonsters) {
       if (m.action) {
         const a = m.action;
         // During monster freeze, clamp time to freeze start so actions pause
@@ -801,6 +808,33 @@ function gameLoop(timestamp) {
   } else if (G.ui.transition) {
     renderTransition(Date.now());
   } else {
+    // Death camera: swap room data to spectated room before rendering
+    const _spectating = G.player.waitingForRevival && G.player.spectateData;
+    let _savedRoom;
+    if (_spectating) {
+      const sd = G.player.spectateData;
+      _savedRoom = {
+        tilemap: G.room.currentRoom.tilemap,
+        exits: G.room.currentRoom.exits,
+        biome: G.room.currentRoom.biome,
+        otherPlayers: G.room.otherPlayers,
+        tombstones: G.room.tombstones,
+        monsters: G.room.monsters,
+        dark: G.room.dark,
+        lightSources: G.room.lightSources,
+        lanternHolders: G.room.lanternHolders,
+      };
+      G.room.currentRoom.tilemap = sd.tilemap;
+      G.room.currentRoom.exits = sd.exits;
+      G.room.currentRoom.biome = sd.biome;
+      G.room.otherPlayers = sd.players;
+      G.room.tombstones = sd.tombstones;
+      G.room.monsters = sd.monsters;
+      G.room.dark = sd.dark;
+      G.room.lightSources = sd.light_sources;
+      G.room.lanternHolders = sd.lantern_holders;
+    }
+
     renderRoom();
     renderRevealedTiles();
     renderBrightTiles();
@@ -834,6 +868,19 @@ function gameLoop(timestamp) {
     renderDungeonMinimap();
     if (G.player.dyingPlayerSelf) renderDeathAnimation();
     if (G.player.spiritJarRevive) renderSpiritJarRevive();
+
+    // Restore original room data after rendering
+    if (_spectating && _savedRoom) {
+      G.room.currentRoom.tilemap = _savedRoom.tilemap;
+      G.room.currentRoom.exits = _savedRoom.exits;
+      G.room.currentRoom.biome = _savedRoom.biome;
+      G.room.otherPlayers = _savedRoom.otherPlayers;
+      G.room.tombstones = _savedRoom.tombstones;
+      G.room.monsters = _savedRoom.monsters;
+      G.room.dark = _savedRoom.dark;
+      G.room.lightSources = _savedRoom.lightSources;
+      G.room.lanternHolders = _savedRoom.lanternHolders;
+    }
   }
   renderHeartsHUD();
   renderKeyHUD();

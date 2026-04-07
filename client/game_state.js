@@ -94,6 +94,7 @@ const G = {
     revivalProgress: null,      // {reviverName, startTime, duration} when being revived
     spiritJarRevive: null,      // {startTime} when spirit jar auto-revive animation is playing
     _respawnBtnHover: false,    // Respawn button hover state (set by mousemove in input.js)
+    spectateData: null,         // {room_id, tilemap, players: {}, tombstones: {}, monsters: [], target_name, ...} when spectating another room (death camera)
   },
 
   // Current room, entities, dungeon state

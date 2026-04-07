@@ -165,6 +165,8 @@ def _respawn_player(player, msgs):
     from server.lifecycle import on_player_enter_room, on_player_leave_room, send_room_enter
     from server.models import Avatar
 
+    _stop_spectating(player)
+
     old_room_id = player.death_room
     player.dead = False
     player.death_time = 0.0
@@ -238,6 +240,8 @@ def _place_tombstone(player, now, msgs):
     }, None))
     msgs.append(("send", player, {"type": "waiting_for_revival"}))
     log.event("TOMBSTONE", f"{player.name} tombstone placed in {player.death_room}")
+    # Check if the dead player should start spectating an ally in another room
+    _check_spectate_needed(player, msgs)
 
 
 def _remove_tombstone(name, msgs):
@@ -249,6 +253,204 @@ def _remove_tombstone(name, msgs):
         msgs.append(("broadcast", ts.room_id, {
             "type": "tombstone_removed", "name": name,
         }, None))
+
+
+def _stop_spectating(player):
+    """Remove a dead player from spectator tracking."""
+    if player.spectate_room:
+        spectators = game.spectators.get(player.spectate_room)
+        if spectators:
+            spectators.discard(player)
+            if not spectators:
+                del game.spectators[player.spectate_room]
+    player.spectating = None
+    player.spectate_room = None
+
+
+def _build_spectate_room_msg(room_id, target_name):
+    """Build a spectate_room message with full room data for a dead player."""
+    from server.lifecycle import get_room_monsters
+    room = game.rooms.get(room_id)
+    if not room:
+        return None
+
+    # Collect alive players in the target room
+    players = []
+    for p in game.players.values():
+        if p.room == room_id and p.avatar is not None:
+            a = p.avatar
+            players.append({
+                "name": p.name,
+                "x": a.x, "y": a.y,
+                "direction": a.direction,
+                "color_index": p.color_index,
+            })
+
+    # Collect tombstones in the target room
+    tombstones = []
+    for ts in game.tombstones.values():
+        if ts.room_id == room_id:
+            tombstones.append({"name": ts.name, "x": ts.x, "y": ts.y,
+                               "color_index": ts.color_index})
+
+    # Collect alive monsters
+    monsters = []
+    now = time.monotonic()
+    for i, m in enumerate(get_room_monsters(room_id)):
+        if m.alive:
+            mdata = {"id": i, "kind": m.kind, "x": m.x, "y": m.y,
+                     "walk_time": m.walk_time, "seq": m.move_seq}
+            if m.width > 1:
+                mdata["width"] = m.width
+            if m.height > 1:
+                mdata["height"] = m.height
+            if m.state == "walking":
+                sd = m.state_data
+                elapsed = now - sd.start_time
+                progress = min(elapsed / sd.walk_time, 1.0)
+                mdata["walking"] = True
+                mdata["walk_from"] = {"x": sd.from_x, "y": sd.from_y}
+                mdata["walk_to"] = {"x": sd.to_x, "y": sd.to_y}
+                mdata["walk_progress"] = progress
+                mdata["walk_time_step"] = sd.walk_time
+            monsters.append(mdata)
+
+    msg = {
+        "type": "spectate_room",
+        "room_id": room_id,
+        "tilemap": room["tilemap"],
+        "exits": room.get("exits", {}),
+        "biome": room.get("biome", "overworld"),
+        "monsters": monsters,
+        "players": players,
+        "tombstones": tombstones,
+        "target_name": target_name,
+        "dark": room.get("dark", False),
+        "light_sources": room.get("light_sources", []),
+    }
+
+    # Include custom tile/sprite data so spectator can render
+    custom_tiles = {}
+    from server.dungeons import is_dungeon_room
+    if is_dungeon_room(room_id):
+        custom_tiles = dict(game.custom_tile_recipes)
+    else:
+        for row in room["tilemap"]:
+            for tid in row:
+                if tid in game.custom_tile_recipes:
+                    custom_tiles[tid] = game.custom_tile_recipes[tid]
+    if custom_tiles:
+        msg["custom_tiles"] = custom_tiles
+
+    custom_sprites = {}
+    custom_death_sprites = {}
+    if is_dungeon_room(room_id):
+        custom_sprites = dict(game.custom_sprites)
+        custom_death_sprites = dict(game.custom_death_sprites)
+    else:
+        for m in monsters:
+            kind = m["kind"]
+            if kind in game.custom_sprites:
+                custom_sprites[kind] = game.custom_sprites[kind]
+            if kind in game.custom_death_sprites:
+                custom_death_sprites[kind] = game.custom_death_sprites[kind]
+    if custom_sprites:
+        msg["custom_sprites"] = custom_sprites
+    if custom_death_sprites:
+        msg["custom_death_sprites"] = custom_death_sprites
+
+    # Lantern holders for dark rooms
+    if room.get("dark"):
+        lantern_holders = [p["name"] for p in players
+                           if any(pl.name == p["name"] and pl.has_flag("has_lantern")
+                                  for pl in game.players.values())]
+        if lantern_holders:
+            msg["lantern_holders"] = lantern_holders
+
+    return msg
+
+
+def _start_spectating(dead_player, target, msgs):
+    """Begin spectating a target player in their room."""
+    _stop_spectating(dead_player)  # clean up any prior spectate
+
+    room_id = target.room
+    msg = _build_spectate_room_msg(room_id, target.name)
+    if not msg:
+        return
+
+    dead_player.spectating = target.name
+    dead_player.spectate_room = room_id
+    if room_id not in game.spectators:
+        game.spectators[room_id] = set()
+    game.spectators[room_id].add(dead_player)
+
+    msgs.append(("send", dead_player, msg))
+    log.event("SPECTATE", f"{dead_player.name} now spectating {target.name} in {room_id}")
+
+
+def _find_spectate_target(dead_player):
+    """Find the best alive player for a dead player to spectate.
+
+    Prefers players in the same dungeon instance. Returns Player or None.
+    """
+    from server.dungeons import get_dungeon_for_room, is_dungeon_room
+    death_room = dead_player.death_room
+    inst = get_dungeon_for_room(death_room)
+
+    candidates = []
+    for p in game.players.values():
+        if p is dead_player or p.dead or p.avatar is None:
+            continue
+        if inst:
+            # Same dungeon instance
+            if p.room in inst.active_rooms:
+                candidates.append(p)
+        else:
+            # Overworld — any alive non-dungeon player
+            if not is_dungeon_room(p.room):
+                candidates.append(p)
+
+    if not candidates:
+        return None
+
+    # If we can find someone in the same room, prefer them
+    for c in candidates:
+        if c.room == death_room:
+            return c
+
+    # Otherwise just pick the first candidate (could be improved with BFS distance)
+    return candidates[0]
+
+
+def _check_spectate_needed(dead_player, msgs):
+    """Check if a dead player should start or update spectating.
+
+    Called after tombstone placement and when allies leave the death room.
+    Only starts spectating if no living allies are in the death room.
+    """
+    death_room = dead_player.death_room
+    if not death_room:
+        return
+
+    # Check if any living ally is still in the death room
+    for p in game.players.values():
+        if p is not dead_player and not p.dead and p.avatar is not None and p.room == death_room:
+            # Ally present in death room — no need to spectate elsewhere
+            if dead_player.spectating:
+                _stop_spectating(dead_player)
+                msgs.append(("send", dead_player, {"type": "spectate_stop"}))
+            return
+
+    # No living allies in death room — find someone to spectate
+    target = _find_spectate_target(dead_player)
+    if target:
+        # Only update if target changed or not currently spectating
+        if dead_player.spectating != target.name or dead_player.spectate_room != target.room:
+            _start_spectating(dead_player, target, msgs)
+    elif dead_player.spectating:
+        _stop_spectating(dead_player)
+        msgs.append(("send", dead_player, {"type": "spectate_stop"}))
 
 
 def _cancel_revival(ts, msgs):
@@ -271,6 +473,8 @@ def _complete_revival(ts, now, msgs):
     player = ts.player
     reviver = ts.reviver
     room_id = ts.room_id
+
+    _stop_spectating(player)
 
     player.dead = False
     player.death_time = 0.0
@@ -307,6 +511,8 @@ def _spirit_jar_revive(player, now, msgs):
     """Auto-revive a dead player using their spirit jar."""
     from server.lifecycle import on_player_enter_room, send_room_enter
     from server.models import Avatar
+
+    _stop_spectating(player)
 
     room_id = player.death_room
     x, y = player.death_x, player.death_y

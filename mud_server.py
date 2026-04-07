@@ -258,6 +258,15 @@ async def handle_connection(websocket):
                     "type": "tombstone_removed", "name": player.name,
                 }, None))
 
+            # Clean up spectate state if this player was spectating
+            from server.combat import _stop_spectating
+            _stop_spectating(player)
+            # If anyone was spectating this player, re-evaluate their target
+            from server.combat import _check_spectate_needed
+            for sp in list(game.players.values()):
+                if sp.dead and sp.spectating == player.name:
+                    _check_spectate_needed(sp, disc_msgs)
+
             # Cancel any revival this player was channeling
             for ts in game.tombstones.values():
                 if ts.reviver is player:

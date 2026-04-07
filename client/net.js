@@ -119,6 +119,12 @@ function registerCustomContent(msg) {
   }
 }
 
+// Helper: get the active monster list — from spectateData when death-camera spectating, else G.room.monsters
+function _getMonsters() {
+  const sd = G.player.spectateData;
+  return (sd && G.player.waitingForRevival) ? sd.monsters : G.room.monsters;
+}
+
 // Dead reckoning: shorten animation by RTT/2 to compensate for message travel time.
 function computeEffectiveDuration(serverDurationMs) {
   const halfRtt = (G.conn.rtt || 0) / 2;
@@ -309,6 +315,7 @@ function handleMessage(msg) {
       G.player.waitingForRevival = false;
       G.player.revivalProgress = null;
       G.player._revivalWaitStart = null;
+      G.player.spectateData = null;
       G.room.dyingOtherPlayers = {};
       G.room.tombstones = {};
       G.room.activeRevival = null;
@@ -504,7 +511,9 @@ function handleMessage(msg) {
       }
 
       // Unified state update for another player (position, direction, dancing, attacking)
-      const op = G.room.otherPlayers[msg.name];
+      // When spectating another room, route to spectateData.players
+      const _sd = G.player.spectateData;
+      const op = (_sd && _sd.players[msg.name]) || G.room.otherPlayers[msg.name];
       if (!op) break;
 
       // Position update — push to interpolation buffer
@@ -532,7 +541,13 @@ function handleMessage(msg) {
 
     case "player_entered":
       if (msg.name !== G.player.myName) {
-        G.room.otherPlayers[msg.name] = createOtherPlayer(msg.x, msg.y, msg.direction, msg.color_index);
+        const _peSD = G.player.spectateData;
+        if (_peSD && G.player.waitingForRevival) {
+          // Route to spectate data — player entered the spectated room
+          _peSD.players[msg.name] = createOtherPlayer(msg.x, msg.y, msg.direction, msg.color_index);
+        } else {
+          G.room.otherPlayers[msg.name] = createOtherPlayer(msg.x, msg.y, msg.direction, msg.color_index);
+        }
         if (msg.dancing) startDance(msg.name);
         if (msg.attacking) startAttack(msg.name, msg.attacking.direction);
         if (msg.has_lantern) G.room.lanternHolders.add(msg.name);
@@ -541,13 +556,19 @@ function handleMessage(msg) {
       }
       break;
 
-    case "player_left":
-      delete G.room.otherPlayers[msg.name];
+    case "player_left": {
+      const _plSD = G.player.spectateData;
+      if (_plSD && _plSD.players[msg.name]) {
+        delete _plSD.players[msg.name];
+      } else {
+        delete G.room.otherPlayers[msg.name];
+      }
       G.room.lanternHolders.delete(msg.name);
       G.room.medallionHolders.delete(msg.name);
       stopDance(msg.name);
       appendChatLog(`<span class="chat-system">${escHtml(msg.name)} left the room</span>`);
       break;
+    }
 
     case "npc_thinking": {
       // Show animated "..." thinking bubble above the NPC
@@ -692,7 +713,7 @@ function handleMessage(msg) {
     }
 
     case "monster_walk_started": {
-      const walkMon = G.room.monsters.find(m => m.id === msg.id);
+      const walkMon = _getMonsters().find(m => m.id === msg.id);
       if (walkMon && (msg.seq == null || msg.seq >= walkMon.stateSeq)) {
         walkMon.stateSeq = msg.seq || (walkMon.stateSeq + 1);
         const durationMs = msg.walk_time * 1000;
@@ -721,7 +742,7 @@ function handleMessage(msg) {
     }
 
     case "monster_walk_complete": {
-      const wcMon = G.room.monsters.find(m => m.id === msg.id);
+      const wcMon = _getMonsters().find(m => m.id === msg.id);
       if (wcMon) {
         // Only commit if this completion matches the walk we're currently
         // animating.  A charge, knockback, or newer walk will have bumped
@@ -738,7 +759,7 @@ function handleMessage(msg) {
     }
 
     case "monster_moved": {
-      const mon = G.room.monsters.find(m => m.id === msg.id);
+      const mon = _getMonsters().find(m => m.id === msg.id);
       if (mon) {
         mon.x = msg.x; mon.y = msg.y;
         mon.displayX = msg.x; mon.displayY = msg.y;
@@ -750,13 +771,14 @@ function handleMessage(msg) {
     }
 
     case "monster_killed": {
-      const idx = G.room.monsters.findIndex(m => m.id === msg.id);
+      const _mkList = _getMonsters();
+      const idx = _mkList.findIndex(m => m.id === msg.id);
       if (idx !== -1) {
-        const mon = G.room.monsters[idx];
+        const mon = _mkList[idx];
         mon.action = null;
         const isBoss = (mon.width || 1) > 1 || (mon.height || 1) > 1;
         G.room.dyingMonsters.push({ kind: mon.kind, x: msg.x, y: msg.y, frame: 0, nextTime: Date.now() + (isBoss ? 400 : DYING_MONSTER_FRAME_MS), width: mon.width || 1, height: mon.height || 1 });
-        G.room.monsters.splice(idx, 1);
+        _mkList.splice(idx, 1);
         // Juice: corpse persistence
         addCorpse(mon.kind, msg.x, msg.y, mon.width, mon.height);
         // Juice: death particles in monster's sprite colors
@@ -817,7 +839,7 @@ function handleMessage(msg) {
     }
 
     case "monster_hit": {
-      const hitMon = G.room.monsters.find(m => m.id === msg.id);
+      const hitMon = _getMonsters().find(m => m.id === msg.id);
       if (hitMon) {
         const isBossHit = (hitMon.width || 1) > 1 || (hitMon.height || 1) > 1;
         SfxPlayer.play(isBossHit ? "sword_hit" : "sword_hit_flesh");
@@ -856,7 +878,7 @@ function handleMessage(msg) {
 
     case "monster_spawned":
       registerCustomContent(msg);
-      G.room.monsters.push({ id: msg.id, kind: msg.kind, x: msg.x, y: msg.y, displayX: msg.x, displayY: msg.y, width: msg.width || 1, height: msg.height || 1, action: null, stateSeq: 0, correctionOffset: { x: 0, y: 0 }, spawnTime: Date.now() });
+      _getMonsters().push({ id: msg.id, kind: msg.kind, x: msg.x, y: msg.y, displayX: msg.x, displayY: msg.y, width: msg.width || 1, height: msg.height || 1, action: null, stateSeq: 0, correctionOffset: { x: 0, y: 0 }, spawnTime: Date.now() });
       break;
 
     // --- Stage 5: Monster attack messages ---
@@ -898,7 +920,7 @@ function handleMessage(msg) {
       break;
 
     case "charge_prep": {
-      const prepMon = G.room.monsters.find(m => m.id === msg.id);
+      const prepMon = _getMonsters().find(m => m.id === msg.id);
       if (prepMon) {
         if (msg.seq != null && msg.seq < prepMon.stateSeq) break; // stale
         const durationMs = (msg.duration || 2.0) * 1000;
@@ -915,7 +937,7 @@ function handleMessage(msg) {
     }
 
     case "monster_charged": {
-      const chargedMon = G.room.monsters.find(m => m.id === msg.id);
+      const chargedMon = _getMonsters().find(m => m.id === msg.id);
       if (chargedMon) {
         if (msg.seq != null && msg.seq < chargedMon.stateSeq) break; // stale
         chargedMon.x = msg.x;
@@ -932,7 +954,7 @@ function handleMessage(msg) {
 
     case "teleport_start": {
       SfxPlayer.play("portal_enter");
-      const tpMon = G.room.monsters.find(m => m.id === msg.id);
+      const tpMon = _getMonsters().find(m => m.id === msg.id);
       if (tpMon) {
         const durationMs = (msg.delay || 0.5) * 1000;
         tpMon.action = {
@@ -949,7 +971,7 @@ function handleMessage(msg) {
     }
 
     case "teleport_end": {
-      const tpEndMon = G.room.monsters.find(m => m.id === msg.id);
+      const tpEndMon = _getMonsters().find(m => m.id === msg.id);
       if (tpEndMon) {
         if (msg.seq != null && msg.seq < tpEndMon.stateSeq) break; // stale
         tpEndMon.x = msg.x;
@@ -964,7 +986,7 @@ function handleMessage(msg) {
     }
 
     case "area_warning": {
-      const awMon = G.room.monsters.find(m => m.id === msg.id);
+      const awMon = _getMonsters().find(m => m.id === msg.id);
       if (awMon) {
         const durationMs = (msg.duration || 0.75) * 1000;
         awMon.action = {
@@ -986,7 +1008,7 @@ function handleMessage(msg) {
       break;
 
     case "warmup_cancel": {
-      const cancelMon = G.room.monsters.find(m => m.id === msg.id);
+      const cancelMon = _getMonsters().find(m => m.id === msg.id);
       if (cancelMon && cancelMon.action &&
           (cancelMon.action.type === "charge_warmup" || cancelMon.action.type === "area_warmup")) {
         cancelMon.action = null;
@@ -995,7 +1017,7 @@ function handleMessage(msg) {
     }
 
     case "monster_fade_in": {
-      const fadeMon = G.room.monsters.find(m => m.id === msg.id);
+      const fadeMon = _getMonsters().find(m => m.id === msg.id);
       if (fadeMon && fadeMon.action && fadeMon.action.type === "teleport_warmup") {
         fadeMon.action = null;
       }
@@ -1238,12 +1260,23 @@ function handleMessage(msg) {
       appendChatLog(`<span class="chat-system">Waiting for revival... Press Respawn to give up.</span>`);
       break;
 
-    case "tombstone_placed":
-      G.room.tombstones[msg.name] = { x: msg.x, y: msg.y, color_index: msg.color_index };
+    case "tombstone_placed": {
+      const _tpSD = G.player.spectateData;
+      if (_tpSD && G.player.waitingForRevival) {
+        _tpSD.tombstones[msg.name] = { x: msg.x, y: msg.y, color_index: msg.color_index };
+      } else {
+        G.room.tombstones[msg.name] = { x: msg.x, y: msg.y, color_index: msg.color_index };
+      }
       break;
+    }
 
-    case "tombstone_removed":
-      delete G.room.tombstones[msg.name];
+    case "tombstone_removed": {
+      const _trSD = G.player.spectateData;
+      if (_trSD && _trSD.tombstones[msg.name]) {
+        delete _trSD.tombstones[msg.name];
+      } else {
+        delete G.room.tombstones[msg.name];
+      }
       delete G.room.dyingOtherPlayers[msg.name];
       if (G.room.activeRevival && G.room.activeRevival.targetName === msg.name) {
         G.room.activeRevival = null;
@@ -1299,6 +1332,7 @@ function handleMessage(msg) {
       G.player.revivalProgress = null;
       G.player.dyingPlayerSelf = null;
       G.player._revivalWaitStart = null;
+      G.player.spectateData = null;
       appendChatLog(`<span class="chat-system">${escHtml(msg.reviver)} revived you!</span>`);
       break;
 
@@ -1310,8 +1344,52 @@ function handleMessage(msg) {
       G.player.waitingForRevival = false;
       G.player.revivalProgress = null;
       G.player._revivalWaitStart = null;
+      G.player.spectateData = null;
       G.player.spiritJarCount = Math.max(0, (G.player.spiritJarCount || 0) - 1);
       appendChatLog(`<span class="chat-system">The Spirit Jar saved you!</span>`);
+      break;
+
+    // ----- Death camera (spectate) -----
+
+    case "spectate_room": {
+      registerCustomContent(msg);
+      const sd = {
+        room_id: msg.room_id,
+        tilemap: msg.tilemap,
+        exits: msg.exits || {},
+        biome: msg.biome || "overworld",
+        players: {},
+        tombstones: {},
+        monsters: (msg.monsters || []).map((m, idx) => ({
+          id: m.id ?? idx, kind: m.kind, x: m.x, y: m.y,
+          displayX: m.x, displayY: m.y,
+          walk_time: m.walk_time || 0.25, seq: m.seq || 0,
+          width: m.width || 1, height: m.height || 1,
+          alive: true,
+          walking: m.walking ? {
+            from: m.walk_from, to: m.walk_to,
+            progress: m.walk_progress || 0,
+            walk_time: m.walk_time_step || 0.25,
+            startTime: performance.now() - (m.walk_progress || 0) * (m.walk_time_step || 0.25) * 1000,
+          } : null,
+        })),
+        target_name: msg.target_name,
+        dark: msg.dark || false,
+        light_sources: msg.light_sources || [],
+        lantern_holders: new Set(msg.lantern_holders || []),
+      };
+      for (const p of (msg.players || [])) {
+        sd.players[p.name] = createOtherPlayer(p.x, p.y, p.direction, p.color_index);
+      }
+      for (const ts of (msg.tombstones || [])) {
+        sd.tombstones[ts.name] = { x: ts.x, y: ts.y, color_index: ts.color_index };
+      }
+      G.player.spectateData = sd;
+      break;
+    }
+
+    case "spectate_stop":
+      G.player.spectateData = null;
       break;
 
     case "error":
