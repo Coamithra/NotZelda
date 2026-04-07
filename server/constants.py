@@ -87,6 +87,10 @@ NO_LANTERN_RADIUS = 0.75            # tile visibility radius without lantern (pr
 BRIGHT_TILE_RADIUS = 3.0            # static light radius for sconces, braziers, fireplaces
 SEAL_FRAGMENT_HP_BONUS = 2          # +1 heart container = +2 HP
 
+# Ghost items — rendered as translucent ghosts after this player picks them up,
+# while other players in the dungeon/world still need them.
+GHOST_ELIGIBLE = {"seal_fragment", "heart_container", "spirit_jar"}
+
 # Tick loop
 TICK_INTERVAL = 1.0 / 30     # ~33ms — unified game tick rate
 

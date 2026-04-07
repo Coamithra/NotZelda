@@ -407,11 +407,12 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
         if room_items and player.room not in game.locked_rooms:
             msg["dungeon_items"] = [{"x": it["x"], "y": it["y"], "item_type": it["item_type"]} for it in room_items]
 
-    # Per-player dungeon items (lantern, seal_fragment) — filter by player flags
+    # Per-player dungeon items (lantern, seal_fragment, spirit_jar) — filter by player flags
     if inst:
         pp_items = inst.per_player_items.get(player.room, [])
         if pp_items and player.room not in game.locked_rooms:
-            visible = [it for it in pp_items if not player.has_flag(f"has_{it['item_type']}")]
+            visible = [it for it in pp_items
+                       if not player.has_flag(it.get("flag", f"has_{it['item_type']}"))]
             if visible:
                 # Merge with regular dungeon_items for client rendering
                 existing = msg.get("dungeon_items", [])
@@ -423,6 +424,22 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
                                 and player.has_flag(f"has_{it['item_type']}")]
             if collected_chests:
                 msg["opened_chests"] = [{"x": it["x"], "y": it["y"]} for it in collected_chests]
+            # Ghost items: collected by this player, but others in the dungeon still need them
+            from server.constants import GHOST_ELIGIBLE
+            ghost_candidates = [it for it in pp_items
+                                if it["item_type"] in GHOST_ELIGIBLE
+                                and player.has_flag(it.get("flag", f"has_{it['item_type']}"))]
+            if ghost_candidates:
+                dungeon_players = [p for p in game.players.values()
+                                   if p.room and get_dungeon_for_room(p.room) is inst
+                                   and p is not player]
+                ghost_items = []
+                for it in ghost_candidates:
+                    flag = it.get("flag", f"has_{it['item_type']}")
+                    if any(not p.has_flag(flag) for p in dungeon_players):
+                        ghost_items.append({"x": it["x"], "y": it["y"], "item_type": it["item_type"]})
+                if ghost_items:
+                    msg["ghost_items"] = ghost_items
 
     # Dark room data (dungeon rooms)
     if inst:
@@ -455,6 +472,19 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
             existing = msg.get("dungeon_items", [])
             existing.extend([{"x": it["x"], "y": it["y"], "item_type": it["item_type"]} for it in visible])
             msg["dungeon_items"] = existing
+        # Ghost items for overworld: collected by this player but others still need them
+        ow_ghost_eligible = {"heart_container", "spirit_jar"}
+        collected_ow = [it for it in ow_items
+                        if it["item_type"] in ow_ghost_eligible
+                        and player.has_flag(it["flag"])]
+        if collected_ow:
+            other_players = [p for p in game.players.values() if p is not player]
+            ghost_items = msg.get("ghost_items", [])
+            for it in collected_ow:
+                if any(not p.has_flag(it["flag"]) for p in other_players):
+                    ghost_items.append({"x": it["x"], "y": it["y"], "item_type": it["item_type"]})
+            if ghost_items:
+                msg["ghost_items"] = ghost_items
 
     # Tell client which players in this room have the Tide Medallion (water-walking)
     medallion_holders = [p.name for p, a in avatars_in_room(player.room) if p.has_flag("has_tide_medallion")]

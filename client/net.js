@@ -147,6 +147,7 @@ function handleMessage(msg) {
       G.player.spiritJarCount = 0;
       G.room.dungeonState = null;
       G.room.dungeonGroundItems = [];
+      G.room.ghostItems = [];
       G.player.itemPickupActive = null;
       G.player.itemPickupEffects = {};
       if (typeof TITLE !== "undefined") TITLE.hide();
@@ -293,6 +294,7 @@ function handleMessage(msg) {
       G.fx.screenShake = null;
       G.ui.canvas.style.transform = "";
       G.room.dungeonGroundItems = msg.dungeon_items || [];
+      G.room.ghostItems = msg.ghost_items || [];
       G.room.openedChests = msg.opened_chests || [];
       G.room.monsterFreeze = null;
       G.room.dark = msg.dark || false;
@@ -395,6 +397,7 @@ function handleMessage(msg) {
         // Left the dungeon
         G.room.dungeonState = null;
         if (!msg.dungeon_items) G.room.dungeonGroundItems = [];
+        if (!msg.ghost_items) G.room.ghostItems = [];
       }
 
       if (cameFromConjuring) {
@@ -1038,8 +1041,9 @@ function handleMessage(msg) {
           y: G.player.displayY,
         };
         // Remove from ground items (dungeon items only)
-        // Per-player items (lantern, seal_fragment) stay on ground for other players
-        const perPlayerItems = new Set(["lantern", "tide_medallion", "seal_fragment", "heart_container"]);
+        // Per-player items stay on ground for other players; ghost-eligible become translucent
+        const ghostEligible = new Set(["seal_fragment", "heart_container", "spirit_jar"]);
+        const perPlayerItems = new Set(["lantern", "tide_medallion", "seal_fragment", "heart_container", "spirit_jar"]);
         if (perPlayerItems.has(msg.item_type)) {
           // Remove for THIS player only (visual) — server keeps it for others
           const px = G.player.displayX, py = G.player.displayY;
@@ -1047,9 +1051,12 @@ function handleMessage(msg) {
           G.room.dungeonGroundItems = G.room.dungeonGroundItems.filter(it => {
             if (!removed && it.item_type === msg.item_type && Math.abs(it.x - px) < 1 && Math.abs(it.y - py) < 1) {
               removed = true;
-              // Chest items: transition chest to opened state at this position
               if (msg.item_type === "lantern" || msg.item_type === "tide_medallion") {
+                // Chest items: transition chest to opened state at this position
                 G.room.openedChests.push({x: it.x, y: it.y});
+              } else if (ghostEligible.has(msg.item_type)) {
+                // Ghost-eligible: show as translucent ghost while others still need it
+                G.room.ghostItems.push({x: it.x, y: it.y, item_type: it.item_type});
               }
               return false;
             }
@@ -1149,6 +1156,14 @@ function handleMessage(msg) {
       }
       break;
     }
+
+    case "ghost_remove":
+      // All players have collected this item — remove the ghost
+      G.room.ghostItems = G.room.ghostItems.filter(
+        it => !(it.item_type === msg.item_type &&
+                Math.abs(it.x - msg.x) < 0.1 && Math.abs(it.y - msg.y) < 0.1)
+      );
+      break;
 
     case "room_freeze":
       G.room.monsterFreeze = {

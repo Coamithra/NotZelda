@@ -474,6 +474,16 @@ function renderDungeonGroundItems() {
   for (const ch of G.room.openedChests) {
     drawGroundChest(G.ui.ctx, ch.x * TS, ch.y * TS, true, SCALE);
   }
+  // Ghost items: collected by this player, but others still need them
+  for (const item of G.room.ghostItems) {
+    G.ui.ctx.save();
+    G.ui.ctx.globalAlpha = 0.35;
+    G.ui.ctx.filter = "grayscale(1)";
+    drawGroundItem(G.ui.ctx, item.x * TS, item.y * TS, item.item_type, SCALE);
+    G.ui.ctx.filter = "none";
+    G.ui.ctx.globalAlpha = 1;
+    G.ui.ctx.restore();
+  }
 }
 
 function updateItemPickups() {
