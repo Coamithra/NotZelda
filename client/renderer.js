@@ -1229,16 +1229,6 @@ function renderDrawMode() {
     ctx.beginPath(); ctx.moveTo(0, r * TS); ctx.lineTo(CW, r * TS); ctx.stroke();
   }
 
-  // Tint non-walkable tiles
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      if (!WALKABLE.has(tm[r][c])) {
-        ctx.fillStyle = "rgba(255, 60, 60, 0.12)";
-        ctx.fillRect(c * TS, r * TS, TS, TS);
-      }
-    }
-  }
-
   // Highlight tile under cursor — show preview of LMB tile
   const h = G.debug.drawHover;
   if (h) {

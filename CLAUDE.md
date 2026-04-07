@@ -83,6 +83,18 @@ Detailed implementation notes for each game system:
 - **`websockets` must stay at 12.0** — v16+ breaks `process_request` API. HTTP routing lives in `_GameServerProtocol.process_request()` (a subclass of `WebSocketServerProtocol`), not a standalone function, because websockets 12.0 only accepts GET — the subclass overrides `read_http_request()` to also accept POST for `/clear-log`.
 - **WebSocket bypasses nginx** — client connects `wss://` directly to Python on port 8443 (TLS via Python `ssl`). nginx only serves static files.
 
+### Debug Draw Mode
+
+`/draw` (debug only) enables in-game tile editing:
+
+- **Tile palette** appears below chat bar: room tiles + expandable "All Tiles" (56 built-in)
+- **LMB/RMB** click palette tiles to bind, then click canvas to place
+- **Smart undo**: placing same tile twice restores the original; placing on an identical tile is a no-op
+- **Edge sync**: placing on room border auto-updates neighbor room's corresponding tile (walkable→predominant walkable, wall→predominant wall)
+- **Instant persistence**: `.room` files saved to disk on every edit
+- **Server state**: `game.draw_overrides` tracks originals + linked neighbor overrides for undo
+- **Key files**: `server/commands.py` (`_cmd_draw`, `_process_draw_tile`), `server/rooms.py` (`save_room_tilemap`), `client/client.html` (palette HTML/CSS/JS), `client/input.js` (canvas click/contextmenu), `client/renderer.js` (`renderDrawMode`)
+
 ## Workflow Preferences
 
 - **Prefer self-hosted/local tools** over cloud APIs when quality is comparable. The user has an RTX 4070 Ti (12GB) and prefers owning the toolchain. Lead with open-source options first; suggest cloud APIs only as fallback.
