@@ -22,9 +22,7 @@ from server.lifecycle import (
 from server.dungeons import get_dungeon_for_room, _run_content_deprecation, start_background_regen, broadcast_to_dungeon
 from server.npc_chat import find_adjacent_npc
 
-# Ghost-eligible item types: rendered as translucent ghosts after this player
-# picks them up, while other players in the dungeon/world still need them.
-GHOST_ELIGIBLE = {"seal_fragment", "heart_container", "spirit_jar"}
+from server.constants import GHOST_ELIGIBLE
 
 
 def process_player_commands(player, now, msgs):

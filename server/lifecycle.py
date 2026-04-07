@@ -387,7 +387,7 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
             if collected_chests:
                 msg["opened_chests"] = [{"x": it["x"], "y": it["y"]} for it in collected_chests]
             # Ghost items: collected by this player, but others in the dungeon still need them
-            GHOST_ELIGIBLE = {"seal_fragment", "heart_container", "spirit_jar"}
+            from server.constants import GHOST_ELIGIBLE
             ghost_candidates = [it for it in pp_items
                                 if it["item_type"] in GHOST_ELIGIBLE
                                 and player.has_flag(it.get("flag", f"has_{it['item_type']}"))]
