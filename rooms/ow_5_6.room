@@ -1,18 +1,17 @@
 name: Tranquil Edge
 biome: lake
 music: overworld
-exits: east=ow_5_7 west=ow_5_5
+exits: north=ow_4_6 south=ow_6_6 east=ow_5_7 west=ow_5_5
 ---
-GR GR GR GR GR GR GR GR GR GR GR GR GR GR GR
-GR SH SH SH SH SH SH SH SH SH SH SH SH SH GR
-GR SH SH WA WA WA WA SH SH SH SH SH SH SH GR
-GR SH WA WA WA WA SH SH GR GR SH SH SH SH GR
-SH SH WA WA WA SH SH GR GR GR GR GR SH SH SH
-SH SH WA WA SH SH GR WD GR GR FL GR SH SH SH
-SH SH WA WA WA SH GR WD GR GR GR GR SH SH SH
-GR SH SH WA WA WA SH WD SH SH SH SH SH SH GR
-GR SH SH SH WA WA WA WA WA WA WA SH SH SH GR
-GR SH SH SH SH SH SH SH SH SH SH SH SH SH GR
-GR GR GR GR GR GR GR GR GR GR GR GR GR GR GR
+WA WA WA WA WA WA WA WA WA WA WA WA WA WA WA
+WA WA WA WA WA WA WA WA WA WA WA WA WA WA WA
+WA WA WA WA WA SH SH SH SH SH SH WA WA WA WA
+WA WA WA WA SH WS WS DR DR WS WS SH WA WA WA
+WA WA WA WA SH WS DR DR DR DR WS SH WA WA WA
+WA WA WA WA SH DR DR DR SD DR DR SH WA WA WA
+WA WA WA WA SH WS DR DR DR DR WS SH WA WA WA
+WA WA WA WA SH WS WS DR DR WS WS SH WA WA WA
+WA WA WA WA WA SH SH SH SH SH SH WA WA WA WA
+WA WA WA WA WA WA WA WA WA WA WA WA WA WA WA
+TR WA WA WA WA WA WA WA WA WA WA WA WA WA WA
 ---
-npc Dock_Builder 7 5 fisher I built this dock myself. Best view of the sunset on the whole lake. | Proud craftsman who built the dock with his own hands. Speaks with quiet pride. Loves the lake and its moods. Has seen strange lights under the water at night.

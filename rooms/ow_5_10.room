@@ -1,7 +1,7 @@
 name: Dark Slough
 biome: swamp
 music: overworld
-exits: west=ow_5_9 north=ow_4_10 east=ow_5_11
+exits: north=ow_4_10 south=ow_6_10 east=ow_5_11 west=ow_5_9
 ---
 DK DK DK DK DK DK SM SM SM DK DK DK DK DK DK
 DK SM SM SM SM SM SM SM SM SM SM SM SM SM DK

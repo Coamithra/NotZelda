@@ -1,18 +1,18 @@
 name: Flat Pasture
 biome: plains
 music: overworld
-exits: east=ow_4_10 north=ow_3_9 south=ow_5_9
+exits: west=ow_4_8 east=ow_4_10 north=ow_3_9 south=ow_5_9
 ---
 TR TR TR TR TR GR GR GR GR GR TR TR TR TR TR
 TR GR GR GR GR GR GR RD GR GR GR GR GR GR TR
-TR GR BO BO BO BO GR RD GR GR GR GR GR GR TR
-TR GR BO GR GR BO GR RD GR GR GR GR GR GR TR
-TR GR BO GR GR BO GR RD GR GR TG GR GR GR GR
-TR GR BO BO DR BO GR RD RD RD RD RD RD RD RD
-TR GR GR GR GR GR GR RD GR GR GR GR GR GR GR
-TR GR GR GR FL GR GR RD GR GR FL TG FL GR TR
-TR GR GR FL TG FL GR RD GR GR TG FL TG GR TR
-TR GR GR GR FL GR GR RD GR GR GR GR GR GR TR
+WA GR BO BO BO BO GR RD GR GR GR GR GR GR TR
+WA WA BO GR GR BO GR RD GR GR GR GR GR GR TR
+WA WA BO GR GR BO GR RD GR GR TG GR GR GR GR
+WA WA BO BO DR BO GR RD RD RD RD RD RD RD RD
+WA WA TG GR GR GR GR RD GR GR GR GR GR GR GR
+WA WA TG GR FL GR GR RD GR GR FL TG FL GR TR
+WA WA TG FL TG FL GR RD GR GR TG FL TG GR TR
+WA TG GR GR FL GR GR RD GR GR GR GR GR GR TR
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 ---
 npc Shepherd 3 3 farmer My flock grazes here in summer. Wolves come from the east at night. | Protective shepherd who watches over his flock. Speaks simply and honestly. Worried about wolves and stranger things coming from the east. Knows the plains well.

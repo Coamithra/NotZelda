@@ -1,19 +1,18 @@
-name: Winding Rapids
-biome: river
+name: Mossy Lane
+biome: plains
 music: overworld
 exits: north=ow_2_7 east=ow_3_8 south=ow_4_7 west=ow_3_6
 ---
-TR TR TR TR TR TR BR BR GR WA TR TR TR TR TR
-TR GR GR GR GR GR BR BR GR WA GR GR GR GR TR
-TR GR GR GR GR BR BR GR GR WA WA GR GR SH TR
-TR GR GR GR BR BR GR GR GR GR WA WA GR GR TR
-GR GR GR BR BR GR GR GR GR GR GR WA WA GR GR
-GR GR BR BR GR GR GR GR GR GR GR GR WA WA GR
-GR GR GR SH GR GR GR GR GR GR GR WA WA GR GR
-TR GR GR GR GR GR GR GR GR GR WA WA GR GR TR
-TR SH GR GR GR GR GR BR GR WA WA GR GR GR TR
-TR GR GR GR GR GR GR GR BR WA GR GR GR GR TR
-TR TR TR TR TR TR GR GR BR TR WA TR TR TR TR
+TR TR TR TR TR TR GR GR GR GR TR TR TR TR TR
+TR GR GR GR GR GR GR RD GR GR GR GR GR GR TR
+TR GR FL GR GR GR GR RD GR TR GR GR FL GR TR
+TR GR GR GR GR GR GR RD GR GR GR GR GR GR TR
+GR GR GR GR TR GR GR RD GR FL GR GR GR GR GR
+GR GR GR TR TR TR GR RD GR GR GR GR GR GR GR
+GR GR GR GR TR GR GR RD GR GR GR TR TR GR GR
+TR GR GR GR GR GR GR RD GR GR TR TR TR GR TR
+TR GR GR FL GR GR GR RD GR GR GR TR GR GR TR
+TR TR GR GR GR GR GR RD GR GR GR GR GR GR TR
+TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 ---
-npc River_Guard 7 4 guard The rapids are treacherous. Use the bridges or you'll be swept away. | Stern river guard who has pulled too many fools from the rapids. Speaks with authority. Knows every crossing point along the river. Takes his duty seriously.
 monster slime 4 7

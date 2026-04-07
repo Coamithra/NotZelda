@@ -1,7 +1,7 @@
 name: Green Fields
 biome: plains
 music: overworld
-exits: south=ow_7_10 west=ow_6_9
+exits: north=ow_5_10 south=ow_7_10 east=ow_6_11 west=ow_6_9
 ---
 TR TR TR TR TR TR TR TR TR TR TR TR TR TR TR
 TR GR GR GR GR GR GR GR GR GR GR GR GR GR TR
@@ -13,7 +13,7 @@ GR GR GR GR GR GR GR RD GR ST ST ST GR GR TR
 TR GR GR TG GR GR GR RD GR GR GR GR GR GR TR
 TR GR GR GR TG GR GR RD GR GR GR GR GR GR TR
 TR GR GR GR GR GR GR RD GR GR GR GR GR GR TR
-TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
+RW TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 ---
 npc Watchman 10 4 guard The old watchtower. You can see the castle from up here on a clear day. | Lonely watchman stationed at a crumbling tower. Speaks wistfully about the view. Has watched the castle ruins for years. Reports strange movements in the graveyard below.
 monster slime 3 3

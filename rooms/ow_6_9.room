@@ -1,7 +1,7 @@
 name: Open Flatland
 biome: plains
 music: overworld
-exits: north=ow_5_9 west=ow_6_8 east=ow_6_10
+exits: north=ow_5_9 south=ow_7_9 east=ow_6_10 west=ow_6_8
 ---
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 TR GR GR GR GR GR GR RD GR GR GR GR GR GR TR
@@ -13,6 +13,6 @@ GR GR GR GR GR GR GR RD GR GR GR GR GR GR GR
 TR GR GR FL FL FL GR RD GR GR GR GR GR GR TR
 TR GR GR FL TG FL GR RD GR GR GR TG GR GR TR
 TR GR GR FL FL FL GR RD GR GR GR GR GR GR TR
-TR TR TR TR TR TR TR TR TR TR TR TR TR TR TR
+RW RW RW RW RW RW RW RW RW RW RW RW RW RW RW
 ---
 monster slime 7 7

@@ -2,7 +2,7 @@ name: Mossy Passage
 biome: castle
 music: castle_ruins
 dark: true
-exits: north=ow_9_7 west=ow_10_6
+exits: north=ow_9_7 east=ow_10_8 west=ow_10_6
 ---
 RW RW RW RW RF RW RW RW RW RW RW RW RW RW RW
 RW RF RF RF RF RF RF RD RF RF RF RF RF RF RW

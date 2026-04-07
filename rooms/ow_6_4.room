@@ -1,7 +1,7 @@
 name: Windy Prairie
 biome: plains
 music: overworld
-exits: east=ow_6_5 south=ow_7_4 west=ow_6_3
+exits: north=ow_5_4 south=ow_7_4 east=ow_6_5 west=ow_6_3
 ---
 TR TR TR TR TR TR TR TR TR TR TR TR TR TR TR
 TR GR GR GR GR GR GR GR GR GR GR GR GR GR TR

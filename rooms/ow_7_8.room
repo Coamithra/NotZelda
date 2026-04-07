@@ -1,7 +1,7 @@
 name: Ruined Walls
 biome: castle
 music: castle_ruins
-exits: north=ow_6_8 south=ow_8_8
+exits: north=ow_6_8 south=ow_8_8 east=ow_7_9 west=ow_7_7
 ---
 RW RW RW RW RW RW RW RW RW RW RW RF RW RW RW
 RW RF RF RF RF RF RF RD RD RF RF RF RF RF RW

@@ -1,7 +1,7 @@
 name: Damp Fen
 biome: swamp
 music: overworld
-exits: west=ow_4_11 east=ow_4_13
+exits: north=ow_3_12 south=ow_5_12 east=ow_4_13 west=ow_4_11
 ---
 DK DK DK DK DK DK DK DK DK DK DK DK DK DK DK
 DK SM SM SM SM SM SM SM SM SM SM SM SM SM DK

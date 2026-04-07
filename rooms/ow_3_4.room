@@ -1,7 +1,7 @@
 name: Quiet Downs
 biome: plains
 music: overworld
-exits: south=ow_4_4 north=ow_2_4 east=ow_3_5
+exits: north=ow_2_4 south=ow_4_4 east=ow_3_5 west=ow_3_3
 ---
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 TR GR GR GR GR GR GR RD GR GR GR GR GR GR TR

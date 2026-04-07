@@ -1,7 +1,7 @@
 name: Sun-baked Dunes
 biome: desert
 music: overworld
-exits: north=ow_2_2 east=ow_3_3 south=ow_4_2
+exits: north=ow_2_2 south=ow_4_2 east=ow_3_3 west=ow_3_1
 ---
 CC CC CC CC CC CC SA SA SA CC CC CC CC CC CC
 CC SA SA SA SA SA SA SA SA SA SA SA SA SA CC

@@ -1,7 +1,7 @@
 name: Tall Heath
 biome: plains
 music: overworld
-exits: south=ow_3_4 west=ow_2_3 east=ow_2_5
+exits: north=ow_1_4 south=ow_3_4 east=ow_2_5 west=ow_2_3
 ---
 TR TR TR TR TR TR TR TR TR TR TR TR TR TR TR
 TR GR GR GR GR GR GR GR GR GR GR GR GR GR TR

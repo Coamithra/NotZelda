@@ -1,7 +1,7 @@
 name: Stagnant Bottom
 biome: swamp
 music: overworld
-exits: west=ow_3_12
+exits: north=ow_2_13 south=ow_4_13 east=ow_3_14 west=ow_3_12
 ---
 DK DK DK DK DK DK DK DK DK DK DK DK DK DK DK
 DK SM SM SM SM SM SM SM SM SM SM SM SM SM DK

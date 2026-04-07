@@ -1,7 +1,7 @@
 name: Ancient Yard
 biome: graveyard
 music: chapel
-exits: north=ow_0_12 east=ow_1_13
+exits: north=ow_0_12 south=ow_2_12 east=ow_1_13 west=ow_1_11
 ---
 IF IF IF IF IF IF GR GR GR IF IF IF IF IF IF
 IF GR GR GR GR GR GR RD GR GR GR GR GR GR IF

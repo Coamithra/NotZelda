@@ -1,7 +1,7 @@
 name: Bare Overlook
 biome: mountain
 music: chapel
-exits: south=ow_2_2 down=mtn_cave_bare_1
+exits: south=ow_2_2 east=ow_1_3 down=mtn_cave_bare_1
 ---
 MT MT MT MT MT MT MT MT MT MT MT MT MT MT MT
 MT ST ST ST ST ST ST ST ST ST ST ST ST ST MT

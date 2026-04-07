@@ -1,7 +1,7 @@
 name: Damp Mire
 biome: swamp
 music: overworld
-exits: south=ow_4_14
+exits: south=ow_4_14 west=ow_3_13
 ---
 DK DK DK DK DK DK DK DK DK DK DK DK DK DK DK
 DK SM SM SM SM SM SM SM SM SM SM SM SM SM DK

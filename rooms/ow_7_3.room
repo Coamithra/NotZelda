@@ -1,7 +1,7 @@
 name: Wide Meadow
 biome: plains
 music: overworld
-exits: north=ow_6_3
+exits: north=ow_6_3 east=ow_7_4
 ---
 TR TR TR GR GR GR GR GR GR GR GR GR TR TR TR
 TR GR GR GR GR GR GR RD GR GR GR GR GR GR TR

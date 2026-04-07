@@ -1,7 +1,7 @@
 name: Dry Plain
 biome: desert
 music: overworld
-exits: west=ow_4_1 north=ow_3_2 east=ow_4_3
+exits: north=ow_3_2 south=ow_5_2 east=ow_4_3 west=ow_4_1
 ---
 CC CC CC CC CC CC SA SA SA CC CC CC CC CC CC
 CC SA SA SA SA SA SA SA SA SA SA SA SA SA CC

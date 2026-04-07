@@ -1,18 +1,18 @@
 name: Wide Beach
 biome: lake
 music: overworld
-exits: north=ow_3_8 west=ow_4_7
+exits: north=ow_3_8 east=ow_4_9 south=ow_5_8 west=ow_4_7
 ---
-GR GR GR GR GR GR SH SH SH GR GR GR GR GR GR
-GR SH SH SH SH SH SH SH SH SH SH SH SH SH GR
-GR SH WA WA WA WA WA WA WA SH SH SH SH SH GR
-GR SH WA WA WA WA WA WA SH SH GR GR SH SH GR
-SH SH WA WA WA WA WA SH SH GR GR GR GR SH GR
-SH SH WA WA WA WA SH SH GR GR BO GR GR SH GR
-SH SH WA WA WA WA WA SH SH GR GR GR GR SH GR
-GR SH WA WA WA WA WA WA SH SH FL GR SH SH GR
-GR SH SH WA WA WA WA WA WA SH SH SH SH SH GR
-GR SH SH SH SH SH SH SH SH SH SH SH SH SH GR
-GR GR GR GR GR GR GR GR GR GR GR GR GR GR GR
+TR TR TR TR TR TR SH SH SH WA WA TR TR TR TR
+GR SH SH SH SH SH SH SH SH SH WA WA WA WA TR
+GR SH WA WA WA WA WA WA WA SH SH SH SH WA WA
+SH WA WA WA WA WA WA WA SH SH GR GR SH SH WA
+WA WA WA WA WA WA WA SH SH GR GR GR GR SH WA
+WA WA WA WA WA WA SH SH GR GR BO GR GR SH WA
+WA WA WA WA WA WA WA SH SH GR GR GR GR SH WA
+WA WA WA WA WA WA WA WA SH SH FL GR SH SH WA
+WA WA WA WA WA WA WA WA WA SH SH SH SH WA WA
+TR WA WA WA WA WA WA WA WA WA WA WA WA WA WA
+TR TR WA WA WA WA WA WA WA WA WA WA WA WA TR
 ---
 npc Beachcomber 10 5 farmer Found an old boat hull under the sand once. Lake swallows everything eventually. | Curious beachcomber who collects things washed up by the lake. Speaks in a rambling, friendly way. Has found strange artifacts and bones. Believes the lake is bottomless.

@@ -1,7 +1,7 @@
 name: Ancient Graveyard
 biome: graveyard
 music: chapel
-exits: west=ow_1_10 north=ow_0_11
+exits: north=ow_0_11 south=ow_2_11 east=ow_1_12 west=ow_1_10
 ---
 IF IF IF IF IF IF GR GR GR IF IF IF IF IF IF
 IF GR GR GR GR GR GR RD GR GR GR GR GR GR IF

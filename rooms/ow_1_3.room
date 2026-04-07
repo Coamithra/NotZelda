@@ -1,7 +1,7 @@
 name: Narrow Pass
 biome: mountain
 music: chapel
-exits: north=ow_0_3 east=ow_1_4 south=ow_2_3
+exits: north=ow_0_3 south=ow_2_3 east=ow_1_4 west=ow_1_2
 ---
 MT MT MT MT MT MT ST ST ST MT MT MT MT MT MT
 MT ST ST ST ST ST ST DT ST ST ST ST ST ST MT

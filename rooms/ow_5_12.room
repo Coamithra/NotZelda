@@ -2,7 +2,7 @@ name: Sinking Marsh
 biome: swamp
 music: overworld
 dark: 0.5
-exits: west=ow_5_11 down=d2_entrance
+exits: north=ow_4_12 south=ow_6_12 west=ow_5_11 down=d2_entrance
 ---
 DK DK DK DK DK DK DK DK DK DK DK DK DK DK DK
 DK SM SM SM SM SM SM SM SM SM SM SM SM SM DK

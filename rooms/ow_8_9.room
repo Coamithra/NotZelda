@@ -2,7 +2,7 @@ name: Forsaken Bailey
 biome: castle
 music: castle_ruins
 locked: true
-exits: north=ow_7_9 south=ow_9_9
+exits: north=ow_7_9 south=ow_9_9 west=ow_8_8
 ---
 RW RW RW RW RW RW DR DR DR RW RW RW RW RW RW
 RW RF RF RF RF RF RF RD RF RF RF RF RF RF RW

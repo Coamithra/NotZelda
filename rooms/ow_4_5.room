@@ -1,18 +1,18 @@
 name: Tranquil Bay
 biome: lake
 music: overworld
-exits: south=ow_5_5 east=ow_4_6 west=ow_4_4
+exits: north=ow_3_5 south=ow_5_5 east=ow_4_6 west=ow_4_4
 ---
-GR GR GR GR GR GR GR GR GR GR GR GR GR GR GR
-GR SH SH SH SH SH SH SH SH SH SH SH SH SH GR
-GR SH SH WA WA WA WA WA WA WA WA WA SH SH GR
-GR SH WA WA WA WA WA WA WA WA WA WA WA SH GR
-SH SH WA WA WA WA WA WA WA WA WA WA SH SH SH
-SH SH WA WA WA GR WD GR WA WA WA WA SH SH SH
-SH SH WA WA WA SH WD SH WA WA WA WA SH SH SH
-GR SH SH WA WA WA WD WA WA WA WA SH SH SH GR
-GR SH SH SH SH SH SH SH SH SH SH SH SH SH GR
-GR SH SH SH SH SH SH SH SH SH SH SH SH SH GR
-GR GR GR GR GR GR SH SH SH GR GR GR GR GR GR
+TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
+TR SH SH SH SH SH SH SH SH SH SH SH SH SH GR
+TR SH SH WA WA WA WD WA WA WA WA WA SH SH GR
+TR SH WA WA WA WA WD WA WA WA WA WA WA WA WA
+SH SH WA WA WA SH WD SH WA WA WA WA WA WA WA
+SH SH WA WA WA GR WD GR WA WA WA WA WA WA WA
+SH SH WA WA WA WA WA WA WA WA WA WA WA WA WA
+TR SH SH WA WA WA WA WA WA WA WA WA WA WA WA
+TR SH SH SH SH SH SH SH WA WA WA WA WA WA WA
+TR SH SH SH SH SH SH SH SH WA WA WA WA WA WA
+TR GR GR GR GR GR SH SH SH WA WA WA WA WA WA
 ---
 npc Fisherman 6 5 fisher The dock goes out to the deepest part. Fish bite best at dawn. | Easygoing fisherman who spends all day at the lake. Speaks slowly and contentedly. Knows the lake's secrets — deep currents, hidden caves, and the occasional strange catch. Happiest with a line in the water. Has a spare fishing rod he'd give to anyone who truly appreciates the craft. | Fishing Rod:The adventurer shows genuine interest in fish, fishing, the lake, or the Fisherman's stories and lifestyle.

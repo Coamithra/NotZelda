@@ -1,7 +1,7 @@
 name: Wide Plains
 biome: plains
 music: overworld
-exits: south=ow_3_11 west=ow_2_10 east=ow_2_12
+exits: north=ow_1_11 south=ow_3_11 east=ow_2_12 west=ow_2_10
 ---
 TR TR TR TR TR TR TR TR TR TR TR TR TR TR TR
 TR GR GR GR GR GR GR GR GR GR GR GR GR GR TR

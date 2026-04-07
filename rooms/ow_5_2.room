@@ -1,7 +1,7 @@
 name: Barren Ridge
 biome: desert
 music: overworld
-exits: east=ow_5_3 west=ow_5_1 south=ow_6_2 down=desert_oasis
+exits: north=ow_4_2 south=ow_6_2 east=ow_5_3 west=ow_5_1 down=desert_oasis
 ---
 CC CC CC CC CC CC CC CC CC CC CC CC CC CC CC
 CC SA SA SA SA SA SA SA SA SA SA SA SA SA CC

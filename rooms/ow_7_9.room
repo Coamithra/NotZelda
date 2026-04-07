@@ -1,7 +1,7 @@
 name: Shattered Armory
 biome: castle
 music: castle_ruins
-exits: south=ow_8_9 down=d1_entrance
+exits: north=ow_6_9 south=ow_8_9 east=ow_7_10 west=ow_7_8 down=d1_entrance
 ---
 RW RW RW RW RW RW RW RW RW RW RW RW RW RW RW
 RW RF RF RF RF RF RF RF RF RF RF RF RF RF RW

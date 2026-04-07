@@ -1,7 +1,7 @@
 name: Peak Ascent
 biome: mountain
 music: chapel
-exits: west=ow_1_3 east=ow_1_5 north=ow_0_4
+exits: north=ow_0_4 south=ow_2_4 east=ow_1_5 west=ow_1_3
 ---
 MT MT MT MT MT MT ST ST ST MT MT MT MT MT MT
 MT ST ST ST ST ST ST DT ST ST ST ST ST ST MT

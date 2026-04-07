@@ -1,7 +1,7 @@
 name: Stone Battlement
 biome: castle
 music: castle_ruins
-exits: west=ow_10_8
+exits: north=ow_9_9 west=ow_10_8
 ---
 RW RW RW RW RW RW RW RW RW RW RW RW RW RW RW
 RW RF RF RF RF RF RF RF RF RF RF RF RF RF RW

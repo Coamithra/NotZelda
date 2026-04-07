@@ -1,7 +1,7 @@
 name: Cracked Basin
 biome: desert
 music: overworld
-exits: west=ow_3_0 north=ow_2_1
+exits: north=ow_2_1 south=ow_4_1 east=ow_3_2 west=ow_3_0
 ---
 CC CC CC CC CC CC SA SA SA CC CC CC CC CC CC
 CC SA SA SA SA SA SA DT SA SA SA SA CC CC CC

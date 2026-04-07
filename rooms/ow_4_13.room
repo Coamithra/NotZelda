@@ -1,7 +1,7 @@
 name: Thick Swamp
 biome: swamp
 music: overworld
-exits: west=ow_4_12 east=ow_4_14
+exits: north=ow_3_13 east=ow_4_14 west=ow_4_12
 ---
 DK DK DK DK DK DK DK DK DK DK DK DK DK DK DK
 DK SM SM SM SM SM SM SM SM SM SM SM SM SM DK

@@ -1,7 +1,7 @@
 name: Sun-baked Wastes
 biome: desert
 music: overworld
-exits: south=ow_5_3 west=ow_4_2
+exits: north=ow_3_3 south=ow_5_3 east=ow_4_4 west=ow_4_2
 ---
 CC CC CC CC CC CC CC CC CC CC CC CC CC CC CC
 CC SA SA SA SA SA SA SA SA SA SA SA CC SA CC

@@ -1,7 +1,7 @@
 name: Damp Creek
 biome: swamp
 music: overworld
-exits: west=ow_6_11
+exits: north=ow_5_12 west=ow_6_11
 ---
 DK DK DK DK DK DK DK DK DK DK DK DK DK DK DK
 DK SM SM SM SM SM WA WA SM SM SM SM SM SM DK

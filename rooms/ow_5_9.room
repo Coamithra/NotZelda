@@ -1,7 +1,7 @@
 name: Open Pasture
 biome: plains
 music: overworld
-exits: south=ow_6_9 north=ow_4_9 east=ow_5_10
+exits: north=ow_4_9 south=ow_6_9 east=ow_5_10 west=ow_5_8
 ---
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 TR GR GR GR GR GR GR RD GR GR GR GR GR GR TR

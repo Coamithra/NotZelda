@@ -1,7 +1,7 @@
 name: Quiet Green
 biome: plains
 music: overworld
-exits: north=ow_3_4 east=ow_4_5 south=ow_5_4
+exits: north=ow_3_4 south=ow_5_4 east=ow_4_5 west=ow_4_3
 ---
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 TR GR GR GR GR GR GR RD GR GR GR GR GR GR TR

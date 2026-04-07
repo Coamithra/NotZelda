@@ -1,7 +1,7 @@
 name: Wild Green
 biome: plains
 music: overworld
-exits: south=ow_6_3 west=ow_5_2 north=ow_4_3
+exits: north=ow_4_3 south=ow_6_3 east=ow_5_4 west=ow_5_2
 ---
 TR TR TR TR TR TR GR GR GR TR TR TR TR TR TR
 TR GR GR GR GR GR GR RD GR GR GR GR GR GR TR

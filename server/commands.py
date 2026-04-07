@@ -1205,32 +1205,6 @@ def _cmd_draw(player, args, msgs):
     msgs.append(("send", player, {"type": "info", "text": f"Draw mode {mode}"}))
 
 
-def _get_predominant_tiles(room):
-    """Find the most common wall and walkable tiles on the room's outer edge."""
-    from collections import Counter
-    tilemap = room["tilemap"]
-    wall_counts = Counter()
-    walk_counts = Counter()
-    # Top and bottom rows
-    for c in range(ROOM_COLS):
-        for r in (0, ROOM_ROWS - 1):
-            tile = tilemap[r][c]
-            if game.is_walkable_tile(tile):
-                walk_counts[tile] += 1
-            else:
-                wall_counts[tile] += 1
-    # Left and right columns (excluding corners already counted)
-    for r in range(1, ROOM_ROWS - 1):
-        for c in (0, ROOM_COLS - 1):
-            tile = tilemap[r][c]
-            if game.is_walkable_tile(tile):
-                walk_counts[tile] += 1
-            else:
-                wall_counts[tile] += 1
-    wall_tile = wall_counts.most_common(1)[0][0] if wall_counts else "WS"
-    walk_tile = walk_counts.most_common(1)[0][0] if walk_counts else "GR"
-    return wall_tile, walk_tile
-
 
 def _get_edge_neighbor(room, row, col):
     """If (row, col) is on the room edge with an exit, return (neighbor_room_id, neighbor_row, neighbor_col)."""
@@ -1339,11 +1313,16 @@ def _sync_edge_neighbor(source_key, n_room_id, n_row, n_col, n_room,
     n_key = (n_room_id, n_row, n_col)
     n_current = n_room["tilemap"][n_row][n_col]
     is_walkable = game.is_walkable_tile(placed_tile)
-    n_wall, n_walk = _get_predominant_tiles(n_room)
-    n_new = n_walk if is_walkable else n_wall
+
+    # Skip if the neighbor tile already matches walkability (wall↔wall, walkable↔walkable)
+    if game.is_walkable_tile(n_current) == is_walkable:
+        return  # neighbor already has the right type
+
+    # Mirror the placed tile directly rather than using room's predominant tile
+    n_new = placed_tile
 
     if n_current == n_new:
-        return  # neighbor already has the right type
+        return  # neighbor already has the exact tile
 
     if n_key not in game.draw_overrides:
         game.draw_overrides[n_key] = {"original": n_current, "linked": source_key}

@@ -1,7 +1,7 @@
 name: Fetid Morass
 biome: swamp
 music: overworld
-exits: east=ow_3_13 west=ow_3_11 north=ow_2_12
+exits: north=ow_2_12 south=ow_4_12 east=ow_3_13 west=ow_3_11
 ---
 DK DK DK DK DK DK SM SM SM DK DK DK DK DK DK
 DK SM SM SM SM SM SM SM SM SM SM SM SM SM DK
