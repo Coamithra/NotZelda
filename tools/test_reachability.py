@@ -1,7 +1,7 @@
-"""Integration tests — dungeon reachability.
+"""Integration tests — reachability and room connectivity.
 
 Tests BFS reachability, dungeon generation validity, boss/item accessibility,
-and key placement correctness.
+key placement correctness, and edge tile consistency between neighboring rooms.
 """
 
 import sys
@@ -12,7 +12,7 @@ from collections import Counter, deque
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from test_harness import (
-    load_dungeon_assets, reset_game_state, run_tests,
+    load_dungeon_assets, load_test_assets, reset_game_state, run_tests,
 )
 from server.state import game
 from server.constants import bfs_reachable, ROOM_COLS, ROOM_ROWS
@@ -456,6 +456,115 @@ def test_items_in_reachable_cells(clock):
     _clean_dungeon_state()
     assert not failures, (
         f"{len(failures)} item(s) unreachable:\n" + "\n".join(failures)
+    )
+
+
+def _reachable_rooms_from_overworld():
+    """BFS from all overworld rooms through exits to find all reachable rooms."""
+    visited = set()
+    queue = deque()
+    for room_id in game.rooms:
+        if room_id.startswith("ow_"):
+            visited.add(room_id)
+            queue.append(room_id)
+    while queue:
+        rid = queue.popleft()
+        for target in game.rooms[rid].get("exits", {}).values():
+            if target not in visited and target in game.rooms:
+                visited.add(target)
+                queue.append(target)
+    return visited
+
+
+def _is_water_tile(tile_code):
+    """Check if a tile code is a water tile."""
+    recipe = game.custom_tile_recipes.get(tile_code, {})
+    return recipe.get("water", False)
+
+
+# Edge-direction mapping: direction -> (edge row/col in this room,
+#                                        edge row/col in neighbor,
+#                                        iteration axis length,
+#                                        builder: idx -> (row, col) for this room,
+#                                        builder: idx -> (row, col) for neighbor)
+_EDGE_MAP = {
+    "north": (lambda i: (0, i),  lambda i: (ROOM_ROWS - 1, i), ROOM_COLS),
+    "south": (lambda i: (ROOM_ROWS - 1, i), lambda i: (0, i),  ROOM_COLS),
+    "west":  (lambda i: (i, 0),  lambda i: (i, ROOM_COLS - 1),  ROOM_ROWS),
+    "east":  (lambda i: (i, ROOM_COLS - 1), lambda i: (i, 0),   ROOM_ROWS),
+}
+
+
+def test_edge_tile_consistency(clock):
+    """Walkable edge tiles must have walkable counterparts in the neighbor room.
+
+    For every room reachable from the overworld, checks each cardinal exit
+    (north/south/east/west). Along the shared edge:
+      - walkable tiles must face walkable tiles in the neighbor
+      - water tiles must face water tiles in the neighbor
+    """
+    load_test_assets()
+    reachable = _reachable_rooms_from_overworld()
+
+    failures = []
+    checked = set()  # avoid checking A->B and B->A
+
+    for room_id in sorted(reachable):
+        room = game.rooms[room_id]
+        tilemap = room["tilemap"]
+
+        for direction, target_id in room.get("exits", {}).items():
+            if direction not in _EDGE_MAP:
+                continue  # skip up/down (stair-based, not edge-based)
+            if target_id not in game.rooms:
+                continue
+            pair = frozenset((room_id, target_id, direction))
+            if pair in checked:
+                continue
+            checked.add(pair)
+
+            this_pos, neighbor_pos, length = _EDGE_MAP[direction]
+            neighbor_tilemap = game.rooms[target_id]["tilemap"]
+
+            for i in range(length):
+                r1, c1 = this_pos(i)
+                r2, c2 = neighbor_pos(i)
+                tile_a = tilemap[r1][c1]
+                tile_b = neighbor_tilemap[r2][c2]
+                walk_a = game.is_walkable_tile(tile_a)
+                walk_b = game.is_walkable_tile(tile_b)
+                water_a = _is_water_tile(tile_a)
+                water_b = _is_water_tile(tile_b)
+
+                # Water must match water
+                if water_a and not water_b:
+                    failures.append(
+                        f"{room_id}({r1},{c1})={tile_a} {direction}-> "
+                        f"{target_id}({r2},{c2})={tile_b}: "
+                        f"water must face water"
+                    )
+                elif water_b and not water_a and walk_a:
+                    failures.append(
+                        f"{room_id}({r1},{c1})={tile_a} {direction}-> "
+                        f"{target_id}({r2},{c2})={tile_b}: "
+                        f"walkable tile faces water (need water or wall)"
+                    )
+                # Walkable must face walkable
+                elif walk_a and not walk_b and not water_b:
+                    failures.append(
+                        f"{room_id}({r1},{c1})={tile_a} {direction}-> "
+                        f"{target_id}({r2},{c2})={tile_b}: "
+                        f"walkable faces non-walkable"
+                    )
+                elif walk_b and not walk_a and not water_a:
+                    failures.append(
+                        f"{room_id}({r1},{c1})={tile_a} {direction}-> "
+                        f"{target_id}({r2},{c2})={tile_b}: "
+                        f"non-walkable faces walkable"
+                    )
+
+    assert not failures, (
+        f"{len(failures)} edge tile mismatch(es):\n" + "\n".join(failures)
     )
 
 
