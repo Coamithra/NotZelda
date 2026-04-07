@@ -22,6 +22,10 @@ from server.lifecycle import (
 from server.dungeons import get_dungeon_for_room, _run_content_deprecation, start_background_regen, broadcast_to_dungeon
 from server.npc_chat import find_adjacent_npc
 
+# Ghost-eligible item types: rendered as translucent ghosts after this player
+# picks them up, while other players in the dungeon/world still need them.
+GHOST_ELIGIBLE = {"seal_fragment", "heart_container", "spirit_jar"}
+
 
 def process_player_commands(player, now, msgs):
     """Drain and process all queued commands for a player."""
@@ -488,10 +492,6 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
                         # Keys go to the player, not to collected_items
                         player.keys += 1
                         item_name = "Small Key"
-                    elif item_type == "spirit_jar":
-                        # Spirit jar is per-player (like keys), not shared
-                        player.spirit_jar_count += 1
-                        item_name = "Spirit Jar"
                     else:
                         dinst.collected_items.add(item_type)
                         item_name = {"map": "Dungeon Map", "compass": "Compass"}.get(item_type, item_type)
@@ -536,7 +536,7 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
                     }, None))
                     break
 
-    # Per-player dungeon items (lantern, seal_fragment) — stay on ground for others
+    # Per-player dungeon items (lantern, seal_fragment, spirit_jar) — stay on ground for others
     if player.hp > 0:
         dinst = get_dungeon_for_room(player.room)
         if dinst and player.room not in game.locked_rooms:
@@ -544,7 +544,9 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
             for item in pp_items:
                 if abs(a.x - item["x"]) < 0.75 and abs(a.y - item["y"]) < 0.75:
                     item_type = item["item_type"]
-                    flag_name = f"has_{item_type}"
+                    # Use item-specific flag if present (spirit_jar uses position-specific),
+                    # otherwise fall back to has_{item_type}
+                    flag_name = item.get("flag", f"has_{item_type}")
                     if player.has_flag(flag_name):
                         continue  # already collected by this player
                     player.grant_flag(flag_name)
@@ -560,8 +562,13 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
                         msgs.append(("send", player, {
                             "type": "hp_update", "hp": player.hp, "max_hp": player.max_hp,
                         }))
-                        # Spawn exit stairwell in treasure room
-                        _spawn_treasure_exit(dinst, player.room, msgs)
+                        # Only spawn exit once (first player to pick up)
+                        room = game.rooms.get(player.room, {})
+                        if "up" not in room.get("exits", {}):
+                            _spawn_treasure_exit(dinst, player.room, msgs)
+                    elif item_type == "spirit_jar":
+                        item_name = "Spirit Jar"
+                        player.spirit_jar_count += 1
                     else:
                         item_name = item_type.replace("_", " ").title()
                     msgs.append(("send", player, {
@@ -575,6 +582,18 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
                         "item_name": item_name,
                         "name": player.name,
                     }, player.ws))
+                    # Ghost removal: if all dungeon players now have this item, remove ghosts
+                    if item_type in GHOST_ELIGIBLE:
+                        dungeon_players = [p for p in game.players.values()
+                                           if p.room and get_dungeon_for_room(p.room) is dinst]
+                        all_have = all(p.has_flag(flag_name) for p in dungeon_players)
+                        if all_have:
+                            msgs.append(("broadcast", player.room, {
+                                "type": "ghost_remove",
+                                "item_type": item_type,
+                                "x": item["x"],
+                                "y": item["y"],
+                            }, None))
                     # Freeze monsters during pickup animation
                     freeze_end = now + ITEM_PICKUP_FREEZE_DURATION
                     existing = game.room_pickup_freeze.get(player.room)
@@ -625,6 +644,18 @@ def _check_position_collisions(player, now, msgs, prev_player_x=None, prev_playe
                     "item_name": item_name,
                     "name": player.name,
                 }, player.ws))
+                # Ghost removal: if all players now have this overworld item, remove ghosts
+                if item_type in GHOST_ELIGIBLE:
+                    flag = item["flag"]
+                    all_have = all(p.has_flag(flag)
+                                  for p in game.players.values() if p is not player)
+                    if all_have:
+                        msgs.append(("broadcast", player.room, {
+                            "type": "ghost_remove",
+                            "item_type": item_type,
+                            "x": item["x"],
+                            "y": item["y"],
+                        }, None))
                 # Freeze monsters during pickup animation
                 freeze_end = now + ITEM_PICKUP_FREEZE_DURATION
                 existing = game.room_pickup_freeze.get(player.room)
