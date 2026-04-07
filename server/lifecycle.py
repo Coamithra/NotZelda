@@ -224,7 +224,8 @@ def _dungeon_other_players(inst, exclude_player=None):
         cell = room_to_cell.get(p.room)
         if cell:
             players.append({"c": cell[0], "r": cell[1],
-                            "color_index": p.color_index, "name": p.name})
+                            "color_index": p.color_index, "name": p.name,
+                            "dead": p.dead})
     return players
 
 
@@ -237,7 +238,8 @@ def broadcast_dungeon_player_positions(inst, moved_player, msgs):
         cell = room_to_cell.get(p.room)
         if cell:
             all_players.append({"c": cell[0], "r": cell[1],
-                                "color_index": p.color_index, "name": p.name})
+                                "color_index": p.color_index, "name": p.name,
+                                "dead": p.dead})
     # Send each player a list excluding themselves
     for p in game.players.values():
         if p is moved_player:
@@ -249,6 +251,42 @@ def broadcast_dungeon_player_positions(inst, moved_player, msgs):
                 "type": "dungeon_player_positions",
                 "players": others,
             }))
+
+
+def broadcast_overworld_player_positions(moved_player, msgs):
+    """Notify overworld players about nearby players in adjacent rooms."""
+    for p in game.players.values():
+        if p.avatar is None:
+            continue
+        # Only overworld players (not in dungeons)
+        if is_dungeon_room(p.room):
+            continue
+        room_data = game.rooms.get(p.room)
+        if not room_data:
+            continue
+        exits = room_data.get("exits", {})
+        if not exits:
+            continue
+        # Build list of other players reachable via this player's exits
+        nearby = []
+        for direction, target_room_id in exits.items():
+            for other in game.players.values():
+                if other is p or other.avatar is None:
+                    continue
+                if is_dungeon_room(other.room):
+                    continue
+                if other.room == target_room_id:
+                    nearby.append({
+                        "name": other.name,
+                        "room_id": other.room,
+                        "color_index": other.color_index,
+                        "dead": other.dead,
+                        "direction": direction,
+                    })
+        msgs.append(("send", p, {
+            "type": "overworld_player_positions",
+            "players": nearby,
+        }))
 
 
 def send_room_enter(player, msgs: list, exit_direction: str = None):
@@ -731,6 +769,9 @@ def do_room_transition(player, exit_direction: str, msgs: list):
         # Player left a dungeon for a different area — notify remaining
         if old_inst and old_inst is not new_inst:
             broadcast_dungeon_player_positions(old_inst, player, msgs)
+        # Update overworld edge arrows for nearby players
+        if not new_inst:
+            broadcast_overworld_player_positions(player, msgs)
     except Exception:
         # If anything fails mid-transition, restore avatar at spawn so the
         # player isn't permanently stuck as a ghost.

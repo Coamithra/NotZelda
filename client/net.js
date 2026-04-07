@@ -281,6 +281,7 @@ function handleMessage(msg) {
       G.room.attackingPlayers = {};
       G.room.speechBubbles = [];
       G.room.npcThinking = {};
+      G.room.nearbyPlayers = [];
       G.room.guards = msg.guards || [];
       G.room.dyingMonsters = [];
       G.room.heartPickups = [];
@@ -1172,6 +1173,10 @@ function handleMessage(msg) {
       if (G.room.dungeonState) {
         G.room.dungeonState.otherPlayers = msg.players || [];
       }
+      break;
+
+    case "overworld_player_positions":
+      G.room.nearbyPlayers = msg.players || [];
       break;
 
     case "debug_state":

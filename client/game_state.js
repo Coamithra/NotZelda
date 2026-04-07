@@ -139,6 +139,9 @@ const G = {
 
     // Corpses
     roomCorpses: [],          // [{kind, x, y, width, height}]
+
+    // Nearby players in adjacent rooms (overworld edge arrows)
+    nearbyPlayers: [],        // [{name, room_id, color_index, dead, direction}]
   },
 
   // DOM refs, chat, login, screens

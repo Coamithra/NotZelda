@@ -1999,3 +1999,163 @@ function renderDungeonMinimap() {
     G.ui.ctx.fillText(mm.layout, mapX + pad, mapY + mapH + 8);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Edge arrows — directional indicators for players in other rooms
+// ---------------------------------------------------------------------------
+
+function _drawArrowTriangle(ctx, cx, cy, direction, color, size) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  switch (direction) {
+    case "north": ctx.moveTo(cx, cy - size); ctx.lineTo(cx - size / 2, cy); ctx.lineTo(cx + size / 2, cy); break;
+    case "south": ctx.moveTo(cx, cy + size); ctx.lineTo(cx - size / 2, cy); ctx.lineTo(cx + size / 2, cy); break;
+    case "east":  ctx.moveTo(cx + size, cy); ctx.lineTo(cx, cy - size / 2); ctx.lineTo(cx, cy + size / 2); break;
+    case "west":  ctx.moveTo(cx - size, cy); ctx.lineTo(cx, cy - size / 2); ctx.lineTo(cx, cy + size / 2); break;
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+function _drawSkullIcon(ctx, cx, cy, color) {
+  ctx.font = "bold 12px monospace";
+  ctx.fillStyle = color;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("\u2620", cx, cy);
+  ctx.textAlign = "start";
+  ctx.textBaseline = "alphabetic";
+}
+
+function _getDirectionToCell(myCell, theirCell) {
+  const dc = theirCell[0] - myCell[0]; // positive = east
+  const dr = theirCell[1] - myCell[1]; // positive = south
+  const dirs = [];
+  if (dr < 0) dirs.push("north");
+  if (dr > 0) dirs.push("south");
+  if (dc < 0) dirs.push("west");
+  if (dc > 0) dirs.push("east");
+  return dirs;
+}
+
+function renderPlayerArrows() {
+  // Skip when dead or in death animation
+  if (G.player.waitingForRevival || G.player.dyingPlayerSelf) return;
+  if (!G.room.currentRoom) return;
+
+  const ctx = G.ui.ctx;
+  const arrowSize = 7;
+  const spacing = 18;
+
+  // Collect arrows by direction: { north: [{color, dead}], ... }
+  const dirArrows = { north: [], south: [], east: [], west: [] };
+
+  const isDungeon = !!G.room.dungeonState;
+
+  if (isDungeon) {
+    // Dungeon mode: compare cell coords
+    const mm = G.debug.dungeonDebug && G.debug.dungeonDebug.minimap;
+    const ds = G.room.dungeonState;
+    const otherPlayers = ds ? ds.otherPlayers : null;
+    if (!otherPlayers || otherPlayers.length === 0) return;
+    const myCell = mm && mm.player;
+    if (!myCell) return;
+
+    for (const op of otherPlayers) {
+      const dirs = _getDirectionToCell(myCell, [op.c, op.r]);
+      if (dirs.length === 0) continue;
+      const color = SHIRT_COLORS[op.color_index % SHIRT_COLORS.length];
+      // For diagonal, add to each direction component
+      for (const d of dirs) {
+        dirArrows[d].push({ color, dead: op.dead, name: op.name });
+      }
+    }
+  } else {
+    // Overworld mode: use nearbyPlayers with pre-computed direction
+    const nearby = G.room.nearbyPlayers;
+    if (!nearby || nearby.length === 0) return;
+
+    for (const np of nearby) {
+      const d = np.direction;
+      if (!dirArrows[d]) continue;
+      const color = SHIRT_COLORS[np.color_index % SHIRT_COLORS.length];
+      dirArrows[d].push({ color, dead: np.dead, name: np.name });
+    }
+  }
+
+  // Check if there's anything to draw
+  const totalArrows = dirArrows.north.length + dirArrows.south.length +
+                      dirArrows.east.length + dirArrows.west.length;
+  if (totalArrows === 0) return;
+
+  // Gentle pulse for visibility
+  const pulse = 0.7 + 0.3 * Math.sin(Date.now() / 500);
+  ctx.globalAlpha = pulse;
+
+  // Draw arrows for each direction
+  // North: y=30, centered horizontally, stack left-to-right
+  if (dirArrows.north.length > 0) {
+    const arr = dirArrows.north;
+    const totalW = arr.length * spacing;
+    const startX = CW / 2 - totalW / 2 + spacing / 2;
+    for (let i = 0; i < arr.length; i++) {
+      const x = startX + i * spacing;
+      const y = 30;
+      if (arr[i].dead) {
+        _drawSkullIcon(ctx, x, y, arr[i].color);
+      } else {
+        _drawArrowTriangle(ctx, x, y, "north", arr[i].color, arrowSize);
+      }
+    }
+  }
+
+  // South: y=CH-20, centered horizontally
+  if (dirArrows.south.length > 0) {
+    const arr = dirArrows.south;
+    const totalW = arr.length * spacing;
+    const startX = CW / 2 - totalW / 2 + spacing / 2;
+    for (let i = 0; i < arr.length; i++) {
+      const x = startX + i * spacing;
+      const y = CH - 20;
+      if (arr[i].dead) {
+        _drawSkullIcon(ctx, x, y, arr[i].color);
+      } else {
+        _drawArrowTriangle(ctx, x, y, "south", arr[i].color, arrowSize);
+      }
+    }
+  }
+
+  // West: x=20, centered vertically, stack top-to-bottom
+  if (dirArrows.west.length > 0) {
+    const arr = dirArrows.west;
+    const totalH = arr.length * spacing;
+    const startY = CH / 2 - totalH / 2 + spacing / 2;
+    for (let i = 0; i < arr.length; i++) {
+      const x = 20;
+      const y = startY + i * spacing;
+      if (arr[i].dead) {
+        _drawSkullIcon(ctx, x, y, arr[i].color);
+      } else {
+        _drawArrowTriangle(ctx, x, y, "west", arr[i].color, arrowSize);
+      }
+    }
+  }
+
+  // East: x=CW-30, centered vertically
+  if (dirArrows.east.length > 0) {
+    const arr = dirArrows.east;
+    const totalH = arr.length * spacing;
+    const startY = CH / 2 - totalH / 2 + spacing / 2;
+    for (let i = 0; i < arr.length; i++) {
+      const x = CW - 30;
+      const y = startY + i * spacing;
+      if (arr[i].dead) {
+        _drawSkullIcon(ctx, x, y, arr[i].color);
+      } else {
+        _drawArrowTriangle(ctx, x, y, "east", arr[i].color, arrowSize);
+      }
+    }
+  }
+
+  ctx.globalAlpha = 1.0;
+}
