@@ -146,6 +146,11 @@ async def flush_messages(msgs: list):
             player.death_x = dx
             player.death_y = dy
             player.avatar = None  # destroy physical presence — tombstone takes over
+            # Update overworld edge arrows (alive→dead transition)
+            from server.dungeons import is_dungeon_room as _is_dungeon
+            if not _is_dungeon(old_room_id):
+                from server.lifecycle import broadcast_overworld_player_positions
+                broadcast_overworld_player_positions(player, msgs)
         elif kind == "guard_chat":
             _, player, guard = entry
             asyncio.ensure_future(handle_quest_npc(player, guard))
@@ -162,7 +167,7 @@ async def flush_messages(msgs: list):
 
 def _respawn_player(player, msgs):
     """Synchronous respawn — called from _tick_players when delay has elapsed."""
-    from server.lifecycle import on_player_enter_room, on_player_leave_room, send_room_enter
+    from server.lifecycle import on_player_enter_room, on_player_leave_room, send_room_enter, broadcast_overworld_player_positions
     from server.models import Avatar
 
     _stop_spectating(player)
@@ -205,6 +210,8 @@ def _respawn_player(player, msgs):
     send_room_enter(player, msgs)
     msgs.append(("broadcast", STARTING_ROOM,
                   {"type": "player_entered", **player_info(player)}, player.ws))
+    # Update overworld edge arrows (dead→alive, now in starting room)
+    broadcast_overworld_player_positions(player, msgs)
 
 
 # ---------------------------------------------------------------------------

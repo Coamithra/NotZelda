@@ -1353,17 +1353,19 @@ def resolve_dungeon_room(instance: DungeonInstance, cell: tuple) -> bool:
     instance.per_player_items.pop(room_id, None)
     used_positions = set()
 
-    # Per-player items (lantern) — always placed, tracked separately
-    per_player_types = {"lantern", "tide_medallion"}
+    # Per-player items (lantern, spirit_jar) — always placed, tracked separately
+    per_player_types = {"lantern", "tide_medallion", "spirit_jar"}
     for item_type, item_cell in instance.item_cells.items():
         if item_type in per_player_types:
             if cell == item_cell:
                 pos = _find_item_tile(room_id, exclude=used_positions)
                 if pos:
                     used_positions.add(pos)
-                    instance.per_player_items.setdefault(room_id, []).append(
-                        {"x": pos[0], "y": pos[1], "item_type": item_type}
-                    )
+                    entry = {"x": pos[0], "y": pos[1], "item_type": item_type}
+                    # Spirit jar is stackable — use position-specific flag
+                    if item_type == "spirit_jar":
+                        entry["flag"] = f"pp_{room_id}_{pos[0]}_{pos[1]}_spirit_jar"
+                    instance.per_player_items.setdefault(room_id, []).append(entry)
                     log.debug(f"[DUNGEON] Placed {item_type} (per-player) in {room_id} at ({pos[0]},{pos[1]})")
         elif cell == item_cell and item_type not in instance.collected_items:
             pos = _find_item_tile(room_id, exclude=used_positions)
