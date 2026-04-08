@@ -73,7 +73,7 @@ def warmup_ollama():
                 "model": OLLAMA_MODEL,
                 "messages": [{"role": "user", "content": "hi"}],
                 "stream": False,
-                "keep_alive": "1h",
+                "keep_alive": "-1",
                 "options": {"num_predict": 1},
             }).encode("utf-8")
             req = urllib.request.Request(
@@ -458,7 +458,7 @@ async def _call_ollama(static_prompt: str, dynamic_prompt: str,
         "model": OLLAMA_MODEL,
         "messages": ollama_messages,
         "stream": False,
-        "keep_alive": "1h",
+        "keep_alive": "-1",
         "options": {
             "num_ctx": OLLAMA_NUM_CTX,
             "num_predict": OLLAMA_NUM_PREDICT,

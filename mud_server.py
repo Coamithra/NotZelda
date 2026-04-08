@@ -595,6 +595,7 @@ async def main():
     register_precreated_types()
     register_town_guard()
     auto_register_debug_monsters()
+    warmup_ollama()
 
     # Initialize per-type dungeon templates and content libraries
     data_dir = ROOT_DIR / "data"
