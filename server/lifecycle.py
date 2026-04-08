@@ -7,7 +7,8 @@ import time
 from server import log
 from server.state import game
 from server.constants import (
-    ROOM_RESET_COOLDOWN, ENTRY_DIR, EDGE_SPAWN_POINTS, DEFAULT_SPAWN,
+    ROOM_RESET_COOLDOWN, MONSTER_SPAWN_DELAY, MONSTER_SPAWN_STAGGER,
+    ENTRY_DIR, EDGE_SPAWN_POINTS, DEFAULT_SPAWN,
     ROOM_COLS, ROOM_ROWS, DOORWAY_TILES, STARTING_ROOM,
 )
 from server.models import Monster
@@ -113,8 +114,8 @@ def spawn_monsters(room_id: str) -> list[Monster]:
     monsters = []
     for t in templates:
         m = Monster(t["x"], t["y"], t["kind"])
-        # Spawn pause (1-2s) so player can survey the room, plus stagger
-        m.last_action_time = now + 1.0 + random.random()
+        # Spawn pause so player can survey the room, plus stagger
+        m.last_action_time = now + MONSTER_SPAWN_DELAY + random.random() * MONSTER_SPAWN_STAGGER
         monsters.append(m)
     return monsters
 

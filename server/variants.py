@@ -12,6 +12,8 @@ import copy
 import math
 import random
 
+from server.constants import VARIANT_MIN_WALK_TIME, VARIANT_MIN_DECISION_TIME
+
 
 # ---------------------------------------------------------------------------
 # Variant tier definitions — index 0 (weakest) to 4 (strongest)
@@ -128,8 +130,8 @@ def create_variant(base_monster: dict, tier: int | None = None) -> dict:
     new_stats = {
         "hp": min(100, max(1, math.ceil(base_stats.get("hp", 2) * t["hp_mult"]))),
         "damage": min(20, max(1, base_stats.get("damage", 1) + t["dmg_add"])),
-        "walk_time": max(0.1, round(base_stats.get("walk_time", 0.25) / t["speed_mult"], 2)),
-        "decision_time": max(0.2, round(base_stats.get("decision_time", 2.0) / t["speed_mult"], 2)),
+        "walk_time": max(VARIANT_MIN_WALK_TIME, round(base_stats.get("walk_time", 0.25) / t["speed_mult"], 2)),
+        "decision_time": max(VARIANT_MIN_DECISION_TIME, round(base_stats.get("decision_time", 2.0) / t["speed_mult"], 2)),
     }
 
     # --- Random hue shift (avoid shifts too small to notice) ---

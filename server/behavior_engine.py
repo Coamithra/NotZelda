@@ -29,7 +29,7 @@ import random
 import math
 
 from server.state import game
-from server.constants import ROOM_COLS, ROOM_ROWS, MOVE_STEP
+from server.constants import ROOM_COLS, ROOM_ROWS, MOVE_STEP, SWIM_WATER_PREFERENCE
 from server.models import WalkState, Projectile
 from server.net import avatars_in_room
 from server.lifecycle import set_monster_idle
@@ -607,8 +607,8 @@ class BehaviorEngine:
                     water_moves.append((nx, ny))
                 else:
                     land_moves.append((nx, ny))
-        # 70% chance to prefer water when available
-        if water_moves and (not land_moves or random.random() < 0.7):
+        # Prefer water when available (controlled by SWIM_WATER_PREFERENCE)
+        if water_moves and (not land_moves or random.random() < SWIM_WATER_PREFERENCE):
             nx, ny = random.choice(water_moves)
         elif land_moves:
             nx, ny = random.choice(land_moves)

@@ -11,7 +11,8 @@ from server.constants import (
     MAX_MOVE_PER_UPDATE, PLAYER_SPEED, DT_CLAMP, MAX_INPUTS_PER_TICK,
     COLLISION_GRACE_PERIOD, ITEM_PICKUP_FREEZE_DURATION,
     SEAL_FRAGMENT_HP_BONUS, SWORD_PERP_WIDTH, PLAYER_COLLISION_MARGIN,
-    KNOCKBACK_DURATION,
+    KNOCKBACK_DURATION, SWORD_DAMAGE, KNOCKBACK_TILES,
+    NPC_PROXIMITY_DISTANCE,
 )
 from server import log
 from server.lifecycle import (
@@ -706,7 +707,7 @@ def _check_guard_proximity_sync(player, now, msgs):
     for guard in game.guards.get(player.room, []):
         dx = abs(a.x - guard["x"])
         dy = abs(a.y - guard["y"])
-        if dx + dy <= 1.5:
+        if dx + dy <= NPC_PROXIMITY_DISTANCE:
             # Skip proximity dialog if the NPC is still generating an LLM response
             if is_npc_thinking(player.name, guard["name"]):
                 continue
@@ -789,8 +790,8 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
             sword_x < mx + monster.width and sword_x + sword_w > mx and
             sword_y < my + monster.height and sword_y + sword_h > my):
             hit_monsters.add(mid)
-            monster.hp -= 1
-            # Knockback: push surviving non-boss monster 1 tile in attack direction
+            monster.hp -= SWORD_DAMAGE
+            # Knockback: push surviving non-boss monster in attack direction
             knock_x = None
             knock_y = None
             knock_from_x = monster.x
@@ -798,9 +799,9 @@ def sword_hit_scan(player, direction, room_id, hit_monsters, now, msgs, *, ancho
             if monster.hp > 0 and monster.knockbackable:
                 room = game.rooms.get(room_id)
                 if room:
-                    # Knockback 1 tile, snap to integer grid
-                    kx = round(monster.x + dx)
-                    ky = round(monster.y + dy)
+                    # Knockback N tiles, snap to integer grid
+                    kx = round(monster.x + dx * KNOCKBACK_TILES)
+                    ky = round(monster.y + dy * KNOCKBACK_TILES)
                     can_knock = True
                     # Check all tiles covered by the knocked-back footprint
                     min_tx = math.floor(kx)
@@ -1210,8 +1211,10 @@ TWEAKABLE_SERVER_CONSTANTS = {
     # Combat
     "ATTACK_COOLDOWN":       {"group": "Combat", "label": "Attack Cooldown (s)", "min": 0.05, "max": 2, "step": 0.01},
     "SWORD_ACTIVE_DURATION": {"group": "Combat", "label": "Sword Active (s)", "min": 0.05, "max": 1, "step": 0.01},
+    "SWORD_DAMAGE":          {"group": "Combat", "label": "Sword Damage", "min": 1, "max": 20, "step": 1, "type": "int"},
     "SWORD_PERP_WIDTH":      {"group": "Combat", "label": "Sword Width (tiles)", "min": 0.1, "max": 2, "step": 0.1},
     "PLAYER_COLLISION_MARGIN":{"group": "Combat", "label": "Player Collision Margin", "min": 0, "max": 0.5, "step": 0.025},
+    "KNOCKBACK_TILES":       {"group": "Combat", "label": "Knockback Distance (tiles)", "min": 0, "max": 5, "step": 1, "type": "int"},
     "KNOCKBACK_DURATION":    {"group": "Combat", "label": "Knockback Duration (s)", "min": 0, "max": 1, "step": 0.05},
     "INVINCIBILITY_DURATION":{"group": "Combat", "label": "Invincibility (s)", "min": 0, "max": 5, "step": 0.25},
     "COLLISION_GRACE_PERIOD":{"group": "Combat", "label": "Collision Grace (s)", "min": 0, "max": 2, "step": 0.1},
@@ -1225,6 +1228,9 @@ TWEAKABLE_SERVER_CONSTANTS = {
     "WALK_TIME":             {"group": "Monsters (Global)", "label": "Default Walk Time (s)", "min": 0.05, "max": 2, "step": 0.05},
     "ROOM_RESET_COOLDOWN":   {"group": "Monsters (Global)", "label": "Room Reset Cooldown (s)", "min": 0, "max": 600, "step": 30},
     "PROJECTILE_TICK_RATE":  {"group": "Monsters (Global)", "label": "Projectile Tick Rate (s)", "min": 0.01, "max": 1, "step": 0.05},
+    "MONSTER_SPAWN_DELAY":   {"group": "Monsters (Global)", "label": "Spawn Delay (s)", "min": 0, "max": 5, "step": 0.25},
+    "MONSTER_SPAWN_STAGGER": {"group": "Monsters (Global)", "label": "Spawn Stagger (s)", "min": 0, "max": 5, "step": 0.25},
+    "SWIM_WATER_PREFERENCE": {"group": "Monsters (Global)", "label": "Swim Water Preference", "min": 0, "max": 1, "step": 0.05},
     # Movement
     "PLAYER_SPEED":          {"group": "Movement (Server)", "label": "Player Speed (tiles/s)", "min": 0.5, "max": 20, "step": 0.5},
     "MAX_MOVE_PER_UPDATE":   {"group": "Movement (Server)", "label": "Max Move/Update (tiles)", "min": 0.5, "max": 5, "step": 0.25},
@@ -1246,6 +1252,22 @@ TWEAKABLE_SERVER_CONSTANTS = {
     "GUARD_DESPAWN_TIMEOUT": {"group": "Lifecycle", "label": "Guard Despawn Timeout (s)", "min": 5, "max": 120, "step": 5},
     "GUARD_DESPAWN_DISTANCE":{"group": "Lifecycle", "label": "Guard Despawn Distance", "min": 1, "max": 15, "step": 1, "type": "int"},
     "GUARD_DESPAWN_GRACE":   {"group": "Lifecycle", "label": "Guard Despawn Grace (s)", "min": 0, "max": 10, "step": 0.5},
+    # Gauntlet
+    "GAUNTLET_STARTING_HP":  {"group": "Gauntlet", "label": "Starting HP", "min": 1, "max": 40, "step": 1, "type": "int"},
+    "GAUNTLET_SPIRIT_JARS":  {"group": "Gauntlet", "label": "Spirit Jars/Wave", "min": 0, "max": 10, "step": 1, "type": "int"},
+    "GAUNTLET_HARD_HP_THRESHOLD": {"group": "Gauntlet", "label": "HARD HP Lost Threshold", "min": 1, "max": 20, "step": 1, "type": "int"},
+    "GAUNTLET_GOOD_HP_THRESHOLD": {"group": "Gauntlet", "label": "GOOD HP Lost Threshold", "min": 1, "max": 20, "step": 1, "type": "int"},
+    "GAUNTLET_GOOD_STREAK_RESET": {"group": "Gauntlet", "label": "GOOD Streak Reset", "min": 1, "max": 10, "step": 1, "type": "int"},
+    # NPC & Guards
+    "NPC_RESPONSE_DELAY":    {"group": "NPC & Guards", "label": "Response Delay (s)", "min": 0, "max": 5, "step": 0.25},
+    "NPC_MAX_RESPONSE_LENGTH":{"group": "NPC & Guards", "label": "Max Response Length", "min": 50, "max": 500, "step": 25, "type": "int"},
+    "NPC_DETECTION_DISTANCE":{"group": "NPC & Guards", "label": "Detection Distance (tiles)", "min": 0.5, "max": 5, "step": 0.25},
+    "NPC_PROXIMITY_DISTANCE":{"group": "NPC & Guards", "label": "Proximity Distance (tiles)", "min": 0.5, "max": 5, "step": 0.25},
+    "GUARD_SPAWN_COUNT_MIN": {"group": "NPC & Guards", "label": "Guard Spawn Min", "min": 1, "max": 10, "step": 1, "type": "int"},
+    "GUARD_SPAWN_COUNT_MAX": {"group": "NPC & Guards", "label": "Guard Spawn Max", "min": 1, "max": 15, "step": 1, "type": "int"},
+    # Variants
+    "VARIANT_MIN_WALK_TIME": {"group": "Variants", "label": "Min Walk Time (s)", "min": 0.01, "max": 1, "step": 0.01},
+    "VARIANT_MIN_DECISION_TIME": {"group": "Variants", "label": "Min Decision Time (s)", "min": 0.01, "max": 2, "step": 0.05},
 }
 
 

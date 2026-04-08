@@ -52,9 +52,11 @@ CANCEL_TIME = 0.090        # seconds — legacy (kept for backward compat)
 LATENCY_COMP = 0.066       # seconds — legacy (kept for backward compat)
 ATTACK_COOLDOWN = 0.27  # 1.5 * SWORD_ACTIVE_DURATION (0.18) — gap = 0.5 * active
 SWORD_ACTIVE_DURATION = 0.18
+SWORD_DAMAGE = 1        # HP per sword hit on monsters
 SWORD_PERP_WIDTH = 0.6  # perpendicular hitbox width (was implicit 1.0 with tile-based collision)
 PLAYER_COLLISION_MARGIN = 0.275  # inset per side for player-vs-monster AABB (0.45 tile box)
 MOVE_STEP = 1.0         # monster movement step size in tiles
+KNOCKBACK_TILES = 1     # tiles a monster is pushed back on hit
 KNOCKBACK_DURATION = 0.2  # seconds — server-side knockback slide duration
 
 # Half-tile free movement (NES Zelda-style)
@@ -95,8 +97,30 @@ GHOST_ELIGIBLE = {"seal_fragment", "heart_container", "spirit_jar"}
 TICK_INTERVAL = 1.0 / 30     # ~33ms — unified game tick rate
 
 # Monsters
+MONSTER_SPAWN_DELAY = 1.0      # seconds - base delay before monsters act when player enters room
+MONSTER_SPAWN_STAGGER = 1.0    # seconds - random per-monster stagger added on top of spawn delay
 ROOM_RESET_COOLDOWN = 300.0
 PROJECTILE_TICK_RATE = 0.15
+SWIM_WATER_PREFERENCE = 0.7    # probability aquatic monsters prefer water tiles when moving
+
+# Gauntlet
+GAUNTLET_STARTING_HP = 6       # HP reset on gauntlet entry and between waves
+GAUNTLET_SPIRIT_JARS = 1       # spirit jars granted per wave
+GAUNTLET_HARD_HP_THRESHOLD = 4 # HP lost >= this = "HARD" outcome
+GAUNTLET_GOOD_HP_THRESHOLD = 1 # HP lost >= this (but < HARD) = "GOOD" outcome
+GAUNTLET_GOOD_STREAK_RESET = 2 # consecutive "GOOD" results before resetting to max-hard
+
+# NPC & Guards
+NPC_RESPONSE_DELAY = 1.5       # seconds - minimum pause before NPC responds (feels natural)
+NPC_MAX_RESPONSE_LENGTH = 200  # characters - hard cap on NPC response length
+NPC_DETECTION_DISTANCE = 2.25  # Manhattan tiles - distance for detecting adjacent NPCs
+NPC_PROXIMITY_DISTANCE = 1.5   # Manhattan tiles - distance for proximity dialog trigger
+GUARD_SPAWN_COUNT_MIN = 3      # minimum guards spawned when NPC calls for help
+GUARD_SPAWN_COUNT_MAX = 5      # maximum guards spawned when NPC calls for help
+
+# Variant monsters
+VARIANT_MIN_WALK_TIME = 0.1    # seconds - speed floor for variant monsters
+VARIANT_MIN_DECISION_TIME = 0.2  # seconds - decision time floor for variant monsters
 
 DUNGEON_MUSIC_TRACKS = [
     "dungeon1", "dungeon2", "dungeon3", "dungeon4",

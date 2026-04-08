@@ -22,6 +22,9 @@ from server.state import game
 from server.constants import (
     EDGE_SPAWN_POINTS, DEFAULT_SPAWN,
     ROOM_COLS, ROOM_ROWS,
+    GAUNTLET_STARTING_HP, GAUNTLET_SPIRIT_JARS,
+    GAUNTLET_HARD_HP_THRESHOLD, GAUNTLET_GOOD_HP_THRESHOLD,
+    GAUNTLET_GOOD_STREAK_RESET,
 )
 
 RESULTS_FILE = "gauntlet_results.txt"
@@ -223,8 +226,8 @@ def on_gauntlet_enter(player):
     if not session:
         return
     player.flags.discard("invulnerable")  # no cheating in the gauntlet!
-    player.hp = min(6, player.max_hp)  # 3 hearts
-    player.spirit_jar_count = 1
+    player.hp = min(GAUNTLET_STARTING_HP, player.max_hp)
+    player.spirit_jar_count = GAUNTLET_SPIRIT_JARS
     session.entry_hp = player.hp
     session.entry_time = time.monotonic()
     session.deaths = 0
@@ -276,9 +279,9 @@ def on_gauntlet_death(player, now, msgs):
     player.death_y = 0.0
     player.chose_respawn = False
     player.room = next_room
-    player.hp = min(6, player.max_hp)
+    player.hp = min(GAUNTLET_STARTING_HP, player.max_hp)
     player.flags.discard("invulnerable")
-    player.spirit_jar_count = 1
+    player.spirit_jar_count = GAUNTLET_SPIRIT_JARS
     player.avatar = Avatar(1.0, 5.0, "right")
     player.command_queue.clear()
     player.active_attack = None
@@ -306,9 +309,9 @@ def on_gauntlet_room_cleared(player, room_id, msgs):
     # Classify outcome
     if session.deaths > 0:
         outcome = "TOO HARD"
-    elif hp_lost >= 4:
+    elif hp_lost >= GAUNTLET_HARD_HP_THRESHOLD:
         outcome = "HARD"
-    elif hp_lost >= 1:
+    elif hp_lost >= GAUNTLET_GOOD_HP_THRESHOLD:
         outcome = "GOOD"
     else:
         outcome = "EASY"
@@ -335,8 +338,8 @@ def on_gauntlet_room_cleared(player, room_id, msgs):
     _create_gauntlet_room(session)
 
     # Reset HP for next room
-    player.hp = min(6, player.max_hp)
-    player.spirit_jar_count = 1
+    player.hp = min(GAUNTLET_STARTING_HP, player.max_hp)
+    player.spirit_jar_count = GAUNTLET_SPIRIT_JARS
 
 
 def on_gauntlet_exit(player_name):
@@ -457,8 +460,8 @@ def cmd_gauntlet(player, args, msgs):
     # Spawn 1 tile inside the west doorway so we're not stuck in the door
     player.avatar = Avatar(1.0, 5.0, "right")
     player.flags.discard("invulnerable")  # no cheating in the gauntlet!
-    player.hp = min(6, player.max_hp)
-    player.spirit_jar_count = 1
+    player.hp = min(GAUNTLET_STARTING_HP, player.max_hp)
+    player.spirit_jar_count = GAUNTLET_SPIRIT_JARS
 
     on_player_enter_room(room_id)
 
@@ -549,7 +552,7 @@ def _auto_adjust(session, outcome, msgs_out):
 
     if outcome == "GOOD":
         session.consecutive_good += 1
-        if session.consecutive_good >= 2:
+        if session.consecutive_good >= GAUNTLET_GOOD_STREAK_RESET:
             # Found a sweet spot twice — reset to max hard for a fresh search
             defaults = game.monster_stats.get(kind, {})
             hard = _max_hard_config(kind, session.original_count, defaults)

@@ -19,7 +19,11 @@ from collections import defaultdict
 from pathlib import Path
 
 from server.state import game
-from server.constants import DEBUG_MODE
+from server.constants import (
+    DEBUG_MODE,
+    NPC_RESPONSE_DELAY, NPC_MAX_RESPONSE_LENGTH, NPC_DETECTION_DISTANCE,
+    GUARD_SPAWN_COUNT_MIN, GUARD_SPAWN_COUNT_MAX,
+)
 from server.net import broadcast_to_room, avatars_in_room, send_to
 from server import log
 
@@ -495,7 +499,7 @@ def find_adjacent_npc(room_id, avatar) -> dict | None:
     for guard in game.guards.get(room_id, []):
         dx = abs(avatar.x - guard["x"])
         dy = abs(avatar.y - guard["y"])
-        if dx + dy <= 2.25:  # within ~1 tile gap (float margin)
+        if dx + dy <= NPC_DETECTION_DISTANCE:
             return guard
     return None
 
@@ -599,8 +603,8 @@ async def handle_npc_chat(player, guard: dict, text: str):
 
         # NPCs should pause before responding (feels more natural)
         elapsed = time.monotonic() - t0
-        if elapsed < 1.5:
-            await asyncio.sleep(1.5 - elapsed)
+        if elapsed < NPC_RESPONSE_DELAY:
+            await asyncio.sleep(NPC_RESPONSE_DELAY - elapsed)
     except Exception as e:
         log.debug(f"[NPC_CHAT] LLM call failed for {npc_name}: {type(e).__name__}: {e}")
 
@@ -649,14 +653,14 @@ async def handle_npc_chat(player, guard: dict, text: str):
             if last_sentence > 20:  # only if we keep a reasonable chunk
                 response = response[:last_sentence + 1]
 
-        if len(response) > 200:
+        if len(response) > NPC_MAX_RESPONSE_LENGTH:
             # Truncate at last sentence boundary, fall back to hard cut
-            truncated = response[:200]
+            truncated = response[:NPC_MAX_RESPONSE_LENGTH]
             last_sentence = max(truncated.rfind('.'), truncated.rfind('!'), truncated.rfind('?'))
             if last_sentence > 40:
                 response = truncated[:last_sentence + 1]
             else:
-                response = response[:197] + "..."
+                response = response[:NPC_MAX_RESPONSE_LENGTH - 3] + "..."
 
         # Add NPC response to history (without tags)
         _conversations[conv_key].append({"role": "assistant", "content": response})
@@ -787,7 +791,7 @@ async def _spawn_summoned_guards(room_id: str, npc_x: int, npc_y: int, npc_name:
     if not candidates:
         return
 
-    count = random.randint(3, 5)
+    count = random.randint(GUARD_SPAWN_COUNT_MIN, GUARD_SPAWN_COUNT_MAX)
     random.shuffle(candidates)
     spawn_points = candidates[:count]
 

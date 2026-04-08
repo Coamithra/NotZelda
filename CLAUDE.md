@@ -101,7 +101,7 @@ Detailed implementation notes for each game system:
 
 - **Panel layout**: right sidebar (380px), coexists with `/draw` palette, collapsible groups with filter bar
 - **Client constants**: `const` changed to `let` in game_state.js, fx.js, renderer.js, music.js; registered via `registerTweak()` getter/setter pattern in `client/tweak.js`
-- **Server constants**: whitelist in `TWEAKABLE_SERVER_CONSTANTS` dict in `server/commands.py`; updates via `setattr()` on constants module; sent to client on `/tweak` toggle
+- **Server constants**: whitelist in `TWEAKABLE_SERVER_CONSTANTS` dict in `server/commands.py` (50 constants across 9 groups: Combat, HP & Items, Monsters, Movement, Dungeon, Lifecycle, Gauntlet, NPC & Guards, Variants); updates via `setattr()` on constants module; sent to client on `/tweak` toggle
 - **Monster scripts**: per-kind stats + behavior rule params; server sends built-in monster registry (excludes AI-generated); patches existing instances on change
 - **Controls**: direct input field + slider (when min/max defined) + -/+ buttons + reset per param
 - **Export**: copies all non-default values to clipboard as readable text
