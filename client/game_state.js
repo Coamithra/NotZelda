@@ -14,7 +14,7 @@ let MOVE_LERP = 0.3;            // lerp factor for other players & monsters (fal
 
 // Half-tile free movement constants
 let MOVE_SPEED = 4.0;                  // tiles/sec
-let HALF_TILE = 0.5;
+const HALF_TILE = 0.5;
 // (position reporting triggers when Math.round(pos*2)/2 changes — see maybeReportPosition)
 let HALF_WALK_TIME_MS = 125;           // other player animation duration (ms)
 

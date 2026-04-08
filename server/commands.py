@@ -1194,7 +1194,16 @@ def _cmd_keylayout(player, args, msgs):
 # Tweak console — runtime constant editing
 # ---------------------------------------------------------------------------
 
+import sys
 import server.constants as _constants_module
+
+# Modules that import from server.constants via `from server.constants import X`.
+# setattr on the module alone doesn't update those local bindings, so we propagate.
+_CONSTANTS_CONSUMERS = [
+    "server.commands", "server.combat", "server.lifecycle",
+    "server.dungeons", "server.behavior_engine", "server.models",
+    "server.net", "mud_server",
+]
 
 # Server constants exposed to the tweak console (name -> {min, max, step, type, group, label})
 TWEAKABLE_SERVER_CONSTANTS = {
@@ -1237,8 +1246,6 @@ TWEAKABLE_SERVER_CONSTANTS = {
     "GUARD_DESPAWN_TIMEOUT": {"group": "Lifecycle", "label": "Guard Despawn Timeout (s)", "min": 5, "max": 120, "step": 5},
     "GUARD_DESPAWN_DISTANCE":{"group": "Lifecycle", "label": "Guard Despawn Distance", "min": 1, "max": 15, "step": 1, "type": "int"},
     "GUARD_DESPAWN_GRACE":   {"group": "Lifecycle", "label": "Guard Despawn Grace (s)", "min": 0, "max": 10, "step": 0.5},
-    # Tick
-    "TICK_INTERVAL":         {"group": "Network", "label": "Tick Interval (s)", "min": 0.01, "max": 0.2, "step": 0.005},
 }
 
 
@@ -1292,17 +1299,28 @@ def _process_tweak(player, data, msgs):
     value = data.get("value")
     if name not in TWEAKABLE_SERVER_CONSTANTS or value is None:
         return
+    if not isinstance(value, (int, float)):
+        return
     meta = TWEAKABLE_SERVER_CONSTANTS[name]
-    if meta.get("type") == "int":
-        value = int(round(value))
-    else:
-        value = float(value)
+    try:
+        if meta.get("type") == "int":
+            value = int(round(value))
+        else:
+            value = float(value)
+    except (TypeError, ValueError):
+        return
     # Clamp
     if meta.get("min") is not None and value < meta["min"]:
         value = meta["min"]
     if meta.get("max") is not None and value > meta["max"]:
         value = meta["max"]
+    # Update the module attribute AND propagate to all modules that
+    # imported this name via `from server.constants import X`
     setattr(_constants_module, name, value)
+    for mod_name in _CONSTANTS_CONSUMERS:
+        mod = sys.modules.get(mod_name)
+        if mod and name in mod.__dict__:
+            setattr(mod, name, value)
     log.event("tweak", f"{player.name} set {name} = {value}")
 
 
@@ -1316,22 +1334,29 @@ def _process_tweak_monster(player, data, msgs):
     value = data.get("value")
     if not kind or kind not in game.monster_stats:
         return
+    if value is None or not isinstance(value, (int, float)):
+        return
 
     if tweak_type == "stat":
         if key not in ("hp", "walk_time", "decision_time", "damage"):
             return
-        if key in ("hp", "damage"):
-            value = int(round(value))
-        else:
-            value = float(value)
+        try:
+            if key in ("hp", "damage"):
+                value = int(round(value))
+            else:
+                value = float(value)
+        except (TypeError, ValueError):
+            return
         game.monster_stats[kind][key] = value
         # Patch all existing instances of this kind
         for room_id, monsters in game.room_monsters.items():
             for m in monsters:
                 if m.kind == kind and m.alive:
-                    setattr(m, key, value)
                     if key == "hp":
                         m.max_hp = value
+                        m.hp = min(m.hp, value)  # clamp, don't fully heal
+                    else:
+                        setattr(m, key, value)
         log.event("tweak", f"{player.name} set {kind}.{key} = {value}")
 
     elif tweak_type == "rule":
@@ -1339,7 +1364,10 @@ def _process_tweak_monster(player, data, msgs):
         parts = key.split(".", 1)
         if len(parts) != 2:
             return
-        rule_idx = int(parts[0])
+        try:
+            rule_idx = int(parts[0])
+        except ValueError:
+            return
         param = parts[1]
         behavior = game.monster_behaviors.get(kind)
         if not behavior:

@@ -73,7 +73,7 @@ Detailed implementation notes for each game system:
 
 ## Key Gotchas
 
-- **Client script load order**: `game_state.js` → `title.js` → `tiles.js` → `sprite_data.js` → `sprites.js` → `music.js` → `renderer.js` → `fx.js` → `net.js` → inline init/gameLoop → `input.js`
+- **Client script load order**: `game_state.js` → `tweak.js` → `title.js` → `tiles.js` → `sprite_data.js` → `sprites.js` → `music.js` → `renderer.js` → `fx.js` → `net.js` → inline init/gameLoop → `input.js`
 - **Import order** avoids circular deps: `constants` → `state` → `log` → `models` → `net` → `rooms` → `validation` → `dungeon_types` → `dungeon_topology` → `dungeons` → `quests` → `lifecycle` → `behavior_engine` → `commands` → `combat` → `debug_monsters` → `mud_server`.
 - **Command queue**: websocket messages append to `player.command_queue`, drained by `game_tick()`. Only `ping` handled directly.
 - **game_tick() is synchronous** — no `await` mid-tick. Messages batched as tuples, flushed after tick.
