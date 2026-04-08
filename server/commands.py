@@ -39,6 +39,10 @@ def process_player_commands(player, now, msgs):
             _process_unlock_door(player, data, msgs)
         elif cmd_type == "draw_tile":
             _process_draw_tile(player, data, msgs)
+        elif cmd_type == "tweak":
+            _process_tweak(player, data, msgs)
+        elif cmd_type == "tweak_monster":
+            _process_tweak_monster(player, data, msgs)
 
 
 # ---------------------------------------------------------------------------
@@ -1187,6 +1191,182 @@ def _cmd_keylayout(player, args, msgs):
 
 
 # ---------------------------------------------------------------------------
+# Tweak console — runtime constant editing
+# ---------------------------------------------------------------------------
+
+import server.constants as _constants_module
+
+# Server constants exposed to the tweak console (name -> {min, max, step, type, group, label})
+TWEAKABLE_SERVER_CONSTANTS = {
+    # Combat
+    "ATTACK_COOLDOWN":       {"group": "Combat", "label": "Attack Cooldown (s)", "min": 0.05, "max": 2, "step": 0.01},
+    "SWORD_ACTIVE_DURATION": {"group": "Combat", "label": "Sword Active (s)", "min": 0.05, "max": 1, "step": 0.01},
+    "SWORD_PERP_WIDTH":      {"group": "Combat", "label": "Sword Width (tiles)", "min": 0.1, "max": 2, "step": 0.1},
+    "PLAYER_COLLISION_MARGIN":{"group": "Combat", "label": "Player Collision Margin", "min": 0, "max": 0.5, "step": 0.025},
+    "KNOCKBACK_DURATION":    {"group": "Combat", "label": "Knockback Duration (s)", "min": 0, "max": 1, "step": 0.05},
+    "INVINCIBILITY_DURATION":{"group": "Combat", "label": "Invincibility (s)", "min": 0, "max": 5, "step": 0.25},
+    "COLLISION_GRACE_PERIOD":{"group": "Combat", "label": "Collision Grace (s)", "min": 0, "max": 2, "step": 0.1},
+    # HP & Items
+    "PLAYER_MAX_HP":         {"group": "HP & Items", "label": "Player Max HP", "min": 1, "max": 40, "step": 1, "type": "int"},
+    "HEART_RESTORE_HP":      {"group": "HP & Items", "label": "Heart Restore HP", "min": 1, "max": 20, "step": 1, "type": "int"},
+    "HEART_DROP_CHANCE":     {"group": "HP & Items", "label": "Heart Drop Chance", "min": 0, "max": 1, "step": 0.05},
+    "SEAL_FRAGMENT_HP_BONUS":{"group": "HP & Items", "label": "Seal Fragment HP Bonus", "min": 0, "max": 10, "step": 1, "type": "int"},
+    "ITEM_PICKUP_FREEZE_DURATION": {"group": "HP & Items", "label": "Pickup Freeze (s)", "min": 0, "max": 10, "step": 0.5},
+    # Monsters
+    "WALK_TIME":             {"group": "Monsters (Global)", "label": "Default Walk Time (s)", "min": 0.05, "max": 2, "step": 0.05},
+    "ROOM_RESET_COOLDOWN":   {"group": "Monsters (Global)", "label": "Room Reset Cooldown (s)", "min": 0, "max": 600, "step": 30},
+    "PROJECTILE_TICK_RATE":  {"group": "Monsters (Global)", "label": "Projectile Tick Rate (s)", "min": 0.01, "max": 1, "step": 0.05},
+    # Movement
+    "PLAYER_SPEED":          {"group": "Movement (Server)", "label": "Player Speed (tiles/s)", "min": 0.5, "max": 20, "step": 0.5},
+    "MAX_MOVE_PER_UPDATE":   {"group": "Movement (Server)", "label": "Max Move/Update (tiles)", "min": 0.5, "max": 5, "step": 0.25},
+    "DT_CLAMP":              {"group": "Movement (Server)", "label": "DT Clamp (s)", "min": 0.01, "max": 0.2, "step": 0.01},
+    "MAX_INPUTS_PER_TICK":   {"group": "Movement (Server)", "label": "Max Inputs/Tick", "min": 1, "max": 20, "step": 1, "type": "int"},
+    # Dungeon
+    "DARK_ROOM_FRACTION":    {"group": "Dungeon", "label": "Dark Room Fraction (d1)", "min": 0, "max": 1, "step": 0.05},
+    "DEFAULT_DARK_FRACTION": {"group": "Dungeon", "label": "Dark Room Fraction (other)", "min": 0, "max": 1, "step": 0.05},
+    "LANTERN_RADIUS":        {"group": "Dungeon", "label": "Lantern Radius (srv)", "min": 0.5, "max": 10, "step": 0.5},
+    "NO_LANTERN_RADIUS":     {"group": "Dungeon", "label": "No Lantern Radius (srv)", "min": 0, "max": 5, "step": 0.25},
+    "BRIGHT_TILE_RADIUS":    {"group": "Dungeon", "label": "Bright Tile Radius (srv)", "min": 0.5, "max": 10, "step": 0.5},
+    # Lifecycle
+    "PLAYER_RESPAWN_DELAY":  {"group": "Lifecycle", "label": "Respawn Delay (s)", "min": 0, "max": 20, "step": 0.5},
+    "REVIVAL_DURATION":      {"group": "Lifecycle", "label": "Revival Duration (s)", "min": 1, "max": 30, "step": 0.5},
+    "REVIVAL_PROXIMITY":     {"group": "Lifecycle", "label": "Revival Proximity (tiles)", "min": 0.5, "max": 5, "step": 0.5},
+    "REVIVAL_HP":            {"group": "Lifecycle", "label": "Revival HP", "min": 1, "max": 40, "step": 1, "type": "int"},
+    # Guards
+    "GUARD_COOLDOWN":        {"group": "Lifecycle", "label": "Guard Cooldown (s)", "min": 0, "max": 60, "step": 5, "type": "int"},
+    "GUARD_DESPAWN_TIMEOUT": {"group": "Lifecycle", "label": "Guard Despawn Timeout (s)", "min": 5, "max": 120, "step": 5},
+    "GUARD_DESPAWN_DISTANCE":{"group": "Lifecycle", "label": "Guard Despawn Distance", "min": 1, "max": 15, "step": 1, "type": "int"},
+    "GUARD_DESPAWN_GRACE":   {"group": "Lifecycle", "label": "Guard Despawn Grace (s)", "min": 0, "max": 10, "step": 0.5},
+    # Tick
+    "TICK_INTERVAL":         {"group": "Network", "label": "Tick Interval (s)", "min": 0.01, "max": 0.2, "step": 0.005},
+}
+
+
+def _cmd_tweak(player, args, msgs):
+    """Toggle tweak console for the player (debug only)."""
+    player._tweak_mode = not getattr(player, '_tweak_mode', False)
+    mode = "ON" if player._tweak_mode else "OFF"
+    tweak_msg = {"type": "tweak_mode", "active": player._tweak_mode}
+    if player._tweak_mode:
+        # Send current server constant values
+        constants = {}
+        for name, meta in TWEAKABLE_SERVER_CONSTANTS.items():
+            val = getattr(_constants_module, name, None)
+            if val is not None:
+                constants[name] = {"value": val, **meta}
+        tweak_msg["constants"] = constants
+
+        # Send monster registry (only built-in, not AI-generated)
+        monster_data = {}
+        for kind in sorted(game.builtin_monster_ids):
+            stats = game.monster_stats[kind]
+            behavior = game.monster_behaviors.get(kind) or {"rules": []}
+            rules_data = []
+            for rule in behavior.get("rules", []):
+                rule_entry = {}
+                for k in ("if", "do", "range", "cooldown", "warmup", "damage",
+                          "drift", "speed", "damage_radius", "count", "value",
+                          "direction", "los"):
+                    if k in rule:
+                        rule_entry[k] = rule[k]
+                rules_data.append(rule_entry)
+            monster_data[kind] = {
+                "stats": {
+                    "hp": stats.get("hp", 1),
+                    "walk_time": stats.get("walk_time", 0.25),
+                    "decision_time": stats.get("decision_time", 2.0),
+                    "damage": stats.get("damage", 1),
+                },
+                "rules": rules_data,
+            }
+        tweak_msg["monsters"] = monster_data
+    msgs.append(("send", player, tweak_msg))
+    msgs.append(("send", player, {"type": "info", "text": f"Tweak console {mode}"}))
+
+
+def _process_tweak(player, data, msgs):
+    """Handle tweak message - update a server constant at runtime."""
+    if not DEBUG_MODE or not getattr(player, '_tweak_mode', False):
+        return
+    name = data.get("name")
+    value = data.get("value")
+    if name not in TWEAKABLE_SERVER_CONSTANTS or value is None:
+        return
+    meta = TWEAKABLE_SERVER_CONSTANTS[name]
+    if meta.get("type") == "int":
+        value = int(round(value))
+    else:
+        value = float(value)
+    # Clamp
+    if meta.get("min") is not None and value < meta["min"]:
+        value = meta["min"]
+    if meta.get("max") is not None and value > meta["max"]:
+        value = meta["max"]
+    setattr(_constants_module, name, value)
+    log.event("tweak", f"{player.name} set {name} = {value}")
+
+
+def _process_tweak_monster(player, data, msgs):
+    """Handle tweak_monster message - update monster stats/behavior at runtime."""
+    if not DEBUG_MODE or not getattr(player, '_tweak_mode', False):
+        return
+    kind = data.get("kind")
+    tweak_type = data.get("tweak_type")
+    key = data.get("key")
+    value = data.get("value")
+    if not kind or kind not in game.monster_stats:
+        return
+
+    if tweak_type == "stat":
+        if key not in ("hp", "walk_time", "decision_time", "damage"):
+            return
+        if key in ("hp", "damage"):
+            value = int(round(value))
+        else:
+            value = float(value)
+        game.monster_stats[kind][key] = value
+        # Patch all existing instances of this kind
+        for room_id, monsters in game.room_monsters.items():
+            for m in monsters:
+                if m.kind == kind and m.alive:
+                    setattr(m, key, value)
+                    if key == "hp":
+                        m.max_hp = value
+        log.event("tweak", f"{player.name} set {kind}.{key} = {value}")
+
+    elif tweak_type == "rule":
+        # key format: "0.range" (rule_index.param_name)
+        parts = key.split(".", 1)
+        if len(parts) != 2:
+            return
+        rule_idx = int(parts[0])
+        param = parts[1]
+        behavior = game.monster_behaviors.get(kind)
+        if not behavior:
+            return
+        rules = behavior.get("rules", [])
+        if rule_idx < 0 or rule_idx >= len(rules):
+            return
+        if param not in rules[rule_idx]:
+            return
+        # Type match to original
+        original = rules[rule_idx][param]
+        if isinstance(original, int):
+            value = int(round(value))
+        else:
+            value = float(value)
+        rules[rule_idx][param] = value
+        # Also patch existing monster instances that share this behavior reference
+        for room_id, monsters in game.room_monsters.items():
+            for m in monsters:
+                if m.kind == kind and m.alive and m.behavior:
+                    m_rules = m.behavior.get("rules", [])
+                    if rule_idx < len(m_rules) and param in m_rules[rule_idx]:
+                        m_rules[rule_idx][param] = value
+        log.event("tweak", f"{player.name} set {kind}.rule{rule_idx}.{param} = {value}")
+
+
+# ---------------------------------------------------------------------------
 # Draw mode — debug tile editing
 # ---------------------------------------------------------------------------
 
@@ -1359,6 +1539,7 @@ DEBUG_COMMANDS = {
     "key": _cmd_key,
     "keylayout": _cmd_keylayout,
     "draw": _cmd_draw,
+    "tweak": _cmd_tweak,
     "gauntlet": lambda p, a, m: __import__("server.gauntlet", fromlist=["cmd_gauntlet"]).cmd_gauntlet(p, a, m),
     "gt": lambda p, a, m: __import__("server.gauntlet", fromlist=["cmd_gt"]).cmd_gt(p, a, m),
     "rmgauntlet": lambda p, a, m: __import__("server.gauntlet", fromlist=["cmd_rmgauntlet"]).cmd_rmgauntlet(p, a, m),

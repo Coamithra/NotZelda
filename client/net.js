@@ -1448,6 +1448,53 @@ function handleMessage(msg) {
       G.player.spectateData = null;
       break;
 
+    case "tweak_mode": {
+      G.debug.tweakMode = !!msg.active;
+      if (typeof toggleTweakPanel === "function") {
+        // Don't double-toggle, just sync state
+        const panel = document.getElementById("tweak-panel");
+        if (panel) panel.classList.toggle("active", G.debug.tweakMode);
+      }
+      // Register server constants
+      if (msg.constants && typeof registerTweak === "function") {
+        for (const [name, meta] of Object.entries(msg.constants)) {
+          const sName = "srv." + name;
+          // Skip if already registered with same value
+          if (TWEAK_REGISTRY[sName]) {
+            TWEAK_REGISTRY[sName].default = meta.value;
+            continue;
+          }
+          (function (n, m) {
+            let _val = m.value;
+            registerTweak("srv." + n, {
+              get: () => _val,
+              set: (v) => {
+                _val = v;
+                if (typeof sendToServer === "function") {
+                  sendToServer({ type: "tweak", name: n, value: v });
+                }
+              },
+              group: m.group || "Server",
+              label: m.label || n,
+              type: m.type || (Number.isInteger(m.value) ? "int" : "float"),
+              min: m.min, max: m.max, step: m.step,
+              server: true,
+            });
+          })(name, meta);
+        }
+      }
+      // Register monster tweaks
+      if (msg.monsters && typeof registerMonsterTweaks === "function") {
+        for (const [kind, data] of Object.entries(msg.monsters)) {
+          registerMonsterTweaks(kind, data.stats, data.rules);
+        }
+      }
+      if (G.debug.tweakMode && typeof renderTweakPanel === "function") {
+        renderTweakPanel();
+      }
+      break;
+    }
+
     case "error":
       G.ui.loginError.textContent = msg.text;
       break;

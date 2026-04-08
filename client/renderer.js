@@ -1,11 +1,11 @@
 /* Rendering — all render* and update* functions for the game loop. */
 
-const DANCE_FRAME_MS = 200;
-const DYING_MONSTER_FRAME_MS = 150;
-const ATTACK_FRAME_MS = 150;
-const ATTACK_FRAMES = 2;
-const ATTACK_GAP_MS = 90;  // vulnerability gap = 0.5 * sword active time (180ms)
-const DYING_PLAYER_FRAME_MS = 200;
+let DANCE_FRAME_MS = 200;
+let DYING_MONSTER_FRAME_MS = 150;
+let ATTACK_FRAME_MS = 150;
+let ATTACK_FRAMES = 2;
+let ATTACK_GAP_MS = 90;  // vulnerability gap = 0.5 * sword active time (180ms)
+let DYING_PLAYER_FRAME_MS = 200;
 
 // Advance a frame-based animation: returns true if the frame advanced
 function advanceFrame(obj, duration, now) {
@@ -198,9 +198,9 @@ function renderWaterWalkEffect() {
 let _darkCanvas = null;
 let _darkCtx = null;
 
-const LANTERN_RADIUS = 3.5;
-const NO_LANTERN_RADIUS = 0.75;
-const BRIGHT_TILE_RADIUS = 3.0;
+let LANTERN_RADIUS = 3.5;
+let NO_LANTERN_RADIUS = 0.75;
+let BRIGHT_TILE_RADIUS = 3.0;
 
 function renderDarkness() {
   if (!G.room.dark) return;
@@ -459,7 +459,7 @@ function renderHeartPickups() {
   }
 }
 
-const ITEM_PICKUP_DURATION = 2500;
+let ITEM_PICKUP_DURATION = 2500;
 
 function renderDungeonGroundItems() {
   for (const item of G.room.dungeonGroundItems) {
@@ -688,7 +688,7 @@ function _roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-const SPIRIT_JAR_ANIM_DURATION = 2500; // ms — spirit jar revival overlay
+let SPIRIT_JAR_ANIM_DURATION = 2500; // ms — spirit jar revival overlay
 
 function renderSpiritJarRevive() {
   const sj = G.player.spiritJarRevive;
@@ -2199,3 +2199,63 @@ function renderPlayerArrows() {
 
   ctx.globalAlpha = 1.0;
 }
+
+// ---------------------------------------------------------------------------
+// Tweak registrations
+// ---------------------------------------------------------------------------
+
+registerTweak("DANCE_FRAME_MS", {
+  get: () => DANCE_FRAME_MS, set: v => { DANCE_FRAME_MS = v; },
+  group: "Animation", label: "Dance Frame (ms)",
+  type: "int", min: 50, max: 500, step: 25,
+});
+registerTweak("DYING_MONSTER_FRAME_MS", {
+  get: () => DYING_MONSTER_FRAME_MS, set: v => { DYING_MONSTER_FRAME_MS = v; },
+  group: "Animation", label: "Monster Death Frame (ms)",
+  type: "int", min: 50, max: 500, step: 25,
+});
+registerTweak("ATTACK_FRAME_MS", {
+  get: () => ATTACK_FRAME_MS, set: v => { ATTACK_FRAME_MS = v; },
+  group: "Animation", label: "Attack Frame (ms)",
+  type: "int", min: 50, max: 500, step: 25,
+});
+registerTweak("ATTACK_FRAMES", {
+  get: () => ATTACK_FRAMES, set: v => { ATTACK_FRAMES = v; },
+  group: "Animation", label: "Attack Frame Count",
+  type: "int", min: 1, max: 6, step: 1,
+});
+registerTweak("ATTACK_GAP_MS", {
+  get: () => ATTACK_GAP_MS, set: v => { ATTACK_GAP_MS = v; },
+  group: "Animation", label: "Attack Gap (ms)",
+  type: "int", min: 0, max: 300, step: 10,
+});
+registerTweak("DYING_PLAYER_FRAME_MS", {
+  get: () => DYING_PLAYER_FRAME_MS, set: v => { DYING_PLAYER_FRAME_MS = v; },
+  group: "Animation", label: "Player Death Frame (ms)",
+  type: "int", min: 50, max: 500, step: 25,
+});
+registerTweak("LANTERN_RADIUS", {
+  get: () => LANTERN_RADIUS, set: v => { LANTERN_RADIUS = v; },
+  group: "Camera & Light", label: "Lantern Radius (tiles)",
+  min: 0.5, max: 10, step: 0.5,
+});
+registerTweak("NO_LANTERN_RADIUS", {
+  get: () => NO_LANTERN_RADIUS, set: v => { NO_LANTERN_RADIUS = v; },
+  group: "Camera & Light", label: "No Lantern Radius (tiles)",
+  min: 0, max: 5, step: 0.25,
+});
+registerTweak("BRIGHT_TILE_RADIUS", {
+  get: () => BRIGHT_TILE_RADIUS, set: v => { BRIGHT_TILE_RADIUS = v; },
+  group: "Camera & Light", label: "Bright Tile Radius (tiles)",
+  min: 0.5, max: 10, step: 0.5,
+});
+registerTweak("ITEM_PICKUP_DURATION", {
+  get: () => ITEM_PICKUP_DURATION, set: v => { ITEM_PICKUP_DURATION = v; },
+  group: "Animation", label: "Item Pickup Duration (ms)",
+  type: "int", min: 500, max: 5000, step: 250,
+});
+registerTweak("SPIRIT_JAR_ANIM_DURATION", {
+  get: () => SPIRIT_JAR_ANIM_DURATION, set: v => { SPIRIT_JAR_ANIM_DURATION = v; },
+  group: "Animation", label: "Spirit Jar Anim (ms)",
+  type: "int", min: 500, max: 5000, step: 250,
+});

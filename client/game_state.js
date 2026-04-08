@@ -10,21 +10,21 @@ const COLS = 15;
 const ROWS = 11;
 const CW = COLS * TS; // 720
 const CH = ROWS * TS; // 528
-const MOVE_LERP = 0.3;            // lerp factor for other players & monsters (fallback)
+let MOVE_LERP = 0.3;            // lerp factor for other players & monsters (fallback)
 
 // Half-tile free movement constants
-const MOVE_SPEED = 4.0;                  // tiles/sec
-const HALF_TILE = 0.5;
+let MOVE_SPEED = 4.0;                  // tiles/sec
+let HALF_TILE = 0.5;
 // (position reporting triggers when Math.round(pos*2)/2 changes — see maybeReportPosition)
-const HALF_WALK_TIME_MS = 125;           // other player animation duration (ms)
+let HALF_WALK_TIME_MS = 125;           // other player animation duration (ms)
 
 // Entity interpolation — remote player smoothing
-const INTERP_DELAY = 66;                 // ms behind real-time to render remote players (~2 server ticks)
-const INTERP_BUFFER_SIZE = 6;            // max snapshots to keep per remote player
+let INTERP_DELAY = 66;                 // ms behind real-time to render remote players (~2 server ticks)
+let INTERP_BUFFER_SIZE = 6;            // max snapshots to keep per remote player
 
 // Client-side prediction + server reconciliation
-const CORRECTION_RATE = 0.15;            // per-frame lerp factor for smooth correction decay
-const MONSTER_CORRECTION_RATE = 0.2;     // per-frame decay for monster dead reckoning offset
+let CORRECTION_RATE = 0.15;            // per-frame lerp factor for smooth correction decay
+let MONSTER_CORRECTION_RATE = 0.2;     // per-frame decay for monster dead reckoning offset
 
 // Shared mutable game state
 const G = {
@@ -203,5 +203,6 @@ const G = {
     drawLMB: null,         // tile code bound to left mouse button
     drawRMB: null,         // tile code bound to right mouse button
     builtinTileIds: [],    // built-in tile IDs from server (for "All Tiles" palette)
+    tweakMode: false,      // /tweak toggle: gamefeel parameter console
   },
 };

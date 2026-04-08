@@ -224,7 +224,7 @@ async def handle_connection(websocket):
                     if "ct" in data:
                         pong["ct"] = data["ct"]  # echo client timestamp for RTT measurement
                     await player.ws.send(json.dumps(pong))
-                elif msg_type in ("player_input", "player_state", "chat", "unlock_door", "respawn_request", "draw_tile"):
+                elif msg_type in ("player_input", "player_state", "chat", "unlock_door", "respawn_request", "draw_tile", "tweak", "tweak_monster"):
                     player.command_queue.append((msg_type, data))
             except json.JSONDecodeError:
                 log.debug(f"[WARN] {name}: bad JSON: {raw[:200]}")
@@ -305,6 +305,7 @@ STATIC_FILES = {
     "/index.html":  ("client/client.html", "text/html; charset=utf-8"),
     "/ost":         ("client/ost.html",    "text/html; charset=utf-8"),
     "/game_state.js": ("client/game_state.js", "application/javascript; charset=utf-8"),
+    "/tweak.js":    ("client/tweak.js",    "application/javascript; charset=utf-8"),
     "/title.js":    ("client/title.js",    "application/javascript; charset=utf-8"),
     "/sprite_data.js": ("client/sprite_data.js", "application/javascript; charset=utf-8"),
     "/sprites.js":  ("client/sprites.js",  "application/javascript; charset=utf-8"),

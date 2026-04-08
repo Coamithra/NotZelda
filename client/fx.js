@@ -3,13 +3,13 @@
    corpses, damage vignette, camera lead.
    Loaded between renderer.js and net.js. */
 
-const PARTICLE_CAP = 100;
-const SLASH_ARC_DURATION = 150;
-const FLOATING_TEXT_DURATION = 600;
-const FLOATING_TEXT_RISE = 30;
-const VIGNETTE_DURATION = 300;
-const CORPSE_CAP = 20;
-const SPAWN_POP_DURATION = 300;
+let PARTICLE_CAP = 100;
+let SLASH_ARC_DURATION = 150;
+let FLOATING_TEXT_DURATION = 600;
+let FLOATING_TEXT_RISE = 30;
+let VIGNETTE_DURATION = 300;
+let CORPSE_CAP = 20;
+let SPAWN_POP_DURATION = 300;
 
 // Direction vectors for camera lead
 const DIR_VECTORS = {
@@ -267,3 +267,43 @@ function spawnDustPuff(px, py, dir) {
   const dustColors = ["#c8b898", "#a09068", "#d0c0a0"];
   spawnBurst(cx, cy, 2, 1.2, 200, dustColors, [2 * SCALE, 3 * SCALE], { shrink: true });
 }
+
+// ---------------------------------------------------------------------------
+// Tweak registrations
+// ---------------------------------------------------------------------------
+
+registerTweak("PARTICLE_CAP", {
+  get: () => PARTICLE_CAP, set: v => { PARTICLE_CAP = v; },
+  group: "FX", label: "Particle Cap",
+  type: "int", min: 10, max: 500, step: 10,
+});
+registerTweak("SLASH_ARC_DURATION", {
+  get: () => SLASH_ARC_DURATION, set: v => { SLASH_ARC_DURATION = v; },
+  group: "FX", label: "Slash Arc Duration (ms)",
+  type: "int", min: 50, max: 500, step: 25,
+});
+registerTweak("FLOATING_TEXT_DURATION", {
+  get: () => FLOATING_TEXT_DURATION, set: v => { FLOATING_TEXT_DURATION = v; },
+  group: "FX", label: "Floating Text Duration (ms)",
+  type: "int", min: 100, max: 2000, step: 50,
+});
+registerTweak("FLOATING_TEXT_RISE", {
+  get: () => FLOATING_TEXT_RISE, set: v => { FLOATING_TEXT_RISE = v; },
+  group: "FX", label: "Floating Text Rise (px)",
+  type: "int", min: 5, max: 100, step: 5,
+});
+registerTweak("VIGNETTE_DURATION", {
+  get: () => VIGNETTE_DURATION, set: v => { VIGNETTE_DURATION = v; },
+  group: "FX", label: "Damage Vignette Duration (ms)",
+  type: "int", min: 50, max: 1000, step: 50,
+});
+registerTweak("CORPSE_CAP", {
+  get: () => CORPSE_CAP, set: v => { CORPSE_CAP = v; },
+  group: "FX", label: "Corpse Cap",
+  type: "int", min: 0, max: 100, step: 5,
+});
+registerTweak("SPAWN_POP_DURATION", {
+  get: () => SPAWN_POP_DURATION, set: v => { SPAWN_POP_DURATION = v; },
+  group: "FX", label: "Spawn Pop Duration (ms)",
+  type: "int", min: 50, max: 1000, step: 50,
+});

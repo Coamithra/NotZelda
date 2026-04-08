@@ -95,6 +95,19 @@ Detailed implementation notes for each game system:
 - **Server state**: `game.draw_overrides` tracks originals + linked neighbor overrides for undo
 - **Key files**: `server/commands.py` (`_cmd_draw`, `_process_draw_tile`), `server/rooms.py` (`save_room_tilemap`), `client/client.html` (palette HTML/CSS/JS), `client/input.js` (canvas click/contextmenu), `client/renderer.js` (`renderDrawMode`)
 
+### Debug Tweak Console
+
+`/tweak` (debug only) opens a runtime parameter tweaking panel to the right of the game canvas:
+
+- **Panel layout**: right sidebar (380px), coexists with `/draw` palette, collapsible groups with filter bar
+- **Client constants**: `const` changed to `let` in game_state.js, fx.js, renderer.js, music.js; registered via `registerTweak()` getter/setter pattern in `client/tweak.js`
+- **Server constants**: whitelist in `TWEAKABLE_SERVER_CONSTANTS` dict in `server/commands.py`; updates via `setattr()` on constants module; sent to client on `/tweak` toggle
+- **Monster scripts**: per-kind stats + behavior rule params; server sends built-in monster registry (excludes AI-generated); patches existing instances on change
+- **Controls**: direct input field + slider (when min/max defined) + -/+ buttons + reset per param
+- **Export**: copies all non-default values to clipboard as readable text
+- **Key files**: `client/tweak.js` (registry + UI), `client/client.html` (panel HTML/CSS), `server/commands.py` (`_cmd_tweak`, `_process_tweak`, `_process_tweak_monster`)
+- **Script load order**: `game_state.js` -> `tweak.js` -> `title.js` -> ... (tweak.js must load after game_state.js but before other scripts that call `registerTweak()`)
+
 ## Workflow Preferences
 
 - **Prefer self-hosted/local tools** over cloud APIs when quality is comparable. The user has an RTX 4070 Ti (12GB) and prefers owning the toolchain. Lead with open-source options first; suggest cloud APIs only as fallback.

@@ -4,7 +4,7 @@
 
 const SfxPlayer = (function () {
   let enabled = true;
-  const VOLUME = 0.5;
+  let VOLUME = 0.5;
   const cache = {};  // name -> Audio (preloaded)
 
   const SFX_FILES = {
@@ -59,7 +59,10 @@ const SfxPlayer = (function () {
   function toggle() { enabled = !enabled; return enabled; }
   function isEnabled() { return enabled; }
 
-  return { play, preload, toggle, isEnabled };
+  function getVolume() { return VOLUME; }
+  function setVolume(v) { VOLUME = v; }
+
+  return { play, preload, toggle, isEnabled, getVolume, setVolume };
 })();
 
 // ---------------------------------------------------------------------------
@@ -71,8 +74,8 @@ const MusicPlayer = (function () {
   let currentTrack = null;
   const tracks = {};       // url -> Audio element
   const fadeIds = {};      // url -> requestAnimationFrame ID (for cancellation)
-  const FADE_MS = 800;
-  const VOLUME = 0.4;
+  let FADE_MS = 800;
+  let VOLUME = 0.4;
 
   // Map music field values (from server) to track URLs
   const MUSIC_TRACKS = {
@@ -122,8 +125,8 @@ const MusicPlayer = (function () {
 
   // --- Boss choir overlay ---
   const CHOIR_DEFAULT_URL = "music_boss1_choir.mp3";
-  const CHOIR_MAX_VOL = 0.70;
-  const CHOIR_MIN_VOL = 0.10;
+  let CHOIR_MAX_VOL = 0.70;
+  let CHOIR_MIN_VOL = 0.10;
   let choirAudio = null;
   let choirFadeId = null;
   let choirActive = false;
@@ -348,5 +351,49 @@ const MusicPlayer = (function () {
     _fadeChoir(0, FADE_MS, function () { choirAudio.pause(); });
   }
 
-  return { start, stop, toggle, isPlaying, setRoom, silence, startChoir, stopChoir };
+  // Tweak accessors
+  function getVolume() { return VOLUME; }
+  function setVolume(v) { VOLUME = v; }
+  function getFadeMs() { return FADE_MS; }
+  function setFadeMs(v) { FADE_MS = v; }
+  function getChoirMaxVol() { return CHOIR_MAX_VOL; }
+  function setChoirMaxVol(v) { CHOIR_MAX_VOL = v; }
+  function getChoirMinVol() { return CHOIR_MIN_VOL; }
+  function setChoirMinVol(v) { CHOIR_MIN_VOL = v; }
+
+  return {
+    start, stop, toggle, isPlaying, setRoom, silence, startChoir, stopChoir,
+    getVolume, setVolume, getFadeMs, setFadeMs,
+    getChoirMaxVol, setChoirMaxVol, getChoirMinVol, setChoirMinVol,
+  };
 })();
+
+// ---------------------------------------------------------------------------
+// Tweak registrations
+// ---------------------------------------------------------------------------
+
+registerTweak("SFX_VOLUME", {
+  get: () => SfxPlayer.getVolume(), set: v => SfxPlayer.setVolume(v),
+  group: "Audio", label: "SFX Volume",
+  min: 0, max: 1, step: 0.05,
+});
+registerTweak("MUSIC_VOLUME", {
+  get: () => MusicPlayer.getVolume(), set: v => MusicPlayer.setVolume(v),
+  group: "Audio", label: "Music Volume",
+  min: 0, max: 1, step: 0.05,
+});
+registerTweak("MUSIC_FADE_MS", {
+  get: () => MusicPlayer.getFadeMs(), set: v => MusicPlayer.setFadeMs(v),
+  group: "Audio", label: "Music Crossfade (ms)",
+  type: "int", min: 100, max: 3000, step: 100,
+});
+registerTweak("CHOIR_MAX_VOL", {
+  get: () => MusicPlayer.getChoirMaxVol(), set: v => MusicPlayer.setChoirMaxVol(v),
+  group: "Audio", label: "Choir Max Volume",
+  min: 0, max: 1, step: 0.05,
+});
+registerTweak("CHOIR_MIN_VOL", {
+  get: () => MusicPlayer.getChoirMinVol(), set: v => MusicPlayer.setChoirMinVol(v),
+  group: "Audio", label: "Choir Min Volume",
+  min: 0, max: 1, step: 0.05,
+});

@@ -110,6 +110,171 @@
   #server-log .log-line.regen { color: #3fb950; }
   #server-log .log-line.deprecation { color: #d2a8ff; }
 
+  /* ---------- Tweak panel ---------- */
+  #tweak-panel {
+    display: none;
+    width: 380px;
+    max-height: 90vh;
+    background: #0d1117;
+    border: 2px solid #30363d;
+    border-left: none;
+    font-family: "Fira Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 11px;
+    color: #8b949e;
+    flex-direction: column;
+  }
+  #tweak-panel.active { display: flex; }
+  .tweak-header {
+    padding: 6px 8px;
+    border-bottom: 1px solid #30363d;
+    color: #e6b422;
+    font-weight: bold;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .tweak-filter {
+    flex: 1;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 2px;
+    color: #c9d1d9;
+    font-family: inherit;
+    font-size: 11px;
+    padding: 2px 6px;
+    outline: none;
+  }
+  .tweak-filter:focus { border-color: #e6b422; }
+  .tweak-filter::placeholder { color: #484f58; }
+  .tweak-export {
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 2px;
+    color: #8b949e;
+    font-family: inherit;
+    font-size: 11px;
+    padding: 2px 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .tweak-export:hover { background: #30363d; color: #c9d1d9; }
+  .tweak-body {
+    overflow-y: auto;
+    padding: 4px 0;
+    flex: 1;
+    scrollbar-width: thin;
+    scrollbar-color: #30363d #0d1117;
+  }
+  .tweak-group { margin-bottom: 2px; }
+  .tweak-group-header {
+    padding: 4px 8px;
+    background: #161b22;
+    color: #58a6ff;
+    font-weight: bold;
+    font-size: 11px;
+    cursor: pointer;
+    user-select: none;
+    border-top: 1px solid #21262d;
+  }
+  .tweak-group-header:hover { background: #1c2128; }
+  .tweak-arrow { font-size: 9px; display: inline-block; width: 10px; }
+  .tweak-count { color: #484f58; font-weight: normal; }
+  .tweak-row {
+    display: flex;
+    align-items: center;
+    padding: 2px 8px 2px 16px;
+    gap: 4px;
+    min-height: 24px;
+  }
+  .tweak-row:hover { background: #161b22; }
+  .tweak-row.tweak-server .tweak-label { color: #d2a8ff; }
+  .tweak-label {
+    flex: 0 0 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 10px;
+    color: #8b949e;
+    cursor: default;
+  }
+  .tweak-controls {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    flex: 1;
+    min-width: 0;
+  }
+  .tweak-input {
+    width: 60px;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 2px;
+    color: #c9d1d9;
+    font-family: inherit;
+    font-size: 11px;
+    padding: 1px 4px;
+    text-align: right;
+    outline: none;
+    -moz-appearance: textfield;
+  }
+  .tweak-input::-webkit-inner-spin-button,
+  .tweak-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .tweak-input:focus { border-color: #58a6ff; }
+  .tweak-btn {
+    width: 20px;
+    height: 20px;
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 2px;
+    color: #8b949e;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    line-height: 1;
+  }
+  .tweak-btn:hover { background: #30363d; color: #c9d1d9; }
+  .tweak-btn:active { background: #484f58; }
+  .tweak-btn.tweak-default { opacity: 0.3; cursor: default; }
+  .tweak-slider {
+    flex: 1;
+    min-width: 50px;
+    height: 14px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #21262d;
+    border-radius: 2px;
+    outline: none;
+  }
+  .tweak-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 10px;
+    height: 14px;
+    background: #58a6ff;
+    border-radius: 2px;
+    cursor: pointer;
+  }
+  .tweak-slider::-moz-range-thumb {
+    width: 10px;
+    height: 14px;
+    background: #58a6ff;
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+  }
+  .tweak-empty {
+    padding: 12px;
+    color: #484f58;
+    text-align: center;
+    font-style: italic;
+  }
+
   /* ---------- Chat log ---------- */
   #chat-log {
     width: 720px;
@@ -352,6 +517,14 @@
     </div>
   </div>
   <div id="server-log"></div>
+  <div id="tweak-panel">
+    <div class="tweak-header">
+      TWEAK
+      <input class="tweak-filter" type="text" placeholder="Filter...">
+      <button class="tweak-export" onclick="exportTweaks()">Export</button>
+    </div>
+    <div class="tweak-body"></div>
+  </div>
 </div>
 
 <!-- Mobile controls -->
@@ -367,6 +540,7 @@
 
 <!-- Game scripts — load order matters -->
 <script src="game_state.js?v=3"></script>
+<script src="tweak.js?v=1"></script>
 <script src="title.js?v=1"></script>
 <script src="tiles.js?v=3"></script>
 <script src="sprite_data.js?v=3"></script>
@@ -419,6 +593,9 @@ G.ui.chatBar     = document.getElementById("chat-bar");
 G.ui.chatHint    = document.getElementById("chat-hint");
 G.ui.chatLog     = document.getElementById("chat-log");
 G.ui.serverLog   = document.getElementById("server-log");
+
+// Init tweak panel
+if (typeof initTweakPanel === "function") initTweakPanel();
 
 // ---------------------------------------------------------------------------
 // Title screen
