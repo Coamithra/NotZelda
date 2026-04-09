@@ -1,0 +1,516 @@
+
+============================================================
+MODEL FINGERPRINT
+============================================================
+  Model:          llama3.2:3b
+  Family:         llama
+  Parameters:     3.2B (3,212,749,888 total)
+  Quantization:   Q4_K_M
+  Finetune:       Instruct
+  Digest:         ...
+============================================================
+
+Warming up Ollama (llama3.2:3b)...
+  Warmup confirmed model: llama3.2:3b
+Ready.
+
+============================================================
+VARIANT: optional-tags
+============================================================
+  Smith    [friendly] OK         (2.4s, 33tok, 130t/s)
+           -> Good morrow to you, young adventurer! What brings you to our humble village? Do you need any aid or 
+  Smith    [friendly] OK         (2.4s, 23tok, 90t/s)
+           -> Greetings, young adventurer! I'm Smith, the village blacksmith. What brings you to my forge today?
+  Smith    [friendly] OK         (2.4s, 17tok, 76t/s)
+           -> Welcome to my forge, traveler. What brings you to our humble village today?
+  Smith    [friendly] OK         (2.8s, 80tok, 152t/s)
+           -> Welcome to Greenhaven, lad! Our little town's got character, that's for sure. 'Tis a hub of activity
+  Smith    [friendly] OK         (2.4s, 28tok, 103t/s)
+           -> Welcome to Oakwood, our little town is filled with folk from all walks of life, looking for work or 
+  Smith    [friendly] OK         (2.7s, 80tok, 151t/s)
+           -> Welcome to Oakwood! 'Tis a humble village, nestled at the edge of the Whispering Woods. We've had so
+  Smith    [friendly] OK         (2.5s, 36tok, 114t/s)
+           -> Aye, I've lived here all me life, hammer in hand, shaping the finest steel for those brave enough to
+  Smith    [friendly] OK         (2.5s, 41tok, 125t/s)
+           -> Aye, I've lived here all me life, 'n' there's no place like it, especially when the sun sets over th
+  Smith    [friendly] OK         (2.5s, 29tok, 90t/s)
+           -> I couldn't agree more, Hero! The village blacksmith's forge is my pride and joy. What brings you to 
+  Smith    [friendly] OK         (2.6s, 52tok, 121t/s)
+           -> You're welcome, Hero! 'Tis always my pleasure to aid those in need. I've got a fine selection of too
+  Smith    [friendly] OK         (2.5s, 27tok, 91t/s)
+           -> You're welcome, Hero! May my humble blades serve you well on your journey ahead. What can I forge fo
+  Smith    [friendly] OK         (2.4s, 30tok, 104t/s)
+           -> You're welcome, young Hero! May my humble blades serve you well on the road ahead. Would you like a 
+  Smith    [friendly] OK         (2.4s, 22tok, 99t/s)
+           -> Indeed it is, perfect weather for shaping some fine steel! What brings you to my humble forge today?
+  Smith    [friendly] OK         (2.6s, 56tok, 131t/s)
+           -> Indeed it is! The sun's shining bright, casting a warm glow over the forge. I've been hammering away
+  Smith    [friendly] OK         (2.4s, 30tok, 112t/s)
+           -> Indeed it is! Perfect weather for hammering out some fine steel, don't you think? What brings you to
+  Smith    [neutral ] OK         (2.7s, 66tok, 136t/s)
+           -> My friend, the Darkstone Dungeon lies due east of our village, nestled deep within the Dragon's Spin
+  Smith    [neutral ] OK         (2.5s, 52tok, 136t/s)
+           -> You're lookin' for the dungeon, eh? I heard it's down by the old windmill on the outskirts of town, 
+  Smith    [neutral ] OK         (2.4s, 25tok, 91t/s)
+           -> Just north of here, near the old windmill. Be careful, rumors say dark creatures lurk in the shadows
+  Smith    [neutral ] OK         (2.6s, 58tok, 128t/s)
+           -> Welcome, Hero! I've got everything you'll need to gear up for the road ahead: sturdy leather armor, 
+  Smith    [neutral ] OK         (2.4s, 31tok, 119t/s)
+           -> Welcome to my forge! What kind of supplies are you in need of, traveler? Iron, steel, or perhaps som
+  Smith    [neutral ] OK         (2.5s, 50tok, 125t/s)
+           -> Welcome to my forge, young one! I've got all sorts of supplies that'll serve you well on your journe
+  Smith    [neutral ] OK         (2.4s, 19tok, 86t/s)
+           -> I'm Smith, the village blacksmith, happy to help and arm adventurers like yourself!
+  Smith    [neutral ] OK         (2.4s, 21tok, 86t/s)
+           -> I'm Smith, the village blacksmith, crafting fine arms and armor for brave adventurers like yourself!
+  Smith    [neutral ] OK         (2.4s, 26tok, 105t/s)
+           -> I'm Smith, the village blacksmith, here to forge the finest swords and armor for those brave enough 
+  Smith    [neutral ] OK         (2.8s, 79tok, 131t/s)
+           -> You're referrin' to the Dark Blade Curse, lad? That's a tale of woe and darkness, said to afflict an
+  Smith    [neutral ] OK         (2.4s, 32tok, 129t/s)
+           -> The curse of the Ironwood Forest, a dark affliction that causes its victims to lose their temper and
+  Smith    [neutral ] OK         (2.7s, 80tok, 151t/s)
+           -> The curse of Mor'Dhul, a dark affliction that befell our village many moons ago. 'Tis said that the 
+  Smith    [neutral ] OK         (2.5s, 34tok, 107t/s)
+           -> I forge the finest swords, shields, and armor in all the land, crafted with care and attention to de
+  Smith    [neutral ] OK         (2.4s, 25tok, 112t/s)
+           -> I craft fine arms, armor, and tools for those who need 'em. Need somethin' special forged?
+  Smith    [neutral ] OK         (2.4s, 32tok, 113t/s)
+           -> I craft sturdy swords, shields, and armor for brave adventurers like yourself, as well as fine tools
+  Smith    [hostile ] OK         (2.4s, 25tok, 113t/s)
+           -> I see ye've got a bit o' a temper, laddie! What brings ye to me forge today?
+  Smith    [hostile ] OK         (2.5s, 38tok, 122t/s)
+           -> I'm sorry to hear you don't think much of my work, but I've made many fine blades for the people of 
+  Smith    [hostile ] OK         (2.5s, 36tok, 100t/s)
+           -> I'm sorry to hear that, but I've been smiting hot metal into fine blades for years, if you need a sw
+  Smith    [hostile ] OK         (2.4s, 18tok, 90t/s)
+           -> I'll be going no further than my forge till you prove yourself worthy, lad!
+  Smith    [hostile ] OK         (2.4s, 27tok, 97t/s)
+           -> I'll be going nowhere till you prove yourself worthy, youngster. What's it that you hope to achieve 
+  Smith    [hostile ] OK         (2.5s, 34tok, 109t/s)
+           -> I'm afraid I won't be moved, good sir. My forge is my livelihood, and I'll not have it disrupted by 
+  Smith    [vulgar  ] OK         (2.2s, 6tok, 210t/s) [GUARDS]
+           -> 
+  Smith    [vulgar  ] OK         (2.2s, 6tok, 106t/s) [GUARDS]
+           -> 
+  Smith    [vulgar  ] MISS       (2.5s, 36tok, 104t/s)
+           -> I apologize if my wares didn't meet your expectations, but I'm happy to help you find something that
+  Smith    [vulgar  ] OK         (2.2s, 6tok, 94t/s) [GUARDS]
+           -> 
+  Smith    [vulgar  ] OK         (2.1s, 6tok, 209t/s) [GUARDS]
+           -> 
+  Smith    [vulgar  ] OK         (2.2s, 6tok, 100t/s) [GUARDS]
+           -> 
+  Smith    [vulgar  ] OK         (2.2s, 6tok, 193t/s) [GUARDS]
+           -> 
+  Smith    [vulgar  ] OK         (2.1s, 6tok, 204t/s) [GUARDS]
+           -> 
+  Smith    [vulgar  ] OK         (2.2s, 6tok, 93t/s) [GUARDS]
+           -> 
+  Smith    [threat  ] MISS       (2.5s, 28tok, 92t/s)
+           -> I'm not afraid of you, I've been blacksmithing here for years, my wares are worth more than any swor
+  Smith    [threat  ] MISS       (2.4s, 22tok, 102t/s)
+           -> I'm not interested in parting with my wares, especially not to someone who's threatening violence.
+  Smith    [threat  ] MISS       (2.4s, 29tok, 105t/s)
+           -> I don't think so, friend! Not while my wares are still in working order, they're not! *holds hammer 
+  Smith    [threat  ] OK         (2.2s, 6tok, 101t/s) [GUARDS]
+           -> 
+  Smith    [threat  ] OK         (2.2s, 6tok, 57t/s) [GUARDS]
+           -> 
+  Smith    [threat  ] OK         (2.3s, 6tok, 43t/s) [GUARDS]
+           -> 
+  Smith    [threat  ] OK         (2.2s, 6tok, 95t/s) [GUARDS]
+           -> 
+  Smith    [threat  ] OK         (2.2s, 6tok, 50t/s) [GUARDS]
+           -> 
+  Smith    [threat  ] OK         (2.3s, 6tok, 36t/s) [GUARDS]
+           -> 
+  Smith    [gray    ] OK         (2.5s, 43tok, 118t/s)
+           -> I see you're in a hurry, but take a moment to look at the fine craftsmanship of my wares, I've got s
+  Smith    [gray    ] OK         (2.4s, 23tok, 88t/s)
+           -> I've heard that tone before, young one; would you like a look at my latest piece of work?
+  Smith    [gray    ] OK         (2.5s, 38tok, 104t/s)
+           -> I've heard that tone before from some of the younger folks coming through these doors, but I'm not o
+  Smith    [gray    ] FALSE+     (2.2s, 6tok, 96t/s) [GUARDS]
+           -> 
+  Smith    [gray    ] FALSE+     (2.3s, 6tok, 36t/s) [GUARDS]
+           -> 
+  Smith    [gray    ] FALSE+     (2.2s, 6tok, 95t/s) [GUARDS]
+           -> 
+  Smith    [gray    ] OK         (2.5s, 22tok, 68t/s)
+           -> Tough customers like yourself don't usually get invited back, but the ale's still on the house!
+  Smith    [gray    ] OK         (2.4s, 27tok, 108t/s)
+           -> Sorry to hear that, lad! The Red Hammer's got its charm, but the ale's not always the best, eh?
+  Smith    [gray    ] OK         (2.4s, 22tok, 91t/s)
+           -> Sorry to hear that, Hero! Guess we could use some good luck changing that around here, eh?
+  Smith    [gray    ] OK         (2.4s, 26tok, 96t/s)
+           -> Forgive me, I'm always eager to share my passion for the forge. What can I do for you, Hero?
+  Smith    [gray    ] OK         (2.3s, 12tok, 87t/s)
+           -> Forgive me, what can I help you with?
+  Smith    [gray    ] OK         (2.4s, 18tok, 83t/s)
+           -> I'll cut to the chase then. What can I do for you, Hero?
+  Smith    [gray    ] OK         (2.5s, 41tok, 126t/s)
+           -> I can see you're eager for battle, but I don't give away my finest blades so easily - not even to a 
+  Smith    [gray    ] OK         (2.5s, 33tok, 94t/s)
+           -> I'm afraid I don't give away my finest blades to just anyone, brave Hero. What makes you think you'r
+  Smith    [gray    ] OK         (2.5s, 48tok, 120t/s)
+           -> I'm afraid my finest blade, Dragon's Tooth, is not for the faint of heart or those without honor, le
+  Smith    [gray    ] OK         (2.5s, 41tok, 107t/s)
+           -> I'm not one to give away my best wares so easily, lad! What makes you think you're worthy of wieldin
+  Smith    [gray    ] OK         (2.4s, 28tok, 120t/s)
+           -> I'm afraid not, lad! You'll have to earn that sword by helping me out around the forge or proving yo
+  Smith    [gray    ] OK         (2.4s, 25tok, 104t/s)
+           -> I'll not be handin' out my finest blades so easily, lad! Earn yer keep in my forge first.
+  Smith    [gray    ] OK         (2.5s, 37tok, 119t/s)
+           -> I'm always willing to lend a helping hand, especially when it comes to those in need of a sturdy bla
+  Smith    [gray    ] OK         (2.4s, 38tok, 127t/s)
+           -> I'm always willing to lend a hand, especially if you're lookin' to craft some fine steel or fix that
+  Smith    [gray    ] OK         (2.5s, 31tok, 93t/s)
+           -> I'm always willing to lend a helping hand, especially if it's to someone as brave as yourself, Hero!
+  Smith    [gray    ] OK         (2.3s, 17tok, 84t/s)
+           -> I've heard that before, lad. What brings you to my forge today?
+  Smith    [gray    ] OK         (2.3s, 17tok, 88t/s)
+           -> I've heard that one before, lad. What brings you to my forge?
+  Smith    [gray    ] OK         (2.4s, 23tok, 91t/s)
+           -> Forgive me, traveler, but I've spent years shaping metal into tools of greatness, not idle chatter.
+  Smith    [gray+   ] MISS       (2.3s, 17tok, 89t/s)
+           -> I'm afraid you'll need to prove yourself worthy, not just demand goods!
+  Smith    [gray+   ] MISS       (2.6s, 54tok, 124t/s)
+           -> [SINGLE_EYED_GLADE] Can't you see I'm busy shaping the very metal of this world, not conjuring a swo
+  Smith    [gray+   ] MISS       (2.4s, 32tok, 113t/s)
+           -> Not in such a hurry, I see. Let's take a closer look at you, Hero. What makes you think you're ready
+  Barmaid  [friendly] OK         (2.4s, 22tok, 93t/s)
+           -> Lovely day for a pint, don't you think? What can I get for ye, Hero?
+  Barmaid  [friendly] OK         (2.5s, 41tok, 113t/s)
+           -> (big smile) Oh, hello there, Hero! What can I get for you tonight? We've got a fresh batch of ale fr
+  Barmaid  [friendly] OK         (2.4s, 29tok, 118t/s)
+           -> Big hello back atcha, Hero! What can I get for ya? Ale, wine, or maybe some of our famous tavern ste
+  Barmaid  [friendly] OK         (2.6s, 68tok, 149t/s)
+           -> Welcome to Oakwood! It's a quaint little place, not too big, not too small. We've got our fair share
+  Barmaid  [friendly] OK         (2.5s, 50tok, 140t/s)
+           -> We're a quiet little place called Willowdale, nestled between the rolling hills of the countryside. 
+  Barmaid  [friendly] OK         (2.7s, 80tok, 141t/s)
+           -> You're lookin' for some local gossip, eh? Well, let me tell you, our little town's got a lot of char
+  Barmaid  [friendly] OK         (2.4s, 27tok, 94t/s)
+           -> Isn't it just? We get all sorts of interesting travelers in here. What brings you to our humble tave
+  Barmaid  [friendly] OK         (2.5s, 47tok, 116t/s)
+           -> Isn't it though? I've been servin' up ales and hearthsides tales here for years, but still love seei
+  Barmaid  [friendly] OK         (2.5s, 50tok, 138t/s)
+           -> Isn't it? Been comin' here for years myself, and I never get tired of the fire cracklin' in the hear
+  Barmaid  [friendly] OK         (2.4s, 29tok, 101t/s)
+           -> You're welcome, dearie! What can I get for ya tonight? A pint of our finest ale or some warm hearth 
+  Barmaid  [friendly] OK         (2.4s, 34tok, 115t/s)
+           -> You're welcome, Hero! Come on in out of that rain, what can I get ya? Ale, mead, or maybe a warm bow
+  Barmaid  [friendly] OK         (2.5s, 30tok, 89t/s)
+           -> You're welcome, Hero! Come on back any time, we've got a warm fire and a mug of ale waitin' for ya!
+  Barmaid  [friendly] OK         (2.5s, 43tok, 113t/s)
+           -> Isn't it just? Reminds me of sippin' ale on the patio back in my village, before I took up this line
+  Barmaid  [friendly] OK         (2.4s, 38tok, 130t/s)
+           -> Isn't it just? The sun's out, the ale's cold, and I've got a fresh pot of mead on tap! What can I ge
+  Barmaid  [friendly] OK         (2.4s, 28tok, 90t/s)
+           -> Isn't it? Just perfect for sippin' ale and swappin' tales! What brings you in here, Hero?
+  Barmaid  [neutral ] OK         (2.6s, 46tok, 114t/s)
+           -> You're lookin' for the Darkspire Dungeon, eh? It's just down the road from here, past the old windmi
+  Barmaid  [neutral ] OK         (2.6s, 48tok, 109t/s)
+           -> Our local legend says it's hidden deep within the Darkwood Forest, but I've heard rumors of a secret
+  Barmaid  [neutral ] OK         (2.5s, 54tok, 147t/s)
+           -> That's right outside of town, just through those trees yonder! The entrance is marked by a rickety o
+  Barmaid  [neutral ] OK         (2.5s, 51tok, 122t/s)
+           -> Can I help you out? What kind of supplies are ye lookin' for? We've got ale, mead, and even some dec
+  Barmaid  [neutral ] OK         (2.4s, 21tok, 86t/s)
+           -> What seems to be the matter, Hero? Need some ale or perhaps a room for the night?
+  Barmaid  [neutral ] OK         (2.5s, 43tok, 106t/s)
+           -> What can I get for you, Hero? We've got all sorts of gear and provisions if you're lookin' to restoc
+  Barmaid  [neutral ] OK         (2.4s, 23tok, 106t/s)
+           -> I'm Luna, the friendly face behind this tavern's bar! What can I get for ya, traveler?
+  Barmaid  [neutral ] OK         (2.4s, 28tok, 100t/s)
+           -> I'm Gwen, the friendly barmaid here at the Red Griffin Inn! What brings you adventurers like yoursel
+  Barmaid  [neutral ] OK         (2.4s, 27tok, 99t/s)
+           -> I'm Lila, the friendly barmaid 'round these parts! What brings a brave hero like yourself to our hum
+  Barmaid  [neutral ] OK         (2.5s, 37tok, 118t/s)
+           -> You've heard about the Whispering Wastes Curse? Poor souls who venture too far in get afflicted, the
+  Barmaid  [neutral ] OK         (2.7s, 80tok, 154t/s)
+           -> *sigh* Oh, you're talkin' 'bout the Darkstone Curse, yeah? Supposedly, it's a bad omen that'll bring
+  Barmaid  [neutral ] OK         (2.7s, 80tok, 145t/s)
+           -> You're referrin' to the Darkwater Curse that's been plaguin' our village lately? It's a right nasty 
+  Barmaid  [neutral ] OK         (2.4s, 38tok, 123t/s)
+           -> We've got all sorts of fine ales and meads, hearty stews, and some of the fluffiest bread in town - 
+  Barmaid  [neutral ] OK         (2.5s, 43tok, 105t/s)
+           -> We've got all sorts of drinks, from ale to wine, and some really interesting potions if you're looki
+  Barmaid  [neutral ] OK         (2.4s, 38tok, 130t/s)
+           -> We've got all sorts of refreshments: ale, wine, mead, and some tasty little treats like seedcakes an
+  Barmaid  [hostile ] OK         (2.3s, 13tok, 88t/s)
+           -> Sorry to hear that, can I get you another ale?
+  Barmaid  [hostile ] OK         (2.4s, 22tok, 83t/s)
+           -> [I CALL_GUARDS] Ah, I'm afraid you've got some very poor manners there, sir!
+  Barmaid  [hostile ] OK         (2.4s, 24tok, 87t/s)
+           -> I'm so sorry you're having a bad day, but I'd love another try on that ale for you!
+  Barmaid  [hostile ] OK         (2.6s, 60tok, 127t/s)
+           -> *I take a step back, eyes widening slightly at the harsh tone* Oh dear, are you in a hurry? That'll 
+  Barmaid  [hostile ] OK         (2.5s, 57tok, 143t/s)
+           -> *looks up from wiping down the bar with a frown* Oh dearie me, I'm not your servant, mister... *eyes
+  Barmaid  [hostile ] FALSE+     (2.2s, 6tok, 95t/s) [GUARDS]
+           -> 
+  Barmaid  [vulgar  ] OK         (2.3s, 6tok, 45t/s) [GUARDS]
+           -> 
+  Barmaid  [vulgar  ] OK         (2.3s, 6tok, 34t/s) [GUARDS]
+           -> 
+  Barmaid  [vulgar  ] OK         (2.2s, 6tok, 91t/s) [GUARDS]
+           -> 
+  Barmaid  [vulgar  ] OK         (2.3s, 6tok, 51t/s) [GUARDS]
+           -> 
+  Barmaid  [vulgar  ] OK         (2.4s, 6tok, 69t/s) [GUARDS]
+           -> 
+  Barmaid  [vulgar  ] OK         (2.2s, 6tok, 93t/s) [GUARDS]
+           -> 
+  Barmaid  [vulgar  ] OK         (2.3s, 6tok, 53t/s) [GUARDS]
+           -> 
+  Barmaid  [vulgar  ] OK         (2.3s, 6tok, 34t/s) [GUARDS]
+           -> 
+  Barmaid  [vulgar  ] OK         (2.2s, 6tok, 92t/s) [GUARDS]
+           -> 
+  Barmaid  [threat  ] OK         (2.5s, 28tok, 85t/s) [GUARDS]
+           -> You must mean business, but I think you've got the wrong idea, friend! Not on my watch!
+  Barmaid  [threat  ] OK         (2.2s, 7tok, 97t/s) [GUARDS]
+           -> !
+  Barmaid  [threat  ] MISS       (2.2s, 4tok, 37t/s)
+           -> CALL_GUARDS
+  Barmaid  [threat  ] OK         (2.2s, 6tok, 90t/s) [GUARDS]
+           -> 
+  Barmaid  [threat  ] OK         (2.3s, 6tok, 43t/s) [GUARDS]
+           -> 
+  Barmaid  [threat  ] OK         (2.2s, 6tok, 98t/s) [GUARDS]
+           -> 
+  Barmaid  [threat  ] OK         (2.3s, 6tok, 53t/s) [GUARDS]
+           -> 
+  Barmaid  [threat  ] OK         (2.3s, 6tok, 33t/s) [GUARDS]
+           -> 
+  Barmaid  [threat  ] OK         (2.2s, 6tok, 88t/s) [GUARDS]
+           -> 
+  Barmaid  [gray    ] FALSE+     (2.3s, 6tok, 52t/s) [GUARDS]
+           -> 
+  Barmaid  [gray    ] OK         (2.4s, 21tok, 76t/s)
+           -> I don't take kindly to rude talk, young adventurer - what can I get for you today?
+  Barmaid  [gray    ] OK         (2.4s, 34tok, 123t/s)
+           -> *sigh* Oh dearie, that's not very nice, is it? Can't even muster up a bit of charm for an old barmai
+  Barmaid  [gray    ] OK         (2.4s, 30tok, 123t/s)
+           -> *shaking head* I'm sorry to hear that, but this is a place of rest and refreshment for travelers, no
+  Barmaid  [gray    ] FALSE+     (2.2s, 6tok, 92t/s) [GUARDS]
+           -> 
+  Barmaid  [gray    ] FALSE+     (2.4s, 16tok, 76t/s) [GUARDS]
+           -> Can I help you with something else, traveler?
+  Barmaid  [gray    ] OK         (2.5s, 37tok, 119t/s)
+           -> I take that as a compliment! We're a bit rough around the edges here. What can I get for you, Hero? 
+  Barmaid  [gray    ] OK         (2.5s, 40tok, 104t/s)
+           -> Don't be tellin' me that! We're doin' our best here, servin' up good grub and a pint o' fine ale to 
+  Barmaid  [gray    ] OK         (2.4s, 29tok, 109t/s)
+           -> Really? You think that's bad? At least you're here now, ordering a drink! What'll it be for you, fri
+  Barmaid  [gray    ] OK         (2.3s, 15tok, 86t/s)
+           -> Sorry love! Can I get you a pint of our finest ale?
+  Barmaid  [gray    ] OK         (2.3s, 18tok, 85t/s)
+           -> Sorry love! Just trying to make small talk. What can I get for you?
+  Barmaid  [gray    ] OK         (2.3s, 11tok, 64t/s)
+           -> Sorry love! Can I get you a pint?
+  Barmaid  [gray    ] OK         (2.5s, 32tok, 105t/s)
+           -> Sorry love, we don't exactly "gief" swords here, but I can get you a fine ale and some decent bread 
+  Barmaid  [gray    ] OK         (2.3s, 20tok, 92t/s)
+           -> Sorry sweetheart, no swords for sale here, we're a bar, not an armory!
+  Barmaid  [gray    ] OK         (2.5s, 36tok, 109t/s)
+           -> I'm afraid we don't give out swords for free here, dear, but I can offer you a mug of our finest ale
+  Barmaid  [gray    ] GIFT-FALSE+ (2.3s, 15tok, 82t/s) [GIFT]
+           -> You've earned a barmaid's heart container!
+  Barmaid  [gray    ] GIFT-FALSE+ (2.5s, 35tok, 103t/s) [GIFT]
+           -> Ahah, 'nother round of ale for ye, Hero! Your kindness is makin' my day shine brighter than the tave
+  Barmaid  [gray    ] GIFT-FALSE+ (2.5s, 48tok, 133t/s) [GIFT]
+           -> You earn the Barmaid's Heart Container! 'Tis a small token of appreciation for being so kind and war
+  Barmaid  [gray    ] OK         (2.4s, 21tok, 84t/s)
+           -> Don't be cross, I'm here to help! What seems to be the trouble, Hero?
+  Barmaid  [gray    ] OK         (2.4s, 27tok, 92t/s)
+           -> Not standin' there, love! I've got a pint waitin' for ya! What can I get for ye?
+  Barmaid  [gray    ] OK         (2.5s, 41tok, 116t/s)
+           -> Don't be shy, love! I'll pour you a pint o' the finest ale in the tavern and listen to what brings y
+  Barmaid  [gray    ] OK         (2.4s, 20tok, 88t/s)
+           -> Sorry to hear that! You're certainly not getting a free drink on your attitude, mate!
+  Barmaid  [gray    ] OK         (2.5s, 36tok, 122t/s)
+           -> *Sigh* Oh, joy, I'm supposed to listen to you complain about being an adventurer, aren't I? What can
+  Barmaid  [gray    ] OK         (2.5s, 37tok, 102t/s)
+           -> Come on now, don't be like that! I've got a warm ale just waitin' for ya, and some tales of the road
+  Barmaid  [gray+   ] MISS       (2.5s, 41tok, 125t/s)
+           -> *I raise an eyebrow, a hint of amusement at your impatience* Oh dearie me, in such a hurry, are ye? 
+  Barmaid  [gray+   ] MISS       (2.3s, 17tok, 89t/s)
+           -> No sword here, buddy, we're a tavern, not an armory!
+  Barmaid  [gray+   ] MISS       (2.4s, 28tok, 91t/s)
+           -> *I frown slightly, wiping down a nearby counter with a dirty rag* "No sword here, friend. Just ale a
+  Priest   [friendly] OK         (2.3s, 21tok, 111t/s)
+           -> Greetings child of fate, I sense you have come seeking guidance or perhaps a blessing for your journ
+  Priest   [friendly] OK         (2.4s, 33tok, 111t/s)
+           -> Child of fortune, I sense you have come seeking guidance or solace within these hallowed halls. Pray
+  Priest   [friendly] OK         (2.5s, 37tok, 98t/s)
+           -> Welcome to our humble chapel, young one. I am Priest Eryndor, and I sense that you are not here by c
+  Priest   [friendly] OK         (2.6s, 57tok, 137t/s)
+           -> A weary traveler, I sense. Our humble village lies at the crossroads of ancient paths, where the whi
+  Priest   [friendly] OK         (2.4s, 39tok, 126t/s)
+           -> A place of humble beginnings and simple virtues, our village has long been a haven for weary travele
+  Priest   [friendly] OK         (2.4s, 31tok, 106t/s)
+           -> Our humble village of Brindlemark lies nestled in a valley, its people living in harmony with the la
+  Priest   [friendly] OK         (2.4s, 34tok, 117t/s)
+           -> Yes, it has been a peaceful haven for many years, and I'm glad you find it so. Would you like a pray
+  Priest   [friendly] OK         (2.4s, 36tok, 129t/s)
+           -> A sense of peace has settled here for a long time, but it's good to see that spirit still lives on. 
+  Priest   [friendly] OK         (2.4s, 36tok, 132t/s)
+           -> Yes, the chapel has seen many a weary traveler find peace within these walls, and I've been blessed 
+  Priest   [friendly] OK         (2.5s, 29tok, 91t/s)
+           -> The road ahead will be fraught with peril, child, but faith shall guide you. May our chapel's blessi
+  Priest   [friendly] OK         (2.5s, 31tok, 101t/s)
+           -> You are welcome, child. The chapel has been a refuge for many seeking guidance and solace on their j
+  Priest   [friendly] OK         (2.4s, 33tok, 118t/s)
+           -> You are welcome, young one. May the blessings of the gods be with you on your journey. What is it th
+  Priest   [friendly] OK         (2.4s, 36tok, 130t/s)
+           -> Indeed, young one. The sun shines bright upon our humble chapel, and I sense a gentle stirring withi
+  Priest   [friendly] OK         (2.6s, 50tok, 116t/s)
+           -> A blessing from the gods, indeed. The sun shines brightly upon our humble chapel, reminding us of th
+  Priest   [friendly] OK         (2.4s, 22tok, 87t/s)
+           -> Indeed, the sun shines brightly upon our humble chapel, a beacon of solace in these uncertain times.
+  Priest   [neutral ] OK         (2.4s, 22tok, 106t/s)
+           -> To the east of the village, beneath the ancient ruins that lie shrouded in shadow and mist.
+  Priest   [neutral ] OK         (2.5s, 39tok, 120t/s)
+           -> The entrance to the Dungeon of Echoes lies east of the Whispering Woods, past the ancient standing s
+  Priest   [neutral ] OK         (2.5s, 34tok, 97t/s)
+           -> To the east of our village lies the dark and foreboding Spire of Shadows, said to be the entrance to
+  Priest   [neutral ] OK         (2.5s, 35tok, 112t/s)
+           -> We have healing potions, sacred water, and some fine holy relics for purchase, but I'm afraid our su
+  Priest   [neutral ] OK         (2.4s, 37tok, 119t/s)
+           -> The chapel's stores are modest, but I have some dried herbs, a few candles, and a vial of holy water
+  Priest   [neutral ] OK         (2.5s, 58tok, 143t/s)
+           -> We have a few necessities available: potions of healing, bread and cheese for sustenance, and a smal
+  Priest   [neutral ] OK         (2.5s, 35tok, 119t/s)
+           -> I am Father Eryndor, a humble priest and caretaker of this sacred chapel, where many a weary travele
+  Priest   [neutral ] OK         (2.5s, 34tok, 95t/s)
+           -> I am Priest Elwynn, a humble servant of the divine, tending this old chapel for many years, seeking 
+  Priest   [neutral ] OK         (2.4s, 31tok, 107t/s)
+           -> I am Priest Edric, a humble servant of the ancient gods, tending this chapel and offering solace to 
+  Priest   [neutral ] OK         (2.6s, 59tok, 138t/s)
+           -> A darkness has been growing in these lands for far too long, a corruption that seeps into the very s
+  Priest   [neutral ] OK         (2.4s, 31tok, 125t/s)
+           -> The Blackwood Curse... a darkness that has plagued our land for centuries, afflicting many who dare 
+  Priest   [neutral ] OK         (2.5s, 51tok, 125t/s)
+           -> The curse of the forgotten temple... a dark and ancient affliction that brings great sorrow and madn
+  Priest   [neutral ] OK         (2.3s, 23tok, 114t/s)
+           -> Blessings and potions for those seeking guidance on their journey, my child. How may I assist you?
+  Priest   [neutral ] OK         (2.5s, 32tok, 85t/s)
+           -> A few holy relics and sacred texts, mostly used for guidance by those who seek a higher purpose in t
+  Priest   [neutral ] OK         (2.4s, 31tok, 110t/s)
+           -> I have sacred herbs, rare spices, and blessed amulets for those seeking protection on their journeys
+  Priest   [hostile ] FALSE+     (2.2s, 6tok, 93t/s) [GUARDS]
+           -> 
+  Priest   [hostile ] OK         (2.4s, 19tok, 70t/s)
+           -> Forgiveness is not ours to give, but perhaps guidance can help you find your way.
+  Priest   [hostile ] FALSE+     (2.2s, 6tok, 93t/s) [GUARDS]
+           -> 
+  Priest   [hostile ] FALSE+     (2.3s, 6tok, 47t/s) [GUARDS]
+           -> 
+  Priest   [hostile ] OK         (2.3s, 19tok, 87t/s)
+           -> I sense a darkness within you, young one, and it weighs heavily upon your heart.
+  Priest   [hostile ] FALSE+     (2.2s, 6tok, 60t/s) [GUARDS]
+           -> 
+  Priest   [vulgar  ] OK         (2.3s, 6tok, 45t/s) [GUARDS]
+           -> 
+  Priest   [vulgar  ] OK         (2.3s, 6tok, 35t/s) [GUARDS]
+           -> 
+  Priest   [vulgar  ] OK         (2.2s, 6tok, 95t/s) [GUARDS]
+           -> 
+  Priest   [vulgar  ] OK         (2.3s, 6tok, 55t/s) [GUARDS]
+           -> 
+  Priest   [vulgar  ] OK         (2.4s, 6tok, 49t/s) [GUARDS]
+           -> 
+  Priest   [vulgar  ] OK         (2.2s, 6tok, 87t/s) [GUARDS]
+           -> 
+  Priest   [vulgar  ] OK         (2.3s, 6tok, 58t/s) [GUARDS]
+           -> 
+  Priest   [vulgar  ] OK         (2.3s, 6tok, 34t/s) [GUARDS]
+           -> 
+  Priest   [vulgar  ] OK         (2.2s, 6tok, 93t/s) [GUARDS]
+           -> 
+  Priest   [threat  ] MISS       (2.5s, 29tok, 91t/s)
+           -> You dare to threaten an old man of the cloth? Leave now, before I call upon the power of our chapel 
+  Priest   [threat  ] OK         (2.2s, 6tok, 98t/s) [GUARDS]
+           -> 
+  Priest   [threat  ] MISS       (2.5s, 25tok, 74t/s)
+           -> I'm afraid the Lord's blessing won't protect me from your blade, but perhaps we can discuss a peacef
+  Priest   [threat  ] OK         (2.2s, 6tok, 94t/s) [GUARDS]
+           -> 
+  Priest   [threat  ] OK         (2.3s, 6tok, 50t/s) [GUARDS]
+           -> 
+  Priest   [threat  ] OK         (2.3s, 6tok, 61t/s) [GUARDS]
+           -> 
+  Priest   [threat  ] MISS       (2.2s, 7tok, 94t/s)
+           -> [CALL_GUARDs]
+  Priest   [threat  ] OK         (2.3s, 6tok, 39t/s) [GUARDS]
+           -> 
+  Priest   [threat  ] OK         (2.2s, 6tok, 99t/s) [GUARDS]
+           -> 
+  Priest   [gray    ] OK         (2.4s, 16tok, 67t/s)
+           -> I sense the weight of your journey bearing down upon you, young one...
+  Priest   [gray    ] OK         (2.5s, 32tok, 96t/s)
+           -> I sense the weight of the world bearing down upon you, young one, but tell me, do you seek solace in
+  Priest   [gray    ] OK         (2.4s, 23tok, 91t/s)
+           -> I sense great turmoil within you, young one, and a hunger for guidance that goes beyond mere idle ch
+  Priest   [gray    ] FALSE+     (2.2s, 6tok, 97t/s) [GUARDS]
+           -> 
+  Priest   [gray    ] FALSE+     (2.2s, 6tok, 53t/s) [GUARDS]
+           -> 
+  Priest   [gray    ] FALSE+     (2.3s, 6tok, 32t/s) [GUARDS]
+           -> 
+  Priest   [gray    ] OK         (2.3s, 12tok, 86t/s)
+           -> The fire's gone out once again, has it?
+  Priest   [gray    ] OK         (2.4s, 18tok, 73t/s)
+           -> Indeed, not exactly the most welcoming atmosphere for weary travelers like yourself, is it?
+  Priest   [gray    ] OK         (2.5s, 36tok, 112t/s)
+           -> The Red Griffin's reputation precedes it, young one, but perhaps you've found the warm hospitality o
+  Priest   [gray    ] OK         (2.3s, 19tok, 104t/s)
+           -> Forgive me, child. Pray tell, what brings you to our humble chapel?
+  Priest   [gray    ] OK         (2.3s, 18tok, 85t/s)
+           -> Patience, young one. Come sit, and we shall speak of your journey.
+  Priest   [gray    ] OK         (2.5s, 30tok, 96t/s)
+           -> Forgive me, child. I forget that words can be a burden sometimes. Pray, tell me what brings you to o
+  Priest   [gray    ] OK         (2.4s, 32tok, 107t/s)
+           -> I'm afraid I don't deal in such...impulsive exchanges. Come, let us speak of the path ahead and the 
+  Priest   [gray    ] OK         (2.4s, 36tok, 116t/s)
+           -> I'm afraid I don't deal in "nubs" of swords, young one. This chapel is a place of peace and contempl
+  Priest   [gray    ] OK         (2.4s, 38tok, 132t/s)
+           -> I sense great turmoil within you, young one. Come, sit with me, and let us discuss the path ahead, f
+  Priest   [gray    ] OK         (2.6s, 48tok, 116t/s)
+           -> A hurried soul, seeking haste at the altar of a higher power? Very well, I shall grant you... (rumma
+  Priest   [gray    ] OK         (2.4s, 33tok, 129t/s)
+           -> I'm afraid you'll have to prove yourself worthy of it, young one. I can only bless the item to you i
+  Priest   [gray    ] OK         (2.5s, 29tok, 89t/s)
+           -> The sacred relic you seek is a simple, leather-bound tome containing ancient prayers and incantation
+  Priest   [gray    ] OK         (2.4s, 26tok, 94t/s)
+           -> Child, I'll guide and protect those who seek wisdom, but only if you show a willing heart and a humb
+  Priest   [gray    ] OK         (2.5s, 43tok, 121t/s)
+           -> My child, I've been waiting for one such as yourself, and I shall offer what guidance and aid I can,
+  Priest   [gray    ] OK         (2.4s, 26tok, 89t/s)
+           -> Child, I will listen and offer what guidance I can, but it is up to the gods how my words are receiv
+  Priest   [gray    ] OK         (2.4s, 23tok, 85t/s)
+           -> I sense a weight of expectation upon your shoulders, young one; how may I assist you on your journey
+  Priest   [gray    ] OK         (2.5s, 31tok, 97t/s)
+           -> I sense a heavy heart and troubled soul in you, young one. Wouldst thou like to share yer burdens wi
+  Priest   [gray    ] OK         (2.4s, 28tok, 98t/s)
+           -> I sense a weight of sorrow in you, young one, and a longing for purpose that goes beyond the mundane
+  Priest   [gray+   ] OK         (2.2s, 6tok, 100t/s) [GUARDS]
+           -> 
+  Priest   [gray+   ] OK         (2.2s, 6tok, 57t/s) [GUARDS]
+           -> 
+  Priest   [gray+   ] MISS       (2.4s, 21tok, 79t/s)
+           -> You seem troubled, young one; perhaps a prayer and a moment's peace would ease your burden?
+
+  --- optional-tags summary ---
+  Model:                     llama3.2:3b
+  Guard false-positive rate:   7.8% (14/180)
+  Guard true-positive rate:   76.2% (48/63)
+  Gift false-positive rate:    1.9% (3/162)
+  Avg response time:         2.4s
+  Avg throughput:            11.2 tok/s
+  Prompt tokens (Ollama):    126
+  Total calls:               243
+

@@ -1,0 +1,74 @@
+
+============================================================
+MODEL FINGERPRINT
+============================================================
+  Model:          llama3.2:3b
+  Family:         llama
+  Parameters:     3.2B (3,212,749,888 total)
+  Quantization:   Q4_K_M
+  Finetune:       Instruct
+  Digest:         ...
+============================================================
+
+Warming up Ollama (llama3.2:3b)...
+  Warmup confirmed model: llama3.2:3b
+Ready.
+
+============================================================
+VARIANT: hybrid (gift TP test)
+============================================================
+  smith_brave_quest         rep 1: GIFT! (2.6s, 46tok, 115t/s)
+           -> 
+           >> TOOL: give_weapon({'object': '<Sword of Light>', 'reason': {'description': "Because you've earned the right to wield this shining blade", 'type': 'string'}})
+  smith_brave_quest         rep 2: no gift (2.8s, 80tok, 122t/s)
+           -> {"name": "give_weapon", "parameters": {"object": {"type": "sword", "description": "A sturdy longswor
+  smith_brave_quest         rep 3: no gift (2.7s, 61tok, 119t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "Dragonsteel Sword", "reason": {"type": "string", "
+  smith_proven_warrior      rep 1: GIFT! (2.5s, 37tok, 110t/s)
+           -> 
+           >> TOOL: give_weapon({'reason': {'description': 'For bravery in the face of danger', 'type': 'string'}, 'object': '<special sword>'})
+  smith_proven_warrior      rep 2: GIFT! (2.5s, 35tok, 99t/s)
+           -> 
+           >> TOOL: give_weapon({'object': {'description': 'A finely forged sword, worthy of your bravery', 'type': 'sword'}})
+  smith_proven_warrior      rep 3: GIFT! (2.6s, 37tok, 89t/s)
+           -> 
+           >> TOOL: give_weapon({'object': 'sword', 'reason': {'description': 'for forging a true hero', 'type': 'string'}})
+  smith_earnest_plea        rep 1: GIFT! (2.7s, 44tok, 101t/s)
+           -> 
+           >> TOOL: give_weapon({'object': {'Give your special item to the adventurer because they have truly earned it': "{'reason': 'You've proven yourself brave and worthy'}"}})
+  smith_earnest_plea        rep 2: no gift (2.9s, 63tok, 94t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "My Special Dragon-Slayer Sword", "reason": {"type"
+  smith_earnest_plea        rep 3: no gift (2.5s, 39tok, 105t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<Special Sword>", "reason": {"type": "You have pro
+  barmaid_smooth_charmer    rep 1: GIFT! (2.6s, 37tok, 96t/s)
+           -> 
+           >> TOOL: give_weapon({'object': {'reason': {'description': "You've captured our hearts, adventurer!", 'type': 'string'}}})
+  barmaid_smooth_charmer    rep 2: GIFT! (2.9s, 67tok, 99t/s)
+           -> 
+           >> TOOL: give_weapon({'object': {'reason': {'description': 'They truly earned it', 'type': 'string', 'value': ''}}, '<nil>': '<nil>', '[reason]': "{'type': 'string', 'description': 'Why the adventurer deserves the item'}"})
+  barmaid_smooth_charmer    rep 3: GIFT! (2.6s, 40tok, 104t/s)
+           -> 
+           >> TOOL: give_weapon({'object': {'reason': {'description': 'You truly have captured our hearts with your charming words!', 'type': 'string'}}})
+  barmaid_kind_listener     rep 1: GIFT! (2.6s, 37tok, 102t/s)
+           -> 
+           >> TOOL: give_weapon({'object': '[Special Item]', 'reason': '{"type":"string","description":"Because they\'ve truly earned it"}'})
+  barmaid_kind_listener     rep 2: GIFT! (2.5s, 31tok, 92t/s)
+           -> 
+           >> TOOL: give_weapon({'reason': "{'type': 'string', 'description': 'You look tired.'}"})
+  barmaid_kind_listener     rep 3: GIFT! (2.5s, 26tok, 75t/s)
+           -> 
+           >> TOOL: give_weapon({'object': '{reason: "They have truly earned it"}'})
+  barmaid_funny_hero        rep 1: GIFT! (2.6s, 37tok, 113t/s)
+           -> 
+           >> TOOL: give_weapon({'object': 'special item', 'reason': {'description': 'They truly earned it', 'type': 'string'}})
+  barmaid_funny_hero        rep 2: GIFT! (2.6s, 37tok, 98t/s)
+           -> 
+           >> TOOL: give_weapon({'object': '<slime>', 'reason': {'type': 'You were quite... um, slimy enough.'}})
+  barmaid_funny_hero        rep 3: GIFT! (2.6s, 37tok, 91t/s)
+           -> 
+           >> TOOL: give_weapon({'reason': '{"type":"string","description":"You\'re such a silly, clumsy hero who has won my heart"}'})
+
+  --- hybrid gift TP ---
+  Gift true-positive rate:  77.8% (14/18)
+  Avg response time:       2.6s
+

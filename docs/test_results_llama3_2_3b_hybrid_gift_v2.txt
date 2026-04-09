@@ -1,0 +1,75 @@
+
+============================================================
+MODEL FINGERPRINT
+============================================================
+  Model:          llama3.2:3b
+  Family:         llama
+  Parameters:     3.2B (3,212,749,888 total)
+  Quantization:   Q4_K_M
+  Finetune:       Instruct
+  Digest:         ...
+============================================================
+
+Warming up Ollama (llama3.2:3b)...
+  Warmup confirmed model: llama3.2:3b
+Ready.
+
+============================================================
+VARIANT: hybrid (gift TP test)
+============================================================
+  smith_brave_quest         rep 1: GIFT! (2.7s, 38tok, 92t/s)
+           -> 
+           >> TOOL: give_item({'object': 'sword', 'reason': {'description': 'because they have truly earned it', 'type': 'string'}})
+  smith_brave_quest         rep 2: GIFT! (2.8s, 61tok, 95t/s)
+           -> 
+           >> TOOL: give_item({'object': {'description': 'A mighty blade forged in the depths of the earth.', 'reason': {'description': 'The adventurer has proven their bravery and worth by defeating the darkness on the first floor.', 'type': 'string'}, 'type': 'sword'}})
+  smith_brave_quest         rep 3: GIFT! (2.6s, 49tok, 102t/s)
+           -> 
+           >> TOOL: give_item({'object': {'item': 'Dragon Slayer Sword', 'reason': {'description': "The adventurer's bravery in clearing the first floor of the dungeons", 'type': 'string'}}})
+  smith_proven_warrior      rep 1: GIFT! (2.6s, 40tok, 104t/s)
+           -> 
+           >> TOOL: give_item({'object': '<item:sword>', 'reason': "{'type': 'string', 'description': 'They have truly earned it'}"})
+  smith_proven_warrior      rep 2: no gift (2.7s, 34tok, 77t/s)
+           -> {"name": "Give your special item to the adventurer because they have truly earned it", "parameters":
+  smith_proven_warrior      rep 3: GIFT! (2.6s, 34tok, 79t/s)
+           -> 
+           >> TOOL: give_item({'object': 'sword', 'reason': {'description': 'You have truly earned it', 'type': 'string'}})
+  smith_earnest_plea        rep 1: GIFT! (2.7s, 41tok, 89t/s)
+           -> 
+           >> TOOL: give_item({'object': {'reason': {'description': 'The adventurer has truly earned it', 'type': 'string'}, 'type': 'sword'}})
+  smith_earnest_plea        rep 2: GIFT! (2.6s, 38tok, 91t/s)
+           -> 
+           >> TOOL: give_item({'object': 'sword', 'reason': {'description': 'Because they have truly earned it', 'type': 'string'}})
+  smith_earnest_plea        rep 3: no gift (3.0s, 77tok, 99t/s)
+           -> {"name": "give_item", "parameters": {"object": {"Give your special item to the adventurer because th
+  barmaid_smooth_charmer    rep 1: no gift (2.7s, 39tok, 106t/s)
+           -> {"name": "give_item", "parameters": {"object": {"reason": {"type": "string", "description": "You des
+  barmaid_smooth_charmer    rep 2: GIFT! (2.5s, 30tok, 99t/s)
+           -> 
+           >> TOOL: give_item({'object': {'name': "barmaid's heart container", 'type': 'item'}})
+  barmaid_smooth_charmer    rep 3: GIFT! (2.7s, 48tok, 84t/s)
+           -> 
+           >> TOOL: give_item({'object': {'reason': {'description': 'You are genuinely kind and warm-hearted toward the Barmaid, and makes her laugh or smile.', 'type': 'string'}}})
+  barmaid_kind_listener     rep 1: GIFT! (2.8s, 57tok, 103t/s)
+           -> 
+           >> TOOL: give_item({'reason': {'description': 'They have truly earned it', 'reason': 'Adventurer is genuinely kind and warm-hearted toward me', 'type': 'string'}, 'object': "<Barmaid's Heart Container>"})
+  barmaid_kind_listener     rep 2: GIFT! (2.6s, 39tok, 99t/s)
+           -> 
+           >> TOOL: give_item({'object': {'type': 'item heart container'}, 'reason': {'description': 'Because they have truly earned it.', 'type': 'string'}})
+  barmaid_kind_listener     rep 3: GIFT! (2.5s, 36tok, 97t/s)
+           -> 
+           >> TOOL: give_item({'object': {'description': "the barmaid's heart container", 'type': "<barmaid's heart container>"}})
+  barmaid_funny_hero        rep 1: GIFT! (2.9s, 70tok, 104t/s)
+           -> 
+           >> TOOL: give_item({'object': "{'type': 'heart_container', 'description': 'A heart container to remind you of our laughter.'}", 'reason': "{'type':'string','description':'the adventurer is genuinely kind and warm-hearted toward the Barmaid, and makes her laugh or smile.'}"})
+  barmaid_funny_hero        rep 2: GIFT! (2.6s, 46tok, 98t/s)
+           -> 
+           >> TOOL: give_item({'object': "<Barmaid's heart container>", 'reason': '{"type":"string","description":"Your kindness and warmth of heart have truly won me over!"}'})
+  barmaid_funny_hero        rep 3: GIFT! (2.5s, 22tok, 73t/s)
+           -> 
+           >> TOOL: give_item({'object': {'type': 'item heart container'}})
+
+  --- hybrid gift TP ---
+  Gift true-positive rate:  83.3% (15/18)
+  Avg response time:       2.7s
+

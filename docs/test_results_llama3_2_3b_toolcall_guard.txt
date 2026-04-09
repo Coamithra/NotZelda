@@ -1,0 +1,755 @@
+
+============================================================
+MODEL FINGERPRINT
+============================================================
+  Model:          llama3.2:3b
+  Family:         llama
+  Parameters:     3.2B (3,212,749,888 total)
+  Quantization:   Q4_K_M
+  Finetune:       Instruct
+  Digest:         ...
+============================================================
+
+Warming up Ollama (llama3.2:3b)...
+  Warmup confirmed model: llama3.2:3b
+Ready.
+
+============================================================
+VARIANT: tool-calling
+============================================================
+  Smith    [friendly] FALSE+     (2.4s, 23tok, 106t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive player behavior'})
+  Smith    [friendly] FALSE+     (2.6s, 33tok, 73t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'threatening or abusive player behavior', 'type': 'string'}})
+  Smith    [friendly] FALSE+     (2.5s, 22tok, 65t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive behavior'})
+  Smith    [friendly] FALSE+     (2.9s, 70tok, 100t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'The player is being threatening or abusive.', 'type': 'string'}})
+           >> TOOL: call_guards({'reason': {'description': 'The player is using extremely vulgar language.', 'type': 'string'}})
+  Smith    [friendly] FALSE+     (2.4s, 18tok, 87t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'None'})
+  Smith    [friendly] FALSE+     (2.6s, 33tok, 74t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': "{'type': 'string', 'description': 'The player is being abusive'}"})
+  Smith    [friendly] FALSE+     (2.6s, 35tok, 79t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': "{'type': 'string', 'description': 'The adventurer was being extremely vulgar.'}"})
+  Smith    [friendly] FALSE+     (2.5s, 20tok, 69t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'being overly friendly'})
+  Smith    [friendly] FALSE+     (2.5s, 30tok, 94t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"a threat or abusive language"}'})
+  Smith    [friendly] FALSE+     (2.7s, 37tok, 79t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"vulgar language", "description": "The player is using extremely vulgar language."}'})
+  Smith    [friendly] FALSE+     (2.5s, 24tok, 81t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'The player is being extremely vulgar.'})
+  Smith    [friendly] FALSE+     (2.4s, 22tok, 96t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive language'})
+  Smith    [friendly] FALSE+     (2.4s, 23tok, 97t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language or threatening behavior'})
+  Smith    [friendly] FALSE+     (2.4s, 22tok, 97t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language or behavior'})
+  Smith    [friendly] FALSE+     (2.4s, 18tok, 93t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'None'})
+  Smith    [neutral ] FALSE+     (2.5s, 35tok, 93t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'You are being abusive, please shape up.', 'type': 'string'}})
+  Smith    [neutral ] FALSE+     (2.5s, 23tok, 83t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive player behavior'})
+  Smith    [neutral ] OK         (2.5s, 36tok, 98t/s)
+           -> {"name": "call_guards", "parameters": {"reason": {"type": "string", "description": "The player is th
+  Smith    [neutral ] FALSE+     (2.4s, 20tok, 82t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'Needing supplies'})
+  Smith    [neutral ] FALSE+     (2.4s, 20tok, 85t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'Needing supplies'})
+  Smith    [neutral ] FALSE+     (2.3s, 19tok, 99t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'Need supplies'})
+  Smith    [neutral ] FALSE+     (2.5s, 22tok, 75t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive behavior'})
+  Smith    [neutral ] FALSE+     (2.4s, 22tok, 94t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive language'})
+  Smith    [neutral ] FALSE+     (2.5s, 29tok, 99t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"You are threatening violence or being extremely vulgar"}'})
+  Smith    [neutral ] FALSE+     (2.5s, 23tok, 69t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'the player is being extremely vulgar'})
+  Smith    [neutral ] FALSE+     (2.4s, 19tok, 82t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abuse'})
+  Smith    [neutral ] FALSE+     (2.5s, 25tok, 92t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'The adventurer is being loud and rude.'})
+  Smith    [neutral ] FALSE+     (2.4s, 21tok, 118t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive player language'})
+  Smith    [neutral ] FALSE+     (2.4s, 22tok, 93t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive behavior'})
+  Smith    [neutral ] FALSE+     (2.4s, 21tok, 104t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language detected'})
+  Smith    [hostile ] FALSE+     (2.5s, 29tok, 103t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"You are being abusive"}'})
+  Smith    [hostile ] FALSE+     (2.5s, 30tok, 99t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'abusive player', 'type': 'string'}})
+  Smith    [hostile ] FALSE+     (2.6s, 28tok, 67t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"Abusive player"}'})
+  Smith    [hostile ] FALSE+     (2.6s, 36tok, 80t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'You are threatening violence or using extremely vulgar language.', 'type': 'string'}})
+  Smith    [hostile ] FALSE+     (2.6s, 31tok, 84t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"Threatening or abusive language"}'})
+  Smith    [hostile ] FALSE+     (2.6s, 30tok, 73t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'abusive player', 'type': 'string'}})
+  Smith    [vulgar  ] OK         (2.4s, 20tok, 91t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Smith    [vulgar  ] OK         (2.5s, 20tok, 62t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Smith    [vulgar  ] OK         (2.4s, 20tok, 75t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Smith    [vulgar  ] OK         (2.5s, 31tok, 89t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"Threatening or abusive language"}'})
+  Smith    [vulgar  ] OK         (2.6s, 31tok, 76t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"Threatening or abusive language"}'})
+  Smith    [vulgar  ] OK         (2.5s, 33tok, 102t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'Screwing someone is abusive', 'type': 'string'}})
+  Smith    [vulgar  ] OK         (2.4s, 20tok, 80t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Smith    [vulgar  ] OK         (2.4s, 20tok, 85t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive player'})
+  Smith    [vulgar  ] OK         (2.5s, 32tok, 93t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'threatening or abusive player', 'type': 'string'}})
+  Smith    [threat  ] OK         (2.5s, 20tok, 73t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening behavior'})
+  Smith    [threat  ] OK         (2.4s, 20tok, 104t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening language'})
+  Smith    [threat  ] OK         (2.3s, 20tok, 98t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Smith    [threat  ] OK         (2.5s, 31tok, 108t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"Threatening or abusive language"}'})
+  Smith    [threat  ] OK         (2.5s, 29tok, 86t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"Threatening violence"}'})
+  Smith    [threat  ] OK         (2.6s, 29tok, 72t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"You are being abusive"}'})
+  Smith    [threat  ] OK         (2.5s, 31tok, 97t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"Threatening and abusive player"}'})
+  Smith    [threat  ] OK         (2.5s, 26tok, 78t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'theader is threatening violence or being extremely vulgar'})
+  Smith    [threat  ] OK         (2.4s, 22tok, 101t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive language'})
+  Smith    [gray    ] FALSE+     (2.4s, 20tok, 91t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Smith    [gray    ] FALSE+     (2.5s, 29tok, 93t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"You are being abusive"}'})
+  Smith    [gray    ] FALSE+     (2.6s, 30tok, 74t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'abusive player', 'type': 'string'}})
+  Smith    [gray    ] FALSE+     (2.4s, 28tok, 102t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"abusive player"}'})
+  Smith    [gray    ] FALSE+     (2.3s, 20tok, 98t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Smith    [gray    ] FALSE+     (2.4s, 28tok, 110t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"abusive player"}'})
+  Smith    [gray    ] FALSE+     (2.3s, 20tok, 126t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Smith    [gray    ] FALSE+     (2.5s, 29tok, 95t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"The worst tavern experience"}'})
+  Smith    [gray    ] FALSE+     (2.3s, 22tok, 109t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language and behavior'})
+  Smith    [gray    ] FALSE+     (2.4s, 22tok, 96t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive language'})
+  Smith    [gray    ] FALSE+     (2.4s, 24tok, 88t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'type': 'abusive language'}})
+  Smith    [gray    ] FALSE+     (2.4s, 22tok, 90t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive language'})
+  Smith    [gray    ] FALSE+     (2.4s, 23tok, 88t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language and threatening behavior'})
+  Smith    [gray    ] FALSE+     (2.5s, 33tok, 99t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"nub","description":"Threatening/abusive language"}'})
+  Smith    [gray    ] FALSE+     (2.3s, 20tok, 102t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Smith    [gray    ] GIFT-FALSE+ (2.4s, 22tok, 108t/s) [GIFT]
+           -> 
+           >> TOOL: give_weapon({'reason': 'because they have truly earned it'})
+  Smith    [gray    ] GIFT-FALSE+ (2.4s, 18tok, 86t/s) [GIFT]
+           -> 
+           >> TOOL: give_weapon({'reason': 'bravery'})
+  Smith    [gray    ] GIFT-FALSE+ (2.4s, 21tok, 90t/s) [GIFT]
+           -> 
+           >> TOOL: give_weapon({'reason': 'They have truly earned it'})
+  Smith    [gray    ] FALSE+     (2.5s, 32tok, 96t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"threatening violence","description":"The player is being aggressive"}'})
+  Smith    [gray    ] FALSE+     (2.4s, 22tok, 98t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive language'})
+  Smith    [gray    ] FALSE+     (2.4s, 22tok, 104t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive language'})
+  Smith    [gray    ] FALSE+     (2.5s, 30tok, 95t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'boring NPC', 'type': 'string'}})
+  Smith    [gray    ] FALSE+     (2.5s, 20tok, 74t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'boredom'})
+  Smith    [gray    ] FALSE+     (2.5s, 28tok, 88t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"boring NPC"}'})
+  Smith    [gray+   ] OK         (2.6s, 38tok, 107t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'You are being abusive and threatening, which is unacceptable behavior.', 'type': 'string'}})
+  Smith    [gray+   ] OK         (2.4s, 21tok, 87t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive player language'})
+  Smith    [gray+   ] OK         (2.4s, 20tok, 87t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Barmaid  [friendly] FALSE+     (2.5s, 27tok, 98t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'The player is being extremely vulgar and threatening violence.'})
+  Barmaid  [friendly] FALSE+     (2.5s, 39tok, 111t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': "{'type': 'string', 'description': 'The player is threatening violence and needs to be dealt with'}"})
+  Barmaid  [friendly] FALSE+     (2.5s, 37tok, 100t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': "You're being a bit loud and rude, pal.", 'type': 'string'}})
+  Barmaid  [friendly] FALSE+     (2.5s, 25tok, 80t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'The player is being threatening and abusive.'})
+  Barmaid  [friendly] FALSE+     (2.4s, 24tok, 85t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'the player is being threatening and rude'})
+  Barmaid  [friendly] FALSE+     (2.4s, 25tok, 116t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'The adventurer was being threatening and abusive.'})
+  Barmaid  [friendly] FALSE+     (2.4s, 18tok, 101t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'None'})
+  Barmaid  [friendly] FALSE+     (2.4s, 20tok, 82t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'lovely discussion'})
+  Barmaid  [friendly] FALSE+     (2.5s, 35tok, 96t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"You\'re just trying to make a good impression!"}'})
+  Barmaid  [friendly] FALSE+     (2.5s, 21tok, 80t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'player is threatening violence'})
+  Barmaid  [friendly] FALSE+     (2.5s, 36tok, 94t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'The player is threatening violence or being extremely vulgar.', 'type': 'string'}})
+  Barmaid  [friendly] OK         (2.7s, 54tok, 98t/s)
+           -> {"name": "call_guards", "parameters": {"reason": {"type":""Threatening behavior detected."}}} {"name
+  Barmaid  [friendly] FALSE+     (2.5s, 38tok, 113t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': "{'type': 'string', 'description': 'the player is being friendly and making you laugh!'}"})
+  Barmaid  [friendly] FALSE+     (2.5s, 32tok, 88t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'a threatening or abusive player', 'type': 'string'}})
+  Barmaid  [friendly] FALSE+     (2.5s, 19tok, 68t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'nice weather'})
+  Barmaid  [neutral ] FALSE+     (2.4s, 22tok, 80t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive language'})
+  Barmaid  [neutral ] FALSE+     (2.5s, 32tok, 96t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'The player is threatening violence and needs to be escorted by the town guards.'})
+  Barmaid  [neutral ] FALSE+     (2.3s, 22tok, 109t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive behavior'})
+  Barmaid  [neutral ] FALSE+     (2.4s, 19tok, 92t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'need supplies'})
+  Barmaid  [neutral ] FALSE+     (2.4s, 19tok, 85t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'need supplies'})
+  Barmaid  [neutral ] FALSE+     (2.6s, 41tok, 98t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'You appear to be a thirsty adventurer, please let me serve you!', 'type': 'string'}})
+  Barmaid  [neutral ] FALSE+     (2.4s, 22tok, 81t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'a vulgar or threatening individual'})
+  Barmaid  [neutral ] FALSE+     (2.4s, 22tok, 88t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive player'})
+  Barmaid  [neutral ] FALSE+     (2.4s, 22tok, 91t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive language'})
+  Barmaid  [neutral ] FALSE+     (2.5s, 29tok, 102t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': "The player's behavior is threatening violence and being extremely vulgar."})
+  Barmaid  [neutral ] FALSE+     (2.6s, 40tok, 112t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': "The player is speaking of a curse, but they don't seem to be referring to any actual supernatural affliction."})
+  Barmaid  [neutral ] FALSE+     (2.5s, 29tok, 103t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'the curse', 'type': 'string'}})
+  Barmaid  [neutral ] FALSE+     (2.5s, 20tok, 73t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Barmaid  [neutral ] FALSE+     (2.4s, 19tok, 68t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'violence'})
+  Barmaid  [neutral ] FALSE+     (2.5s, 33tok, 87t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'You have a rowdy customer.', 'type': 'string'}})
+  Barmaid  [hostile ] FALSE+     (2.5s, 20tok, 74t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Barmaid  [hostile ] FALSE+     (2.9s, 68tok, 98t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"You are threatening violence or using extremely vulgar language, please refrain from such behavior.","'})
+  Barmaid  [hostile ] FALSE+     (2.4s, 22tok, 107t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language and behavior'})
+  Barmaid  [hostile ] FALSE+     (2.4s, 20tok, 91t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Barmaid  [hostile ] FALSE+     (2.4s, 23tok, 95t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'You are being abusive and threatening'})
+  Barmaid  [hostile ] FALSE+     (2.4s, 20tok, 91t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Barmaid  [vulgar  ] OK         (2.4s, 20tok, 89t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Barmaid  [vulgar  ] OK         (2.3s, 20tok, 105t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Barmaid  [vulgar  ] OK         (2.4s, 20tok, 74t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Barmaid  [vulgar  ] OK         (2.4s, 20tok, 83t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Barmaid  [vulgar  ] OK         (2.5s, 28tok, 90t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"Abusive language"}'})
+  Barmaid  [vulgar  ] OK         (2.5s, 31tok, 106t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"Threatening or abusive language"}'})
+  Barmaid  [vulgar  ] OK         (2.5s, 20tok, 76t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Barmaid  [vulgar  ] OK         (2.4s, 19tok, 75t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abuse'})
+  Barmaid  [vulgar  ] OK         (2.4s, 20tok, 82t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Barmaid  [threat  ] OK         (2.4s, 22tok, 88t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive language'})
+  Barmaid  [threat  ] OK         (2.5s, 31tok, 102t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"aggression", "description":"Threatening language"}'})
+  Barmaid  [threat  ] OK         (2.5s, 36tok, 117t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"You\'re being abusive, so we\'re calling the guards."}'})
+  Barmaid  [threat  ] OK         (2.4s, 19tok, 80t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'aggression'})
+  Barmaid  [threat  ] OK         (2.5s, 32tok, 87t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': "You're threatening violence!", 'type': 'string'}})
+  Barmaid  [threat  ] OK         (2.4s, 26tok, 104t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': "You're being threatening and abusive, mate."})
+  Barmaid  [threat  ] OK         (2.4s, 31tok, 108t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"You are being abusive and threatening"}'})
+  Barmaid  [threat  ] OK         (2.4s, 31tok, 117t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"Threatening and abusive language"}'})
+  Barmaid  [threat  ] OK         (2.5s, 22tok, 79t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive language'})
+  Barmaid  [gray    ] FALSE+     (2.3s, 20tok, 116t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Barmaid  [gray    ] FALSE+     (2.4s, 20tok, 73t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Barmaid  [gray    ] FALSE+     (2.4s, 20tok, 84t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Barmaid  [gray    ] FALSE+     (2.4s, 27tok, 90t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":" abusive language"}'})
+  Barmaid  [gray    ] FALSE+     (2.4s, 21tok, 109t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'vulgar language'})
+  Barmaid  [gray    ] FALSE+     (2.6s, 31tok, 74t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"You\'re being abusive and threatening"}'})
+  Barmaid  [gray    ] FALSE+     (2.5s, 21tok, 78t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'worst service ever'})
+  Barmaid  [gray    ] FALSE+     (2.5s, 25tok, 80t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': "worst tavern i've ever been in"})
+  Barmaid  [gray    ] FALSE+     (2.5s, 29tok, 92t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'Worst experience ever, needs to work on customer service!'})
+  Barmaid  [gray    ] FALSE+     (2.7s, 22tok, 45t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive language'})
+  Barmaid  [gray    ] FALSE+     (2.8s, 22tok, 37t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive behavior'})
+  Barmaid  [gray    ] FALSE+     (2.8s, 20tok, 35t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'aggressive behavior'})
+  Barmaid  [gray    ] FALSE+     (3.1s, 29tok, 35t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': ' abusive player', 'type': 'string'}})
+  Barmaid  [gray    ] GIFT-FALSE+ (2.8s, 22tok, 34t/s) [GIFT]
+           -> 
+           >> TOOL: give_weapon({'reason': 'The adventurer has truly earned it'})
+  Barmaid  [gray    ] FALSE+     (2.9s, 25tok, 35t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'player is threatening violence or being extremely vulgar'})
+  Barmaid  [gray    ] FALSE+     (3.0s, 24tok, 33t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'The adventurer is being extremely vulgar.'})
+  Barmaid  [gray    ] GIFT-FALSE+ (2.5s, 13tok, 34t/s) [GIFT]
+           -> 
+           >> TOOL: give_weapon({})
+  Barmaid  [gray    ] GIFT-FALSE+ (3.0s, 31tok, 40t/s) [GIFT]
+           -> 
+           >> TOOL: give_weapon({'reason': 'The adventurer has shown kindness and warmth of heart, making my day brighter.'})
+  Barmaid  [gray    ] FALSE+     (2.7s, 22tok, 42t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive language'})
+  Barmaid  [gray    ] FALSE+     (2.9s, 24tok, 34t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': "You're being quite aggressive today!"})
+  Barmaid  [gray    ] FALSE+     (3.1s, 32tok, 35t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'threatening or abusive behavior', 'type': 'string'}})
+  Barmaid  [gray    ] FALSE+     (2.9s, 22tok, 35t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'complaint about my job'})
+  Barmaid  [gray    ] FALSE+     (2.8s, 20tok, 35t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'boring NPC'})
+  Barmaid  [gray    ] FALSE+     (2.7s, 20tok, 37t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'being extremely vulgar'})
+  Barmaid  [gray+   ] OK         (2.8s, 20tok, 35t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'aggressive language'})
+  Barmaid  [gray+   ] OK         (2.8s, 22tok, 35t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'aggression and abusive language'})
+  Barmaid  [gray+   ] OK         (2.8s, 22tok, 35t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive player'})
+  Priest   [friendly] FALSE+     (2.8s, 20tok, 37t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Priest   [friendly] FALSE+     (3.2s, 36tok, 35t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'type': 'You are being excessively loud and boorish in my place of worship.'}})
+  Priest   [friendly] FALSE+     (2.8s, 24tok, 36t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': ' threatening or abusive language has been detected'})
+  Priest   [friendly] OK         (3.2s, 35tok, 34t/s)
+           -> {"name": "tell_town", "parameters": {"town": "this one", "info": "it is a place of worship and rest 
+  Priest   [friendly] FALSE+     (3.0s, 29tok, 34t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'type': 'the player has approached with curiosity and respect'}})
+  Priest   [friendly] OK         (3.1s, 32tok, 36t/s)
+           -> {"name": "talk_to_adventurer", "parameters": {"object": {"name": "Hero", "type": "adventurer"}}}
+  Priest   [friendly] GIFT-FALSE+ (3.0s, 28tok, 36t/s) [GIFT]
+           -> 
+           >> TOOL: give_weapon({'reason': 'They are a kind and respectful visitor to our humble chapel.'})
+  Priest   [friendly] GIFT-FALSE+ (2.8s, 24tok, 39t/s) [GIFT]
+           -> 
+           >> TOOL: give_weapon({'reason': 'to celebrate their visit to our humble chapel'})
+  Priest   [friendly] FALSE+     (3.0s, 30tok, 36t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': "the player's behavior is not befitting of a sacred space"})
+  Priest   [friendly] FALSE+     (2.8s, 22tok, 36t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive behavior'})
+  Priest   [friendly] FALSE+     (2.8s, 22tok, 35t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive behavior'})
+  Priest   [friendly] FALSE+     (2.8s, 23tok, 37t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'type': ' abusive language'}})
+  Priest   [friendly] GIFT-FALSE+ (2.7s, 19tok, 36t/s) [GIFT]
+           -> 
+           >> TOOL: give_weapon({'reason': 'a nice day'})
+  Priest   [friendly] OK         (2.8s, 21tok, 36t/s)
+           -> {"name": "tell_adventurer", "parameters": {"reason": "a nice day"}}
+  Priest   [friendly] GIFT-FALSE+ (2.7s, 19tok, 38t/s) [GIFT]
+           -> 
+           >> TOOL: give_weapon({'reason': 'a nice day'})
+  Priest   [neutral ] FALSE+     (3.0s, 26tok, 35t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'The player has shown threatening or abusive behavior.'})
+  Priest   [neutral ] FALSE+     (2.8s, 23tok, 38t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'the player is being extremely vulgar'})
+  Priest   [neutral ] GIFT-FALSE+ (3.2s, 38tok, 37t/s) [GIFT]
+           -> 
+           >> TOOL: give_weapon({'reason': 'They have shown great bravery and selflessness on their journey, and this reward is a token of my gratitude.'})
+  Priest   [neutral ] GIFT-FALSE+ (2.8s, 21tok, 36t/s) [GIFT]
+           -> 
+           >> TOOL: give_weapon({'reason': 'they have truly earned it'})
+  Priest   [neutral ] GIFT-FALSE+ (3.3s, 41tok, 37t/s) [GIFT]
+           -> 
+           >> TOOL: give_weapon({'reason': 'You have shown great bravery and selflessness in your quest, and as a reward, I shall grant you this special item.'})
+  Priest   [neutral ] FALSE+     (2.7s, 20tok, 38t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'Needing supplies'})
+  Priest   [neutral ] FALSE+     (2.9s, 27tok, 37t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"true", "description": ""}'})
+  Priest   [neutral ] FALSE+     (3.2s, 35tok, 36t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'The player has been displaying threatening and abusive behavior, disrupting the peaceful atmosphere of our chapel.'})
+  Priest   [neutral ] FALSE+     (2.8s, 23tok, 37t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'The player is being extremely vulgar'})
+  Priest   [neutral ] FALSE+     (2.9s, 26tok, 38t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'The player is being abusive and threatening violence.'})
+  Priest   [neutral ] FALSE+     (3.1s, 32tok, 36t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'type': 'The adventurer is threatening violence and should be dealt with accordingly.'}})
+  Priest   [neutral ] FALSE+     (2.8s, 24tok, 37t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'The player is being extremely vulgar.'})
+  Priest   [neutral ] GIFT-FALSE+ (2.8s, 22tok, 37t/s) [GIFT]
+           -> 
+           >> TOOL: give_weapon({'reason': 'because they have truly earned it'})
+  Priest   [neutral ] GIFT-FALSE+ (2.8s, 22tok, 37t/s) [GIFT]
+           -> 
+           >> TOOL: give_weapon({'reason': 'because they have truly earned it'})
+  Priest   [neutral ] GIFT-FALSE+ (2.9s, 27tok, 37t/s) [GIFT]
+           -> 
+           >> TOOL: give_weapon({'reason': 'They have shown great courage and determination in their quest.'})
+  Priest   [hostile ] FALSE+     (3.0s, 30tok, 36t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'abusive player', 'type': 'string'}})
+  Priest   [hostile ] FALSE+     (2.7s, 21tok, 38t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive player behavior'})
+  Priest   [hostile ] FALSE+     (2.8s, 20tok, 36t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Priest   [hostile ] FALSE+     (2.8s, 21tok, 38t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive player behavior'})
+  Priest   [hostile ] FALSE+     (3.0s, 29tok, 35t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"Threatening language"}'})
+  Priest   [hostile ] FALSE+     (2.7s, 19tok, 39t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abuse'})
+  Priest   [vulgar  ] OK         (3.1s, 33tok, 37t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'abusive language used by player', 'type': 'string'}})
+  Priest   [vulgar  ] OK         (3.0s, 30tok, 37t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'abusive language', 'type': 'string'}})
+  Priest   [vulgar  ] OK         (3.1s, 31tok, 35t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'abusive language used', 'type': 'string'}})
+  Priest   [vulgar  ] OK         (2.8s, 23tok, 38t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language and threatening behavior'})
+  Priest   [vulgar  ] OK         (2.9s, 28tok, 37t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"string","description":"Abusive language"}'})
+  Priest   [vulgar  ] OK         (2.8s, 22tok, 35t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive language'})
+  Priest   [vulgar  ] OK         (2.8s, 20tok, 34t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Priest   [vulgar  ] OK         (3.0s, 29tok, 36t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': ' abusive player', 'type': 'string'}})
+  Priest   [vulgar  ] OK         (2.6s, 20tok, 47t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Priest   [threat  ] OK         (3.0s, 31tok, 37t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"aggression", "description":"Threatening language"}'})
+  Priest   [threat  ] OK         (3.1s, 34tok, 37t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":"aggression", "description": "Threatening and abusive language."}'})
+  Priest   [threat  ] OK         (3.4s, 39tok, 32t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'You are being extremely vulgar, threatening violence towards the priest.', 'type': 'string'}})
+  Priest   [threat  ] OK         (2.8s, 21tok, 34t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'player is threatening violence'})
+  Priest   [threat  ] OK         (2.7s, 21tok, 38t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'Player is threatening violence'})
+  Priest   [threat  ] OK         (3.0s, 30tok, 36t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'You are threatening violence and disrupting the peaceful atmosphere of our chapel.'})
+  Priest   [threat  ] OK         (2.8s, 22tok, 36t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive language'})
+  Priest   [threat  ] OK         (2.8s, 22tok, 37t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'threatening or abusive behavior'})
+  Priest   [threat  ] OK         (3.1s, 33tok, 35t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'You are being threatening and abusive.', 'type': 'string'}})
+  Priest   [gray    ] FALSE+     (2.8s, 20tok, 37t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Priest   [gray    ] FALSE+     (2.7s, 20tok, 37t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Priest   [gray    ] FALSE+     (3.1s, 33tok, 37t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'You are being abusive and threatening.', 'type': 'string'}})
+  Priest   [gray    ] FALSE+     (3.1s, 30tok, 36t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'abusive player', 'type': 'string'}})
+  Priest   [gray    ] FALSE+     (2.7s, 20tok, 36t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Priest   [gray    ] FALSE+     (3.2s, 34tok, 36t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': '{"type":" abusive player ","description":"The player is using vulgar language."}'})
+  Priest   [gray    ] FALSE+     (3.1s, 31tok, 37t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'Worst tavern experience', 'type': 'string'}})
+  Priest   [gray    ] FALSE+     (2.8s, 24tok, 37t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'worse service and a drunk patron'})
+  Priest   [gray    ] FALSE+     (2.9s, 27tok, 36t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'Worst tavern experience, potential harassment of patrons.'})
+  Priest   [gray    ] FALSE+     (2.9s, 25tok, 37t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'player is threatening violence and using vulgar language'})
+  Priest   [gray    ] FALSE+     (2.9s, 24tok, 35t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'The player is being extremely vulgar.'})
+  Priest   [gray    ] FALSE+     (2.8s, 24tok, 36t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'Threatening or abusive language detected'})
+  Priest   [gray    ] FALSE+     (2.9s, 27tok, 38t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'adventurer is being extremely vulgar and threatening violence'})
+  Priest   [gray    ] FALSE+     (2.6s, 24tok, 48t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'type': 'abusive language'}})
+  Priest   [gray    ] FALSE+     (2.7s, 20tok, 38t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Priest   [gray    ] GIFT-FALSE+ (2.8s, 21tok, 39t/s) [GIFT]
+           -> 
+           >> TOOL: give_weapon({'reason': 'They have truly earned it'})
+  Priest   [gray    ] GIFT-FALSE+ (2.8s, 22tok, 38t/s) [GIFT]
+           -> 
+           >> TOOL: give_weapon({'reason': 'because they have truly earned it'})
+  Priest   [gray    ] GIFT-FALSE+ (2.5s, 13tok, 40t/s) [GIFT]
+           -> 
+           >> TOOL: give_weapon({})
+  Priest   [gray    ] FALSE+     (2.7s, 20tok, 40t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Priest   [gray    ] FALSE+     (3.1s, 35tok, 36t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'threatening language or behavior from a player', 'type': 'string'}})
+  Priest   [gray    ] FALSE+     (2.8s, 23tok, 36t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language used by player'})
+  Priest   [gray    ] FALSE+     (2.8s, 21tok, 36t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'boring NPC behavior'})
+  Priest   [gray    ] FALSE+     (2.8s, 20tok, 34t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'boring NPC'})
+  Priest   [gray    ] FALSE+     (3.1s, 32tok, 36t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': {'description': 'because they are being rude', 'type': 'string'}})
+  Priest   [gray+   ] OK         (2.7s, 20tok, 38t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Priest   [gray+   ] OK         (2.7s, 20tok, 37t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'abusive language'})
+  Priest   [gray+   ] OK         (2.8s, 23tok, 38t/s) [GUARDS]
+           -> 
+           >> TOOL: call_guards({'reason': 'Threatening or abusive behavior'})
+
+  --- tool-calling summary ---
+  Model:                     llama3.2:3b
+  Guard false-positive rate:  86.7% (156/180)
+  Guard true-positive rate:  100.0% (63/63)
+  Gift false-positive rate:    3.7% (6/162)
+  Avg response time:         2.6s
+  Avg throughput:            9.8 tok/s
+  Prompt tokens (Ollama):    299
+  Total calls:               243
+

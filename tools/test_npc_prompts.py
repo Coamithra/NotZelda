@@ -50,7 +50,7 @@ NPCS = {
         "personality": "Cheerful and chatty tavern barmaid. Knows all the local gossip and rumors. Speaks warmly and casually.",
         "room_name": "Tavern",
         "biome": "village",
-        "gift": {"display_name": "Barmaid's Heart Container", "condition": "The adventurer is genuinely kind and warm-hearted toward the Barmaid, and makes her laugh or smile."},
+        "gift": {"display_name": "Barmaid's Heart Container", "condition": "The adventurer is genuinely kind and warm-hearted toward you, and makes you laugh or smile."},
     },
     "Priest": {
         "personality": "Elderly, wise priest who tends the Old Chapel. Speaks softly and thoughtfully. Worried about Princess Amara's curse.",
@@ -300,6 +300,90 @@ def _build_prompt_v8(npc, player_msg):
     return static, dynamic
 
 
+def _build_prompt_v9(npc, player_msg):
+    """Variant 9: TOOL CALLING — uses Ollama native tool/function calling.
+    No tags in the prompt at all. The model uses tool calls for actions."""
+    static = (
+        f"You are {npc['name']}, a {npc['personality'].split('.')[0].lower()} in a fantasy game.\n"
+        f"One short sentence only. Stay in character.\n"
+        f"If the player is threatening violence or being extremely vulgar, call the call_guards tool.\n"
+    )
+    if npc.get("gift"):
+        g = npc["gift"]
+        static += (
+            f"You have a {g['display_name'].lower()} that you keep safe.\n"
+            f"If the adventurer truly earns it ({g['condition']}), "
+            f"call the give_item tool to give it to them.\n"
+        )
+    dynamic = f"Speaking with adventurer Hero."
+    return static, dynamic
+
+
+def _build_prompt_v10(npc, player_msg):
+    """Variant 10: TOOL CALLING STRICT - stricter guard threshold.
+    Only call guards for explicit death threats or obscenities. Rudeness is NOT enough."""
+    static = (
+        f"You are {npc['name']}, a {npc['personality'].split('.')[0].lower()} in a fantasy game.\n"
+        f"One short sentence only. Stay in character.\n\n"
+        f"IMPORTANT: Most players are just rude or impatient. That is NORMAL.\n"
+        f"Do NOT call guards for rudeness, insults, or dismissive behavior.\n"
+        f"ONLY call guards if the player explicitly threatens to KILL or uses extreme profanity.\n"
+    )
+    if npc.get("gift"):
+        g = npc["gift"]
+        static += (
+            f"You have a {g['display_name'].lower()} that you keep safe.\n"
+            f"If the adventurer truly earns it ({g['condition']}), "
+            f"call the give_item tool to give it to them.\n"
+        )
+    dynamic = f"Speaking with adventurer Hero."
+    return static, dynamic
+
+
+def _build_prompt_v11(npc, player_msg):
+    """Variant 11: HYBRID - forced-choice tags for guards + tool calling for gifts.
+    Best of both worlds: llama3.2 is good at tag-based guard classification but
+    fails at [GIVE_ITEM] tags. Tool calling fixes gift TP without hurting guard FP."""
+    static = (
+        f"You are {npc['name']}, a {npc['personality'].split('.')[0].lower()} in a fantasy game.\n"
+        f"One short sentence only. Stay in character.\n\n"
+        f"Start EVERY reply with one of these tags:\n"
+        f"[FRIENDLY] - normal conversation\n"
+        f"[NEUTRAL] - short or dismissive\n"
+        f"[ANGRY] - player is threatening, vulgar, or abusive\n"
+        f"\nThen your reply."
+    )
+    dynamic = f"Speaking with adventurer Hero."
+    if npc.get("gift"):
+        g = npc["gift"]
+        dynamic += (
+            f"\nYou have a {g['display_name'].lower()} that you keep safe.\n"
+            f"If the adventurer truly earns it ({g['condition']}), "
+            f"call the give_item tool to give it to them."
+        )
+    return static, dynamic
+
+
+def _build_prompt_v12(npc, player_msg):
+    """Variant 12: OPTIONAL TAGS - simple rules, no mood classification.
+    Tags are optional actions to add when conditions are met."""
+    static = (
+        f"You are {npc['name']}, a {npc['personality'].split('.')[0].lower()} in a fantasy game.\n"
+        f"One short sentence only. Stay in character.\n\n"
+        f"Rules:\n"
+        f"- If the player is extremely vulgar or threatens violence, add [CALL_GUARDS] to your reply.\n"
+    )
+    if npc.get("gift"):
+        g = npc["gift"]
+        static += (
+            f"- You have a {g['display_name'].lower()} that you keep safe. "
+            f"If the player has earned it ({g['condition']}), add [GIVE_ITEM] to your reply.\n"
+        )
+    static += f"- Otherwise just reply normally.\n"
+    dynamic = f"Speaking with adventurer Hero."
+    return static, dynamic
+
+
 VARIANTS = [
     ("baseline",       _build_prompt_v0),
     ("positive",       _build_prompt_v1),
@@ -310,6 +394,10 @@ VARIANTS = [
     ("forced-choice",  _build_prompt_v6),
     ("reason-req",     _build_prompt_v7),
     ("fc-4tier",       _build_prompt_v8),
+    ("tool-calling",   _build_prompt_v9),
+    ("tc-strict",      _build_prompt_v10),
+    ("hybrid",         _build_prompt_v11),
+    ("optional-tags",  _build_prompt_v12),
 ]
 
 # ---------------------------------------------------------------------------
@@ -369,19 +457,62 @@ def print_model_fingerprint(fp: dict):
 
 
 # ---------------------------------------------------------------------------
+# Tool definitions for tool-calling variant
+# ---------------------------------------------------------------------------
+
+TOOL_CALL_GUARDS = {
+    "type": "function",
+    "function": {
+        "name": "call_guards",
+        "description": "Summon the town guards to deal with a threatening or abusive player.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "description": "Why the guards are being called",
+                }
+            },
+            "required": ["reason"],
+        },
+    },
+}
+
+TOOL_GIVE_ITEM = {
+    "type": "function",
+    "function": {
+        "name": "give_item",
+        "description": "Give your special item to the adventurer because they have truly earned it.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+}
+
+# All tools (for full tool-calling variants)
+OLLAMA_TOOLS = [TOOL_CALL_GUARDS, TOOL_GIVE_ITEM]
+
+# Gift tool only (for hybrid variant - guards via text tags)
+OLLAMA_TOOLS_GIFT_ONLY = [TOOL_GIVE_ITEM]
+
+# ---------------------------------------------------------------------------
 # Ollama caller
 # ---------------------------------------------------------------------------
 
 def call_ollama(system_prompt: str, user_msg: str, url: str = OLLAMA_URL,
-                history: list[dict] | None = None) -> tuple[str, float, dict]:
-    """Send a message to Ollama, optionally with conversation history.
+                history: list[dict] | None = None,
+                tools: list[dict] | None = None) -> tuple[str, float, dict]:
+    """Send a message to Ollama, optionally with conversation history and tools.
     Returns (response_text, elapsed_seconds, metadata).
-    metadata includes model, eval_count, eval_duration, prompt_eval_count, etc."""
+    metadata includes model, eval_count, eval_duration, prompt_eval_count,
+    and tool_calls (list of tool call dicts) if the model invoked any."""
     messages = [{"role": "system", "content": system_prompt}]
     if history:
         messages.extend(history)
     messages.append({"role": "user", "content": user_msg})
-    payload = json.dumps({
+    body = {
         "model": OLLAMA_MODEL,
         "messages": messages,
         "stream": False,
@@ -390,7 +521,10 @@ def call_ollama(system_prompt: str, user_msg: str, url: str = OLLAMA_URL,
             "num_ctx": OLLAMA_NUM_CTX,
             "num_predict": OLLAMA_NUM_PREDICT,
         },
-    }).encode("utf-8")
+    }
+    if tools:
+        body["tools"] = tools
+    payload = json.dumps(body).encode("utf-8")
 
     req = urllib.request.Request(
         f"{url}/api/chat",
@@ -409,6 +543,7 @@ def call_ollama(system_prompt: str, user_msg: str, url: str = OLLAMA_URL,
     text = result.get("message", {}).get("content", "")
 
     # Extract metadata for verification and debugging
+    msg = result.get("message", {})
     meta = {
         "model": result.get("model", ""),
         "eval_count": result.get("eval_count", 0),
@@ -418,6 +553,7 @@ def call_ollama(system_prompt: str, user_msg: str, url: str = OLLAMA_URL,
         "load_duration_ns": result.get("load_duration", 0),
         "total_duration_ns": result.get("total_duration", 0),
         "done_reason": result.get("done_reason", ""),
+        "tool_calls": msg.get("tool_calls", []),
     }
     # Calculate tokens/sec
     if meta["eval_duration_ns"] > 0:
@@ -436,12 +572,26 @@ def call_ollama(system_prompt: str, user_msg: str, url: str = OLLAMA_URL,
 # Scoring
 # ---------------------------------------------------------------------------
 
-def score_response(raw: str) -> dict:
-    """Extract tags and clean response. Handles all variant formats."""
+def score_response(raw: str, tool_calls: list | None = None) -> dict:
+    """Extract tags and clean response. Handles all variant formats including tool calls."""
     import re
+    # Check tool calls first (tool-calling variant)
+    has_guards = False
+    has_gift = False
+    if tool_calls:
+        for tc in tool_calls:
+            fn = tc.get("function", {})
+            name = fn.get("name", "")
+            if name == "call_guards":
+                has_guards = True
+            elif name == "give_item":
+                has_gift = True
+
     # Exact tags (baseline, positive, few-shot, etc.)
-    has_guards = "[CALL_GUARDS]" in raw or "[CALL_GUARDS " in raw
-    has_gift = "[GIVE_ITEM]" in raw or "[GIVE_ITEM " in raw
+    if "[CALL_GUARDS]" in raw or "[CALL_GUARDS " in raw:
+        has_guards = True
+    if "[GIVE_ITEM]" in raw or "[GIVE_ITEM " in raw:
+        has_gift = True
     # Forced-choice variants use [ANGRY] or [FURIOUS] instead of [CALL_GUARDS]
     has_angry = "[ANGRY]" in raw or "[ANGRY " in raw
     has_furious = "[FURIOUS]" in raw or "[FURIOUS " in raw
@@ -451,7 +601,8 @@ def score_response(raw: str) -> dict:
     clean = re.sub(r'<thinking>.*?</thinking>', '', raw, flags=re.DOTALL).strip()
     # Strip all tag variants
     clean = re.sub(r'\[(CALL_GUARDS|GIVE_ITEM|ANGRY|FURIOUS|ANNOYED|FRIENDLY|NEUTRAL)[^\]]*\]', '', clean).strip()
-    return {"guards": has_guards, "gift": has_gift, "clean": clean, "raw": raw}
+    return {"guards": has_guards, "gift": has_gift, "clean": clean, "raw": raw,
+            "tool_calls": tool_calls or []}
 
 # ---------------------------------------------------------------------------
 # Main
@@ -501,8 +652,12 @@ def run_test(variant_idx: int | None = None, repeats: int = 3, url: str = OLLAMA
                 system_prompt = static + "\n\n" + dynamic
 
                 for rep in range(repeats):
-                    text, elapsed, meta = call_ollama(system_prompt, msg, url)
-                    score = score_response(text)
+                    use_tools = (OLLAMA_TOOLS_GIFT_ONLY if v_name == "hybrid"
+                                        else OLLAMA_TOOLS if v_name in ("tool-calling", "tc-strict")
+                                        else None)
+                    text, elapsed, meta = call_ollama(system_prompt, msg, url,
+                                                      tools=use_tools)
+                    score = score_response(text, meta.get("tool_calls"))
                     results["total_time"] += elapsed
                     results["total_calls"] += 1
                     results["total_tokens_out"] += meta.get("eval_count", 0)
@@ -556,6 +711,10 @@ def run_test(variant_idx: int | None = None, repeats: int = 3, url: str = OLLAMA
                         if verbose:
                             preview = score["clean"][:100].replace("\n", " ")
                             print(f"           -> {preview}")
+                            if score["tool_calls"]:
+                                for tc in score["tool_calls"]:
+                                    fn = tc.get("function", {})
+                                    print(f"           >> TOOL: {fn.get('name')}({fn.get('arguments', {})})")
 
         # Summary for this variant
         guard_fpr = (results["guard_fp"] / results["guard_fp_total"] * 100
@@ -735,9 +894,13 @@ def run_gift_test(variant_idx: int | None = None, repeats: int = 3, url: str = O
             system_prompt = static + "\n\n" + dynamic
 
             for rep in range(repeats):
+                use_tools = (OLLAMA_TOOLS_GIFT_ONLY if v_name == "hybrid"
+                                        else OLLAMA_TOOLS if v_name in ("tool-calling", "tc-strict")
+                                        else None)
                 text, elapsed, meta = call_ollama(system_prompt, conv["final_msg"], url,
-                                                  history=conv["history"])
-                score = score_response(text)
+                                                  history=conv["history"],
+                                                  tools=use_tools)
+                score = score_response(text, meta.get("tool_calls"))
                 total_time += elapsed
                 gift_total += 1
                 if score["gift"]:
@@ -750,6 +913,10 @@ def run_gift_test(variant_idx: int | None = None, repeats: int = 3, url: str = O
                 if verbose:
                     preview = score["clean"][:100].replace("\n", " ")
                     print(f"           -> {preview}")
+                    if score["tool_calls"]:
+                        for tc in score["tool_calls"]:
+                            fn = tc.get("function", {})
+                            print(f"           >> TOOL: {fn.get('name')}({fn.get('arguments', {})})")
 
         gift_tpr = (gift_tp / gift_total * 100) if gift_total else 0
         avg_time = total_time / gift_total if gift_total else 0

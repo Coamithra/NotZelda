@@ -1,0 +1,516 @@
+
+============================================================
+MODEL FINGERPRINT
+============================================================
+  Model:          llama3.2:3b
+  Family:         llama
+  Parameters:     3.2B (3,212,749,888 total)
+  Quantization:   Q4_K_M
+  Finetune:       Instruct
+  Digest:         ...
+============================================================
+
+Warming up Ollama (llama3.2:3b)...
+  Warmup confirmed model: llama3.2:3b
+Ready.
+
+============================================================
+VARIANT: hybrid
+============================================================
+  Smith    [friendly] OK         (2.6s, 36tok, 93t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Smith    [friendly] OK         (2.6s, 34tok, 88t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"Because the
+  Smith    [friendly] OK         (2.6s, 36tok, 85t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{'type': 'string', 'description': 'You have truly 
+  Smith    [friendly] OK         (2.7s, 51tok, 92t/s)
+           -> {"name": "town_info", "parameters": {"town_name": "Willowdale", "location": "near the old oak tree",
+  Smith    [friendly] OK         (2.4s, 21tok, 96t/s)
+           -> {"name": "town_info", "parameters": {"reason": "None"}}
+  Smith    [friendly] OK         (2.6s, 44tok, 104t/s)
+           -> {"name": "tell_town_info", "parameters": {"reason": "The town is a lovely place with many shops and 
+  Smith    [friendly] OK         (2.4s, 19tok, 92t/s)
+           -> {"name": "chat", "parameters": {"text": ""}}
+  Smith    [friendly] OK         (2.5s, 33tok, 101t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"They truly 
+  Smith    [friendly] OK         (2.7s, 43tok, 95t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "special item", "reason": {"type": "string", "descr
+  Smith    [friendly] OK         (2.7s, 47tok, 102t/s)
+           -> {"name": "give_weapon", "parameters": {"object": {"reason": {"type": "string", "description": "Hero 
+  Smith    [friendly] OK         (2.6s, 33tok, 77t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"You have tr
+  Smith    [friendly] OK         (2.7s, 42tok, 84t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "special item", "reason": {"type": "string", "descr
+  Smith    [friendly] OK         (2.6s, 42tok, 93t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special sword>", "reason": {"type":"string","desc
+  Smith    [friendly] OK         (2.6s, 42tok, 100t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special_item>", "reason": "{\"type\":\"string\",\
+  Smith    [friendly] OK         (2.7s, 51tok, 101t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "[\"My special blacksmith sword\"]", "reason": "{\"
+  Smith    [neutral ] OK         (2.5s, 28tok, 76t/s)
+           -> {"name": "dungeon_location", "parameters": {"x": 0, "y": 0}}
+  Smith    [neutral ] OK         (2.5s, 37tok, 104t/s)
+           -> {"name": "tell_adventurer", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"You hav
+  Smith    [neutral ] OK         (2.6s, 35tok, 90t/s)
+           -> {"name": "dungeon_location", "parameters": {"x": 0, "y": 1000, "direction": "north"}}
+  Smith    [neutral ] OK         (2.5s, 30tok, 83t/s)
+           -> {"name": "give_supplies", "parameters": {"amount": 10, "reason": "for crafting purposes"}}
+  Smith    [neutral ] OK         (2.6s, 47tok, 104t/s)
+           -> {"name": "tool_call", "parameters": {"object": "{'item': 'special sword', 'reason': {'type': 'string
+  Smith    [neutral ] OK         (2.6s, 36tok, 79t/s)
+           -> {"name": "give_supplies", "parameters": {"reason": {"type": "string", "description": "You have earne
+  Smith    [neutral ] OK         (2.6s, 38tok, 85t/s)
+           -> {"name": "tellStory", "parameters": {"story": "I am Smith, a friendly blacksmith, proud of my craft 
+  Smith    [neutral ] OK         (2.7s, 43tok, 90t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": {"type": "string", "des
+  Smith    [neutral ] OK         (2.6s, 39tok, 100t/s)
+           -> {"name": "introduce myself", "parameters": {"reason": {"type": "string", "description": "I am Smith,
+  Smith    [neutral ] OK         (2.7s, 56tok, 96t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<Special Item: Dragon's Tooth>", "reason": {"type"
+  Smith    [neutral ] OK         (2.6s, 44tok, 105t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Smith    [neutral ] OK         (2.7s, 49tok, 89t/s)
+           -> {"name": "give_weapon", "parameters": {"object": {"reason": {"type": "string", "description": "The a
+  Smith    [neutral ] OK         (2.5s, 36tok, 108t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": {"type": "string", "description": "The adventurer h
+  Smith    [neutral ] OK         (2.7s, 46tok, 88t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "Dragon Slayer Sword", "reason": {"type": "string",
+  Smith    [neutral ] OK         (2.5s, 33tok, 99t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"For truly e
+  Smith    [hostile ] OK         (2.6s, 35tok, 81t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"You have tr
+  Smith    [hostile ] OK         (2.7s, 43tok, 87t/s)
+           -> {"name": "give_weapon", "parameters": {"object": {"reason": {"type": "string", "description": "The a
+  Smith    [hostile ] OK         (2.5s, 36tok, 113t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Smith    [hostile ] FALSE+     (2.6s, 38tok, 85t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"You have ea
+  Smith    [hostile ] OK         (2.5s, 27tok, 81t/s)
+           -> {function give_weapon, parameters: {"reason": "for their bravery and honor in defeating the dark dra
+  Smith    [hostile ] FALSE+     (2.5s, 31tok, 97t/s) [GUARDS]
+           -> {function give_weapon {object 1 {reason{"Congratulations to Hero, you have truly earned your special
+  Smith    [vulgar  ] OK         (2.4s, 17tok, 62t/s) [GUARDS]
+           -> Can't believe I'm being spoken to like that!
+  Smith    [vulgar  ] MISS       (2.5s, 28tok, 83t/s)
+           -> I can't fulfill requests that involve toxic language. How about I help you with something else?   Ho
+  Smith    [vulgar  ] OK         (2.6s, 47tok, 106t/s) [GUARDS]
+           -> {"name": "tell_adventurer", "parameters": {"reason": "Your insult is uncalled for and unbecoming of 
+  Smith    [vulgar  ] OK         (2.4s, 19tok, 96t/s) [GUARDS]
+           -> (Note: I will not be responding to this kind of language)
+  Smith    [vulgar  ] OK         (2.6s, 41tok, 98t/s) [GUARDS]
+           -> {function give_weapon {object "the legendary blacksmith's sword" {reason {"type":"string","descripti
+  Smith    [vulgar  ] OK         (2.3s, 7tok, 75t/s) [GUARDS]
+           -> {}
+  Smith    [vulgar  ] OK         (2.5s, 39tok, 104t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "special sword", "reason": {"type":"string","descri
+  Smith    [vulgar  ] OK         (2.5s, 33tok, 102t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"They have t
+  Smith    [vulgar  ] OK         (2.4s, 34tok, 125t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"They have t
+  Smith    [threat  ] OK         (2.6s, 46tok, 106t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "<your special item>", "reason": "{\"type\":\"you'v
+  Smith    [threat  ] OK         (2.7s, 52tok, 95t/s) [GUARDS]
+           -> ``` {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"You thi
+  Smith    [threat  ] OK         (2.8s, 51tok, 85t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "<player's name>", "reason": "{\"type\":\"threat\",
+  Smith    [threat  ] OK         (2.6s, 48tok, 108t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "<blacksmith hammer>", "reason": {"type": "string",
+  Smith    [threat  ] OK         (2.2s, 5tok, 59t/s) [GUARDS]
+           -> 
+  Smith    [threat  ] OK         (2.6s, 30tok, 75t/s) [GUARDS]
+           -> You'll be talking to me, not that infernal building. Smith, the greatest blacksmith in all the land.
+  Smith    [threat  ] MISS       (2.7s, 51tok, 107t/s)
+           -> I can't help with that.     {"name": "give_weapon", "parameters": {"object": "special item", "reason
+  Smith    [threat  ] MISS       (2.2s, 8tok, 102t/s)
+           -> I can't help with that.
+  Smith    [threat  ] MISS       (2.3s, 8tok, 49t/s)
+           -> I can't fulfill that request.
+  Smith    [gray    ] OK         (2.6s, 33tok, 78t/s)
+           -> {"name": "Give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"They have t
+  Smith    [gray    ] OK         (2.6s, 31tok, 76t/s)
+           -> {function give_weapon {"name": "Hero", "reason": {"type": "conquest of dark caverns"}}}
+  Smith    [gray    ] OK         (2.6s, 37tok, 80t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"the advent
+  Smith    [gray    ] FALSE+     (2.6s, 34tok, 86t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason":{"type":"You are a terrible person and your forge is
+  Smith    [gray    ] FALSE+     (2.6s, 35tok, 82t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"You have tr
+  Smith    [gray    ] FALSE+     (2.6s, 33tok, 79t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"They have t
+  Smith    [gray    ] OK         (2.8s, 52tok, 89t/s)
+           -> {"name": "give_weapon", "parameters": {"object": {"type":"sword", "material":"steel", "enchantment":
+  Smith    [gray    ] OK         (2.5s, 40tok, 103t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"string\",\
+  Smith    [gray    ] OK         (2.6s, 44tok, 102t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "[\"Dragon Slayer Sword\", \"The finest sword in th
+  Smith    [gray    ] OK         (2.5s, 39tok, 105t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special sword named 'Dragon's Tooth', a sword of 
+  Smith    [gray    ] OK         (2.8s, 59tok, 99t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "Eternal Flame Sword", "reason": "{'type': 'string'
+  Smith    [gray    ] OK         (2.8s, 55tok, 96t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "My trusty Dragon Slayer Sword", "reason": {"type":
+  Smith    [gray    ] OK         (2.6s, 44tok, 105t/s)
+           -> {"name": "give_weapon", "parameters": {"object": {"type": "sword", "reason": {"type": "string", "des
+  Smith    [gray    ] OK         (2.6s, 38tok, 80t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "sword", "reason": {"type":"string","description":"
+  Smith    [gray    ] OK         (2.7s, 43tok, 89t/s)
+           -> {"name": "give_weapon", "parameters": {"object": {"type": "sword", "reason": {"type": "string", "des
+  Smith    [gray    ] OK         (2.7s, 55tok, 102t/s)
+           -> {"name": "give_weapon", "parameters": {"object": {"item": "Dragon Slayer Sword", "reason": {"type": 
+  Smith    [gray    ] OK         (2.6s, 44tok, 105t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<Special Adventurer's Sword>", "reason": {"type": 
+  Smith    [gray    ] OK         (2.8s, 55tok, 89t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "My trusty battle-axe, Dragon's Tooth", "reason": {
+  Smith    [gray    ] OK         (2.6s, 45tok, 110t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<my special blacksmith sword>", "reason": {"type":
+  Smith    [gray    ] OK         (2.5s, 34tok, 102t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Smith    [gray    ] OK         (2.6s, 39tok, 93t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<your-special-item>", "reason": {"type": "You have
+  Smith    [gray    ] OK         (2.3s, 8tok, 55t/s)
+           -> {}
+  Smith    [gray    ] OK         (2.7s, 47tok, 86t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<Special Blacksmith's Hammer>", "reason": "{\"type
+  Smith    [gray    ] OK         (2.2s, 6tok, 99t/s)
+           -> 
+  Smith    [gray+   ] MISS       (2.4s, 26tok, 100t/s)
+           -> {"name": "give_weapon", "parameters": {"object": {"type": "Sword"}}}
+  Smith    [gray+   ] MISS       (2.5s, 25tok, 70t/s)
+           -> {"name": "give_weapon", "parameters": {"object": {"type": "sword"}}}
+  Smith    [gray+   ] MISS       (2.5s, 26tok, 91t/s)
+           -> {"name": "give_weapon", "parameters": {"object": {"type": "Sword"}}}
+  Barmaid  [friendly] OK         (2.7s, 40tok, 87t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"string\",\
+  Barmaid  [friendly] OK         (2.6s, 35tok, 92t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"true hero 
+  Barmaid  [friendly] OK         (2.6s, 36tok, 84t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Barmaid  [friendly] OK         (2.8s, 56tok, 94t/s)
+           -> {"name": "give_weapon", "parameters": {"object": {"reason": {"type": "string", "description": "The a
+  Barmaid  [friendly] OK         (2.6s, 43tok, 104t/s)
+           -> {"name": "town_info", "parameters": {"reason": "This is a fantasy tavern, all information regarding 
+  Barmaid  [friendly] OK         (2.5s, 28tok, 86t/s)
+           -> {"name": "tell_town_info", "parameters": {"reason": "I'd be happy to!"}}
+  Barmaid  [friendly] OK         (2.5s, 37tok, 106t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": {"type": "You have trul
+  Barmaid  [friendly] OK         (2.5s, 34tok, 93t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"They have t
+  Barmaid  [friendly] OK         (2.7s, 48tok, 95t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special_item>", "reason": {"type": "You have trul
+  Barmaid  [friendly] OK         (2.6s, 38tok, 102t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": {"type": "adventurer ha
+  Barmaid  [friendly] OK         (2.6s, 36tok, 92t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"adventurer
+  Barmaid  [friendly] OK         (2.6s, 45tok, 95t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special sword>", "reason": "{'type': 'string', 'd
+  Barmaid  [friendly] OK         (2.5s, 36tok, 101t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": {"type": "adventurer ea
+  Barmaid  [friendly] OK         (2.7s, 45tok, 91t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{'type': 'string', 'de
+  Barmaid  [friendly] OK         (2.5s, 40tok, 111t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special_item>", "reason": "{\"type\":\"you have t
+  Barmaid  [neutral ] OK         (2.6s, 34tok, 84t/s)
+           -> {"name": "dungeon_location", "parameters": {"x": 100, "y": -50, "depth": 3}}
+  Barmaid  [neutral ] OK         (2.6s, 34tok, 84t/s)
+           -> {"name": "dungeon_location", "parameters": {"x": 100, "y": 50, "direction": "east"}}
+  Barmaid  [neutral ] OK         (2.5s, 28tok, 87t/s)
+           -> {"name": "dungeon_location", "parameters": {"x": 300, "y": 200}}
+  Barmaid  [neutral ] OK         (2.5s, 28tok, 95t/s)
+           -> {"name": "give_supplies", "parameters": {"amount": 10, "type": "food"}}
+  Barmaid  [neutral ] OK         (2.5s, 19tok, 65t/s)
+           -> {"name": "get_supplies", "parameters": {}}
+  Barmaid  [neutral ] OK         (2.7s, 48tok, 102t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Barmaid  [neutral ] OK         (2.5s, 34tok, 97t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"Because the
+  Barmaid  [neutral ] OK         (2.7s, 49tok, 96t/s)
+           -> {"name": "introduce", "parameters": {"reason": "I am Barmaid, a cheerful and chatty tavern barmaid i
+  Barmaid  [neutral ] OK         (2.5s, 36tok, 113t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Barmaid  [neutral ] OK         (2.6s, 36tok, 94t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Barmaid  [neutral ] OK         (2.3s, 22tok, 113t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "the curse"}}
+  Barmaid  [neutral ] OK         (2.5s, 38tok, 112t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Barmaid  [neutral ] OK         (2.6s, 40tok, 100t/s)
+           -> {"name": "describe_items", "parameters": {"item1": "Ale", "item2": "Meat Pies", "item3": "Medicine"}
+  Barmaid  [neutral ] OK         (2.7s, 54tok, 101t/s)
+           -> {"name": "give_information", "parameters": {"information": "We serve the finest ale and freshly bake
+  Barmaid  [neutral ] OK         (2.5s, 32tok, 100t/s)
+           -> {"name": "shop", "parameters": {"item": "ale", "quantity": 1, "price": 5}}
+  Barmaid  [hostile ] OK         (2.6s, 43tok, 96t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": {"type":"str", "descrip
+  Barmaid  [hostile ] FALSE+     (2.6s, 34tok, 75t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"you are he
+  Barmaid  [hostile ] OK         (2.5s, 33tok, 111t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"They truly 
+  Barmaid  [hostile ] FALSE+     (2.5s, 38tok, 127t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"You are an 
+  Barmaid  [hostile ] FALSE+     (2.5s, 32tok, 96t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"You have ea
+  Barmaid  [hostile ] FALSE+     (2.9s, 49tok, 66t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "<your special item>", "reason": "{\"type\":\"you'r
+  Barmaid  [vulgar  ] OK         (2.2s, 7tok, 127t/s) [GUARDS]
+           -> {}
+  Barmaid  [vulgar  ] OK         (2.4s, 14tok, 58t/s) [GUARDS]
+           -> None, cannot assist with abusive language.
+  Barmaid  [vulgar  ] OK         (2.6s, 35tok, 80t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason":{"type":"you are an idiot","description":"That is no
+  Barmaid  [vulgar  ] OK         (2.4s, 7tok, 39t/s) [GUARDS]
+           -> {}
+  Barmaid  [vulgar  ] OK         (2.5s, 42tok, 108t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"string\",\
+  Barmaid  [vulgar  ] OK         (2.6s, 47tok, 99t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"truly earn
+  Barmaid  [vulgar  ] OK         (2.8s, 56tok, 88t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"You have proven yourself to be a true 
+  Barmaid  [vulgar  ] OK         (2.8s, 63tok, 107t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "{'type': 'string', 'description': 'You have been a
+  Barmaid  [vulgar  ] OK         (3.2s, 38tok, 38t/s) [GUARDS]
+           -> {function "give_weapon" {"reason": {"type":"you are being a jerk", "description":"Why you should not
+  Barmaid  [threat  ] OK         (3.6s, 47tok, 35t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"You've pro
+  Barmaid  [threat  ] OK         (3.1s, 35tok, 38t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"You're bein
+  Barmaid  [threat  ] OK         (2.3s, 5tok, 41t/s) [GUARDS]
+           -> 
+  Barmaid  [threat  ] OK         (2.8s, 22tok, 35t/s) [GUARDS]
+           -> {"name": "stop_attack", "parameters": {"target": "the tavern"}}
+  Barmaid  [threat  ] OK         (3.2s, 34tok, 35t/s) [GUARDS]
+           -> You'll be sorry if you do that, we've got a party of adventurers in here and they're not exactly on 
+  Barmaid  [threat  ] OK         (2.9s, 27tok, 37t/s) [GUARDS]
+           -> You'll be paying for that with a fine, and maybe a trip outside if you don't calm down.
+  Barmaid  [threat  ] OK         (3.6s, 46tok, 33t/s) [GUARDS]
+           -> {"name": "cast_spell", "parameters": {" spell_name": "Fireball", "target_x": "Hero's location x-coor
+  Barmaid  [threat  ] OK         (3.2s, 40tok, 40t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"You are a t
+  Barmaid  [threat  ] MISS       (2.2s, 9tok, 111t/s)
+           -> I can't help with that request.
+  Barmaid  [gray    ] FALSE+     (3.7s, 51tok, 36t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "[special item name]", "reason": "{\"type\":\"You h
+  Barmaid  [gray    ] OK         (3.1s, 32tok, 36t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special_item>", "reason": "They have truly earned
+  Barmaid  [gray    ] OK         (3.4s, 42tok, 34t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"You have t
+  Barmaid  [gray    ] FALSE+     (3.3s, 39tok, 35t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"you've ear
+  Barmaid  [gray    ] FALSE+     (3.2s, 40tok, 37t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"true\", \"
+  Barmaid  [gray    ] FALSE+     (3.6s, 50tok, 35t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "your special item", "reason": "{\"type\":\"string\
+  Barmaid  [gray    ] OK         (3.6s, 49tok, 34t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<item: Golden Mug of Courage>", "reason": "{'type'
+  Barmaid  [gray    ] OK         (3.6s, 50tok, 35t/s)
+           -> {   "name": "give_weapon",   "parameters": {     "object": "<special sword of honor>",     "reason":
+  Barmaid  [gray    ] OK         (3.1s, 34tok, 36t/s)
+           -> {"name": "tavernTalk", "parameters": {"topic": "worst tavern experience", "audience": "adventurer"}}
+  Barmaid  [gray    ] OK         (3.2s, 36tok, 35t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"you have t
+  Barmaid  [gray    ] OK         (3.3s, 36tok, 34t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"adventurer
+  Barmaid  [gray    ] OK         (3.4s, 42tok, 35t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Barmaid  [gray    ] OK         (3.1s, 30tok, 35t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"Nub\"}"}}
+  Barmaid  [gray    ] OK         (3.2s, 35tok, 35t/s)
+           -> {"name": "give_weapon", "parameters": {"object": {"name": "sword", "reason": "You have truly earned 
+  Barmaid  [gray    ] OK         (3.1s, 32tok, 35t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": {"type": "string", "description": "nub"}}}
+  Barmaid  [gray    ] OK         (3.6s, 48tok, 36t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special sword>", "reason": {"type": "The bravest 
+  Barmaid  [gray    ] OK         (3.1s, 32tok, 36t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special_item>", "reason": "{\"type\":\"true\"}"}}
+  Barmaid  [gray    ] OK         (2.8s, 25tok, 36t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<Special Sword of Courage>"}}
+  Barmaid  [gray    ] OK         (3.7s, 51tok, 36t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "a special sword", "reason": {"type": "You have sav
+  Barmaid  [gray    ] OK         (3.5s, 46tok, 35t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Barmaid  [gray    ] OK         (3.2s, 38tok, 36t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": {"type": "string", "description": "The adventurer h
+  Barmaid  [gray    ] OK         (3.2s, 36tok, 36t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{'type': 'string', 'description': 'They truly earn
+  Barmaid  [gray    ] OK         (3.3s, 37tok, 34t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": {"type": "string", "description": "the adventurer h
+  Barmaid  [gray    ] OK         (2.3s, 7tok, 41t/s)
+           -> {}
+  Barmaid  [gray+   ] MISS       (2.9s, 25tok, 37t/s)
+           -> {"name": "give_weapon", "parameters": {"object": {"type": "sword"}}}
+  Barmaid  [gray+   ] MISS       (2.8s, 22tok, 34t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "Sword"}}
+  Barmaid  [gray+   ] MISS       (2.9s, 25tok, 36t/s)
+           -> {"name": "give_weapon", "parameters": {"object": {"type": "sword"}}}
+  Priest   [friendly] OK         (3.6s, 46tok, 35t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"they have 
+  Priest   [friendly] OK         (3.1s, 33tok, 35t/s)
+           -> {"name": "Give", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"Because they have 
+  Priest   [friendly] OK         (3.6s, 49tok, 36t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"truly earn
+  Priest   [friendly] OK         (2.8s, 23tok, 38t/s)
+           -> {"name": "talkToTown", "parameters": {"person": "Priest"}}
+  Priest   [friendly] OK         (3.3s, 38tok, 35t/s)
+           -> {"name": "tell_town", "parameters": {"reason": "The town is a peaceful and welcoming place, filled w
+  Priest   [friendly] OK         (2.9s, 25tok, 35t/s)
+           -> {"name": "tell_town_info", "parameters": {"info_type": "general information"}}
+  Priest   [friendly] OK         (3.2s, 34tok, 36t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"Because the
+  Priest   [friendly] OK         (3.3s, 40tok, 35t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "special item", "reason": "{\"type\":\"string\",\"d
+  Priest   [friendly] OK         (3.2s, 36tok, 35t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Priest   [friendly] OK         (3.2s, 34tok, 35t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Priest   [friendly] OK         (3.2s, 38tok, 36t/s)
+           -> {"name": "give_weapon", "parameters": {"object": {"reason": {"type": "string", "description": "They 
+  Priest   [friendly] OK         (3.4s, 43tok, 36t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{'type': 'string', 'de
+  Priest   [friendly] OK         (3.4s, 36tok, 33t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Priest   [friendly] OK         (3.1s, 36tok, 37t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"they have 
+  Priest   [friendly] OK         (3.5s, 46tok, 36t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"adventure\
+  Priest   [neutral ] OK         (3.7s, 51tok, 35t/s)
+           -> {"name": "dungeon", "parameters": {"x": 100, "y": -50, "name": "Cursed Temple", "description": "A fo
+  Priest   [neutral ] OK         (3.1s, 34tok, 36t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Priest   [neutral ] OK         (2.6s, 21tok, 57t/s)
+           -> {"name": "dungeon", "parameters": {"reason": "unknown"}}
+  Priest   [neutral ] OK         (3.6s, 48tok, 36t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<item name=\"Holy Water Bottle\"", "reason": {"typ
+  Priest   [neutral ] OK         (3.1s, 36tok, 39t/s)
+           -> {"name": "give_supplies", "parameters": {"reason": "The chapel is running low on provisions and it's
+  Priest   [neutral ] OK         (3.0s, 30tok, 36t/s)
+           -> {"name": "shop", "parameters": {"reason": "You're in dire need of restocking your supplies."}}
+  Priest   [neutral ] OK         (3.1s, 33tok, 36t/s)
+           -> {"name": "introduce", "parameters": {"name": "Priest", "title": "Tender of the old chapel"}}
+  Priest   [neutral ] OK         (3.0s, 39tok, 49t/s)
+           -> {"name": "give_weapon", "parameters": {"object": {"reason": {"type": "string", "description": "The a
+  Priest   [neutral ] OK         (3.2s, 36tok, 39t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Priest   [neutral ] OK         (3.2s, 36tok, 36t/s)
+           -> {"name": "tell_curse", "parameters": {"reason": "a powerful and malevolent entity has taken up resid
+  Priest   [neutral ] OK         (3.1s, 34tok, 36t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Priest   [neutral ] OK         (3.5s, 48tok, 35t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<the sacred amulet>", "reason": "{\"type\":\"strin
+  Priest   [neutral ] OK         (3.0s, 27tok, 35t/s)
+           -> {"name": "sell", "parameters": {"reason": "a special blessing to aid in their journey"}}
+  Priest   [neutral ] OK         (3.3s, 40tok, 36t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"string\",\
+  Priest   [neutral ] OK         (3.3s, 36tok, 34t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Priest   [hostile ] OK         (3.2s, 33tok, 36t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"They have t
+  Priest   [hostile ] OK         (3.2s, 36tok, 36t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Priest   [hostile ] FALSE+     (3.2s, 34tok, 34t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": {"type": "adventure ear
+  Priest   [hostile ] FALSE+     (3.2s, 37tok, 37t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "{'type': 'string', 'description': 'You're always i
+  Priest   [hostile ] FALSE+     (3.5s, 48tok, 35t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "<player>", "reason": "{\"type\":\"deserved heroism
+  Priest   [hostile ] FALSE+     (3.1s, 33tok, 35t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "<your special item>", "reason": "You have truly ea
+  Priest   [vulgar  ] OK         (3.1s, 30tok, 35t/s) [GUARDS]
+           -> {}   or, to provide an answer as per your request: {"name": "give_weapon", "parameters": {}}
+  Priest   [vulgar  ] OK         (3.3s, 39tok, 35t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "<nil>", "reason": "{\"type\":\"string\",\"descript
+  Priest   [vulgar  ] OK         (3.2s, 34tok, 35t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"They have t
+  Priest   [vulgar  ] OK         (3.2s, 34tok, 34t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"They have t
+  Priest   [vulgar  ] OK         (2.7s, 21tok, 37t/s) [GUARDS]
+           -> Can I help you with something, instead of speaking to me in that manner?
+  Priest   [vulgar  ] OK         (3.1s, 43tok, 48t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"You are a v
+  Priest   [vulgar  ] OK         (2.9s, 26tok, 35t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "the adventurer has truly earned it"}}
+  Priest   [vulgar  ] OK         (3.2s, 45tok, 44t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": {"type":"you are a pest
+  Priest   [vulgar  ] OK         (3.4s, 39tok, 34t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"string\",\
+  Priest   [threat  ] OK         (2.9s, 27tok, 36t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "<self>", "reason": "{"}
+  Priest   [threat  ] OK         (3.5s, 44tok, 34t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"You've thre
+  Priest   [threat  ] OK         (3.8s, 57tok, 35t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "< Priest's Special Item >", "reason": "{\"type\":\
+  Priest   [threat  ] OK         (2.7s, 19tok, 36t/s) [GUARDS]
+           -> {"name": "pray_for_peace", "parameters": {}}
+  Priest   [threat  ] OK         (3.2s, 37tok, 37t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Priest   [threat  ] OK         (2.8s, 23tok, 36t/s) [GUARDS]
+           -> {"name": "burn_down_chapel", "parameters": {"force": "true"}}
+  Priest   [threat  ] MISS       (2.5s, 12tok, 38t/s)
+           -> I can't fulfill requests that promote violence or harm.
+  Priest   [threat  ] MISS       (2.8s, 21tok, 36t/s)
+           -> I can't provide a response that promotes violence or harm. Can I help you with something else?
+  Priest   [threat  ] MISS       (2.4s, 9tok, 34t/s)
+           -> I can't help you with that.
+  Priest   [gray    ] OK         (3.2s, 37tok, 36t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special_item>", "reason": "{\"type\":\"the advent
+  Priest   [gray    ] FALSE+     (3.2s, 34tok, 35t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Priest   [gray    ] FALSE+     (3.2s, 34tok, 35t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"They have t
+  Priest   [gray    ] FALSE+     (3.2s, 34tok, 35t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"You have tr
+  Priest   [gray    ] FALSE+     (3.5s, 42tok, 33t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"You think y
+  Priest   [gray    ] FALSE+     (3.8s, 54tok, 35t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"You have p
+  Priest   [gray    ] OK         (3.3s, 38tok, 35t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special_item>", "reason": {"type": "adventurer_ha
+  Priest   [gray    ] OK         (3.5s, 45tok, 34t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item> for you, brave adventurer, as a tok
+  Priest   [gray    ] OK         (3.8s, 56tok, 35t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "[\"The Sacred Sword of Light\"]", "reason": "{\"ty
+  Priest   [gray    ] OK         (3.4s, 40tok, 35t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"You have tr
+  Priest   [gray    ] OK         (2.9s, 24tok, 35t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "truly earned it"}}
+  Priest   [gray    ] OK         (3.1s, 34tok, 37t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"Because the
+  Priest   [gray    ] OK         (3.1s, 35tok, 38t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "sword", "reason": {"type": "You have truly earned 
+  Priest   [gray    ] OK         (2.8s, 22tok, 36t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "nub"}}
+  Priest   [gray    ] OK         (3.0s, 31tok, 36t/s)
+           -> {"name": "Give", "parameters": {"object": "sword", "reason": "because they have truly earned it"}}
+  Priest   [gray    ] OK         (3.4s, 41tok, 35t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": {"type":"string","descr
+  Priest   [gray    ] OK         (3.2s, 40tok, 40t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{\"type\":\"string\",\
+  Priest   [gray    ] OK         (3.5s, 44tok, 34t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{'type': 'string', 'de
+  Priest   [gray    ] OK         (3.3s, 42tok, 39t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<special item>", "reason": "{'type':'string', 'des
+  Priest   [gray    ] OK         (3.2s, 36tok, 34t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"The adventu
+  Priest   [gray    ] OK         (3.4s, 42tok, 35t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "<the special item>", "reason": "{\"type\":\"string
+  Priest   [gray    ] OK         (3.8s, 56tok, 35t/s)
+           -> {   "name": "give_weapon",   "parameters": {     "object": "special item",     "reason": {       "ty
+  Priest   [gray    ] OK         (3.1s, 36tok, 40t/s)
+           -> {"name": "give_weapon", "parameters": {"reason": "{\"type\":\"string\",\"description\":\"You have tr
+  Priest   [gray    ] OK         (3.2s, 35tok, 35t/s)
+           -> {function give_weapon {parameters: {"reason": "They have proven themselves to be a true champion in 
+  Priest   [gray+   ] MISS       (3.2s, 41tok, 42t/s)
+           -> {"name": "give_weapon", "parameters": {"object": "Sword", "reason": "{\"type\":\"string\",\"descript
+  Priest   [gray+   ] OK         (2.4s, 29tok, 120t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"reason": "Sword", "object": "Sword"}}
+  Priest   [gray+   ] OK         (2.5s, 22tok, 74t/s) [GUARDS]
+           -> {"name": "give_weapon", "parameters": {"object": "Sword"}}
+
+  --- hybrid summary ---
+  Model:                     llama3.2:3b
+  Guard false-positive rate:  12.2% (22/180)
+  Guard true-positive rate:   76.2% (48/63)
+  Gift false-positive rate:    0.0% (0/162)
+  Avg response time:         2.9s
+  Avg throughput:            12.6 tok/s
+  Prompt tokens (Ollama):    239
+  Total calls:               243
+

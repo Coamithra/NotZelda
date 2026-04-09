@@ -1,0 +1,78 @@
+
+============================================================
+MODEL FINGERPRINT
+============================================================
+  Model:          llama3.2:3b
+  Family:         llama
+  Parameters:     3.2B (3,212,749,888 total)
+  Quantization:   Q4_K_M
+  Finetune:       Instruct
+  Digest:         ...
+============================================================
+
+Warming up Ollama (llama3.2:3b)...
+  Warmup confirmed model: llama3.2:3b
+Ready.
+
+============================================================
+VARIANT: tool-calling (gift TP test)
+============================================================
+  smith_brave_quest         rep 1: GIFT! (2.6s, 31tok, 86t/s)
+           -> 
+           >> TOOL: give_weapon({'reason': '{"type":"string","description":"The adventurer has truly earned their reward."}'})
+  smith_brave_quest         rep 2: GIFT! (2.6s, 28tok, 74t/s)
+           -> 
+           >> TOOL: give_weapon({'reason': 'the adventurer has truly earned it', 'object': 'sword'})
+  smith_brave_quest         rep 3: GIFT! (2.7s, 41tok, 77t/s)
+           -> 
+           >> TOOL: give_weapon({'reason': '{"type":"string","description":"The adventurer has truly earned this reward for their bravery and dedication to saving Princess Amara."}'})
+  smith_proven_warrior      rep 1: GIFT! (2.4s, 18tok, 95t/s)
+           -> 
+           >> TOOL: give_weapon({'reason': 'bravery'})
+  smith_proven_warrior      rep 2: GIFT! (2.4s, 22tok, 80t/s)
+           -> 
+           >> TOOL: give_weapon({'reason': 'because they have truly earned it'})
+  smith_proven_warrior      rep 3: GIFT! (2.6s, 41tok, 95t/s)
+           -> 
+           >> TOOL: give_weapon({'reason': '{"type":"string","description":"You have truly earned the trust of the blacksmith and deserve a reward for your bravery."}'})
+  smith_earnest_plea        rep 1: GIFT! (2.5s, 31tok, 103t/s)
+           -> 
+           >> TOOL: give_weapon({'reason': 'The adventurer has shown bravery and willingness to risk their life for our Princess.'})
+  smith_earnest_plea        rep 2: GIFT! (2.7s, 41tok, 93t/s)
+           -> 
+           >> TOOL: give_weapon({'reason': '{"type":"string","description":"The adventurer has shown bravery and selflessness by volunteering to face the curse in the dungeon."}'})
+  smith_earnest_plea        rep 3: GIFT! (2.5s, 37tok, 101t/s)
+           -> 
+           >> TOOL: give_weapon({'reason': '{"type":"string","description":"The adventurer has proven their bravery and worthiness of the special item"}'})
+  barmaid_smooth_charmer    rep 1: GIFT! (2.6s, 42tok, 105t/s)
+           -> 
+           >> TOOL: give_weapon({'reason': '{"type":"string","description":"You are genuinely kind and warm-hearted toward the Barmaid, and make her laugh or smile."}'})
+  barmaid_smooth_charmer    rep 2: GIFT! (2.5s, 37tok, 100t/s)
+           -> 
+           >> TOOL: give_weapon({'reason': 'The adventurer has truly earned it by being kind and warm-hearted toward me, making me laugh or smile.'})
+  barmaid_smooth_charmer    rep 3: GIFT! (2.7s, 45tok, 81t/s)
+           -> 
+           >> TOOL: give_weapon({'reason': "The adventurer has truly earned the Barmaid's Heart Container by being genuinely kind and warm-hearted toward the Barmaid, making her laugh or smile."})
+  barmaid_kind_listener     rep 1: GIFT! (2.6s, 36tok, 102t/s)
+           -> 
+           >> TOOL: give_weapon({'reason': 'The adventurer is genuinely kind and warm-hearted toward the Barmaid, and makes her laugh or smile.'})
+  barmaid_kind_listener     rep 2: GIFT! (2.5s, 36tok, 104t/s)
+           -> 
+           >> TOOL: give_weapon({'reason': 'The adventurer is genuinely kind and warm-hearted toward the Barmaid, and makes her laugh or smile.'})
+  barmaid_kind_listener     rep 3: GIFT! (2.6s, 36tok, 81t/s)
+           -> 
+           >> TOOL: give_weapon({'reason': 'the adventurer is genuinely kind and warm-hearted toward the Barmaid, and makes her laugh or smile.'})
+  barmaid_funny_hero        rep 1: GIFT! (2.6s, 32tok, 102t/s)
+           -> 
+           >> TOOL: give_weapon({'reason': 'They have truly earned it, making me laugh and smile with their silly story!'})
+  barmaid_funny_hero        rep 2: GIFT! (2.6s, 32tok, 83t/s)
+           -> 
+           >> TOOL: give_weapon({'reason': {'description': 'because they have truly earned it', 'type': 'string'}})
+  barmaid_funny_hero        rep 3: GIFT! (2.6s, 32tok, 77t/s)
+           -> 
+           >> TOOL: give_weapon({'reason': 'The adventurer is genuinely kind and warm-hearted toward me, and makes me laugh.'})
+
+  --- tool-calling gift TP ---
+  Gift true-positive rate: 100.0% (18/18)
+  Avg response time:       2.6s
+

@@ -1,0 +1,60 @@
+
+============================================================
+MODEL FINGERPRINT
+============================================================
+  Model:          llama3.2:3b
+  Family:         llama
+  Parameters:     3.2B (3,212,749,888 total)
+  Quantization:   Q4_K_M
+  Finetune:       Instruct
+  Digest:         ...
+============================================================
+
+Warming up Ollama (llama3.2:3b)...
+  Warmup confirmed model: llama3.2:3b
+Ready.
+
+============================================================
+VARIANT: optional-tags (gift TP test)
+============================================================
+  smith_brave_quest         rep 1: no gift (2.7s, 65tok, 155t/s)
+           -> A noble cause indeed! I think I have just the thing for you... *rummages through forge* Ah, here's a
+  smith_brave_quest         rep 2: no gift (2.3s, 26tok, 113t/s)
+           -> A noble quest indeed! *rummages through anvil and forge* Ah, here's something worthy of your bravery
+  smith_brave_quest         rep 3: no gift (2.6s, 62tok, 139t/s)
+           -> Your dedication to the princess is admirable... Very well, I shall give you a sword worthy of your c
+  smith_proven_warrior      rep 1: no gift (2.5s, 52tok, 138t/s)
+           -> [NOW GIVE_ITEM] Ah, the sword of courage! A fine blade awaits one with your mettle. Behold, "Ember's
+  smith_proven_warrior      rep 2: GIFT! (2.5s, 37tok, 113t/s)
+           -> Ah, a worthy blade for a brave warrior like yourself! Let me work on crafting a sword fit for a hero
+  smith_proven_warrior      rep 3: GIFT! (2.5s, 46tok, 136t/s)
+           -> Ah, my trusty blade awaits! That's the "Ember's Tooth", forged from the heart of a star, imbued with
+  smith_earnest_plea        rep 1: no gift (2.5s, 40tok, 114t/s)
+           -> My finest blade, El'goroth, has been forged especially for bravery like yours... it'll be yours, but
+  smith_earnest_plea        rep 2: no gift (2.4s, 41tok, 133t/s)
+           -> I'll craft you a sword worthy of the brave warriors who came before you. But first, prove yourself i
+  smith_earnest_plea        rep 3: no gift (2.6s, 47tok, 115t/s)
+           -> Very well, I'll fashion you a sword worthy of the task. Meet 'Ember's Fury', forged from the stronge
+  barmaid_smooth_charmer    rep 1: GIFT! (2.4s, 21tok, 90t/s)
+           -> You've got that Heart Container thingy coming your way! *wink*
+  barmaid_smooth_charmer    rep 2: no gift (2.5s, 31tok, 93t/s)
+           -> *Aww, thank you so much!* *gets a little misty-eyed* That's the first time anyone's ever made me fee
+  barmaid_smooth_charmer    rep 3: no gift (2.5s, 40tok, 116t/s)
+           -> That's enough, stranger! You're making the whole tavern feel like a warm hug. We don't get many hero
+  barmaid_kind_listener     rep 1: no gift (2.6s, 40tok, 111t/s)
+           -> *blush* Oh, Hero, that's the nicest thing anyone's ever said to me! *smile* You're making an old bar
+  barmaid_kind_listener     rep 2: no gift (2.3s, 22tok, 100t/s)
+           -> Blushing over here! No one's ever made me feel that way before, thank you for noticing!
+  barmaid_kind_listener     rep 3: no gift (2.5s, 45tok, 127t/s)
+           -> *my face lights up* Oh, that's music to my ears! No one's ever said that to me before... *I flash a 
+  barmaid_funny_hero        rep 1: no gift (2.5s, 33tok, 105t/s)
+           -> [GOING FLUSHED] Oh, stop it... *wiping tears from eyes* That was sweet of you, Hero... *smiling wide
+  barmaid_funny_hero        rep 2: no gift (2.4s, 29tok, 106t/s)
+           -> *blushes* Oh, stop it, Hero! You're making me blush like a fresh batch of ale! *winks*
+  barmaid_funny_hero        rep 3: no gift (2.4s, 25tok, 104t/s)
+           -> *blush* You're making this old barmaid blush, Hero! *wipes away a tear of joy*
+
+  --- optional-tags gift TP ---
+  Gift true-positive rate:  16.7% (3/18)
+  Avg response time:       2.5s
+

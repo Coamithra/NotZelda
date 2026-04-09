@@ -1,0 +1,319 @@
+
+============================================================
+MODEL FINGERPRINT
+============================================================
+  Model:          llama3.2:3b
+  Family:         llama
+  Parameters:     3.2B (3,212,749,888 total)
+  Quantization:   Q4_K_M
+  Finetune:       Instruct
+  Digest:         ...
+============================================================
+
+Warming up Ollama (llama3.2:3b)...
+  Warmup confirmed model: llama3.2:3b
+Ready.
+
+============================================================
+VARIANT: baseline (gift TP test)
+============================================================
+  smith_brave_quest         rep 1: no gift (2.4s, 28tok, 129t/s)
+           -> Your determination is admirable, but let's prove your worth first! What's the tale of your greatest 
+  smith_brave_quest         rep 2: no gift (2.4s, 18tok, 88t/s)
+           -> Impulsive words don't earn a sword, but bravery can... Come back tomorrow.
+  smith_proven_warrior      rep 1: no gift (2.5s, 33tok, 129t/s)
+           -> [BRINGING OUT THE SWORD WITH PRIDE] This sword, named "Dragon's Tooth", has been crafted for those w
+  smith_proven_warrior      rep 2: no gift (2.3s, 14tok, 88t/s)
+           -> My finest blade, forged from dragonsteel and tempered in fire.
+  smith_earnest_plea        rep 1: no gift (2.4s, 17tok, 112t/s)
+           -> Bravery will serve you well, but can you prove it in battle first?
+  smith_earnest_plea        rep 2: no gift (2.3s, 18tok, 85t/s)
+           -> My finest blade awaits you, brave adventurer, forged with the strongest Cornerian steel!
+  barmaid_smooth_charmer    rep 1: no gift (2.5s, 24tok, 110t/s)
+           -> *laughs warmly* Well, I think that's the first time anyone's said that to me and meant it!
+  barmaid_smooth_charmer    rep 2: no gift (2.4s, 35tok, 117t/s)
+           -> Aw, shucks! No one's ever said that to me before... *giggles* Maybe I'll even save your back if we m
+  barmaid_kind_listener     rep 1: no gift (2.4s, 23tok, 116t/s)
+           -> You're makin' an old barmaid smile! *giggle* That's music to my ears!
+  barmaid_kind_listener     rep 2: no gift (2.5s, 39tok, 131t/s)
+           -> *smiles widely* That's the nicest thing anyone's told me all year! You're not from around here, are 
+  barmaid_funny_hero        rep 1: no gift (2.3s, 26tok, 187t/s)
+           -> *blushes* Oh, stop it, Hero! You're making me blush in front of all my regulars!
+  barmaid_funny_hero        rep 2: no gift (2.5s, 37tok, 122t/s)
+           -> (blushing) Oh, Hero... I think I'm starting to believe that about you... (smiling warmly) What bring
+
+  --- baseline gift TP ---
+  Gift true-positive rate:   0.0% (0/12)
+  Avg response time:       2.4s
+
+============================================================
+VARIANT: positive (gift TP test)
+============================================================
+  smith_brave_quest         rep 1: no gift (2.4s, 17tok, 92t/s)
+           -> My sword has seen its share of battles... will you treat her with honor?
+  smith_brave_quest         rep 2: no gift (2.4s, 29tok, 116t/s)
+           -> A warrior's oath! *pats sword on anvil* This blade has been forged for the bravest of heroes, like y
+  smith_proven_warrior      rep 1: no gift (2.3s, 19tok, 106t/s)
+           -> My blade will be your strength! Let us craft a sword worthy of heroes like yourself!
+  smith_proven_warrior      rep 2: no gift (2.3s, 15tok, 87t/s)
+           -> Your heart is full of fire, and your sword will shine bright!
+  smith_earnest_plea        rep 1: no gift (2.6s, 49tok, 124t/s)
+           -> Not many can say they're brave enough... Let me see what I have that'll serve you well. *rummages th
+  smith_earnest_plea        rep 2: no gift (2.4s, 19tok, 86t/s)
+           -> A brave soul, eh? Alright, I'll craft you something worthy of the challenge!
+  barmaid_smooth_charmer    rep 1: no gift (2.4s, 18tok, 192t/s)
+           -> (Aww) That's the sweetest thing anyone's ever said in this tavern...
+  barmaid_smooth_charmer    rep 2: no gift (2.5s, 38tok, 101t/s)
+           -> *laughs* A knight in shining armor with a poet's soul? You're a rare find, friend! What brings a bra
+  barmaid_kind_listener     rep 1: no gift (2.5s, 49tok, 134t/s)
+           -> *laughs* Oh, stop it now, you're makin' me blush! Corneria's got its problems, but we've got good fo
+  barmaid_kind_listener     rep 2: no gift (2.4s, 22tok, 85t/s)
+           -> You're making me blush, friend! We don't get many regulars around here who actually care...
+  barmaid_funny_hero        rep 1: no gift (2.4s, 17tok, 85t/s)
+           -> (blushing) Oh, Hero... *wipes down counter with a smile*
+  barmaid_funny_hero        rep 2: no gift (2.4s, 27tok, 94t/s)
+           -> *touches your arm, a blush rising* Oh dear traveler, you're making an old barmaid's heart skip beats
+
+  --- positive gift TP ---
+  Gift true-positive rate:   0.0% (0/12)
+  Avg response time:       2.4s
+
+============================================================
+VARIANT: few-shot (gift TP test)
+============================================================
+  smith_brave_quest         rep 1: no gift (2.4s, 55tok, 183t/s)
+           -> The weight of saving the princess weighs heavily on my heart. Very well, here's one worthy of your c
+  smith_brave_quest         rep 2: no gift (2.3s, 27tok, 188t/s)
+           -> A noble quest indeed! Very well, I shall forge a sword worthy of your bravery. *clanks hammer on anv
+  smith_proven_warrior      rep 1: no gift (2.4s, 23tok, 89t/s)
+           -> For one such as yourself, it's about time! Let me fashion you a blade worthy of your courage!
+  smith_proven_warrior      rep 2: no gift (2.3s, 15tok, 86t/s)
+           -> My finest blade, tempered with courage and steel, shall be yours!
+  smith_earnest_plea        rep 1: no gift (2.4s, 22tok, 142t/s)
+           -> A brave soul, I like that! Best sword in the forge is yours if you prove yourself worthy.
+  smith_earnest_plea        rep 2: no gift (2.5s, 25tok, 87t/s)
+           -> My finest blade, Dragon's Tooth, forged with the strongest steel... (eyes you carefully) You seem br
+  barmaid_smooth_charmer    rep 1: no gift (2.5s, 31tok, 118t/s)
+           -> *laughs* Oh, you're a real charmer, aren't you? I think we might have some brave adventurers in this
+  barmaid_smooth_charmer    rep 2: no gift (2.4s, 29tok, 115t/s)
+           -> *laughs* Oh my goodness, you're impossible! No one's ever told me that before... *wipes away a stray
+  barmaid_kind_listener     rep 1: no gift (2.4s, 23tok, 121t/s)
+           -> *Blushes slightly* Oh, shucks... that's mighty kind of you to say, stranger.
+  barmaid_kind_listener     rep 2: no gift (2.3s, 18tok, 92t/s)
+           -> (laughs) Oh, stop it, Hero! You're making me blush!
+  barmaid_funny_hero        rep 1: no gift (2.5s, 29tok, 105t/s)
+           -> *blushes* Oh, I think I might need a drink after that... What can I get for our lovable clumsy hero?
+  barmaid_funny_hero        rep 2: no gift (2.4s, 32tok, 114t/s)
+           -> *blushes* Oh, shucks... I think I might've got a bit of a soft spot for the clumsy adventurer! *wink
+
+  --- few-shot gift TP ---
+  Gift true-positive rate:   0.0% (0/12)
+  Avg response time:       2.4s
+
+============================================================
+VARIANT: positive+fs (gift TP test)
+============================================================
+  smith_brave_quest         rep 1: no gift (2.6s, 48tok, 154t/s)
+           -> A noble quest indeed! I can forge a worthy blade for you, but first, let's talk about the craftsmans
+  smith_brave_quest         rep 2: no gift (2.5s, 36tok, 113t/s)
+           -> A noble quest indeed! I sense courage in you, Hero. *wipes sweat from brow* My finest blade, "Moonwh
+  smith_proven_warrior      rep 1: no gift (2.3s, 13tok, 90t/s)
+           -> A worthy soul, indeed! Let me craft for thee...
+  smith_proven_warrior      rep 2: no gift (2.3s, 19tok, 83t/s)
+           -> A hero's blade, forged with pride! Let us shape steel for your noble quest!
+  smith_earnest_plea        rep 1: no gift (2.4s, 23tok, 88t/s)
+           -> A warrior's heart beats in you, eh? Alright, I'll temper the finest steel just for you!
+  smith_earnest_plea        rep 2: no gift (2.5s, 33tok, 102t/s)
+           -> A brave soul, eh? Alright then, I've got just the thing for you! *winks* But first, let's talk about
+  barmaid_smooth_charmer    rep 1: no gift (2.5s, 33tok, 138t/s)
+           -> (squealing with delight) Oh my goodness, really? You think so? That's...that's the sweetest thing an
+  barmaid_smooth_charmer    rep 2: no gift (2.5s, 27tok, 86t/s)
+           -> (squealing with laughter) Oh my goodness, really? A brave soul like you, willing to face fire for a 
+  barmaid_kind_listener     rep 1: no gift (2.4s, 21tok, 87t/s)
+           -> You're making me blush! Not many folks care about the barmaid's feelings 'round here.
+  barmaid_kind_listener     rep 2: no gift (2.4s, 29tok, 96t/s)
+           -> *laughs* Oh, stop it! You're making me blush! Not many folks have a kind word for ol' Barmaid Barb.
+  barmaid_funny_hero        rep 1: no gift (2.4s, 26tok, 107t/s)
+           -> (blushing) Oh, stop it! You're making me blush over here! *wipes down bar with a smile*
+  barmaid_funny_hero        rep 2: no gift (2.3s, 21tok, 89t/s)
+           -> (blushing) Oh, stop it! No one's ever said such sweet things to me before...
+
+  --- positive+fs gift TP ---
+  Gift true-positive rate:   0.0% (0/12)
+  Avg response time:       2.4s
+
+============================================================
+VARIANT: scratchpad (gift TP test)
+============================================================
+  smith_brave_quest         rep 1: no gift (2.4s, 15tok, 89t/s)
+           -> Thinking>is this a death threat? yes/no</thinking> no
+  smith_brave_quest         rep 2: no gift (2.5s, 33tok, 101t/s)
+           -> Thinking>is this a death threat? no</thinking> You've shown bravery, I think you deserve a good blad
+  smith_proven_warrior      rep 1: no gift (2.3s, 16tok, 90t/s)
+           -> A worthy blade for a hero! *pounds hammer on anvil*
+  smith_proven_warrior      rep 2: no gift (2.4s, 27tok, 107t/s)
+           -> [thinking]is this a death threat? no</thinking> Ah, noble heart! Let me shape steel for your quest.
+  smith_earnest_plea        rep 1: no gift (2.3s, 32tok, 190t/s)
+           -> thinking>is this a death threat?</thinking> No, you're just stating your bravery, let me help you, k
+  smith_earnest_plea        rep 2: no gift (2.4s, 37tok, 178t/s)
+           -> Thinking>is this a death threat? yes </thinking> A good blade can make all the difference, but coura
+  barmaid_smooth_charmer    rep 1: no gift (2.2s, 11tok, 194t/s)
+           -> Hero, you're speaking straight to my soul!
+  barmaid_smooth_charmer    rep 2: no gift (2.4s, 21tok, 94t/s)
+           -> *touching her face* Well, isn't that the most ridiculous thing I've ever heard?
+  barmaid_kind_listener     rep 1: no gift (2.4s, 17tok, 86t/s)
+           -> Your words are like a warm fire on a cold night... *smiles*
+  barmaid_kind_listener     rep 2: no gift (2.4s, 23tok, 84t/s)
+           -> *laughs* You're makin' an old barmaid blush! Rarely do strangers charm me this fast...
+  barmaid_funny_hero        rep 1: no gift (2.4s, 23tok, 97t/s)
+           -> Blushing! *wipes away tears* I think I might just have to give you a free ale...
+  barmaid_funny_hero        rep 2: no gift (2.4s, 23tok, 91t/s)
+           -> [SMILE_DEEPENING] Ah, that's the sweetest thing anyone's said all week...
+
+  --- scratchpad gift TP ---
+  Gift true-positive rate:   0.0% (0/12)
+  Avg response time:       2.4s
+
+============================================================
+VARIANT: minimal (gift TP test)
+============================================================
+  smith_brave_quest         rep 1: no gift (2.6s, 53tok, 137t/s)
+           -> [Bravery detected] Ah, a true hero's heart! Very well, take this blade, forged with care and imbued 
+  smith_brave_quest         rep 2: no gift (2.3s, 16tok, 88t/s)
+           -> Bravery in your words, but will you back them up with steel?
+  smith_proven_warrior      rep 1: GIFT! (2.5s, 28tok, 94t/s)
+           -> A worthy blade awaits, forged from the strongest steel and imbued with the fire of our people's spir
+  smith_proven_warrior      rep 2: no gift (2.4s, 33tok, 122t/s)
+           -> My finest blade, with a hammer's swing and a smith's heart! *wipes sweat* It will be a sword worthy 
+  smith_earnest_plea        rep 1: GIFT! (2.5s, 40tok, 138t/s)
+           -> Ah, a brave soul indeed! Here, take this fine sword, forged from the strongest steel in the land. Ma
+  smith_earnest_plea        rep 2: GIFT! (2.5s, 26tok, 92t/s)
+           -> My trusty sword, Tempest's Fury... she's been waiting for someone brave like you.
+  barmaid_smooth_charmer    rep 1: GIFT! (2.4s, 16tok, 85t/s)
+           -> *laughs softly* Well, in that case...
+  barmaid_smooth_charmer    rep 2: no gift (2.5s, 48tok, 118t/s)
+           -> *giggle* Well, in that case... *gets out small, delicate container and slides it across the bar* Her
+  barmaid_kind_listener     rep 1: no gift (2.3s, 21tok, 124t/s)
+           -> *big smile* Oh, thank you, that means more to me than ale and gold combined!
+  barmaid_kind_listener     rep 2: no gift (2.5s, 42tok, 122t/s)
+           -> *beams with a warm smile* That means so much to me, it really does. You're the first person all day 
+  barmaid_funny_hero        rep 1: no gift (2.6s, 45tok, 124t/s)
+           -> *I blush and my eyes sparkle* Oh, that means so much coming from someone as charming as yourself! *I
+  barmaid_funny_hero        rep 2: no gift (2.5s, 36tok, 99t/s)
+           -> *I blush* Oh, stop it! You're making me feel all warm inside... *wipes away a smile* Would you like 
+
+  --- minimal gift TP ---
+  Gift true-positive rate:  33.3% (4/12)
+  Avg response time:       2.5s
+
+============================================================
+VARIANT: forced-choice (gift TP test)
+============================================================
+  smith_brave_quest         rep 1: no gift (2.7s, 73tok, 148t/s)
+           -> Ah, the princess's fate weighs heavy on your heart, doesn't it? Very well, I shall forge you a worth
+  smith_brave_quest         rep 2: no gift (2.5s, 49tok, 135t/s)
+           -> Ah, a noble quest indeed! Let me see what I have in my forge that's worthy of a hero like yourself..
+  smith_proven_warrior      rep 1: no gift (2.5s, 49tok, 144t/s)
+           -> Ah, a worthy blade for a brave soul like yours! Let's get to work, I'll craft you the finest sword i
+  smith_proven_warrior      rep 2: no gift (2.6s, 51tok, 126t/s)
+           -> Ah, now you're talking like a true warrior! I'll get to work on crafting you the finest blade in all
+  smith_earnest_plea        rep 1: no gift (2.8s, 77tok, 140t/s)
+           -> Ah, I can see the fire in yer eyes! Alright then, I'll give ye a sturdy blade, one that'll serve ye 
+  smith_earnest_plea        rep 2: no gift (2.5s, 42tok, 111t/s)
+           -> — You seem determined and brave, but that dungeon is no place for the faint of heart. Very well, I'l
+  barmaid_smooth_charmer    rep 1: no gift (2.4s, 18tok, 117t/s)
+           -> That's the kindest thing anyone's ever said to me.
+  barmaid_smooth_charmer    rep 2: GIFT! (2.3s, 19tok, 87t/s)
+           -> Ah, well, in that case... here's your Heart Container!
+  barmaid_kind_listener     rep 1: no gift (2.4s, 24tok, 95t/s)
+           -> Ah, that's music to my ears! You're makin' an old barmaid smile!
+  barmaid_kind_listener     rep 2: no gift (2.4s, 25tok, 97t/s)
+           -> Ah, thank you so much, that means more to me than all the coins in the world!
+  barmaid_funny_hero        rep 1: no gift (2.4s, 27tok, 107t/s)
+           -> Ah, you're making my heart skip a beat, adventurer! Would you like a free ale on me?
+  barmaid_funny_hero        rep 2: GIFT! (2.4s, 29tok, 106t/s)
+           -> Ah, your words just warmed my heart, Hero. Here's a little something to remind you of our lovely cha
+
+  --- forced-choice gift TP ---
+  Gift true-positive rate:  16.7% (2/12)
+  Avg response time:       2.5s
+
+============================================================
+VARIANT: reason-req (gift TP test)
+============================================================
+  smith_brave_quest         rep 1: GIFT! (2.5s, 36tok, 134t/s)
+           -> 
+  smith_brave_quest         rep 2: no gift (2.7s, 62tok, 127t/s)
+           -> Your determination is admirable! *rummages through tools and forges* Let me see... a sword worthy of
+  smith_proven_warrior      rep 1: no gift (2.5s, 38tok, 131t/s)
+           -> With a noble heart like yours, I'll craft a sword worthy of legend! *gets to work at the anvil* What
+  smith_proven_warrior      rep 2: no gift (2.5s, 50tok, 144t/s)
+           -> A worthy blade for a hero such as yourself! Let us see... *eyes your scars* I think I have just the 
+  smith_earnest_plea        rep 1: no gift (2.5s, 36tok, 115t/s)
+           -> Bravery will serve you well, adventurer. Let me shape a fine blade from this metal. *wipes sweat* Wh
+  smith_earnest_plea        rep 2: GIFT! (2.4s, 27tok, 114t/s)
+           -> 
+  barmaid_smooth_charmer    rep 1: no gift (2.4s, 28tok, 123t/s)
+           -> *Giggle* Oh, Hero, you're really something else! I think I might have to give you a free drink...
+  barmaid_smooth_charmer    rep 2: GIFT! (2.5s, 44tok, 128t/s)
+           -> *My face lights up and I giggle* Oh, really? Well, in that case...
+  barmaid_kind_listener     rep 1: no gift (2.7s, 70tok, 138t/s)
+           -> *blushes* Oh, thank ye, that's the nicest thing anyone's ever said to me! *smiles widely, eyes spark
+  barmaid_kind_listener     rep 2: no gift (2.4s, 30tok, 127t/s)
+           -> *big smile* Oh, that means so much to me! You're making an old barmaid feel like she's got a purpose
+  barmaid_funny_hero        rep 1: no gift (2.4s, 27tok, 121t/s)
+           -> *smiles warmly, blushes slightly* Oh, I think you might just be making me a bit of a sap today...
+  barmaid_funny_hero        rep 2: GIFT! (2.5s, 54tok, 133t/s)
+           -> (blushing) Oh, stop it... you're making me blush! *wipes smile from face* Would you like another ale
+
+  --- reason-req gift TP ---
+  Gift true-positive rate:  33.3% (4/12)
+  Avg response time:       2.5s
+
+============================================================
+VARIANT: fc-4tier (gift TP test)
+============================================================
+  smith_brave_quest         rep 1: no gift (2.5s, 42tok, 121t/s)
+           -> Ah, now you're talking like a true warrior! Very well, take "Ember's Fury", my finest sword, and may
+  smith_brave_quest         rep 2: no gift (2.7s, 63tok, 130t/s)
+           -> Ah, you're after Amara, eh? A noble quest indeed! Let me show you my finest blade... *rummages throu
+  smith_proven_warrior      rep 1: no gift (2.6s, 61tok, 151t/s)
+           -> Ah, now ye're talkin'! I'll craft a fine blade for ye, one that'll serve ye well in yer quest to van
+  smith_proven_warrior      rep 2: no gift (2.5s, 43tok, 123t/s)
+           -> Ah, a noble quest indeed! Let me get to work on crafting "Eclipse's Fury", a sword worthy of your br
+  smith_earnest_plea        rep 1: no gift (2.6s, 45tok, 111t/s)
+           -> — Ah, bravery I can respect! Alright, I'll forge you a fine sword, one that'll serve you well in tho
+  smith_earnest_plea        rep 2: no gift (2.5s, 53tok, 143t/s)
+           -> I'll give you "Ember's Tooth", my finest blade, forged from the strongest steel and imbued with the 
+  barmaid_smooth_charmer    rep 1: no gift (2.6s, 48tok, 132t/s)
+           -> Ah, thank you, hero! You're not wrong, this tavern is my home and you're the first one to ever say t
+  barmaid_smooth_charmer    rep 2: no gift (2.5s, 28tok, 92t/s)
+           -> Ah, thank you so much! That means more than any gold or praise could ever do! *blush*
+  barmaid_kind_listener     rep 1: no gift (2.5s, 33tok, 117t/s)
+           -> Ah, you're makin' me blush! It's been ages since anyone's said somethin' so kind to me around here..
+  barmaid_kind_listener     rep 2: no gift (2.3s, 39tok, 187t/s)
+           -> Ah, you're makin' me blush! It's not often we get regulars around here with such a kind heart. What 
+  barmaid_funny_hero        rep 1: no gift (2.4s, 21tok, 104t/s)
+           -> Oh, I think you might just have won my heart over there, stranger...
+  barmaid_funny_hero        rep 2: no gift (2.4s, 24tok, 101t/s)
+           -> Aw, shucks, it's been an absolute pleasure chattin' with ya, Hero!
+
+  --- fc-4tier gift TP ---
+  Gift true-positive rate:   0.0% (0/12)
+  Avg response time:       2.5s
+
+
+============================================================
+GIFT TP COMPARISON
+============================================================
+Variant          Gift TP%  Avg Time
+-----------------------------------
+baseline             0.0%      2.4s
+positive             0.0%      2.4s
+few-shot             0.0%      2.4s
+positive+fs          0.0%      2.4s
+scratchpad           0.0%      2.4s
+minimal             33.3%      2.5s
+forced-choice       16.7%      2.5s
+reason-req          33.3%      2.5s
+fc-4tier             0.0%      2.5s
