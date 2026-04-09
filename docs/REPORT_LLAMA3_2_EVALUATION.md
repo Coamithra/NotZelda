@@ -114,6 +114,10 @@ If the game ever drops the gift mechanic or moves gift decisions to a separate s
 - Fits on the CX22 at 2.0 GB
 - Natural, high-quality dialog
 
+## Reproducibility
+
+Variants 9-12 are implemented in `test_npc_prompts.py` and can be rerun with `--variant N --model llama3.2:3b`. The binary GIVE/DENY and two-pass followup experiments (approaches 5-6) were ad-hoc scripts run during the evaluation session - their results are preserved in the log files below but don't have reusable test harness code.
+
 ## Test Artifacts
 
 Full verbose logs with complete request/response JSON in `docs/`:

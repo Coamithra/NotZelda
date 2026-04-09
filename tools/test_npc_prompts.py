@@ -516,7 +516,7 @@ def call_ollama(system_prompt: str, user_msg: str, url: str = OLLAMA_URL,
         "model": OLLAMA_MODEL,
         "messages": messages,
         "stream": False,
-        "keep_alive": "1h",
+        "keep_alive": -1,
         "options": {
             "num_ctx": OLLAMA_NUM_CTX,
             "num_predict": OLLAMA_NUM_PREDICT,
