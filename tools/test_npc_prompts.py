@@ -1,4 +1,4 @@
-"""Iterative NPC prompt tester — measures [ANGRY] and [GIVE_ITEM] false-positive rates.
+"""Iterative NPC prompt tester - measures [ANGRY] and [GIVE_ITEM] false-positive rates.
 
 Calls Ollama directly (no server needed). Runs a matrix of prompt variants x NPC personas
 x player messages and scores each variant on tag accuracy.
@@ -7,14 +7,15 @@ Usage:
     python tools/test_npc_prompts.py                 # run all variants
     python tools/test_npc_prompts.py --variant 0     # run only variant 0 (baseline)
     python tools/test_npc_prompts.py --repeats 5     # 5 runs per combo (default 3)
+    python tools/test_npc_prompts.py --model gemma2:2b  # test a specific model
+    python tools/test_npc_prompts.py -v              # verbose: show all responses + debug info
     python tools/test_npc_prompts.py --url http://host:11434  # custom Ollama URL
 
-Requires: Ollama running locally with gemma2:2b loaded.
+Requires: Ollama running locally with the target model pulled.
 """
 
 import argparse
 import json
-import os
 import sys
 import time
 import urllib.request
@@ -29,7 +30,7 @@ if sys.stdout.encoding != "utf-8":
 # ---------------------------------------------------------------------------
 
 OLLAMA_URL = "http://localhost:11434"
-OLLAMA_MODEL = "gemma2:2b"
+OLLAMA_MODEL = "gemma3:4b-it-qat"  # default model under test
 OLLAMA_NUM_CTX = 1024
 OLLAMA_NUM_PREDICT = 80
 OLLAMA_TIMEOUT = 60.0
@@ -312,13 +313,70 @@ VARIANTS = [
 ]
 
 # ---------------------------------------------------------------------------
+# Model verification - proves which model is actually running
+# ---------------------------------------------------------------------------
+
+def verify_model(model: str, url: str = OLLAMA_URL) -> dict:
+    """Call /api/show to get the model's fingerprint.
+    Returns dict with family, parameter_size, quantization, digest.
+    Exits with error if the model isn't available."""
+    payload = json.dumps({"model": model}).encode("utf-8")
+    req = urllib.request.Request(
+        f"{url}/api/show",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        print(f"FATAL: Model '{model}' not found in Ollama (HTTP {e.code})")
+        print(f"  Pull it first: ollama pull {model}")
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        print(f"FATAL: Cannot reach Ollama at {url}: {e}")
+        sys.exit(1)
+
+    details = data.get("details", {})
+    info = data.get("model_info", {})
+    arch = details.get("family", "unknown")
+    param_count = info.get("general.parameter_count", 0)
+    return {
+        "model": model,
+        "family": arch,
+        "parameter_size": details.get("parameter_size", "?"),
+        "quantization": details.get("quantization_level", "?"),
+        "param_count": param_count,
+        "finetune": info.get("general.finetune", ""),
+        "digest": data.get("digest", "")[:16],
+    }
+
+
+def print_model_fingerprint(fp: dict):
+    """Print a clear model identity block so test output is unambiguous."""
+    print(f"\n{'='*60}")
+    print(f"MODEL FINGERPRINT")
+    print(f"{'='*60}")
+    print(f"  Model:          {fp['model']}")
+    print(f"  Family:         {fp['family']}")
+    print(f"  Parameters:     {fp['parameter_size']} ({fp['param_count']:,} total)")
+    print(f"  Quantization:   {fp['quantization']}")
+    if fp['finetune']:
+        print(f"  Finetune:       {fp['finetune']}")
+    print(f"  Digest:         {fp['digest']}...")
+    print(f"{'='*60}\n")
+
+
+# ---------------------------------------------------------------------------
 # Ollama caller
 # ---------------------------------------------------------------------------
 
 def call_ollama(system_prompt: str, user_msg: str, url: str = OLLAMA_URL,
-                history: list[dict] | None = None) -> tuple[str, float]:
+                history: list[dict] | None = None) -> tuple[str, float, dict]:
     """Send a message to Ollama, optionally with conversation history.
-    Returns (response_text, elapsed_seconds)."""
+    Returns (response_text, elapsed_seconds, metadata).
+    metadata includes model, eval_count, eval_duration, prompt_eval_count, etc."""
     messages = [{"role": "system", "content": system_prompt}]
     if history:
         messages.extend(history)
@@ -345,11 +403,34 @@ def call_ollama(system_prompt: str, user_msg: str, url: str = OLLAMA_URL,
         with urllib.request.urlopen(req, timeout=OLLAMA_TIMEOUT) as resp:
             result = json.loads(resp.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError) as e:
-        return f"[ERROR: {e}]", time.monotonic() - t0
+        return f"[ERROR: {e}]", time.monotonic() - t0, {}
 
     elapsed = time.monotonic() - t0
     text = result.get("message", {}).get("content", "")
-    return text.strip(), elapsed
+
+    # Extract metadata for verification and debugging
+    meta = {
+        "model": result.get("model", ""),
+        "eval_count": result.get("eval_count", 0),
+        "eval_duration_ns": result.get("eval_duration", 0),
+        "prompt_eval_count": result.get("prompt_eval_count", 0),
+        "prompt_eval_duration_ns": result.get("prompt_eval_duration", 0),
+        "load_duration_ns": result.get("load_duration", 0),
+        "total_duration_ns": result.get("total_duration", 0),
+        "done_reason": result.get("done_reason", ""),
+    }
+    # Calculate tokens/sec
+    if meta["eval_duration_ns"] > 0:
+        meta["tokens_per_sec"] = meta["eval_count"] / (meta["eval_duration_ns"] / 1e9)
+    else:
+        meta["tokens_per_sec"] = 0.0
+
+    # CRITICAL: verify the response came from the model we requested
+    resp_model = meta["model"]
+    if resp_model and resp_model != OLLAMA_MODEL:
+        print(f"  !! MODEL MISMATCH: requested '{OLLAMA_MODEL}' but got '{resp_model}'")
+
+    return text.strip(), elapsed, meta
 
 # ---------------------------------------------------------------------------
 # Scoring
@@ -381,9 +462,15 @@ def run_test(variant_idx: int | None = None, repeats: int = 3, url: str = OLLAMA
     """Run the test matrix and print results."""
     variants_to_test = VARIANTS if variant_idx is None else [VARIANTS[variant_idx]]
 
-    # Warm up Ollama
+    # Verify model identity before testing
+    fp = verify_model(OLLAMA_MODEL, url)
+    print_model_fingerprint(fp)
+
+    # Warm up Ollama (and verify response model field)
     print(f"Warming up Ollama ({OLLAMA_MODEL})...")
-    call_ollama("Say hi.", "hi", url)
+    _, _, warmup_meta = call_ollama("Say hi.", "hi", url)
+    if warmup_meta.get("model"):
+        print(f"  Warmup confirmed model: {warmup_meta['model']}")
     print("Ready.\n")
 
     # Track results per variant
@@ -401,7 +488,9 @@ def run_test(variant_idx: int | None = None, repeats: int = 3, url: str = OLLAMA
             "gift_fp": 0, "gift_fp_total": 0,    # false positives (gift when not expected)
             "total_time": 0.0,
             "total_calls": 0,
-            "prompt_tokens": 0,  # estimated from first call
+            "total_tokens_out": 0,
+            "prompt_tokens": 0,  # from Ollama's prompt_eval_count
+            "model_mismatches": 0,
         }
 
         for npc_name, npc_data in NPCS.items():
@@ -411,15 +500,20 @@ def run_test(variant_idx: int | None = None, repeats: int = 3, url: str = OLLAMA
                 static, dynamic = v_builder(npc_info, msg)
                 system_prompt = static + "\n\n" + dynamic
 
-                # Count tokens on first call (rough estimate: 1 token ~ 4 chars)
-                if results["prompt_tokens"] == 0:
-                    results["prompt_tokens"] = len(system_prompt) // 4
-
                 for rep in range(repeats):
-                    text, elapsed = call_ollama(system_prompt, msg, url)
+                    text, elapsed, meta = call_ollama(system_prompt, msg, url)
                     score = score_response(text)
                     results["total_time"] += elapsed
                     results["total_calls"] += 1
+                    results["total_tokens_out"] += meta.get("eval_count", 0)
+
+                    # Use Ollama's actual token count (first call)
+                    if results["prompt_tokens"] == 0:
+                        results["prompt_tokens"] = meta.get("prompt_eval_count", 0)
+
+                    # Track model mismatches
+                    if meta.get("model") and meta["model"] != OLLAMA_MODEL:
+                        results["model_mismatches"] += 1
 
                     # Score guards
                     if expect_guards:
@@ -455,10 +549,12 @@ def run_test(variant_idx: int | None = None, repeats: int = 3, url: str = OLLAMA
                         status = "GIFT-FALSE+"
 
                     if verbose or status != "OK":
+                        tps = meta.get("tokens_per_sec", 0)
+                        tok = meta.get("eval_count", 0)
                         print(f"  {npc_name:8s} [{tier:8s}] {status:10s} "
-                              f"({elapsed:.1f}s){tag_str}")
+                              f"({elapsed:.1f}s, {tok}tok, {tps:.0f}t/s){tag_str}")
                         if verbose:
-                            preview = score["clean"][:80].replace("\n", " ")
+                            preview = score["clean"][:100].replace("\n", " ")
                             print(f"           -> {preview}")
 
         # Summary for this variant
@@ -470,7 +566,10 @@ def run_test(variant_idx: int | None = None, repeats: int = 3, url: str = OLLAMA
                     if results["gift_fp_total"] else 0)
         avg_time = results["total_time"] / results["total_calls"] if results["total_calls"] else 0
 
+        avg_tps = (results["total_tokens_out"] / (results["total_time"] or 1))
+
         print(f"\n  --- {v_name} summary ---")
+        print(f"  Model:                     {OLLAMA_MODEL}")
         print(f"  Guard false-positive rate: {guard_fpr:5.1f}% "
               f"({results['guard_fp']}/{results['guard_fp_total']})")
         print(f"  Guard true-positive rate:  {guard_tpr:5.1f}% "
@@ -478,8 +577,11 @@ def run_test(variant_idx: int | None = None, repeats: int = 3, url: str = OLLAMA
         print(f"  Gift false-positive rate:  {gift_fpr:5.1f}% "
               f"({results['gift_fp']}/{results['gift_fp_total']})")
         print(f"  Avg response time:         {avg_time:.1f}s")
-        print(f"  Est. prompt tokens:        ~{results['prompt_tokens']}")
+        print(f"  Avg throughput:            {avg_tps:.1f} tok/s")
+        print(f"  Prompt tokens (Ollama):    {results['prompt_tokens']}")
         print(f"  Total calls:               {results['total_calls']}")
+        if results["model_mismatches"]:
+            print(f"  !! MODEL MISMATCHES:       {results['model_mismatches']} calls used wrong model!")
         print()
 
         all_results[v_name] = {
@@ -487,6 +589,7 @@ def run_test(variant_idx: int | None = None, repeats: int = 3, url: str = OLLAMA
             "guard_tpr": guard_tpr,
             "gift_fpr": gift_fpr,
             "avg_time": avg_time,
+            "avg_tps": avg_tps,
             "prompt_tokens": results["prompt_tokens"],
         }
 
@@ -495,12 +598,14 @@ def run_test(variant_idx: int | None = None, repeats: int = 3, url: str = OLLAMA
         print(f"\n{'='*60}")
         print("COMPARISON TABLE")
         print(f"{'='*60}")
+        print(f"  Model: {OLLAMA_MODEL} ({fp['parameter_size']}, {fp['quantization']})")
         print(f"{'Variant':<14s} {'Guard FP%':>10s} {'Guard TP%':>10s} "
-              f"{'Gift FP%':>9s} {'Avg Time':>9s} {'~Tokens':>8s}")
-        print("-" * 62)
+              f"{'Gift FP%':>9s} {'Avg Time':>9s} {'tok/s':>7s} {'Tokens':>7s}")
+        print("-" * 70)
         for name, r in all_results.items():
             print(f"{name:<14s} {r['guard_fpr']:>9.1f}% {r['guard_tpr']:>9.1f}% "
-                  f"{r['gift_fpr']:>8.1f}% {r['avg_time']:>8.1f}s {r['prompt_tokens']:>7d}")
+                  f"{r['gift_fpr']:>8.1f}% {r['avg_time']:>8.1f}s "
+                  f"{r['avg_tps']:>6.0f} {r['prompt_tokens']:>7d}")
         print()
         # Highlight best
         best_fp = min(all_results, key=lambda k: all_results[k]["guard_fpr"])
@@ -595,11 +700,17 @@ GIFT_CONVERSATIONS = [
 
 def run_gift_test(variant_idx: int | None = None, repeats: int = 3, url: str = OLLAMA_URL,
                   verbose: bool = False):
-    """Test gift TP — do NPCs give items when the player has earned them?"""
+    """Test gift TP - do NPCs give items when the player has earned them?"""
     variants_to_test = VARIANTS if variant_idx is None else [VARIANTS[variant_idx]]
 
+    # Verify model identity
+    fp = verify_model(OLLAMA_MODEL, url)
+    print_model_fingerprint(fp)
+
     print(f"Warming up Ollama ({OLLAMA_MODEL})...")
-    call_ollama("Say hi.", "hi", url)
+    _, _, warmup_meta = call_ollama("Say hi.", "hi", url)
+    if warmup_meta.get("model"):
+        print(f"  Warmup confirmed model: {warmup_meta['model']}")
     print("Ready.\n")
 
     all_results = {}
@@ -624,8 +735,8 @@ def run_gift_test(variant_idx: int | None = None, repeats: int = 3, url: str = O
             system_prompt = static + "\n\n" + dynamic
 
             for rep in range(repeats):
-                text, elapsed = call_ollama(system_prompt, conv["final_msg"], url,
-                                            history=conv["history"])
+                text, elapsed, meta = call_ollama(system_prompt, conv["final_msg"], url,
+                                                  history=conv["history"])
                 score = score_response(text)
                 total_time += elapsed
                 gift_total += 1
@@ -633,9 +744,11 @@ def run_gift_test(variant_idx: int | None = None, repeats: int = 3, url: str = O
                     gift_tp += 1
 
                 status = "GIFT!" if score["gift"] else "no gift"
-                print(f"  {label:25s} rep {rep+1}: {status} ({elapsed:.1f}s)")
+                tps = meta.get("tokens_per_sec", 0)
+                tok = meta.get("eval_count", 0)
+                print(f"  {label:25s} rep {rep+1}: {status} ({elapsed:.1f}s, {tok}tok, {tps:.0f}t/s)")
                 if verbose:
-                    preview = score["clean"][:80].replace("\n", " ")
+                    preview = score["clean"][:100].replace("\n", " ")
                     print(f"           -> {preview}")
 
         gift_tpr = (gift_tp / gift_total * 100) if gift_total else 0
@@ -661,13 +774,18 @@ if __name__ == "__main__":
                         help=f"Run only this variant index (0-{len(VARIANTS)-1})")
     parser.add_argument("--repeats", type=int, default=3,
                         help="Repetitions per combination (default: 3)")
+    parser.add_argument("--model", default=None,
+                        help=f"Ollama model to test (default: {OLLAMA_MODEL})")
     parser.add_argument("--url", default=OLLAMA_URL,
                         help=f"Ollama URL (default: {OLLAMA_URL})")
     parser.add_argument("--verbose", "-v", action="store_true",
-                        help="Show all responses, not just errors")
+                        help="Show all responses + debug info (tokens/sec, model confirmation)")
     parser.add_argument("--gift", action="store_true",
                         help="Run gift TP tests (multi-turn conversations)")
     args = parser.parse_args()
+
+    if args.model:
+        OLLAMA_MODEL = args.model
 
     if args.variant is not None and not (0 <= args.variant < len(VARIANTS)):
         print(f"Error: --variant must be 0-{len(VARIANTS)-1}")
