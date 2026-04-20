@@ -82,6 +82,7 @@ Detailed implementation notes for each game system:
 - **Tile properties** in `custom_tile_recipes[tile_id]` — no separate walkability sets.
 - **`websockets` must stay at 12.0** — v16+ breaks `process_request` API. HTTP routing lives in `_GameServerProtocol.process_request()` (a subclass of `WebSocketServerProtocol`), not a standalone function, because websockets 12.0 only accepts GET — the subclass overrides `read_http_request()` to also accept POST for `/clear-log`.
 - **WebSocket bypasses nginx** — client connects `wss://` directly to Python on port 8443 (TLS via Python `ssl`). nginx only serves static files.
+- **Mobile layout**: `scaleForMobile()` in `client/client.html` toggles `body.landscape` on orientationchange/resize. Portrait reserves 180px for bottom controls (d-pad centered, action buttons stacked right). Landscape overlays the d-pad bottom-left and action buttons bottom-right on the canvas corners (no vertical reserve), so the canvas can use the full viewport height.
 
 ### Debug Draw Mode
 
