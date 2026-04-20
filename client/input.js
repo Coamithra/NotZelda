@@ -1,4 +1,4 @@
-/* Input handling — keyboard, chat, login, mobile d-pad. */
+/* Input handling — keyboard, chat, login, mobile joystick. */
 
 const DIR_KEY_MAP = {
   ArrowUp: "up", KeyW: "up",
@@ -181,49 +181,86 @@ document.addEventListener("visibilitychange", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Mobile D-pad controls
+// Mobile virtual joystick
 // ---------------------------------------------------------------------------
 if (G.ui.isMobile) {
   let activeDir = null;
+  let activeTouchId = null;
   const DPAD_KEY_MAP = { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" };
+  const JOYSTICK_DEADZONE = 0.25;    // fraction of max radius before input registers
+  const JOYSTICK_MAX_OFFSET = 45;    // knob travel in px (base radius 75 - knob radius 30)
 
-  function startDpad(dir) {
+  const joystick = document.getElementById("joystick");
+  const joystickKnob = document.getElementById("joystick-knob");
+
+  function setActiveDir(dir) {
     if (activeDir === dir) return;
-    stopDpad();
-    stopDance(G.player.myName);
+    if (activeDir) delete G.player.keysDown[DPAD_KEY_MAP[activeDir]];
     activeDir = dir;
-    G.player.keysDown[DPAD_KEY_MAP[dir]] = true;
-    G.player.dirStack = [dir];
-  }
-
-  function stopDpad() {
-    if (activeDir) {
-      delete G.player.keysDown[DPAD_KEY_MAP[activeDir]];
+    if (dir) {
+      stopDance(G.player.myName);
+      G.player.keysDown[DPAD_KEY_MAP[dir]] = true;
+      G.player.dirStack = [dir];
+    } else {
       G.player.dirStack = [];
     }
-    activeDir = null;
-    document.querySelectorAll(".dpad-btn").forEach(b => b.classList.remove("active"));
   }
 
-  document.querySelectorAll(".dpad-btn").forEach(btn => {
-    const dir = btn.dataset.dir;
+  function updateJoystick(touch) {
+    const rect = joystick.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    let dx = touch.clientX - cx;
+    let dy = touch.clientY - cy;
+    const dist = Math.hypot(dx, dy);
+    const clamped = Math.min(dist, JOYSTICK_MAX_OFFSET);
+    if (dist > 0) {
+      dx = (dx / dist) * clamped;
+      dy = (dy / dist) * clamped;
+    }
+    joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
 
-    btn.addEventListener("touchstart", (e) => {
-      e.preventDefault();
-      btn.classList.add("active");
-      startDpad(dir);
-    });
+    if (clamped / JOYSTICK_MAX_OFFSET < JOYSTICK_DEADZONE) {
+      setActiveDir(null);
+      return;
+    }
+    // Map angle to nearest cardinal: horizontal vs vertical wins by absolute magnitude
+    const dir = Math.abs(dx) > Math.abs(dy)
+      ? (dx > 0 ? "right" : "left")
+      : (dy > 0 ? "down" : "up");
+    setActiveDir(dir);
+  }
 
-    btn.addEventListener("touchend", (e) => {
-      e.preventDefault();
-      stopDpad();
-    });
+  function resetJoystick() {
+    activeTouchId = null;
+    setActiveDir(null);
+    joystickKnob.style.transform = "";
+    joystick.classList.remove("active");
+  }
 
-    btn.addEventListener("touchcancel", (e) => {
-      e.preventDefault();
-      stopDpad();
-    });
-  });
+  joystick.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    if (activeTouchId !== null) return;
+    const touch = e.changedTouches[0];
+    activeTouchId = touch.identifier;
+    joystick.classList.add("active");
+    updateJoystick(touch);
+  }, { passive: false });
+
+  joystick.addEventListener("touchmove", (e) => {
+    e.preventDefault();
+    for (const t of e.changedTouches) {
+      if (t.identifier === activeTouchId) { updateJoystick(t); break; }
+    }
+  }, { passive: false });
+
+  const endJoystick = (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === activeTouchId) { e.preventDefault(); resetJoystick(); break; }
+    }
+  };
+  joystick.addEventListener("touchend", endJoystick, { passive: false });
+  joystick.addEventListener("touchcancel", endJoystick, { passive: false });
 
   document.getElementById("mobile-chat-btn").addEventListener("click", () => {
     G.ui.chatInput.focus();
