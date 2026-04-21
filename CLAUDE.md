@@ -127,7 +127,7 @@ Opens on http://localhost:8080.
 - **Server:** Hetzner CX22, Ubuntu 24.04 — IP `46.225.218.207`
 - **SSH:** `ssh root@46.225.218.207` — Code at `/opt/NotZelda/`
 - **Service:** `notzelda` systemd service — `systemctl restart notzelda`, `journalctl -u notzelda -f`
-- **Ollama:** `gemma2:2b` for NPC chat, `OLLAMA_NUM_PARALLEL=2`, `.env` sets `AI_BACKEND=ollama`
+- **Ollama:** `gemma2:2b` for NPC chat, `OLLAMA_NUM_PARALLEL=1` (CX22 is CPU-only; parallel=2 splits memory bandwidth and halves single-chat speed), `.env` sets `AI_BACKEND=ollama`
 - **Deploy:** `cd /opt/NotZelda && git pull && systemctl restart notzelda`
 
 ## Dependencies
