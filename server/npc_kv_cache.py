@@ -101,11 +101,13 @@ async def warmup_and_save(static_prompt: str, room_id: str, npc_name: str) -> bo
     }
     try:
         await _post(f"{base_v1}/chat/completions", json=body, timeout=180.0)
-        # llama-server's /slots/{id} endpoint reads action+filename from the
-        # JSON body (query params alone return 500 with an empty-input parse error).
+        # llama-server's /slots/{id} endpoint splits the request: `action` is
+        # read from query params (req.get_param), `filename` is read from the
+        # JSON body. Either one missing returns 400/500.
         await _post(
             f"{base_native}/slots/0",
-            json={"action": "save", "filename": filename},
+            params={"action": "save"},
+            json={"filename": filename},
             timeout=30.0,
         )
         _warmed.add(key)
@@ -140,7 +142,8 @@ async def restore(room_id: str, npc_name: str) -> str:
     try:
         await _post(
             f"{base_native}/slots/0",
-            json={"action": "restore", "filename": filename},
+            params={"action": "restore"},
+            json={"filename": filename},
             timeout=10.0,
         )
         _active_slot = key
