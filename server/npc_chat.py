@@ -12,8 +12,6 @@ import random
 import re
 import subprocess
 import time
-import urllib.request
-import urllib.error
 from collections import defaultdict
 
 from pathlib import Path
@@ -45,53 +43,76 @@ def _load_prompt(filename: str, **kwargs: str) -> str:
 # Configuration
 # ---------------------------------------------------------------------------
 
-# Backend: "cli" (Claude CLI), "api" (Anthropic API), "ollama" (local Ollama)
+# Backend: "cli" (Claude CLI), "api" (Anthropic API), "llamacpp" (local llama.cpp via llmfacade).
+# "ollama" is accepted as a deprecated alias for "llamacpp" so .env files from the previous
+# Ollama-based deployment still work; the request goes through llmfacade either way.
 AI_BACKEND = os.environ.get("AI_BACKEND", "cli").lower()
+if AI_BACKEND == "ollama":
+    AI_BACKEND = "llamacpp"
 NPC_MODEL = "claude-haiku-4-5-20251001"
 NPC_TIMEOUT = 30.0          # seconds — shorter than content gen
 NPC_API_TIMEOUT = 10.0      # API is faster
-MAX_HISTORY = 4             # conversation turns per player-NPC pair; sized so system prompt + history + num_predict fits in OLLAMA_NUM_CTX (prevents system-message truncation)
+NPC_LOCAL_TIMEOUT = 45.0    # seconds — CPU-only inference on CX22 is slow
+# Conversation turns per player-NPC pair. Keep small to fit inside the
+# llama-server context window — match it to your `--ctx-size` launch flag.
+MAX_HISTORY = 4
 NPC_CHAT_COOLDOWN = 3.0     # seconds between NPC chat messages per player
 GUARD_SUMMON_COOLDOWN = 60.0  # seconds between guard summons per room
-NPC_CHATS_PER_HOUR = 150    # server-wide hourly LLM call budget (ignored for ollama)
+NPC_CHATS_PER_HOUR = 150    # server-wide hourly LLM call budget (ignored for llamacpp)
 
-# Ollama configuration — uses native /api/chat (NOT /v1) to support num_ctx.
-# See learnings/ollama-considerations.md for why this matters.
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma2:2b")
-OLLAMA_TIMEOUT = 45.0       # seconds — CPU-only inference on CX22 is slow
-OLLAMA_NUM_CTX = 1024       # smaller = faster prompt eval on CPU (CX22)
-OLLAMA_NUM_PREDICT = 80     # ~200 chars max output; caps CPU inference time
+# llama.cpp configuration — talks to a `llama-server` (or `llama-swap`) you run
+# yourself, via llmfacade's external mode. Knobs that affect the loaded model
+# (context size, KV-cache quantization, GPU offload) live on the llama-server CLI.
+LLAMACPP_BASE_URL = os.environ.get("LLAMACPP_BASE_URL", "http://localhost:8080/v1")
+LLAMACPP_MODEL = os.environ.get("LLAMACPP_MODEL", "gemma-2-2b-it-q4_k_m")
+NPC_LOCAL_MAX_TOKENS = 80   # ~200 chars max output; caps CPU inference time
+
+# Lazy llmfacade handles — built on first use so the import is optional when
+# AI_BACKEND != "llamacpp".
+_llamacpp_model = None
 
 
-def warmup_ollama():
-    """Fire-and-forget request to preload the Ollama model into memory.
+def _get_llamacpp_model():
+    """Return a cached llmfacade Model bound to the configured llama-server."""
+    global _llamacpp_model
+    if _llamacpp_model is not None:
+        return _llamacpp_model
+    # Lazy import — keeps llmfacade optional when AI_BACKEND != "llamacpp".
+    from llmfacade import LLM
+    llm = LLM.default()
+    provider = llm.new_provider(
+        "llamacpp",
+        base_url=LLAMACPP_BASE_URL,
+        log_dir=False,  # NPC chat is high-volume; skip per-convo JSONL logs
+    )
+    _llamacpp_model = provider.new_model(LLAMACPP_MODEL, max_tokens=NPC_LOCAL_MAX_TOKENS)
+    return _llamacpp_model
+
+
+# Hold strong refs to in-flight warmup tasks so the GC can't drop them mid-ping.
+_warmup_tasks: set[asyncio.Task] = set()
+
+
+def warmup_npc_model():
+    """Fire-and-forget ping to preload the llama-server model into memory.
 
     Called on first player join so the model is warm when someone talks to an NPC.
     """
-    if AI_BACKEND != "ollama":
+    if AI_BACKEND != "llamacpp":
         return
-    def _ping():
+
+    async def _ping():
         try:
-            payload = json.dumps({
-                "model": OLLAMA_MODEL,
-                "messages": [{"role": "user", "content": "hi"}],
-                "stream": False,
-                "keep_alive": -1,
-                "options": {"num_predict": 1},
-            }).encode("utf-8")
-            req = urllib.request.Request(
-                f"{OLLAMA_URL}/api/chat",
-                data=payload,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            urllib.request.urlopen(req, timeout=OLLAMA_TIMEOUT)
-            log.debug("[NPC_CHAT] Ollama model warmed up")
+            convo = _get_llamacpp_model().new_conversation(log_dir=False)
+            await convo.asend("hi", max_tokens=1)
+            log.debug("[NPC_CHAT] llama-server model warmed up")
         except Exception as e:
-            log.debug(f"[NPC_CHAT] Ollama warmup failed: {e}")
+            log.debug(f"[NPC_CHAT] llama-server warmup failed: {e}")
+
     loop = asyncio.get_running_loop()
-    loop.run_in_executor(None, _ping)
+    task = loop.create_task(_ping())
+    _warmup_tasks.add(task)
+    task.add_done_callback(_warmup_tasks.discard)
 
 
 
@@ -336,14 +357,25 @@ def _build_system_prompt(guard: dict, room_id: str, player_name: str, player_des
 # LLM call (simplified — no JSON parsing needed, just text)
 # ---------------------------------------------------------------------------
 
+def _active_backend_and_model() -> tuple[str, str]:
+    """Resolve AI_BACKEND to a concrete (backend, model_id) pair.
+
+    Anything other than ``llamacpp``/``api`` falls back to the Claude CLI.
+    """
+    if AI_BACKEND == "llamacpp":
+        return "llamacpp", LLAMACPP_MODEL
+    if AI_BACKEND == "api":
+        return "api", NPC_MODEL
+    return "cli", NPC_MODEL
+
+
 async def _call_npc_llm(static_prompt: str, dynamic_prompt: str,
                         messages: list[dict]) -> str | None:
     """Call the LLM for NPC conversation. Returns plain text or None on failure."""
-    backend = AI_BACKEND if AI_BACKEND in ("ollama", "api") else "cli"
-    model = OLLAMA_MODEL if backend == "ollama" else NPC_MODEL
+    backend, _ = _active_backend_and_model()
     try:
-        if backend == "ollama":
-            return await _call_ollama(static_prompt, dynamic_prompt, messages)
+        if backend == "llamacpp":
+            return await _call_llamacpp(static_prompt, dynamic_prompt, messages)
         elif backend == "api":
             return await _call_api(static_prompt, dynamic_prompt, messages)
         else:
@@ -444,48 +476,26 @@ async def _call_api(static_prompt: str, dynamic_prompt: str,
     return response.content[0].text.strip()
 
 
-async def _call_ollama(static_prompt: str, dynamic_prompt: str,
-                       messages: list[dict]) -> str:
-    """Call a local Ollama instance for NPC chat.
+async def _call_llamacpp(static_prompt: str, dynamic_prompt: str,
+                         messages: list[dict]) -> str:
+    """Call a local llama.cpp server (`llama-server`) via llmfacade.
 
-    Uses the native /api/chat endpoint (NOT /v1/chat/completions) because
-    the OpenAI-compatible endpoint silently ignores num_ctx, which causes
-    Ollama to fall back to a VRAM-based default (often 4k or less).
+    Context size, KV-cache quantization, and GPU offload are server-launch
+    flags on `llama-server`, not handled here — we just hand it the system
+    prompt and conversation history through llmfacade's external mode.
     """
-    system_prompt = static_prompt + "\n\n" + dynamic_prompt
-
-    # Build messages list with system prompt first
-    ollama_messages = [{"role": "system", "content": system_prompt}]
-    ollama_messages.extend(messages)
-
-    payload = json.dumps({
-        "model": OLLAMA_MODEL,
-        "messages": ollama_messages,
-        "stream": False,
-        "keep_alive": -1,
-        "options": {
-            "num_ctx": OLLAMA_NUM_CTX,
-            "num_predict": OLLAMA_NUM_PREDICT,
-        },
-    }).encode("utf-8")
-
-    def _do_request():
-        req = urllib.request.Request(
-            f"{OLLAMA_URL}/api/chat",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=OLLAMA_TIMEOUT) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-
-    result = await asyncio.wait_for(
-        asyncio.get_running_loop().run_in_executor(None, _do_request),
-        timeout=OLLAMA_TIMEOUT + 5,
+    convo = _get_llamacpp_model().new_conversation(
+        system_blocks=[static_prompt + "\n\n" + dynamic_prompt],
+        log_dir=False,
     )
-
-    text = result.get("message", {}).get("content", "")
-    return text.strip()
+    for msg in messages[:-1]:
+        if msg["role"] == "user":
+            convo.add_user_message(msg["content"])
+        else:
+            convo.add_assistant_message(msg["content"])
+    last_user = messages[-1]["content"] if messages and messages[-1]["role"] == "user" else None
+    resp = await asyncio.wait_for(convo.asend(last_user), timeout=NPC_LOCAL_TIMEOUT)
+    return resp.text.strip()
 
 
 # ---------------------------------------------------------------------------
@@ -528,8 +538,8 @@ async def handle_npc_chat(player, guard: dict, text: str):
     if conv_key in _active_npc_calls:
         return
 
-    # --- Server-wide hourly budget (skipped for ollama — it's free) ---
-    if AI_BACKEND != "ollama":
+    # --- Server-wide hourly budget (skipped for llamacpp — it's free) ---
+    if AI_BACKEND != "llamacpp":
         if now - _hourly_reset_time >= 3600:
             _hourly_chat_count = 0
             _hourly_reset_time = now
@@ -670,8 +680,7 @@ async def handle_npc_chat(player, guard: dict, text: str):
 
         # Log and broadcast NPC response
         room_name = game.rooms.get(player.room, {}).get("name", player.room)
-        _backend = AI_BACKEND if AI_BACKEND in ("ollama", "api") else "cli"
-        _model = OLLAMA_MODEL if _backend == "ollama" else NPC_MODEL
+        _backend, _model = _active_backend_and_model()
         log.event("NPC_CHAT", f"[{_backend}:{_model}] {npc_name} -> {player.name} ({room_name}): {response}")
         if raw_response != response:
             log.event("NPC_RAW", f"{npc_name}: {raw_response}")

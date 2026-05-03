@@ -53,7 +53,7 @@ When pushing to git make sure to update CLAUDE.md first!
 - **Server state**: all mutable state on `GameState` singleton (`from server.state import game`).
 - **Player vs Avatar**: `Player` = session/identity (name, hp, room). `Avatar` = physical presence (x, y, direction). `player.avatar` is `None` during room transitions. Use `avatars_in_room()` for combat/targeting, `players_in_room()` for broadcasting.
 - **Data-driven**: tiles, monsters, NPC sprites loaded from JSON in `data/`. Tilemaps use 2-char codes (`"GR"`, `"DW"`). Sprites/tiles use `[colorKey, x, y, w, h]` rect layers. All rooms from `.room` files.
-- **AI backend**: Claude CLI by default (`AI_BACKEND=cli`). `.env` must NOT set `AI_BACKEND=api`. Supports `cli`, `api`, `ollama`.
+- **AI backend**: Claude CLI by default (`AI_BACKEND=cli`). `.env` must NOT set `AI_BACKEND=api`. Supports `cli`, `api`, `llamacpp` (local llama.cpp via [LLMFacade](https://github.com/Coamithra/LLMFacade) — formerly `ollama`, which is still accepted as a deprecated alias). Local-model knobs: `LLAMACPP_BASE_URL` (default `http://localhost:8080/v1`) and `LLAMACPP_MODEL`.
 - **Logging** via `server/log.py` — never use bare `print()`:
   - `log.debug(msg)` → sidebar + file + stdout
   - `log.server(msg)` → file + stdout only
@@ -127,11 +127,12 @@ Opens on http://localhost:8080.
 - **Server:** Hetzner CX22, Ubuntu 24.04 — IP `46.225.218.207`
 - **SSH:** `ssh root@46.225.218.207` — Code at `/opt/NotZelda/`
 - **Service:** `notzelda` systemd service — `systemctl restart notzelda`, `journalctl -u notzelda -f`
-- **Ollama:** `gemma2:2b` for NPC chat, `OLLAMA_NUM_PARALLEL=1` (CX22 is CPU-only; parallel=2 splits memory bandwidth and halves single-chat speed), `.env` sets `AI_BACKEND=ollama`
+- **Local NPC chat:** `llama-server` (llama.cpp) running on port 8080, talked to via [LLMFacade](https://github.com/Coamithra/LLMFacade)'s external mode. `.env` sets `AI_BACKEND=llamacpp` (`ollama` still works as a deprecated alias). Configure model + URL via `LLAMACPP_MODEL` / `LLAMACPP_BASE_URL`. The llama-server CLI owns context size, KV-cache quantization, and parallelism (CX22 is CPU-only — keep parallel slots low).
 - **Deploy:** `cd /opt/NotZelda && git pull && systemctl restart notzelda`
 
 ## Dependencies
 
 - Python 3.12+
 - `websockets` (12.0 — pinned, v16+ breaks the `process_request` API)
+- `llmfacade[llamacpp]` (for local NPC chat against `llama-server`)
 - `pyngrok` (optional, for local dev tunneling)

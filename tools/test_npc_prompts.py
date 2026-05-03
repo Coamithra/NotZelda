@@ -1,39 +1,38 @@
 """Iterative NPC prompt tester - measures [ANGRY] and [GIVE_ITEM] false-positive rates.
 
-Calls Ollama directly (no server needed). Runs a matrix of prompt variants x NPC personas
-x player messages and scores each variant on tag accuracy.
+Talks to a local `llama-server` (llama.cpp) via LLMFacade. Runs a matrix of prompt
+variants x NPC personas x player messages and scores each variant on tag accuracy.
 
 Usage:
     python tools/test_npc_prompts.py                 # run all variants
     python tools/test_npc_prompts.py --variant 0     # run only variant 0 (baseline)
     python tools/test_npc_prompts.py --repeats 5     # 5 runs per combo (default 3)
-    python tools/test_npc_prompts.py --model gemma2:2b  # test a specific model
-    python tools/test_npc_prompts.py -v              # verbose: show all responses + debug info
-    python tools/test_npc_prompts.py --url http://host:11434  # custom Ollama URL
+    python tools/test_npc_prompts.py --model gemma-2-2b-it-q4_k_m  # specific model
+    python tools/test_npc_prompts.py -v              # verbose: responses + tokens/sec
+    python tools/test_npc_prompts.py --url http://host:8080/v1  # custom llama-server URL
 
-Requires: Ollama running locally with the target model pulled.
+Requires: a running `llama-server` (or `llama-swap`) reachable at LLAMACPP_BASE_URL,
+and `pip install llmfacade[llamacpp]`.
 """
 
 import argparse
-import json
 import sys
 import time
-import urllib.request
-import urllib.error
+
+from llmfacade import LLM, tool
 
 # Force UTF-8 output on Windows (Gemma loves emojis)
 if sys.stdout.encoding != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 # ---------------------------------------------------------------------------
-# Ollama settings (match production npc_chat.py)
+# llama.cpp settings (match production npc_chat.py)
 # ---------------------------------------------------------------------------
 
-OLLAMA_URL = "http://localhost:11434"
-OLLAMA_MODEL = "gemma3:4b-it-qat"  # default model under test
-OLLAMA_NUM_CTX = 1024
-OLLAMA_NUM_PREDICT = 80
-OLLAMA_TIMEOUT = 60.0
+LLAMACPP_BASE_URL = "http://localhost:8080/v1"
+LLAMACPP_MODEL = "gemma-2-2b-it-q4_k_m"  # default model under test
+NPC_LOCAL_MAX_TOKENS = 80
+NPC_LOCAL_TIMEOUT = 60.0
 
 # ---------------------------------------------------------------------------
 # NPC personas — trimmed from .room files
@@ -301,7 +300,7 @@ def _build_prompt_v8(npc, player_msg):
 
 
 def _build_prompt_v9(npc, player_msg):
-    """Variant 9: TOOL CALLING — uses Ollama native tool/function calling.
+    """Variant 9: TOOL CALLING — uses native function/tool calling via llmfacade.
     No tags in the prompt at all. The model uses tool calls for actions."""
     static = (
         f"You are {npc['name']}, a {npc['personality'].split('.')[0].lower()} in a fantasy game.\n"
@@ -401,171 +400,120 @@ VARIANTS = [
 ]
 
 # ---------------------------------------------------------------------------
-# Model verification - proves which model is actually running
+# Reachability check — llama-server's OpenAI-compat layer doesn't expose a
+# quantization/digest fingerprint the way Ollama did, so we only confirm the
+# server is up. A model-id mismatch (server loaded the wrong GGUF) won't be
+# caught here.
 # ---------------------------------------------------------------------------
 
-def verify_model(model: str, url: str = OLLAMA_URL) -> dict:
-    """Call /api/show to get the model's fingerprint.
-    Returns dict with family, parameter_size, quantization, digest.
-    Exits with error if the model isn't available."""
-    payload = json.dumps({"model": model}).encode("utf-8")
-    req = urllib.request.Request(
-        f"{url}/api/show",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+def check_server_reachable(model: str, url: str = LLAMACPP_BASE_URL) -> None:
+    """Probe the running llama-server via llmfacade.  Exits on failure."""
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        print(f"FATAL: Model '{model}' not found in Ollama (HTTP {e.code})")
-        print(f"  Pull it first: ollama pull {model}")
+        provider = LLM.default().new_provider("llamacpp", base_url=url, log_dir=False)
+        m = provider.new_model(model, max_tokens=1)
+        m.new_conversation(log_dir=False).send("ok")
+    except Exception as e:
+        print(f"FATAL: Cannot reach llama-server at {url}: {e}")
+        print(f"  Start it with: llama-server -m <gguf> --host 0.0.0.0 --port 8080")
         sys.exit(1)
-    except urllib.error.URLError as e:
-        print(f"FATAL: Cannot reach Ollama at {url}: {e}")
-        sys.exit(1)
-
-    details = data.get("details", {})
-    info = data.get("model_info", {})
-    arch = details.get("family", "unknown")
-    param_count = info.get("general.parameter_count", 0)
-    return {
-        "model": model,
-        "family": arch,
-        "parameter_size": details.get("parameter_size", "?"),
-        "quantization": details.get("quantization_level", "?"),
-        "param_count": param_count,
-        "finetune": info.get("general.finetune", ""),
-        "digest": data.get("digest", "")[:16],
-    }
-
-
-def print_model_fingerprint(fp: dict):
-    """Print a clear model identity block so test output is unambiguous."""
     print(f"\n{'='*60}")
-    print(f"MODEL FINGERPRINT")
-    print(f"{'='*60}")
-    print(f"  Model:          {fp['model']}")
-    print(f"  Family:         {fp['family']}")
-    print(f"  Parameters:     {fp['parameter_size']} ({fp['param_count']:,} total)")
-    print(f"  Quantization:   {fp['quantization']}")
-    if fp['finetune']:
-        print(f"  Finetune:       {fp['finetune']}")
-    print(f"  Digest:         {fp['digest']}...")
+    print(f"  Model:    {model}")
+    print(f"  Endpoint: {url}")
     print(f"{'='*60}\n")
 
 
 # ---------------------------------------------------------------------------
-# Tool definitions for tool-calling variant
+# Tool definitions for tool-calling variant — llmfacade @tool-decorated funcs.
+# Returning the request name keeps schemas explicit for scoring.
 # ---------------------------------------------------------------------------
 
-TOOL_CALL_GUARDS = {
-    "type": "function",
-    "function": {
-        "name": "call_guards",
-        "description": "Summon the town guards to deal with a threatening or abusive player.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "reason": {
-                    "type": "string",
-                    "description": "Why the guards are being called",
-                }
-            },
-            "required": ["reason"],
-        },
-    },
-}
+@tool
+def call_guards(reason: str) -> str:
+    """Summon the town guards to deal with a threatening or abusive player.
 
-TOOL_GIVE_ITEM = {
-    "type": "function",
-    "function": {
-        "name": "give_item",
-        "description": "Give your special item to the adventurer because they have truly earned it.",
-        "parameters": {
-            "type": "object",
-            "properties": {},
-            "required": [],
-        },
-    },
-}
+    Args:
+        reason: Why the guards are being called.
+    """
+    return "called"
+
+
+@tool
+def give_item() -> str:
+    """Give your special item to the adventurer because they have truly earned it."""
+    return "given"
+
 
 # All tools (for full tool-calling variants)
-OLLAMA_TOOLS = [TOOL_CALL_GUARDS, TOOL_GIVE_ITEM]
+LLM_TOOLS = [call_guards, give_item]
 
 # Gift tool only (for hybrid variant - guards via text tags)
-OLLAMA_TOOLS_GIFT_ONLY = [TOOL_GIVE_ITEM]
+LLM_TOOLS_GIFT_ONLY = [give_item]
+
 
 # ---------------------------------------------------------------------------
-# Ollama caller
+# llama-server caller
 # ---------------------------------------------------------------------------
 
-def call_ollama(system_prompt: str, user_msg: str, url: str = OLLAMA_URL,
-                history: list[dict] | None = None,
-                tools: list[dict] | None = None) -> tuple[str, float, dict]:
-    """Send a message to Ollama, optionally with conversation history and tools.
-    Returns (response_text, elapsed_seconds, metadata).
-    metadata includes model, eval_count, eval_duration, prompt_eval_count,
-    and tool_calls (list of tool call dicts) if the model invoked any."""
-    messages = [{"role": "system", "content": system_prompt}]
-    if history:
-        messages.extend(history)
-    messages.append({"role": "user", "content": user_msg})
-    body = {
-        "model": OLLAMA_MODEL,
-        "messages": messages,
-        "stream": False,
-        "keep_alive": -1,
-        "options": {
-            "num_ctx": OLLAMA_NUM_CTX,
-            "num_predict": OLLAMA_NUM_PREDICT,
-        },
-    }
-    if tools:
-        body["tools"] = tools
-    payload = json.dumps(body).encode("utf-8")
+# Cache provider/model so repeated calls reuse one HTTP client.
+_cached_model_id: str | None = None
+_cached_model = None
 
-    req = urllib.request.Request(
-        f"{url}/api/chat",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
+
+def _get_model(url: str):
+    """Return a cached llmfacade Model bound to the running llama-server."""
+    global _cached_model_id, _cached_model
+    if _cached_model is not None and _cached_model_id == LLAMACPP_MODEL:
+        return _cached_model
+    provider = LLM.default().new_provider("llamacpp", base_url=url, log_dir=False)
+    _cached_model = provider.new_model(LLAMACPP_MODEL, max_tokens=NPC_LOCAL_MAX_TOKENS)
+    _cached_model_id = LLAMACPP_MODEL
+    return _cached_model
+
+
+def call_model(system_prompt: str, user_msg: str, url: str = LLAMACPP_BASE_URL,
+               history: list[dict] | None = None,
+               tools: list | None = None) -> tuple[str, float, dict]:
+    """Send a message to llama-server (via llmfacade), optionally with history + tools.
+    Returns (response_text, elapsed_seconds, metadata)."""
+    model = _get_model(url)
+    convo = model.new_conversation(
+        system_blocks=[system_prompt],
+        tools=tools or [],
+        log_dir=False,
     )
+    if history:
+        for msg in history:
+            if msg["role"] == "user":
+                convo.add_user_message(msg["content"])
+            else:
+                convo.add_assistant_message(msg["content"])
+
     t0 = time.monotonic()
     try:
-        with urllib.request.urlopen(req, timeout=OLLAMA_TIMEOUT) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError) as e:
+        resp = convo.send(user_msg)
+    except Exception as e:
         return f"[ERROR: {e}]", time.monotonic() - t0, {}
-
     elapsed = time.monotonic() - t0
-    text = result.get("message", {}).get("content", "")
 
-    # Extract metadata for verification and debugging
-    msg = result.get("message", {})
+    text = resp.text or ""
+    usage = resp.usage
+    eval_count = getattr(usage, "output_tokens", 0) or 0
+    prompt_eval_count = getattr(usage, "input_tokens", 0) or 0
+
+    # Re-shape llmfacade tool calls into the same dict layout the rest of this
+    # script already understands ({"function": {"name": ..., "arguments": ...}}).
+    tool_calls = [
+        {"function": {"name": tc.name, "arguments": tc.input}}
+        for tc in (resp.tool_calls or [])
+    ]
+
     meta = {
-        "model": result.get("model", ""),
-        "eval_count": result.get("eval_count", 0),
-        "eval_duration_ns": result.get("eval_duration", 0),
-        "prompt_eval_count": result.get("prompt_eval_count", 0),
-        "prompt_eval_duration_ns": result.get("prompt_eval_duration", 0),
-        "load_duration_ns": result.get("load_duration", 0),
-        "total_duration_ns": result.get("total_duration", 0),
-        "done_reason": result.get("done_reason", ""),
-        "tool_calls": msg.get("tool_calls", []),
+        "model": LLAMACPP_MODEL,
+        "eval_count": eval_count,
+        "prompt_eval_count": prompt_eval_count,
+        "tool_calls": tool_calls,
+        "tokens_per_sec": (eval_count / elapsed) if elapsed > 0 else 0.0,
     }
-    # Calculate tokens/sec
-    if meta["eval_duration_ns"] > 0:
-        meta["tokens_per_sec"] = meta["eval_count"] / (meta["eval_duration_ns"] / 1e9)
-    else:
-        meta["tokens_per_sec"] = 0.0
-
-    # CRITICAL: verify the response came from the model we requested
-    resp_model = meta["model"]
-    if resp_model and resp_model != OLLAMA_MODEL:
-        print(f"  !! MODEL MISMATCH: requested '{OLLAMA_MODEL}' but got '{resp_model}'")
-
     return text.strip(), elapsed, meta
 
 # ---------------------------------------------------------------------------
@@ -608,18 +556,16 @@ def score_response(raw: str, tool_calls: list | None = None) -> dict:
 # Main
 # ---------------------------------------------------------------------------
 
-def run_test(variant_idx: int | None = None, repeats: int = 3, url: str = OLLAMA_URL,
+def run_test(variant_idx: int | None = None, repeats: int = 3, url: str = LLAMACPP_BASE_URL,
              verbose: bool = False):
     """Run the test matrix and print results."""
     variants_to_test = VARIANTS if variant_idx is None else [VARIANTS[variant_idx]]
 
-    # Verify model identity before testing
-    fp = verify_model(OLLAMA_MODEL, url)
-    print_model_fingerprint(fp)
+    check_server_reachable(LLAMACPP_MODEL, url)
 
-    # Warm up Ollama (and verify response model field)
-    print(f"Warming up Ollama ({OLLAMA_MODEL})...")
-    _, _, warmup_meta = call_ollama("Say hi.", "hi", url)
+    # Warm up llama-server (and verify response model field)
+    print(f"Warming up llama-server ({LLAMACPP_MODEL})...")
+    _, _, warmup_meta = call_model("Say hi.", "hi", url)
     if warmup_meta.get("model"):
         print(f"  Warmup confirmed model: {warmup_meta['model']}")
     print("Ready.\n")
@@ -640,7 +586,7 @@ def run_test(variant_idx: int | None = None, repeats: int = 3, url: str = OLLAMA
             "total_time": 0.0,
             "total_calls": 0,
             "total_tokens_out": 0,
-            "prompt_tokens": 0,  # from Ollama's prompt_eval_count
+            "prompt_tokens": 0,  # from llmfacade Response.usage.input_tokens
             "model_mismatches": 0,
         }
 
@@ -652,22 +598,22 @@ def run_test(variant_idx: int | None = None, repeats: int = 3, url: str = OLLAMA
                 system_prompt = static + "\n\n" + dynamic
 
                 for rep in range(repeats):
-                    use_tools = (OLLAMA_TOOLS_GIFT_ONLY if v_name == "hybrid"
-                                        else OLLAMA_TOOLS if v_name in ("tool-calling", "tc-strict")
+                    use_tools = (LLM_TOOLS_GIFT_ONLY if v_name == "hybrid"
+                                        else LLM_TOOLS if v_name in ("tool-calling", "tc-strict")
                                         else None)
-                    text, elapsed, meta = call_ollama(system_prompt, msg, url,
-                                                      tools=use_tools)
+                    text, elapsed, meta = call_model(system_prompt, msg, url,
+                                                     tools=use_tools)
                     score = score_response(text, meta.get("tool_calls"))
                     results["total_time"] += elapsed
                     results["total_calls"] += 1
                     results["total_tokens_out"] += meta.get("eval_count", 0)
 
-                    # Use Ollama's actual token count (first call)
+                    # Use the response's actual token count (first call)
                     if results["prompt_tokens"] == 0:
                         results["prompt_tokens"] = meta.get("prompt_eval_count", 0)
 
                     # Track model mismatches
-                    if meta.get("model") and meta["model"] != OLLAMA_MODEL:
+                    if meta.get("model") and meta["model"] != LLAMACPP_MODEL:
                         results["model_mismatches"] += 1
 
                     # Score guards
@@ -728,7 +674,7 @@ def run_test(variant_idx: int | None = None, repeats: int = 3, url: str = OLLAMA
         avg_tps = (results["total_tokens_out"] / (results["total_time"] or 1))
 
         print(f"\n  --- {v_name} summary ---")
-        print(f"  Model:                     {OLLAMA_MODEL}")
+        print(f"  Model:                     {LLAMACPP_MODEL}")
         print(f"  Guard false-positive rate: {guard_fpr:5.1f}% "
               f"({results['guard_fp']}/{results['guard_fp_total']})")
         print(f"  Guard true-positive rate:  {guard_tpr:5.1f}% "
@@ -737,7 +683,7 @@ def run_test(variant_idx: int | None = None, repeats: int = 3, url: str = OLLAMA
               f"({results['gift_fp']}/{results['gift_fp_total']})")
         print(f"  Avg response time:         {avg_time:.1f}s")
         print(f"  Avg throughput:            {avg_tps:.1f} tok/s")
-        print(f"  Prompt tokens (Ollama):    {results['prompt_tokens']}")
+        print(f"  Prompt tokens (server):    {results['prompt_tokens']}")
         print(f"  Total calls:               {results['total_calls']}")
         if results["model_mismatches"]:
             print(f"  !! MODEL MISMATCHES:       {results['model_mismatches']} calls used wrong model!")
@@ -757,7 +703,7 @@ def run_test(variant_idx: int | None = None, repeats: int = 3, url: str = OLLAMA
         print(f"\n{'='*60}")
         print("COMPARISON TABLE")
         print(f"{'='*60}")
-        print(f"  Model: {OLLAMA_MODEL} ({fp['parameter_size']}, {fp['quantization']})")
+        print(f"  Model: {LLAMACPP_MODEL}  @ {url}")
         print(f"{'Variant':<14s} {'Guard FP%':>10s} {'Guard TP%':>10s} "
               f"{'Gift FP%':>9s} {'Avg Time':>9s} {'tok/s':>7s} {'Tokens':>7s}")
         print("-" * 70)
@@ -857,17 +803,15 @@ GIFT_CONVERSATIONS = [
 ]
 
 
-def run_gift_test(variant_idx: int | None = None, repeats: int = 3, url: str = OLLAMA_URL,
+def run_gift_test(variant_idx: int | None = None, repeats: int = 3, url: str = LLAMACPP_BASE_URL,
                   verbose: bool = False):
     """Test gift TP - do NPCs give items when the player has earned them?"""
     variants_to_test = VARIANTS if variant_idx is None else [VARIANTS[variant_idx]]
 
-    # Verify model identity
-    fp = verify_model(OLLAMA_MODEL, url)
-    print_model_fingerprint(fp)
+    check_server_reachable(LLAMACPP_MODEL, url)
 
-    print(f"Warming up Ollama ({OLLAMA_MODEL})...")
-    _, _, warmup_meta = call_ollama("Say hi.", "hi", url)
+    print(f"Warming up llama-server ({LLAMACPP_MODEL})...")
+    _, _, warmup_meta = call_model("Say hi.", "hi", url)
     if warmup_meta.get("model"):
         print(f"  Warmup confirmed model: {warmup_meta['model']}")
     print("Ready.\n")
@@ -894,12 +838,12 @@ def run_gift_test(variant_idx: int | None = None, repeats: int = 3, url: str = O
             system_prompt = static + "\n\n" + dynamic
 
             for rep in range(repeats):
-                use_tools = (OLLAMA_TOOLS_GIFT_ONLY if v_name == "hybrid"
-                                        else OLLAMA_TOOLS if v_name in ("tool-calling", "tc-strict")
+                use_tools = (LLM_TOOLS_GIFT_ONLY if v_name == "hybrid"
+                                        else LLM_TOOLS if v_name in ("tool-calling", "tc-strict")
                                         else None)
-                text, elapsed, meta = call_ollama(system_prompt, conv["final_msg"], url,
-                                                  history=conv["history"],
-                                                  tools=use_tools)
+                text, elapsed, meta = call_model(system_prompt, conv["final_msg"], url,
+                                                 history=conv["history"],
+                                                 tools=use_tools)
                 score = score_response(text, meta.get("tool_calls"))
                 total_time += elapsed
                 gift_total += 1
@@ -936,15 +880,15 @@ def run_gift_test(variant_idx: int | None = None, repeats: int = 3, url: str = O
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Test NPC prompt variants against Ollama")
+    parser = argparse.ArgumentParser(description="Test NPC prompt variants against a local llama-server")
     parser.add_argument("--variant", type=int, default=None,
                         help=f"Run only this variant index (0-{len(VARIANTS)-1})")
     parser.add_argument("--repeats", type=int, default=3,
                         help="Repetitions per combination (default: 3)")
     parser.add_argument("--model", default=None,
-                        help=f"Ollama model to test (default: {OLLAMA_MODEL})")
-    parser.add_argument("--url", default=OLLAMA_URL,
-                        help=f"Ollama URL (default: {OLLAMA_URL})")
+                        help=f"llama-server model id to test (default: {LLAMACPP_MODEL})")
+    parser.add_argument("--url", default=LLAMACPP_BASE_URL,
+                        help=f"llama-server OpenAI-compat URL (default: {LLAMACPP_BASE_URL})")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="Show all responses + debug info (tokens/sec, model confirmation)")
     parser.add_argument("--gift", action="store_true",
@@ -952,7 +896,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.model:
-        OLLAMA_MODEL = args.model
+        LLAMACPP_MODEL = args.model
 
     if args.variant is not None and not (0 <= args.variant < len(VARIANTS)):
         print(f"Error: --variant must be 0-{len(VARIANTS)-1}")

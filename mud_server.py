@@ -42,7 +42,7 @@ from server.lifecycle import (
 )
 from server.combat import game_tick, flush_messages
 from server.debug_monsters import auto_register_debug_monsters
-from server.npc_chat import clear_player_history, register_town_guard, warmup_ollama
+from server.npc_chat import clear_player_history, register_town_guard, warmup_npc_model
 from server.dungeon_content import register_precreated_types, load_precreated_content
 from server.dungeons import load_deprecation_timestamp, load_deprecated_sets, get_dungeon_for_room
 from server.dungeon_types import DUNGEON_TYPES
@@ -192,7 +192,7 @@ async def handle_connection(websocket):
         player.avatar.last_reported_y = player.avatar.y
         game.players[websocket] = player
         log.event("JOIN", f"{name} ({player.description}) from {addr}")
-        warmup_ollama()
+        warmup_npc_model()
 
         login_msg = {"type": "login_ok", "name": name, "color_index": color_index, "hp": PLAYER_MAX_HP, "max_hp": PLAYER_MAX_HP}
         if DEBUG_MODE:
@@ -596,7 +596,7 @@ async def main():
     register_precreated_types()
     register_town_guard()
     auto_register_debug_monsters()
-    warmup_ollama()
+    warmup_npc_model()
 
     # Initialize per-type dungeon templates and content libraries
     data_dir = ROOT_DIR / "data"
