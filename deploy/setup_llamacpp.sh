@@ -81,11 +81,11 @@ if [ -z "$release_json" ]; then
     fail "Could not query GitHub API ($api_url) and no existing install to fall back on."
   fi
 else
-  tag=$(printf '%s' "$release_json" | grep -m1 '"tag_name"' | cut -d'"' -f4)
+  # Single-process awk parsing so an early `exit` doesn't SIGPIPE upstream
+  # producers (which `set -o pipefail` would surface as exit 141).
+  tag=$(printf '%s' "$release_json" | awk -F'"' '/"tag_name"/ {print $4; exit}')
   asset_url=$(printf '%s' "$release_json" \
-    | grep '"browser_download_url"' \
-    | grep 'bin-ubuntu-x64\.tar\.gz' \
-    | head -1 | cut -d'"' -f4)
+    | awk -F'"' '/"browser_download_url"/ && /bin-ubuntu-x64\.tar\.gz/ {print $4; exit}')
   [ -n "$tag" ]       || fail "Could not parse release tag from GitHub API"
   [ -n "$asset_url" ] || fail "Could not find ubuntu-x64 CPU asset in release $tag"
 fi
