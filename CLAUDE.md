@@ -43,7 +43,7 @@ When pushing to git make sure to update CLAUDE.md first!
 ├── data/                  # tiles.json, monsters.json, npc_sprites.json
 ├── tools/                 # Dev utilities (renderers, content viewer, tests)
 ├── docs/                  # Architecture docs, system references, planning docs
-├── deploy/                # Nginx config, redirect page
+├── deploy/                # Nginx config, redirect page, llama-server install scripts + systemd unit
 └── local_ignore/          # Local-only files (SSH keys, archives) — gitignored
 ```
 
@@ -126,9 +126,11 @@ Opens on http://localhost:8080.
 
 - **Server:** Hetzner CX22, Ubuntu 24.04 — IP `46.225.218.207`
 - **SSH:** `ssh root@46.225.218.207` — Code at `/opt/NotZelda/`
-- **Service:** `notzelda` systemd service — `systemctl restart notzelda`, `journalctl -u notzelda -f`
-- **Local NPC chat:** `llama-server` (llama.cpp) running on port 8080, talked to via [LLMFacade](https://github.com/Coamithra/LLMFacade)'s external mode. `.env` sets `AI_BACKEND=llamacpp` (`ollama` still works as a deprecated alias). Configure model + URL via `LLAMACPP_MODEL` / `LLAMACPP_BASE_URL`. The llama-server CLI owns context size, KV-cache quantization, and parallelism (CX22 is CPU-only — keep parallel slots low).
-- **Deploy:** `cd /opt/NotZelda && git pull && systemctl restart notzelda`
+- **Services:** `notzelda` (game) + `notzelda-llama` (llama-server for NPC chat).
+  - `systemctl restart notzelda` / `journalctl -u notzelda -f`
+  - `systemctl restart notzelda-llama` / `journalctl -u notzelda-llama -f`
+- **NPC chat backend:** `llama-server` (llama.cpp) reached via [LLMFacade](https://github.com/Coamithra/LLMFacade) external mode. Hetzner runs it on port **8081** (port 8080 is the game server); local dev typically uses 8080. `.env` sets `AI_BACKEND=llamacpp` (`ollama` is a deprecated alias). Model + URL come from `LLAMACPP_MODEL` / `LLAMACPP_BASE_URL`. CPU-only — keep `--parallel` low and `--ctx-size` matched to `MAX_HISTORY * avg-msg-len + system prompt + max_tokens`.
+- **Deploy:** `cd /opt/NotZelda && git pull && bash deploy/setup_llamacpp.sh && systemctl restart notzelda`. The setup script is idempotent — it only installs/updates llama.cpp + the GGUF when something is missing or `LLAMACPP_VERSION` changed. Full first-time setup (including Ollama removal) is documented in `deploy/README.md`.
 
 ## Dependencies
 

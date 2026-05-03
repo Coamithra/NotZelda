@@ -1,0 +1,15 @@
+[Unit]
+Description=llama.cpp HTTP server (NotZelda NPC chat)
+After=network.target
+# Boot ordering vs notzelda.service is handled by the drop-in
+# /etc/systemd/system/notzelda.service.d/llama.conf written by setup_llamacpp.sh.
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/llama-server -m @MODEL_PATH@ --host 127.0.0.1 --port @PORT@ --ctx-size @CTX_SIZE@ --parallel 1
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
