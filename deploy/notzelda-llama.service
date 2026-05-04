@@ -6,7 +6,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/llama-server -m @MODEL_PATH@ --host 127.0.0.1 --port @PORT@ --ctx-size @CTX_SIZE@ --parallel 1
+ExecStart=/usr/local/bin/llama-server -m @MODEL_PATH@ --host 127.0.0.1 --port @PORT@ --ctx-size @CTX_SIZE@ --parallel 1 --slot-save-path /var/lib/llama-cache
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=65536

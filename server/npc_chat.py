@@ -370,22 +370,29 @@ def _active_backend_and_model() -> tuple[str, str]:
 
 
 async def _call_npc_llm(static_prompt: str, dynamic_prompt: str,
-                        messages: list[dict]) -> str | None:
-    """Call the LLM for NPC conversation. Returns plain text or None on failure."""
+                        messages: list[dict],
+                        npc_name: str = "", room_id: str = "") -> tuple[str | None, str]:
+    """Call the LLM for NPC conversation. Returns (text, kv_status).
+
+    `kv_status` is one of "off"/"warm"/"restore"/"warmup"/"fail" for the
+    llamacpp backend (used to tag log lines for cold-vs-warm latency
+    inspection); always "n/a" for cli/api backends.
+    """
     backend, _ = _active_backend_and_model()
     try:
         if backend == "llamacpp":
-            return await _call_llamacpp(static_prompt, dynamic_prompt, messages)
+            return await _call_llamacpp(static_prompt, dynamic_prompt, messages,
+                                        npc_name, room_id)
         elif backend == "api":
-            return await _call_api(static_prompt, dynamic_prompt, messages)
+            return await _call_api(static_prompt, dynamic_prompt, messages), "n/a"
         else:
-            return await _call_cli(static_prompt, dynamic_prompt, messages)
+            return await _call_cli(static_prompt, dynamic_prompt, messages), "n/a"
     except asyncio.TimeoutError:
         log.debug("[NPC_CHAT] Timeout waiting for LLM response")
-        return None
+        return None, "n/a"
     except Exception as e:
         log.debug(f"[NPC_CHAT] LLM call failed: {type(e).__name__}: {e}")
-        return None
+        return None, "n/a"
 
 
 async def _call_cli(static_prompt: str, dynamic_prompt: str,
@@ -477,25 +484,44 @@ async def _call_api(static_prompt: str, dynamic_prompt: str,
 
 
 async def _call_llamacpp(static_prompt: str, dynamic_prompt: str,
-                         messages: list[dict]) -> str:
+                         messages: list[dict],
+                         npc_name: str = "", room_id: str = "") -> tuple[str, str]:
     """Call a local llama.cpp server (`llama-server`) via llmfacade.
 
     Context size, KV-cache quantization, and GPU offload are server-launch
     flags on `llama-server`, not handled here — we just hand it the system
     prompt and conversation history through llmfacade's external mode.
+
+    For NPCs in `npc_kv_cache.ENABLED_KEYS`, restores the saved static-prompt
+    KV into slot 0 before the chat completion so prefill skips the static
+    portion. The slot lock covers prepare + chat so two concurrent calls
+    don't clobber each other's restored state.
+
+    Returns (response_text, kv_status) — kv_status one of off/warm/restore/warmup/fail.
     """
-    convo = _get_llamacpp_model().new_conversation(
-        system_blocks=[static_prompt + "\n\n" + dynamic_prompt],
-        log_dir=False,
-    )
-    for msg in messages[:-1]:
-        if msg["role"] == "user":
-            convo.add_user_message(msg["content"])
-        else:
-            convo.add_assistant_message(msg["content"])
-    last_user = messages[-1]["content"] if messages and messages[-1]["role"] == "user" else None
-    resp = await asyncio.wait_for(convo.asend(last_user), timeout=NPC_LOCAL_TIMEOUT)
-    return resp.text.strip()
+    from server import npc_kv_cache
+
+    async def _do_chat() -> str:
+        convo = _get_llamacpp_model().new_conversation(
+            system_blocks=[static_prompt + "\n\n" + dynamic_prompt],
+            log_dir=False,
+        )
+        for msg in messages[:-1]:
+            if msg["role"] == "user":
+                convo.add_user_message(msg["content"])
+            else:
+                convo.add_assistant_message(msg["content"])
+        last_user = messages[-1]["content"] if messages and messages[-1]["role"] == "user" else None
+        resp = await asyncio.wait_for(convo.asend(last_user), timeout=NPC_LOCAL_TIMEOUT)
+        return resp.text.strip()
+
+    if npc_kv_cache.is_enabled(room_id, npc_name):
+        async with npc_kv_cache.slot_lock:
+            kv_status = await npc_kv_cache.prepare(static_prompt, room_id, npc_name)
+            text = await _do_chat()
+        return text, kv_status
+
+    return await _do_chat(), "off"
 
 
 # ---------------------------------------------------------------------------
@@ -606,15 +632,19 @@ async def handle_npc_chat(player, guard: dict, text: str):
     # Call LLM — wrapped in try/finally to guarantee thinking bubble cleanup.
     # handle_npc_chat runs via ensure_future, so uncaught exceptions are silent.
     response = None
+    kv_status = "n/a"
+    llm_elapsed = 0.0
     try:
         t0 = time.monotonic()
-        response = await _call_npc_llm(static_prompt, dynamic_prompt,
-                                       _conversations[conv_key])
+        response, kv_status = await _call_npc_llm(static_prompt, dynamic_prompt,
+                                                  _conversations[conv_key],
+                                                  npc_name=npc_name,
+                                                  room_id=player.room)
+        llm_elapsed = time.monotonic() - t0
 
         # NPCs should pause before responding (feels more natural)
-        elapsed = time.monotonic() - t0
-        if elapsed < NPC_RESPONSE_DELAY:
-            await asyncio.sleep(NPC_RESPONSE_DELAY - elapsed)
+        if llm_elapsed < NPC_RESPONSE_DELAY:
+            await asyncio.sleep(NPC_RESPONSE_DELAY - llm_elapsed)
     except Exception as e:
         log.debug(f"[NPC_CHAT] LLM call failed for {npc_name}: {type(e).__name__}: {e}")
 
@@ -681,7 +711,10 @@ async def handle_npc_chat(player, guard: dict, text: str):
         # Log and broadcast NPC response
         room_name = game.rooms.get(player.room, {}).get("name", player.room)
         _backend, _model = _active_backend_and_model()
-        log.event("NPC_CHAT", f"[{_backend}:{_model}] {npc_name} -> {player.name} ({room_name}): {response}")
+        kv_tag = f" kv={kv_status}" if kv_status != "n/a" else ""
+        log.event("NPC_CHAT",
+                  f"[{_backend}:{_model}{kv_tag} {llm_elapsed:.2f}s] "
+                  f"{npc_name} -> {player.name} ({room_name}): {response}")
         if raw_response != response:
             log.event("NPC_RAW", f"{npc_name}: {raw_response}")
         # Print raw response to sidelog (encode-safe for Windows cp1252 console)

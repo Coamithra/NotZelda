@@ -81,11 +81,11 @@ if [ -z "$release_json" ]; then
     fail "Could not query GitHub API ($api_url) and no existing install to fall back on."
   fi
 else
-  # Single-process awk parsing so an early `exit` doesn't SIGPIPE upstream
-  # producers (which `set -o pipefail` would surface as exit 141).
-  tag=$(printf '%s' "$release_json" | awk -F'"' '/"tag_name"/ {print $4; exit}')
-  asset_url=$(printf '%s' "$release_json" \
-    | awk -F'"' '/"browser_download_url"/ && /bin-ubuntu-x64\.tar\.gz/ {print $4; exit}')
+  # Stage to a tempfile so awk's `exit` can't SIGPIPE an upstream printf when
+  # the match is deep in the response (`set -o pipefail` would surface as 141).
+  printf '%s' "$release_json" > "$tmp/release.json"
+  tag=$(awk -F'"' '/"tag_name"/ {print $4; exit}' "$tmp/release.json")
+  asset_url=$(awk -F'"' '/"browser_download_url"/ && /bin-ubuntu-x64\.tar\.gz/ {print $4; exit}' "$tmp/release.json")
   [ -n "$tag" ]       || fail "Could not parse release tag from GitHub API"
   [ -n "$asset_url" ] || fail "Could not find ubuntu-x64 CPU asset in release $tag"
 fi
@@ -111,7 +111,10 @@ elif [ -n "$tag" ]; then
   log "Installed llama-server $tag -> /usr/local/bin/llama-server"
 fi
 
-# === 4. GGUF model ===
+# === 4. KV-cache slot directory (for --slot-save-path persistence) ===
+mkdir -p /var/lib/llama-cache
+
+# === 5. GGUF model ===
 mkdir -p "$MODELS_DIR"
 target_model="$MODELS_DIR/$MODEL_FILE"
 if [ -f "$target_model" ] && [ "$(stat -c%s "$target_model")" -ge "$MODEL_MIN_BYTES" ]; then
@@ -128,7 +131,7 @@ else
   log "Downloaded -> $target_model"
 fi
 
-# === 5. systemd unit (only restart if changed) ===
+# === 6. systemd unit (only restart if changed) ===
 sed -e "s|@MODEL_PATH@|$target_model|g" \
     -e "s|@PORT@|$LLAMA_PORT|g" \
     -e "s|@CTX_SIZE@|$LLAMA_CTX_SIZE|g" \
@@ -146,7 +149,7 @@ if [ "$unit_changed" -eq 1 ]; then
   systemctl enable "$SERVICE_NAME" >/dev/null
 fi
 
-# === 6. Drop-in: order notzelda after llama so reboots come up cleanly. ===
+# === 7. Drop-in: order notzelda after llama so reboots come up cleanly. ===
 # `Before=` in the llama unit only orders units started in the same transaction;
 # on boot, `multi-user.target` pulls both via `WantedBy=` and they race. The
 # drop-in tells systemd to wait for llama-server before starting the game.
@@ -171,7 +174,7 @@ else
   log "$SERVICE_NAME unchanged and running — leaving it alone."
 fi
 
-# === 7. Wait for ready ===
+# === 8. Wait for ready ===
 log "Waiting for llama-server on :$LLAMA_PORT..."
 for i in $(seq 1 60); do
   if curl -fsS "http://127.0.0.1:$LLAMA_PORT/health" >/dev/null 2>&1 \
@@ -185,7 +188,7 @@ for i in $(seq 1 60); do
   fi
 done
 
-# === 8. Hint ===
+# === 9. Hint ===
 model_id="${MODEL_FILE%.gguf}"
 cat <<EOF
 
