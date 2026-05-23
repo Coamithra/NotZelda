@@ -304,6 +304,12 @@ STATIC_FILES = {
     "/":            ("client/client.html", "text/html; charset=utf-8"),
     "/index.html":  ("client/client.html", "text/html; charset=utf-8"),
     "/ost":         ("client/ost.html",    "text/html; charset=utf-8"),
+    # OST PWA (offline "Store locally") assets
+    "/sw.js":       ("client/sw.js",       "application/javascript; charset=utf-8"),
+    "/manifest.json": ("client/manifest.json", "application/manifest+json"),
+    "/icon-192.png": ("client/icon-192.png", "image/png"),
+    "/icon-512.png": ("client/icon-512.png", "image/png"),
+    "/apple-touch-icon.png": ("client/apple-touch-icon.png", "image/png"),
     "/game_state.js": ("client/game_state.js", "application/javascript; charset=utf-8"),
     "/tweak.js":    ("client/tweak.js",    "application/javascript; charset=utf-8"),
     "/title.js":    ("client/title.js",    "application/javascript; charset=utf-8"),

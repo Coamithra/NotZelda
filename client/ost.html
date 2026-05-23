@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Legends of Amara — Original Soundtrack</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Amara OST">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -49,6 +56,37 @@
   .album-info .subtitle a { color: #6bc47a; text-decoration: none; }
   .album-info .subtitle a:hover { text-decoration: underline; }
   .album-info .meta { font-size: 13px; color: #777; margin-top: 6px; }
+
+  .store-btn {
+    margin-top: 12px;
+    background: #1a2a1a;
+    border: 1px solid #2f4f2f;
+    color: #6bc47a;
+    font-size: 13px;
+    font-family: inherit;
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+  }
+  .store-btn:hover { background: #213521; border-color: #3f6f3f; }
+  .store-btn:disabled { cursor: default; opacity: 0.7; }
+  .store-btn.stored { color: #8a8; border-color: #2a3a2a; background: #161e16; }
+  .store-status { font-size: 12px; color: #777; margin-top: 7px; min-height: 15px; }
+  .store-status a { color: #6b8ac4; cursor: pointer; text-decoration: none; }
+  .store-status a:hover { text-decoration: underline; }
+  .store-progress {
+    height: 4px;
+    width: 220px;
+    max-width: 100%;
+    background: #2a2a2a;
+    border-radius: 2px;
+    margin-top: 9px;
+    overflow: hidden;
+    display: none;
+  }
+  .store-progress.active { display: block; }
+  .store-progress-fill { height: 100%; width: 0%; background: #6bc47a; transition: width 0.2s; }
 
   .tracklist {
     width: 100%;
@@ -284,6 +322,9 @@
     <h1>Legends of Amara</h1>
     <div class="subtitle">Original Soundtrack</div>
     <div class="meta" id="album-meta"></div>
+    <button class="store-btn" id="store-btn" hidden>&#11015; Store locally</button>
+    <div class="store-progress" id="store-progress"><div class="store-progress-fill" id="store-progress-fill"></div></div>
+    <div class="store-status" id="store-status"></div>
   </div>
 </div>
 
@@ -437,6 +478,17 @@ function loadTrack(i) {
   document.getElementById("np-title").textContent = TRACKS[i].title;
   document.getElementById("np-area").textContent = TRACKS[i].area;
   document.getElementById("player-bar").classList.add("visible");
+  if ("mediaSession" in navigator) {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: TRACKS[i].title,
+      artist: TRACKS[i].area,
+      album: "Legends of Amara — Original Soundtrack",
+      artwork: [
+        { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
+        { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      ],
+    });
+  }
 }
 
 function play() {
@@ -444,12 +496,14 @@ function play() {
   audio.play().catch(() => {});
   isPlaying = true;
   document.getElementById("btn-play").innerHTML = "&#10074;&#10074;";
+  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
 }
 
 function pause() {
   audio.pause();
   isPlaying = false;
   document.getElementById("btn-play").innerHTML = "&#9654;";
+  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused";
 }
 
 function nextTrack() {
@@ -486,6 +540,15 @@ audio.addEventListener("timeupdate", () => {
     progressFill.style.width = pct + "%";
     timeCur.textContent = fmt(audio.currentTime);
     timeDur.textContent = fmt(audio.duration);
+  }
+  if ("mediaSession" in navigator && navigator.mediaSession.setPositionState && audio.duration) {
+    try {
+      navigator.mediaSession.setPositionState({
+        duration: audio.duration,
+        position: audio.currentTime,
+        playbackRate: audio.playbackRate,
+      });
+    } catch (e) { /* invalid state mid-load — ignore */ }
   }
 });
 
@@ -531,6 +594,104 @@ document.addEventListener("keydown", (e) => {
   if (e.code === "ArrowRight" && e.shiftKey) nextTrack();
   if (e.code === "ArrowLeft" && e.shiftKey) prevTrack();
 });
+
+// ── MediaSession action handlers (lock-screen / notification controls) ──
+if ("mediaSession" in navigator) {
+  const set = (action, fn) => { try { navigator.mediaSession.setActionHandler(action, fn); } catch (e) {} };
+  set("play", play);
+  set("pause", pause);
+  set("previoustrack", prevTrack);
+  set("nexttrack", nextTrack);
+  set("seekto", (d) => { if (d.seekTime != null && audio.duration) audio.currentTime = d.seekTime; });
+}
+
+// ── Offline storage ("Store locally") ──
+const AUDIO_CACHE = "amara-ost-audio";
+const TRACK_URLS = TRACKS.map((t) => t.url);
+const storeBtn = document.getElementById("store-btn");
+const storeStatus = document.getElementById("store-status");
+const storeProgress = document.getElementById("store-progress");
+const storeProgressFill = document.getElementById("store-progress-fill");
+
+function fmtMB(bytes) {
+  return (bytes / (1024 * 1024)).toFixed(0) + " MB";
+}
+
+// Register the service worker that serves cached tracks when offline. The site
+// only becomes installable / offline-capable once this is controlling the page.
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").then(refreshStoredState).catch(() => {
+    storeStatus.textContent = "Offline storage unavailable on this connection.";
+  });
+} else {
+  // No SW support — hide the feature rather than show a broken button.
+  storeBtn.hidden = true;
+}
+
+async function refreshStoredState() {
+  if (!("caches" in window)) { storeBtn.hidden = true; return; }
+  storeBtn.hidden = false;
+  const cache = await caches.open(AUDIO_CACHE);
+  const keys = await cache.keys();
+  if (keys.length >= TRACK_URLS.length) {
+    let bytes = 0;
+    for (const req of keys) {
+      const r = await cache.match(req);
+      if (r) bytes += (await r.blob()).size;
+    }
+    storeBtn.classList.add("stored");
+    storeBtn.textContent = "✓ Stored offline";
+    storeBtn.disabled = true;
+    storeStatus.innerHTML = TRACK_URLS.length + " tracks · " + fmtMB(bytes) +
+      " saved · <a id=\"store-remove\">Remove</a>";
+    document.getElementById("store-remove").addEventListener("click", removeLocal);
+  } else if (keys.length > 0) {
+    storeBtn.classList.remove("stored");
+    storeBtn.disabled = false;
+    storeBtn.textContent = "⬇ Resume download";
+    storeStatus.textContent = keys.length + " of " + TRACK_URLS.length + " tracks saved.";
+  } else {
+    storeBtn.classList.remove("stored");
+    storeBtn.disabled = false;
+    storeBtn.textContent = "⬇ Store locally";
+    storeStatus.textContent = "Save all tracks to listen offline.";
+  }
+}
+
+async function storeLocally() {
+  storeBtn.disabled = true;
+  storeProgress.classList.add("active");
+  const cache = await caches.open(AUDIO_CACHE);
+  let done = 0, bytes = 0, failed = 0;
+  for (const url of TRACK_URLS) {
+    try {
+      const resp = await fetch(url, { cache: "reload" });
+      if (resp.ok) {
+        bytes += (await resp.clone().blob()).size;
+        await cache.put(url, resp);
+      } else { failed++; }
+    } catch (e) { failed++; }
+    done++;
+    storeProgressFill.style.width = (done / TRACK_URLS.length * 100) + "%";
+    storeStatus.textContent = "Saving… " + done + "/" + TRACK_URLS.length +
+      " · " + fmtMB(bytes);
+  }
+  storeProgress.classList.remove("active");
+  storeProgressFill.style.width = "0%";
+  if (failed > 0) {
+    storeStatus.textContent = failed + " track(s) failed to download — tap to retry.";
+    storeBtn.disabled = false;
+  } else {
+    await refreshStoredState();
+  }
+}
+
+async function removeLocal() {
+  await caches.delete(AUDIO_CACHE);
+  await refreshStoredState();
+}
+
+storeBtn.addEventListener("click", storeLocally);
 
 // ── Album art — pixel art shield with seal crystal ──
 function drawAlbumArt(canvasId) {

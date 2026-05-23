@@ -122,6 +122,10 @@ python mud_server.py
 
 Opens on http://localhost:8080.
 
+## OST Site (`/ost`)
+
+Standalone soundtrack player (`client/ost.html`) served at `/ost`. It's an installable, offline-capable PWA: a "Store locally" button caches all tracks via the Cache API, served back offline by `client/sw.js`. The service worker is root-scoped (the audio/icons live at `/`) but only ever *handles* a fixed allowlist of OST assets — every other request, including the game, passes straight through. `client/manifest.json` + `icon-*.png` provide install metadata; regenerate the icons (ported from the canvas album art) with `python tools/gen_ost_icons.py`. Asset routes live in `STATIC_FILES` in `mud_server.py`. Offline support requires a secure context (prod HTTPS is fine; `localhost` is exempt). **When adding/removing a track, update the list in BOTH `ost.html` (`TRACKS`) and `sw.js` (`TRACK_URLS`).**
+
 ## Hosting (Hetzner Cloud VPS)
 
 - **Server:** Hetzner CX22, Ubuntu 24.04 — IP `46.225.218.207`
