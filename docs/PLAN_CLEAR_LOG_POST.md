@@ -11,6 +11,8 @@ Surfaced during peer review of card 69c98d0b (Auth-gate /get-log and /clear-log 
 
 ### Constraint: websockets 12.0 GET-only
 
+> **Superseded (websockets 16.0 upgrade):** the server now runs on the modern `websockets.asyncio` API. The GET-only limitation still exists in v16 (`http11.Request.parse()` rejects non-GET before `process_request` runs), but it is now worked around by the module-level `_parse_request_allowing_post` shim in `mud_server.py` rather than the `_GameServerProtocol` subclass described below. The POST-only `/clear-log` behaviour is unchanged; the rest of this doc is kept as a historical record of the original implementation.
+
 websockets 12.0 (pinned — v16+ breaks `process_request` API) rejects all non-GET HTTP methods at the wire level. `websockets.legacy.http.read_request()` raises `ValueError("unsupported HTTP method: POST")` before `process_request()` is ever called. A POST today returns 400 Bad Request silently.
 
 ## Approach

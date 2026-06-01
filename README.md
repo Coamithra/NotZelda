@@ -34,7 +34,7 @@ pip install -r requirements.txt
 ```
 
 Dependencies:
-- `websockets` 12.0 (pinned — v16+ breaks the server API)
+- `websockets` 16.0 (pinned; modern `asyncio` server API)
 - `anthropic` (optional, for API-based AI generation)
 - `llmfacade[llamacpp]` (optional, for local NPC chat via `llama-server`)
 
