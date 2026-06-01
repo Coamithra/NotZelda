@@ -26,8 +26,39 @@ if _env_path.exists():
             os.environ.setdefault(_key.strip(), _val.strip())
 
 import websockets
-from websockets.legacy.http import read_headers, read_line
-from websockets.legacy.server import WebSocketServerProtocol
+from websockets.asyncio.server import serve
+from websockets.datastructures import Headers
+from websockets.http11 import Response
+import websockets.http11 as _http11
+
+# websockets >= 13 hard-rejects any HTTP method other than GET inside
+# http11.Request.parse() — before our process_request() callback ever runs.
+# The game muxes a small admin HTTP API onto the WebSocket port, and
+# /clear-log is intentionally POST-only (destructive, admin-auth gated). We
+# install a lenient request parser that also accepts POST and stashes the
+# method on the Request so process_request() can enforce POST where needed.
+# (Replaces the websockets-12 read_http_request() override on the old
+# _GameServerProtocol subclass.)
+def _parse_request_allowing_post(cls, read_line):
+    request_line = yield from _http11.parse_line(read_line)
+    try:
+        method, raw_path, protocol = request_line.split(b" ", 2)
+    except ValueError:
+        raise ValueError(f"invalid HTTP request line: {request_line!r}") from None
+    if protocol != b"HTTP/1.1":
+        raise ValueError(f"unsupported protocol; expected HTTP/1.1: {request_line!r}")
+    if method not in (b"GET", b"POST"):
+        raise ValueError(f"unsupported HTTP method; expected GET or POST; got {method!r}")
+    path = raw_path.decode("ascii", "surrogateescape")
+    headers = yield from _http11.parse_headers(read_line)
+    # Unlike the stock GET-only parser, we don't reject request bodies: a POST
+    # (e.g. /clear-log) may carry one. process_request() always responds and the
+    # connection is then closed, so any unread body is discarded harmlessly.
+    request = cls(path, headers)
+    request.method = method.decode()
+    return request
+
+_http11.Request.parse = classmethod(_parse_request_allowing_post)
 
 from server import behavior_engine
 from server.state import game
@@ -150,7 +181,7 @@ async def handle_connection(websocket):
     remote = websocket.remote_address
     addr = f"{remote[0]}:{remote[1]}" if remote else "unknown"
     # Extract real IP and User-Agent from nginx proxy headers
-    headers = websocket.request_headers if hasattr(websocket, 'request_headers') else {}
+    headers = websocket.request.headers if websocket.request is not None else {}
     real_ip = headers.get("X-Forwarded-For", addr)
     user_agent = headers.get("User-Agent", "unknown")
     ua_short = user_agent[:80]
@@ -234,7 +265,8 @@ async def handle_connection(websocket):
                 log.debug(f"[ERROR] {name}: message handler error: {type(e).__name__}: {e}")
 
     except websockets.ConnectionClosed as e:
-        reason = f"code={e.code} reason='{e.reason}'" if e.code else "no close frame"
+        reason = (f"code={e.rcvd.code} reason='{e.rcvd.reason}'"
+                  if e.rcvd is not None else "no close frame")
         who = player.name if player else addr
         duration = time.time() - connect_time
         log.event("DISCONNECT", f"{who} — {reason} — {duration:.0f}s (IP: {real_ip}, UA: {ua_short})")
@@ -455,140 +487,102 @@ def _build_library_stats() -> dict:
     }
 
 
+def _http_response(status, body: bytes | str = b"", content_type="text/plain; charset=utf-8", extra_headers=None):
+    """Build a websockets HTTP Response (used by process_request to serve files
+    and admin endpoints instead of upgrading to a WebSocket)."""
+    if isinstance(body, str):
+        body = body.encode()
+    status = HTTPStatus(status)
+    headers = Headers()
+    headers["Content-Type"] = content_type
+    headers["Content-Length"] = str(len(body))
+    for key, value in (extra_headers or []):
+        headers[key] = value
+    return Response(status.value, status.phrase, headers, body)
+
+
 def _check_admin_auth(request_headers):
-    """Validate Basic Auth against ADMIN_PASSWORD. Returns None on success, or HTTP error response tuple."""
+    """Validate Basic Auth against ADMIN_PASSWORD. Returns None on success, or an HTTP error Response."""
     admin_pw = os.environ.get("ADMIN_PASSWORD", "")
     if not admin_pw:
-        return HTTPStatus.NOT_FOUND, [], b"Not Found"
+        return _http_response(HTTPStatus.NOT_FOUND, "Not Found")
     auth = request_headers.get("Authorization", "")
+    unauthorized = lambda: _http_response(
+        HTTPStatus.UNAUTHORIZED, "Unauthorized",
+        extra_headers=[("WWW-Authenticate", 'Basic realm="Admin"')])
     if not auth.startswith("Basic "):
-        return HTTPStatus.UNAUTHORIZED, [("WWW-Authenticate", 'Basic realm="Admin"')], b"Unauthorized"
+        return unauthorized()
     try:
         provided = base64.b64decode(auth[6:]).decode()
     except Exception:
-        return HTTPStatus.UNAUTHORIZED, [("WWW-Authenticate", 'Basic realm="Admin"')], b"Unauthorized"
+        return unauthorized()
     if not hmac.compare_digest(provided, f"admin:{admin_pw}"):
-        return HTTPStatus.UNAUTHORIZED, [("WWW-Authenticate", 'Basic realm="Admin"')], b"Unauthorized"
+        return unauthorized()
     return None
 
 
-class _GameServerProtocol(WebSocketServerProtocol):
-    """Extend WebSocket protocol to accept POST for admin endpoints.
+def process_request(connection, request):
+    """Route HTTP requests during the opening handshake (websockets asyncio API).
 
-    websockets 12.0 only accepts GET requests. This subclass overrides
-    read_http_request() to also accept POST, storing the method so
-    process_request() can enforce POST-only on destructive endpoints.
+    Returning a Response serves plain HTTP (static files + admin endpoints);
+    returning None lets the WebSocket handshake proceed. The request method is
+    stashed on the Request by our lenient parser above (GET fallback is safe).
     """
-
-    async def read_http_request(self):
-        """Read HTTP request line, accepting both GET and POST methods."""
+    path = request.path.split("?")[0]  # strip query string (cache-busting support)
+    request_headers = request.headers
+    method = getattr(request, "method", "GET")
+    if path == "/ws":
+        return None  # proceed with the WebSocket handshake
+    if path == "/get-log":
+        auth_err = _check_admin_auth(request_headers)
+        if auth_err:
+            return auth_err
+        body = game.log_file.read_bytes() if game.log_file.exists() else b""
+        return _http_response(HTTPStatus.OK, body)
+    if path == "/clear-log":
+        if method != "POST":
+            return _http_response(HTTPStatus.METHOD_NOT_ALLOWED, "Use POST for /clear-log",
+                                  extra_headers=[("Allow", "POST")])
+        auth_err = _check_admin_auth(request_headers)
+        if auth_err:
+            return auth_err
+        game.log_file.write_text("", encoding="utf-8")
+        return _http_response(HTTPStatus.OK, "Log cleared.")
+    if path == "/admin/library-stats":
+        auth_err = _check_admin_auth(request_headers)
+        if auth_err:
+            return auth_err
         try:
-            request_line = await read_line(self.reader)
-        except asyncio.CancelledError:
-            raise
-        except EOFError as exc:
-            raise websockets.exceptions.InvalidMessage(
-                "connection closed while reading HTTP request line"
-            ) from exc
-
-        try:
-            method, raw_path, version = request_line.split(b" ", 2)
-        except ValueError:
-            raise websockets.exceptions.InvalidMessage(
-                "invalid HTTP request line"
-            ) from None
-
-        if method not in (b"GET", b"POST"):
-            raise websockets.exceptions.InvalidMessage(
-                f"unsupported HTTP method: {method.decode(errors='backslashreplace')}"
-            )
-        if version != b"HTTP/1.1":
-            raise websockets.exceptions.InvalidMessage(
-                f"unsupported HTTP version: {version.decode(errors='backslashreplace')}"
-            )
-
-        path = raw_path.decode("ascii", "surrogateescape")
-        try:
-            headers = await read_headers(self.reader)
-        except asyncio.CancelledError:
-            raise
-
-        self.path = path
-        self.request_headers = headers
-        self._http_method = method.decode()
-
-        if self.debug:
-            self.logger.debug("< %s %s HTTP/1.1", self._http_method, path)
-            for key, value in headers.raw_items():
-                self.logger.debug("< %s: %s", key, value)
-
-        return path, headers
-
-    async def process_request(self, path, request_headers):
-        """Route HTTP requests. Overrides the parent method (not the callback).
-
-        Note: POST body (if any) is not read. This is safe because
-        process_request always returns non-None for POST paths, triggering
-        AbortHandshake which closes the connection immediately.
-        """
-        path = path.split("?")[0]  # strip query string for cache-busting support
-        method = getattr(self, "_http_method", "GET")  # always set by read_http_request; GET fallback is safe
-        if path == "/ws":
-            return None
-        if path == "/get-log":
-            auth_err = _check_admin_auth(request_headers)
-            if auth_err:
-                return auth_err
-            body = game.log_file.read_bytes() if game.log_file.exists() else b""
-            return HTTPStatus.OK, [("Content-Type", "text/plain; charset=utf-8")], body
-        if path == "/clear-log":
-            if method != "POST":
-                return HTTPStatus.METHOD_NOT_ALLOWED, [("Allow", "POST")], b"Use POST for /clear-log"
-            auth_err = _check_admin_auth(request_headers)
-            if auth_err:
-                return auth_err
-            game.log_file.write_text("", encoding="utf-8")
-            return HTTPStatus.OK, [("Content-Type", "text/plain; charset=utf-8")], b"Log cleared."
-        if path == "/admin/library-stats":
-            auth_err = _check_admin_auth(request_headers)
-            if auth_err:
-                return auth_err
-            try:
-                body = json.dumps(_build_library_stats(), indent=2).encode()
-            except Exception as e:
-                body = json.dumps({"error": str(e)}).encode()
-            return HTTPStatus.OK, [("Content-Type", "application/json")], body
-        if path in STATIC_FILES:
-            filename, content_type = STATIC_FILES[path]
-            body = (ROOT_DIR / filename).read_bytes()
-            # Inject debug flag into HTML so client can auto-login
-            if DEBUG_MODE and filename.endswith(".html"):
-                body = body.replace(b"</head>", b"<script>window.SERVER_DEBUG=true</script></head>")
-            # Support Range requests for audio seeking
-            range_header = request_headers.get("Range", "")
-            if range_header.startswith("bytes=") and content_type.startswith("audio/"):
-                total = len(body)
-                range_spec = range_header[6:]  # strip "bytes="
-                start_str, _, end_str = range_spec.partition("-")
-                start = int(start_str) if start_str else 0
-                end = int(end_str) if end_str else total - 1
-                end = min(end, total - 1)
-                if start > end or start >= total:
-                    return HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE, [
-                        ("Content-Range", f"bytes */{total}"),
-                    ], b""
-                chunk = body[start:end + 1]
-                return HTTPStatus.PARTIAL_CONTENT, [
-                    ("Content-Type", content_type),
-                    ("Accept-Ranges", "bytes"),
-                    ("Content-Range", f"bytes {start}-{end}/{total}"),
-                    ("Content-Length", str(len(chunk))),
-                ], chunk
-            headers = [("Content-Type", content_type)]
-            if content_type.startswith("audio/"):
-                headers.append(("Accept-Ranges", "bytes"))
-            return HTTPStatus.OK, headers, body
-        return HTTPStatus.NOT_FOUND, [], b"Not Found"
+            body = json.dumps(_build_library_stats(), indent=2).encode()
+        except Exception as e:
+            body = json.dumps({"error": str(e)}).encode()
+        return _http_response(HTTPStatus.OK, body, "application/json")
+    if path in STATIC_FILES:
+        filename, content_type = STATIC_FILES[path]
+        body = (ROOT_DIR / filename).read_bytes()
+        # Inject debug flag into HTML so client can auto-login
+        if DEBUG_MODE and filename.endswith(".html"):
+            body = body.replace(b"</head>", b"<script>window.SERVER_DEBUG=true</script></head>")
+        # Support Range requests for audio seeking
+        range_header = request_headers.get("Range", "")
+        if range_header.startswith("bytes=") and content_type.startswith("audio/"):
+            total = len(body)
+            range_spec = range_header[6:]  # strip "bytes="
+            start_str, _, end_str = range_spec.partition("-")
+            start = int(start_str) if start_str else 0
+            end = int(end_str) if end_str else total - 1
+            end = min(end, total - 1)
+            if start > end or start >= total:
+                return _http_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE, b"",
+                                      extra_headers=[("Content-Range", f"bytes */{total}")])
+            chunk = body[start:end + 1]
+            return _http_response(HTTPStatus.PARTIAL_CONTENT, chunk, content_type, extra_headers=[
+                ("Accept-Ranges", "bytes"),
+                ("Content-Range", f"bytes {start}-{end}/{total}"),
+            ])
+        extra = [("Accept-Ranges", "bytes")] if content_type.startswith("audio/") else None
+        return _http_response(HTTPStatus.OK, body, content_type, extra_headers=extra)
+    return _http_response(HTTPStatus.NOT_FOUND, "Not Found")
 
 
 # ---------------------------------------------------------------------------
@@ -675,9 +669,9 @@ async def main():
     from server.combat import _apply_damage
     behavior_engine.init(_apply_damage)
     port = int(os.environ.get("PORT", 8080))
-    server = await websockets.serve(
+    server = await serve(
         handle_connection, "0.0.0.0", port,
-        create_protocol=_GameServerProtocol,
+        process_request=process_request,
         compression=None,
         ping_interval=15,
         ping_timeout=120,
@@ -690,9 +684,9 @@ async def main():
         import ssl
         ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ssl_ctx.load_cert_chain(cert_path / "fullchain.pem", cert_path / "privkey.pem")
-        tls_server = await websockets.serve(
+        tls_server = await serve(
             handle_connection, "0.0.0.0", tls_port,
-            create_protocol=_GameServerProtocol,
+            process_request=process_request,
             ssl=ssl_ctx,
             compression=None,
             ping_interval=15,

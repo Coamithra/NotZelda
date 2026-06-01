@@ -80,7 +80,7 @@ Detailed implementation notes for each game system:
 - **Room transitions**: avatar set to `None` during `do_room_transition()`. `avatars_in_room()` excludes avatar-less players.
 - **Dungeon room resolution is synchronous** — no JIT AI generation. Custom rooms from library pool or precreated fallback.
 - **Tile properties** in `custom_tile_recipes[tile_id]` — no separate walkability sets.
-- **`websockets` must stay at 12.0** — v16+ breaks `process_request` API. HTTP routing lives in `_GameServerProtocol.process_request()` (a subclass of `WebSocketServerProtocol`), not a standalone function, because websockets 12.0 only accepts GET — the subclass overrides `read_http_request()` to also accept POST for `/clear-log`.
+- **`websockets` is pinned at 16.0** (modern `asyncio` API). HTTP routing lives in the standalone `process_request(connection, request)` callback passed to `websockets.asyncio.server.serve()` — it returns a `websockets.http11.Response` to serve files/admin endpoints, or `None` to let `/ws` upgrade. The handshake is GET-only and v16's `http11.Request.parse()` rejects non-GET *before* `process_request` runs, so a module-level shim (`_parse_request_allowing_post`) monkeypatches `Request.parse` to also accept POST (stashing the method on the request) — this keeps the POST-only `/clear-log` endpoint working. (Pre-16 used a `_GameServerProtocol(WebSocketServerProtocol)` subclass overriding `read_http_request()`; that legacy API was removed in v13+.)
 - **WebSocket bypasses nginx** — client connects `wss://` directly to Python on port 8443 (TLS via Python `ssl`). nginx only serves static files.
 
 ### Debug Draw Mode
@@ -139,6 +139,6 @@ Standalone soundtrack player (`client/ost.html`) served at `/ost`. It's an insta
 ## Dependencies
 
 - Python 3.12+
-- `websockets` (12.0 — pinned, v16+ breaks the `process_request` API)
+- `websockets` (16.0 — pinned; modern `asyncio` API — the pre-13 legacy `process_request`/`WebSocketServerProtocol` API was removed. See the websockets gotcha under Key Gotchas.)
 - `llmfacade[llamacpp]` (for local NPC chat against `llama-server`)
 - `pyngrok` (optional, for local dev tunneling)
