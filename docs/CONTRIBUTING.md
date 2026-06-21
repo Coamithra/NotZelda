@@ -1,6 +1,6 @@
 # Contributing: Tackling a Trello Card
 
-Step-by-step workflow for picking up and completing any card from the [Legends of Amara Trello board](https://trello.com/b/FEqdR6QL/legends-of-amara).
+Step-by-step workflow for picking up and completing any card from the [Legends of Amara Trello board](https://trello.com/b/FEqdR6QL/legends-of-amara) (board id `69c1b01b`). Board commands below use the `trello` CLI.
 
 ---
 
@@ -31,7 +31,7 @@ git checkout master && git pull origin master   # fast-forward local master to t
 ## Phase 1: Pick Up the Card
 - [ ] Pull latest master
 - [ ] Read the card (description, comments, linked docs)
-- [ ] Move card to In Progress
+- [ ] Claim the top card with `trello grab` (or move a specific card to Features (In Progress))
 - [ ] Create worktree and branch
 
 ## Phase 2: Research
@@ -64,9 +64,17 @@ All work happens in an isolated **git worktree** under `.trees/`. This lets mult
 
 ## Phase 1: Pick Up the Card
 
+> **Picking up the top card? Use the atomic `grab` command.** This board has no single "To Do" list -- work is bucketed into **Bugs**, **Future Features**, and **Refactoring**. To claim the top card of whichever bucket you are working, in one atomic step:
+>
+> ```
+> trello --board 69c1b01b grab --from "Bugs" --to "Features (In Progress)"
+> ```
+>
+> Swap `--from "Bugs"` for `"Future Features"` or `"Refactoring"` as needed. `grab` pops the top card of that list, moves it to Features (In Progress), and prints the card it got you (it exits 1 when the source list is empty). Run it from several agents at once and each gets a distinct card, so no two collide on the same ticket. On the remote Trello backend `grab` settles ties with a brief (~10-30s) claim-comment handshake. For a specific named card, use the manual move in step 3 instead.
+
 1. **Pull latest master** — `git pull origin master` to ensure you're working from the newest code
 2. **Read the card** — Read the full card description, comments, and any linked docs (e.g. `docs/PLAN_AI_GENERATION.md`, `docs/PLAN_WALK_SYSTEM.md`)
-3. **Move card to In Progress** — `move_card` to the "Features (In Progress)" list
+3. **Move card to In Progress** — `trello --board 69c1b01b card move <card_id> "Features (In Progress)"`
 4. **Create worktree and branch** — Branch off `master` with a descriptive name:
     - Bugs: `fix/card-name` (e.g. `fix/room-transition-race`)
     - Features: `feat/card-name` (e.g. `feat/bump-animation`)
@@ -138,9 +146,9 @@ Dig into the problem before proposing solutions. Use `/research` for topics that
     git branch -d <branch>
     git push origin --delete <branch>
     ```
-29. **Move card to Done** — `move_card` to the "Done" list
-30. **Comment on the card** — Add a fix/feature summary to the Trello card: what changed, which files, what it fixes/adds, commit hash, and what needs manual testing. This leaves a paper trail for future debugging
-31. **Create follow-up tickets** — If the peer review, implementation, or testing surfaced issues that are out of scope for this card (pre-existing bugs, minor improvements, edge cases deferred as too risky to bundle), create new Trello cards in the appropriate list (Bugs, Future Features, or Refactoring). Reference the original card so there's a trail. Don't let follow-up work disappear into commit messages — if it's worth noting, it's worth tracking
+29. **Move card to Done** — `trello --board 69c1b01b card move <card_id> Done`
+30. **Comment on the card** — `trello --board 69c1b01b comment add <card_id> "<summary>"`. Include what changed, which files, what it fixes/adds, the commit hash(es), and what needs manual testing. Use real newlines in the text, not escape sequences. This leaves a paper trail for future debugging
+31. **Create follow-up tickets** — If the peer review, implementation, or testing surfaced issues that are out of scope for this card (pre-existing bugs, minor improvements, edge cases deferred as too risky to bundle), create new Trello cards in the appropriate list with `trello --board 69c1b01b card add "<list>" "<title>" "<desc>"` (Bugs, Future Features, or Refactoring). Reference the original card so there's a trail. Don't let follow-up work disappear into commit messages — if it's worth noting, it's worth tracking
 32. **Deploy (if requested)** — `ssh root@46.225.218.207` → `cd /opt/NotZelda && git pull && bash deploy/setup_llamacpp.sh && systemctl restart notzelda` (the llama-server step is idempotent and short-circuits when nothing changed)
 33. **If new music was added** — Update `client/ost.html` (add track entries to `TRACKS` array) and `mud_server.py` (add serving routes to the static file dict) so the `/ost` soundtrack page stays current
 
