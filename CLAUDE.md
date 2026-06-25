@@ -10,7 +10,16 @@ For detailed module descriptions and game system documentation, see [docs/ARCHIT
 
 **Project tracking:** [Trello — Legends of Amara](https://trello.com/b/FEqdR6QL/legends-of-amara). Bugs, features, and refactoring are tracked there. Use the `trello` CLI (installed from `C:\Programming\TrelloCLI`) with subcommand groups — `trello card ls <list>`, `trello card show <id>`, `trello card move <id> <list>`, `trello comment add <id> <text>`, etc. Config in `~/.trello-cli.json`. **Use real newlines in card descriptions, not `\n` escape sequences** — the CLI passes strings literally.
 
-**Contributing workflow:** See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for the step-by-step runbook for tackling any Trello card (pick up → worktree → research → design → implement → verify → review & ship). All feature work happens in git worktrees under `.trees/` — the root checkout stays on `master`.
+**Contributing workflow:** Follow `~/.claude/CONTRIBUTING.md` plus the **Contributing workflow** section below for the step-by-step runbook for tackling any Trello card (pick up → worktree → research → design → implement → verify → review & ship). All feature work happens in git worktrees under `.trees/` — the root checkout stays on `master`.
+
+## Contributing workflow
+
+Card -> worktree -> PR runbook: follow `~/.claude/CONTRIBUTING.md` (the global generic runbook). Legends of Amara specifics:
+
+- **Board:** Legends of Amara (https://trello.com/b/FEqdR6QL/legends-of-amara), id `69c1b01b`, remote `trello` backend. **No single "To Do" list** - work is bucketed into **Bugs**, **Future Features**, **Refactoring**; in-progress list is **Features (In Progress)**, then **Done**. Atomic pickup (pick the bucket): `trello --board 69c1b01b grab --from "Bugs" --to "Features (In Progress)"` (swap `--from` for "Future Features" / "Refactoring").
+- **Default branch:** `master`. **GitHub:** solo public repo (unprotected `master` -> PR + self-merge, no approval needed). Deploy target is the Hetzner VPS (`/opt/NotZelda`) - see the Hosting section.
+- **Worktrees:** `.trees/<branch>` (branch-named, gitignored). Tracker doc goes in `docs/`. Bootstrap: copy `.env` into the worktree (gitignored, doesn't carry over) so the server picks up `DEBUG_MODE` / `AI_BACKEND` / etc - `copy_env.sh <branch>`.
+- **Verification gate:** smoke `python -c "import mud_server"`; run the `tools/` test suites (`python tools/test_api_leak.py` - all 4 must pass - plus the others). If `ai_generator.py` / `content_viewer.py` / `.env` were touched, the API-leak test is mandatory. **NEVER run `worldgen.py`** without explicit permission (it overwrites hand-edited `.room` files). Flag in-browser checks for the user.
 
 ## General Rules
 
