@@ -235,15 +235,18 @@ const MusicPlayer = (function () {
       // Buffered enough to start — play immediately
       fadeIn(url, FADE_MS);
     } else {
-      // Wait for the file to buffer, then fade in
-      audio.addEventListener("canplaythrough", function () {
+      // Wait for the file to buffer, then fade in. Ensure fadeIn runs exactly
+      // once: the inline race guard removes the pending listener if it fires.
+      function onReady() {
+        audio.removeEventListener("canplaythrough", onReady);
         if (currentTrack === url && playing) {
           fadeIn(url, FADE_MS);
         }
-      }, { once: true });
+      }
+      audio.addEventListener("canplaythrough", onReady, { once: true });
       // Guard against race: if it loaded between check and listener
       if (audio.readyState >= 2 && currentTrack === url && playing) {
-        fadeIn(url, FADE_MS);
+        onReady();
       }
     }
   }
@@ -254,8 +257,14 @@ const MusicPlayer = (function () {
     if (currentTrack) {
       fadeIn(currentTrack, FADE_MS);
     }
-    // Resume choir if it was active
-    if (choirActive && choirAudio) {
+    // Resume choir if it was active. It may not exist yet if startChoir()
+    // bailed while music was off — create it here so boss proximity resumes.
+    if (choirActive) {
+      if (!choirAudio) {
+        choirAudio = new Audio(choirUrl);
+        choirAudio.loop = true;
+        choirAudio.volume = 0;
+      }
       var vol = choirVolumeForDistance(choirDistance);
       var p = choirAudio.play();
       if (p) p.catch(function () {});
