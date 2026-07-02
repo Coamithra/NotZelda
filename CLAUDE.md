@@ -80,7 +80,7 @@ Detailed implementation notes for each game system:
 - [Items & Player](docs/SYSTEMS_ITEMS.md) — lantern, tide medallion, spirit jar, treasure chest, seal fragment, revival, item pickup, reveal tilemap, portal tiles
 - [Audio & SFX](docs/SYSTEMS_AUDIO.md) — AudioGen SFX pipeline, manifest format, generation tool, prompt tips
 
-A full-codebase correctness/quality review (July 2026) lives in [docs/CODE_REVIEW_2026-07.md](docs/CODE_REVIEW_2026-07.md) — findings by severity with verified line references.
+A full-codebase correctness/quality review (July 2026) lives in [docs/CODE_REVIEW_2026-07.md](docs/CODE_REVIEW_2026-07.md) — findings by severity with verified line references. All High/Medium findings and nearly all Lows were implemented in July 2026 (line numbers in the doc predate those fixes); intentionally skipped: the `_build_spectate_room_msg`/`send_room_enter` dedup refactor, the admin-endpoint plaintext-listener exposure (deployment topology), and the `WalkState.room_id`/`monster_idx` write-only fields.
 
 ## Key Gotchas
 
@@ -112,7 +112,7 @@ A full-codebase correctness/quality review (July 2026) lives in [docs/CODE_REVIE
 
 - **Panel layout**: right sidebar (380px), coexists with `/draw` palette, collapsible groups with filter bar
 - **Client constants**: `const` changed to `let` in game_state.js, fx.js, renderer.js, music.js; registered via `registerTweak()` getter/setter pattern in `client/tweak.js`
-- **Server constants**: whitelist in `TWEAKABLE_SERVER_CONSTANTS` dict in `server/commands.py` (50 constants across 9 groups: Combat, HP & Items, Monsters, Movement, Dungeon, Lifecycle, Gauntlet, NPC & Guards, Variants); updates via `setattr()` on constants module; sent to client on `/tweak` toggle
+- **Server constants**: whitelist in `TWEAKABLE_SERVER_CONSTANTS` dict in `server/commands.py` (49 constants across 9 groups: Combat, HP & Items, Monsters, Movement, Dungeon, Lifecycle, Gauntlet, NPC & Guards, Variants); updates via `setattr()` on constants module; sent to client on `/tweak` toggle
 - **Monster scripts**: per-kind stats + behavior rule params; server sends built-in monster registry (excludes AI-generated); patches existing instances on change
 - **Controls**: direct input field + slider (when min/max defined) + -/+ buttons + reset per param
 - **Export**: copies all non-default values to clipboard as readable text
