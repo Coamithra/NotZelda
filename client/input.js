@@ -172,7 +172,9 @@ document.addEventListener("visibilitychange", () => {
     G.player.keysDown = {};
     G.player.dirStack = [];
     dbg(`Tab visible, ws.readyState=${G.conn.ws ? G.conn.ws.readyState : 'null'}`);
-    if (!G.conn.ws || G.conn.ws.readyState !== WebSocket.OPEN) {
+    // Treat CONNECTING as alive — only reconnect when the socket is gone or closing/closed.
+    const rs = G.conn.ws ? G.conn.ws.readyState : null;
+    if (rs === null || rs === WebSocket.CLOSING || rs === WebSocket.CLOSED) {
       dbg(`Connection dead on resume, reconnecting`);
       G.ui.infoMessages.push({ text: "Reconnecting...", expires: Date.now() + 3000 });
       connect(G.conn.lastLoginName, G.conn.lastLoginDesc);
@@ -256,7 +258,11 @@ if (G.ui.isMobile) {
 
 // Debug overlay toggle (only works when server has DEBUG_MODE on)
 document.getElementById("debug-btn").addEventListener("click", () => {
-  if (G.debug.debugMode) G.debug.showDebug = !G.debug.showDebug;
+  // Toggle the same pair as the backtick key so they can't get inverted.
+  if (G.debug.debugMode) {
+    G.debug.showDebug = !G.debug.showDebug;
+    G.debug.debugCollision = !G.debug.debugCollision;
+  }
 });
 
 // ---------------------------------------------------------------------------

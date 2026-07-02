@@ -22,6 +22,11 @@ function dbg(msg) {
   if (G.debug.debugLog.length > G.debug.MAX_DEBUG_LINES) G.debug.debugLog.shift();
 }
 
+// Live values for tweakable server constants, keyed by constant name. Shared between
+// the get/set closures and the /tweak re-open path so re-registration can refresh the
+// value the getter reads (otherwise the panel shows a stale first-registration value).
+const _srvTweakVals = {};
+
 function connect(name, description) {
   G.conn.lastLoginName = name;
   G.conn.lastLoginDesc = description;
@@ -32,12 +37,24 @@ function connect(name, description) {
   // Use port 8443 for TLS WebSocket (bypasses nginx — fixes iOS Safari 30s disconnect)
   const wsHost = proto === "wss:" ? location.hostname + ":8443" : location.host;
   dbg(`Connecting...`);
+  // Cleanly dispose any existing socket before opening a new one. Otherwise a stray
+  // socket (e.g. one still CONNECTING from a prior resume) can open, send its own
+  // login, and claim the name — rejecting this one and triggering a reconnect loop.
+  if (G.conn.ws) {
+    const old = G.conn.ws;
+    old.onopen = old.onmessage = old.onclose = old.onerror = null;
+    if (old.readyState !== WebSocket.CLOSED) {
+      try { old.close(); } catch (e) { /* already closing */ }
+    }
+    G.conn.ws = null;
+  }
   G.conn.ws = new WebSocket(`${proto}//${wsHost}/ws`);
 
   G.conn.ws.onopen = () => {
     dbg(`Connected, logging in`);
     G.conn.reconnectCount = 0;
     G.conn.ws.send(JSON.stringify({ type: "login", name, description }));
+    if (G.conn.pingInterval) { clearInterval(G.conn.pingInterval); G.conn.pingInterval = null; }
     G.conn.pingInterval = setInterval(() => {
       if (G.conn.ws && G.conn.ws.readyState === WebSocket.OPEN) {
         G.conn.ws.send(JSON.stringify({ type: "ping", ct: performance.now() }));
@@ -739,11 +756,12 @@ function handleMessage(msg) {
           duration: durationMs,
           seq: walkMon.stateSeq,
         };
-        // Correction offset: smooth visual transition from old position
-        const ffProgress = Math.min((G.conn.rtt || 0) / 2 / durationMs, 1.0);
-        const newDX = msg.from_x + (msg.to_x - msg.from_x) * ffProgress;
-        const newDY = msg.from_y + (msg.to_y - msg.from_y) * ffProgress;
-        walkMon.correctionOffset = { x: oldDX - newDX, y: oldDY - newDY };
+        // Correction offset: smooth visual transition from the old display position
+        // to the interpolator's render start (from_x/from_y). Dead reckoning is applied
+        // by the shortened effectiveDuration, not by fast-forwarding the start position;
+        // referencing from_x here keeps the correction consistent with where rendering
+        // actually begins, so there's no backward jerk on walk start.
+        walkMon.correctionOffset = { x: oldDX - msg.from_x, y: oldDY - msg.from_y };
         // Set logical position to target
         walkMon.x = msg.to_x;
         walkMon.y = msg.to_y;
@@ -1459,17 +1477,18 @@ function handleMessage(msg) {
       if (msg.constants && typeof registerTweak === "function") {
         for (const [name, meta] of Object.entries(msg.constants)) {
           const sName = "srv." + name;
-          // Skip if already registered with same value
+          // Always refresh the live value to the server's current value so the panel
+          // shows the true value (and Reset targets it) even on /tweak re-open.
+          _srvTweakVals[name] = meta.value;
           if (TWEAK_REGISTRY[sName]) {
             TWEAK_REGISTRY[sName].default = meta.value;
             continue;
           }
           (function (n, m) {
-            let _val = m.value;
             registerTweak("srv." + n, {
-              get: () => _val,
+              get: () => _srvTweakVals[n],
               set: (v) => {
-                _val = v;
+                _srvTweakVals[n] = v;
                 if (typeof sendToServer === "function") {
                   sendToServer({ type: "tweak", name: n, value: v });
                 }

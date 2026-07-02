@@ -1095,12 +1095,14 @@ function gameLoop(timestamp) {
 
         switch (a.type) {
           case "walk": {
-            // Clamp: interpProgress must not lead trueProgress
-            const trueProgress = Math.min(elapsed / a.duration, 1.0);
-            const clampedProgress = Math.min(progress, trueProgress);
-            m.displayX = a.fromX + (a.toX - a.fromX) * clampedProgress;
-            m.displayY = a.fromY + (a.toY - a.fromY) * clampedProgress;
-            m.walkHop = clampedProgress >= 0.5 ? 1 : 0;
+            // Use effectiveDuration-based progress directly so dead reckoning
+            // (RTT/2 fast-forward baked into effectiveDuration) actually takes effect.
+            // The prior Math.min(progress, trueProgress) clamp pinned progress to the
+            // full-duration curve, silently neutralizing dead reckoning and — combined
+            // with the fast-forwarded correction offset — producing a backward jerk.
+            m.displayX = a.fromX + (a.toX - a.fromX) * progress;
+            m.displayY = a.fromY + (a.toY - a.fromY) * progress;
+            m.walkHop = progress >= 0.5 ? 1 : 0;
             break;
           }
           case "knockback": {
