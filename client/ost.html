@@ -632,24 +632,26 @@ async function refreshStoredState() {
   if (!("caches" in window)) { storeBtn.hidden = true; return; }
   storeBtn.hidden = false;
   const cache = await caches.open(AUDIO_CACHE);
-  const keys = await cache.keys();
-  if (keys.length >= TRACK_URLS.length) {
-    let bytes = 0;
-    for (const req of keys) {
-      const r = await cache.match(req);
-      if (r) bytes += (await r.blob()).size;
-    }
+  // "Stored" means every current track URL is actually present — not just that
+  // the entry count matches. After a track rename a stale entry could keep the
+  // count up while the new URL is uncached, so verify each URL individually.
+  let present = 0, bytes = 0;
+  for (const url of TRACK_URLS) {
+    const r = await cache.match(url);
+    if (r) { present++; bytes += (await r.blob()).size; }
+  }
+  if (present === TRACK_URLS.length) {
     storeBtn.classList.add("stored");
     storeBtn.textContent = "✓ Stored offline";
     storeBtn.disabled = true;
     storeStatus.innerHTML = TRACK_URLS.length + " tracks · " + fmtMB(bytes) +
       " saved · <a id=\"store-remove\">Remove</a>";
     document.getElementById("store-remove").addEventListener("click", removeLocal);
-  } else if (keys.length > 0) {
+  } else if (present > 0) {
     storeBtn.classList.remove("stored");
     storeBtn.disabled = false;
     storeBtn.textContent = "⬇ Resume download";
-    storeStatus.textContent = keys.length + " of " + TRACK_URLS.length + " tracks saved.";
+    storeStatus.textContent = present + " of " + TRACK_URLS.length + " tracks saved.";
   } else {
     storeBtn.classList.remove("stored");
     storeBtn.disabled = false;

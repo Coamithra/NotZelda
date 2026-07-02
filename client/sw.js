@@ -130,11 +130,26 @@ async function cacheFirst(req) {
 async function buildRangeResponse(req, cached) {
   const buf = await cached.arrayBuffer();
   const size = buf.byteLength;
-  const match = /bytes=(\d*)-(\d*)/.exec(req.headers.get("range") || "");
-  let start = match && match[1] ? parseInt(match[1], 10) : 0;
-  let end = match && match[2] ? parseInt(match[2], 10) : size - 1;
-  if (isNaN(start)) start = 0;
-  if (isNaN(end) || end >= size) end = size - 1;
+  // Parse a single "bytes=" range per RFC 7233. Anything we don't understand
+  // (multi-range, non-bytes unit, garbage like "bytes=abc-") falls back to the
+  // full cached 200 body — a correct full response beats a corrupt 206.
+  const match = /^bytes=(\d*)-(\d*)$/.exec((req.headers.get("range") || "").trim());
+  if (!match || (match[1] === "" && match[2] === "")) {
+    return cached;
+  }
+  let start, end;
+  if (match[1] === "") {
+    // Suffix range: "bytes=-N" means the LAST N bytes.
+    const suffix = parseInt(match[2], 10);
+    if (isNaN(suffix) || suffix === 0) return cached;
+    start = Math.max(0, size - suffix);
+    end = size - 1;
+  } else {
+    start = parseInt(match[1], 10);
+    end = match[2] === "" ? size - 1 : parseInt(match[2], 10);
+    if (isNaN(start) || isNaN(end)) return cached;
+    if (end >= size) end = size - 1;
+  }
   if (start > end || start >= size) {
     return new Response(null, {
       status: 416,
