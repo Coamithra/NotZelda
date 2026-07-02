@@ -126,13 +126,17 @@ def create_variant(base_monster: dict, tier: int | None = None) -> dict:
     new_kind = f"{prefix}_{base_kind}"
 
     # --- Scale stats (clamped to validation limits) ---
+    # Copy the full base stats dict so non-scaled keys (boss, width, height,
+    # pack_min, pack_max, and any future keys accepted by register_monster_type)
+    # survive; override only the keys we actually scale.
     base_stats = base_monster.get("stats", {})
-    new_stats = {
+    new_stats = copy.deepcopy(base_stats)
+    new_stats.update({
         "hp": min(100, max(1, math.ceil(base_stats.get("hp", 2) * t["hp_mult"]))),
         "damage": min(20, max(1, base_stats.get("damage", 1) + t["dmg_add"])),
         "walk_time": max(VARIANT_MIN_WALK_TIME, round(base_stats.get("walk_time", 0.25) / t["speed_mult"], 2)),
         "decision_time": max(VARIANT_MIN_DECISION_TIME, round(base_stats.get("decision_time", 2.0) / t["speed_mult"], 2)),
-    }
+    })
 
     # --- Random hue shift (avoid shifts too small to notice) ---
     hue_offset = random.uniform(0.15, 0.85)
