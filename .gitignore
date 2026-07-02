@@ -4,6 +4,7 @@ venv/
 .claude/
 local_ignore/
 event_log.txt
+dungeon.txt
 .env
 server.env
 data/*
