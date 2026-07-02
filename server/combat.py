@@ -581,7 +581,8 @@ def _tick_players(now, msgs):
                 _respawn_player(player, msgs)
         elif now - player.death_time >= PLAYER_RESPAWN_DELAY:
             # Phase 1: death animation done — spirit jar / tombstone / auto-respawn
-            # Gauntlet: death = wave failed, advance to next room
+            # Gauntlet: death = spirit-jar revive in the SAME wave (infinite jars),
+            # tallying the death so the wave logs as TOO HARD once cleared.
             if player.death_room and player.death_room.startswith("gauntlet_"):
                 from server.gauntlet import on_gauntlet_death
                 on_gauntlet_death(player, now, msgs)

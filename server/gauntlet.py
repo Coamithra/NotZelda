@@ -19,6 +19,7 @@ import time
 from datetime import datetime
 
 from server.state import game
+from server import log
 from server.constants import (
     EDGE_SPAWN_POINTS, DEFAULT_SPAWN, STARTING_ROOM,
     ROOM_COLS, ROOM_ROWS,
@@ -237,7 +238,16 @@ def on_gauntlet_enter(player):
 
 
 def on_gauntlet_death(player, now, msgs):
-    """Player died in gauntlet — log as TOO HARD, advance to next wave."""
+    """Player died in gauntlet — count the death and auto-revive in the SAME wave.
+
+    Per the module docstring the gauntlet grants "infinite spirit jars": a death
+    consumes one jar exactly like normal play, but the budget is immediately
+    topped back up to GAUNTLET_SPIRIT_JARS so the player never runs out. The
+    death is tallied on the session (never reset here) and the player revives
+    in-place — monsters keep the damage already dealt, so the wave can still be
+    cleared. That surviving death count is what makes the room-clear handler log
+    the wave as TOO HARD (see on_gauntlet_room_cleared).
+    """
     from server.lifecycle import on_player_enter_room, send_room_enter
     from server.models import Avatar
 
@@ -246,57 +256,37 @@ def on_gauntlet_death(player, now, msgs):
         return
 
     session.deaths += 1
-    elapsed = time.monotonic() - session.entry_time
-    hp_lost = session.entry_hp  # lost all HP (dead)
+    room_id = player.death_room
 
-    _log_result(session, hp_lost, elapsed, "TOO HARD")
+    # Consume one spirit jar (as in normal play), then top the budget back up —
+    # the gauntlet grants an infinite supply so the player keeps reviving.
+    player.spirit_jar_count = max(0, player.spirit_jar_count - 1)
+    player.spirit_jar_count = GAUNTLET_SPIRIT_JARS
 
-    # Auto-adjust one random param
-    adjustment = _auto_adjust(session, "TOO HARD", msgs)
-
-    config = session.config
-    adj_str = f" | Next: {adjustment}" if adjustment else ""
-    result_text = (
-        f"Wave {session.wave + 1}: DIED | "
-        f"{config.get('kind', '?')} x{config.get('count', '?')} | "
-        f"Deaths: {session.deaths} | "
-        f"Time: {elapsed:.1f}s | "
-        f"[TOO HARD]{adj_str}"
-    )
-
-    # Clean up old room (monsters still ticking if not cleaned)
-    old_room = player.death_room
-    from server.lifecycle import on_player_leave_room
-    on_player_leave_room(old_room, msgs)
-
-    # Advance wave
-    session.wave += 1
-    next_room = _create_gauntlet_room(session)
-
-    # Revive player into the next room
+    # Revive in-place into the same wave at the west spawn (buffered from
+    # monsters). Do NOT leave the room — that would tear down the partially
+    # cleared monster list and let the wave respawn from scratch.
     player.dead = False
     player.death_time = 0.0
     player.death_room = None
     player.death_x = 0.0
     player.death_y = 0.0
     player.chose_respawn = False
-    player.room = next_room
+    player.room = room_id
     player.hp = min(GAUNTLET_STARTING_HP, player.max_hp)
     player.flags.discard("invulnerable")
-    player.spirit_jar_count = GAUNTLET_SPIRIT_JARS
     player.avatar = Avatar(1.0, 5.0, "right")
     player.command_queue.clear()
     player.active_attack = None
     player.last_damage_time = now  # brief invincibility
 
-    on_player_enter_room(next_room)
-
-    session.entry_hp = player.hp
-    session.entry_time = time.monotonic()
-    session.deaths = 0
-
+    on_player_enter_room(room_id)
     send_room_enter(player, msgs)
-    msgs.append(("send", player, {"type": "info", "text": result_text}))
+    msgs.append(("send", player, {
+        "type": "info",
+        "text": f"Spirit jar revive! Deaths this wave: {session.deaths}",
+    }))
+    log.event("GAUNTLET", f"{player.name} died in {room_id} (deaths: {session.deaths})")
 
 
 def on_gauntlet_room_cleared(player, room_id, msgs):
