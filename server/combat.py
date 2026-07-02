@@ -130,7 +130,14 @@ def _apply_damage(player, damage: int, room_id: str, msgs: list,
 async def flush_messages(msgs: list):
     """Send all batched messages and schedule background tasks."""
     from server.quests import handle_quest_npc
-    for entry in msgs:
+    # Index-based iteration: some branches (e.g. "death" ->
+    # broadcast_overworld_player_positions) append new messages while we're
+    # flushing. A plain "for entry in msgs" over a growing list is fragile;
+    # walking by index guarantees appended death notifications are still sent.
+    i = 0
+    while i < len(msgs):
+        entry = msgs[i]
+        i += 1
         kind = entry[0]
         if kind == "broadcast":
             _, room_id, msg, exclude = entry
@@ -594,9 +601,14 @@ def _tick_revivals(now, msgs):
         # Skip revival checks during room pickup freeze
         freeze_info = game.room_pickup_freeze.get(ts.room_id)
         if freeze_info and now < freeze_info["end"]:
+            # Room frozen for item pickup: PAUSE the revival channel — do not
+            # let frozen time count against it. Advance revival_start_time by
+            # one tick's worth so elapsed (now - revival_start_time) holds
+            # roughly constant across the freeze, preserving pre-freeze
+            # progress. (Completion is skipped below via `continue`, so the
+            # channel can never finish while frozen.)
             if ts.reviver and ts.revival_start_time > 0:
-                # Shift revival start forward so freeze doesn't count as channel time
-                ts.revival_start_time = now
+                ts.revival_start_time += TICK_INTERVAL
             continue
         if ts.reviver:
             r = ts.reviver
@@ -965,9 +977,18 @@ async def game_tick():
                 _tick_projectiles(msgs)
         except Exception:
             traceback.print_exc()
-        await flush_messages(msgs)
-        # Send debug state snapshots to /viewserver subscribers
-        await _send_debug_state_snapshots()
+        # Flush + debug snapshots each get their own guard: an unhandled
+        # exception here (e.g. a non-serializable batched message) must never
+        # escape and kill the unsupervised tick loop (see code review H1).
+        try:
+            await flush_messages(msgs)
+        except Exception:
+            log.server(f"[game_tick] flush_messages failed:\n{traceback.format_exc()}")
+        try:
+            # Send debug state snapshots to /viewserver subscribers
+            await _send_debug_state_snapshots()
+        except Exception:
+            log.server(f"[game_tick] _send_debug_state_snapshots failed:\n{traceback.format_exc()}")
 
 
 def _despawn_guards(guards, room_id, msgs):

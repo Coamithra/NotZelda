@@ -13,6 +13,7 @@ import os
 import re
 import time
 import sys
+import traceback
 from http import HTTPStatus
 from pathlib import Path
 
@@ -180,12 +181,16 @@ async def handle_connection(websocket):
     connect_time = time.time()
     remote = websocket.remote_address
     addr = f"{remote[0]}:{remote[1]}" if remote else "unknown"
-    # Extract real IP and User-Agent from nginx proxy headers
+    # Clients connect directly to Python (the WebSocket bypasses nginx), so the
+    # socket peer address is the authoritative source IP. X-Forwarded-For is
+    # attacker-controlled here — log it only, clearly labeled as unverified.
     headers = websocket.request.headers if websocket.request is not None else {}
-    real_ip = headers.get("X-Forwarded-For", addr)
+    real_ip = addr
+    xff = headers.get("X-Forwarded-For", "")
     user_agent = headers.get("User-Agent", "unknown")
     ua_short = user_agent[:80]
-    log.debug(f"[CONN] New connection from {real_ip} (UA: {ua_short})")
+    xff_note = f" XFF(unverified): {xff}" if xff else ""
+    log.debug(f"[CONN] New connection from {real_ip}{xff_note} (UA: {ua_short})")
     try:
         raw = await websocket.recv()
         data = json.loads(raw)
@@ -501,6 +506,41 @@ def _http_response(status, body: bytes | str = b"", content_type="text/plain; ch
     return Response(status.value, status.phrase, headers, body)
 
 
+def _parse_range(range_header: str, total: int):
+    """Parse a single-range 'Range: bytes=' header per RFC 7233.
+
+    Returns a (start, end) inclusive tuple, ``None`` if the range is
+    syntactically valid but unsatisfiable (caller should 416), or the string
+    ``"invalid"`` if the header is malformed / unsupported (caller should
+    ignore it and serve the full 200 body).
+    """
+    spec = range_header[6:].strip()  # strip "bytes="
+    # Multi-range and syntactically broken specs: ignore, serve full body.
+    if "," in spec or "-" not in spec:
+        return "invalid"
+    start_str, _, end_str = spec.partition("-")
+    start_str, end_str = start_str.strip(), end_str.strip()
+    try:
+        if not start_str:
+            # Suffix range: "bytes=-N" -> last N bytes.
+            if not end_str:
+                return "invalid"
+            suffix = int(end_str)
+            if suffix <= 0:
+                return None  # unsatisfiable
+            start = max(0, total - suffix)
+            end = total - 1
+        else:
+            start = int(start_str)
+            end = int(end_str) if end_str else total - 1
+            end = min(end, total - 1)
+    except ValueError:
+        return "invalid"
+    if total == 0 or start < 0 or start > end or start >= total:
+        return None  # unsatisfiable
+    return (start, end)
+
+
 def _check_admin_auth(request_headers):
     """Validate Basic Auth against ADMIN_PASSWORD. Returns None on success, or an HTTP error Response."""
     admin_pw = os.environ.get("ADMIN_PASSWORD", "")
@@ -559,28 +599,43 @@ def process_request(connection, request):
         return _http_response(HTTPStatus.OK, body, "application/json")
     if path in STATIC_FILES:
         filename, content_type = STATIC_FILES[path]
-        body = (ROOT_DIR / filename).read_bytes()
+        file_path = ROOT_DIR / filename
+        is_audio = content_type.startswith("audio/")
+        range_header = request_headers.get("Range", "")
+
+        # Range requests (audio seeking): read only the requested slice off disk
+        # instead of loading the whole (multi-MB) file into memory.
+        if is_audio and range_header.startswith("bytes="):
+            try:
+                total = file_path.stat().st_size
+            except OSError:
+                return _http_response(HTTPStatus.NOT_FOUND, "Not Found")
+            parsed = _parse_range(range_header, total)
+            if parsed is None:
+                return _http_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE, b"",
+                                      extra_headers=[("Content-Range", f"bytes */{total}")])
+            if parsed != "invalid":
+                start, end = parsed
+                try:
+                    with open(file_path, "rb") as f:
+                        f.seek(start)
+                        chunk = f.read(end - start + 1)
+                except OSError:
+                    return _http_response(HTTPStatus.NOT_FOUND, "Not Found")
+                return _http_response(HTTPStatus.PARTIAL_CONTENT, chunk, content_type, extra_headers=[
+                    ("Accept-Ranges", "bytes"),
+                    ("Content-Range", f"bytes {start}-{end}/{total}"),
+                ])
+            # Malformed Range header — fall through and serve the full body.
+
+        try:
+            body = file_path.read_bytes()
+        except OSError:
+            return _http_response(HTTPStatus.NOT_FOUND, "Not Found")
         # Inject debug flag into HTML so client can auto-login
         if DEBUG_MODE and filename.endswith(".html"):
             body = body.replace(b"</head>", b"<script>window.SERVER_DEBUG=true</script></head>")
-        # Support Range requests for audio seeking
-        range_header = request_headers.get("Range", "")
-        if range_header.startswith("bytes=") and content_type.startswith("audio/"):
-            total = len(body)
-            range_spec = range_header[6:]  # strip "bytes="
-            start_str, _, end_str = range_spec.partition("-")
-            start = int(start_str) if start_str else 0
-            end = int(end_str) if end_str else total - 1
-            end = min(end, total - 1)
-            if start > end or start >= total:
-                return _http_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE, b"",
-                                      extra_headers=[("Content-Range", f"bytes */{total}")])
-            chunk = body[start:end + 1]
-            return _http_response(HTTPStatus.PARTIAL_CONTENT, chunk, content_type, extra_headers=[
-                ("Accept-Ranges", "bytes"),
-                ("Content-Range", f"bytes {start}-{end}/{total}"),
-            ])
-        extra = [("Accept-Ranges", "bytes")] if content_type.startswith("audio/") else None
+        extra = [("Accept-Ranges", "bytes")] if is_audio else None
         return _http_response(HTTPStatus.OK, body, content_type, extra_headers=extra)
     return _http_response(HTTPStatus.NOT_FOUND, "Not Found")
 
@@ -696,7 +751,23 @@ async def main():
     else:
         log.debug(f"No TLS cert found at {cert_path} — TLS WebSocket disabled")
 
-    asyncio.create_task(game_tick())
+    _tick_task = asyncio.create_task(game_tick())
+
+    def _on_game_tick_done(task):
+        # The tick loop is `while True` and should never finish. If it ever
+        # does, log loudly — the game has silently stopped ticking for everyone.
+        try:
+            exc = task.exception()
+        except asyncio.CancelledError:
+            log.server("[game_tick] task was CANCELLED — game loop has stopped!")
+            return
+        if exc is not None:
+            tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+            log.server(f"[game_tick] task EXITED with exception — game loop has stopped!\n{tb}")
+        else:
+            log.server("[game_tick] task EXITED unexpectedly — game loop has stopped!")
+
+    _tick_task.add_done_callback(_on_game_tick_done)
     load_deprecation_timestamp()
     load_deprecated_sets()
     log.debug("MUD server running!")
