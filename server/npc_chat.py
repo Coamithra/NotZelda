@@ -102,9 +102,14 @@ def warmup_npc_model():
         return
 
     async def _ping():
+        from server import npc_kv_cache
         try:
-            convo = _get_llamacpp_model().new_conversation(log_dir=False)
-            await convo.asend("hi", max_tokens=1)
+            # This ping runs through slot 0 too — hold the lock and mark the
+            # slot cold so a KV-enabled chat doesn't trust a stale "warm" claim.
+            async with npc_kv_cache.slot_lock:
+                npc_kv_cache.invalidate()
+                convo = _get_llamacpp_model().new_conversation(log_dir=False)
+                await convo.asend("hi", max_tokens=1)
             log.debug("[NPC_CHAT] llama-server model warmed up")
         except Exception as e:
             log.debug(f"[NPC_CHAT] llama-server warmup failed: {e}")
@@ -521,7 +526,13 @@ async def _call_llamacpp(static_prompt: str, dynamic_prompt: str,
             text = await _do_chat()
         return text, kv_status
 
-    return await _do_chat(), "off"
+    # Non-KV-enabled chats still run through slot 0 — take the same lock and
+    # invalidate _active_slot so this completion can't clobber a warm KV cache
+    # while it still reports "warm". The next enabled chat re-restores.
+    async with npc_kv_cache.slot_lock:
+        npc_kv_cache.invalidate()
+        text = await _do_chat()
+    return text, "off"
 
 
 # ---------------------------------------------------------------------------
@@ -773,10 +784,14 @@ async def _grant_npc_gift(player, guard: dict):
             "type": "item_effect", "item_type": effect, "name": player.name,
         }, exclude=player.ws)
     else:
-        # Generic item obtained message
+        # Generic item obtained message. Client (client/net.js) keys the pickup
+        # animation off item_type/item_name — mirror the GIFT_EFFECTS shape so
+        # generic gifts get client feedback too; keep item/name for compatibility.
         item_key = display_name.lower().replace(" ", "_")
         await send_to(player, {
             "type": "item_obtained",
+            "item_type": item_key,
+            "item_name": display_name,
             "item": item_key,
             "name": display_name,
         })
@@ -877,4 +892,9 @@ def clear_player_history(player_name: str):
         del _angry_streak[k]
     _active_npc_calls.difference_update(
         {k for k in _active_npc_calls if k[0] == player_name})
+    # Purge proximity-dialog entries (keyed by (player, npc), otherwise only
+    # popped on an actual chat) so approach-and-leave players don't leak.
+    proximity_keys = [k for k in _last_proximity_dialog if k[0] == player_name]
+    for k in proximity_keys:
+        del _last_proximity_dialog[k]
     _last_chat_time.pop(player_name, None)

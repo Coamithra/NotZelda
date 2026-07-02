@@ -52,6 +52,19 @@ def is_enabled(room_id: str, npc_name: str) -> bool:
     return (room_id, npc_name) in ENABLED_KEYS
 
 
+def invalidate() -> None:
+    """Mark slot 0 as no longer holding any NPC's saved KV.
+
+    Call (while holding slot_lock) from any path that sends a completion
+    through slot 0 without going via prepare()/restore() — e.g. non-KV-enabled
+    chats and the per-join warmup ping. Those completions overwrite slot 0's KV,
+    so the next KV-enabled chat must re-restore rather than trust a stale
+    _active_slot that still reports "warm".
+    """
+    global _active_slot
+    _active_slot = None
+
+
 def _slot_filename(room_id: str, npc_name: str) -> str:
     safe = re.sub(r"[^A-Za-z0-9]+", "_", f"{room_id}_{npc_name}")
     return f"npc_{safe}.bin"

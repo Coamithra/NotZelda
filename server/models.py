@@ -5,7 +5,7 @@ from collections import deque
 from dataclasses import dataclass
 
 from server.state import game
-from server.constants import PLAYER_MAX_HP, STARTING_ROOM
+from server.constants import PLAYER_MAX_HP, STARTING_ROOM, DEFAULT_SPAWN
 
 
 @dataclass
@@ -74,7 +74,7 @@ class Player:
         self.chose_respawn = False    # True if dead player clicked Respawn button
         self.spectating = None        # name of player being spectated (death camera), or None
         self.spectate_room = None     # room_id of the room being spectated, or None
-        self.avatar = Avatar(8.0, 5.0, "down")
+        self.avatar = Avatar(*DEFAULT_SPAWN)  # placeholder — overwritten at login
 
     def quest(self, qid: str) -> int:
         return self.quests.get(qid, 0)
@@ -143,18 +143,9 @@ class Monster:
         self.position_history = deque(maxlen=10)  # [(time, x, y)] — last ~200ms for lag compensation
 
     @property
-    def tick_interval(self):
-        """Seconds between behavior evaluations (= decision_time)."""
-        return self.decision_time
-
-    @property
     def intangible(self):
         """True when monster can't be hit or deal contact damage (e.g. mid-teleport)."""
         return self.state == "teleporting"
-
-    def occupies(self, tx, ty):
-        """True if tile (tx, ty) is within this monster's footprint."""
-        return self.x <= tx < self.x + self.width and self.y <= ty < self.y + self.height
 
 
 class Projectile:
