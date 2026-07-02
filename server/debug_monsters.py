@@ -616,6 +616,7 @@ async def handle_debug_spawn(player, args: str):
         "kind": kind,
         "x": spawn_x,
         "y": spawn_y,
+        "is_boss": monster.is_boss,
     }
     if kind in game.custom_sprites:
         spawn_msg["custom_sprites"] = {kind: game.custom_sprites[kind]}

@@ -350,7 +350,7 @@ function handleMessage(msg) {
       G.room.monsters = (msg.monsters || []).map((m, idx) => {
         const mon = {
           id: m.id, kind: m.kind, x: m.x, y: m.y, displayX: m.x, displayY: m.y,
-          width: m.width || 1, height: m.height || 1,
+          width: m.width || 1, height: m.height || 1, is_boss: m.is_boss,
           action: null, stateSeq: m.seq || 0,
           correctionOffset: { x: 0, y: 0 },
           spawnTime: Date.now() + idx * 40,  // Juice: staggered spawn pop
@@ -804,8 +804,10 @@ function handleMessage(msg) {
       if (idx !== -1) {
         const mon = _mkList[idx];
         mon.action = null;
-        const isBoss = (mon.width || 1) > 1 || (mon.height || 1) > 1;
-        G.room.dyingMonsters.push({ kind: mon.kind, x: msg.x, y: msg.y, frame: 0, nextTime: Date.now() + (isBoss ? 400 : DYING_MONSTER_FRAME_MS), width: mon.width || 1, height: mon.height || 1 });
+        // Prefer the server-authoritative is_boss flag; fall back to sprite
+        // footprint only if absent (e.g. during a rolling deploy of an old server).
+        const isBoss = mon.is_boss != null ? mon.is_boss : ((mon.width || 1) > 1 || (mon.height || 1) > 1);
+        G.room.dyingMonsters.push({ kind: mon.kind, x: msg.x, y: msg.y, frame: 0, nextTime: Date.now() + (isBoss ? 400 : DYING_MONSTER_FRAME_MS), width: mon.width || 1, height: mon.height || 1, is_boss: isBoss });
         _mkList.splice(idx, 1);
         // Juice: corpse persistence
         addCorpse(mon.kind, msg.x, msg.y, mon.width, mon.height);
@@ -898,7 +900,7 @@ function handleMessage(msg) {
     case "monster_hit": {
       const hitMon = _getMonsters().find(m => m.id === msg.id);
       if (hitMon) {
-        const isBossHit = (hitMon.width || 1) > 1 || (hitMon.height || 1) > 1;
+        const isBossHit = hitMon.is_boss != null ? hitMon.is_boss : ((hitMon.width || 1) > 1 || (hitMon.height || 1) > 1);
         SfxPlayer.play(isBossHit ? "sword_hit" : "sword_hit_flesh");
         hitMon.hitFlash = Date.now() + 200;
         hitMon.stateSeq = msg.seq || (hitMon.stateSeq + 1);
@@ -935,7 +937,7 @@ function handleMessage(msg) {
 
     case "monster_spawned":
       registerCustomContent(msg);
-      _getMonsters().push({ id: msg.id, kind: msg.kind, x: msg.x, y: msg.y, displayX: msg.x, displayY: msg.y, width: msg.width || 1, height: msg.height || 1, action: null, stateSeq: 0, correctionOffset: { x: 0, y: 0 }, spawnTime: Date.now() });
+      _getMonsters().push({ id: msg.id, kind: msg.kind, x: msg.x, y: msg.y, displayX: msg.x, displayY: msg.y, width: msg.width || 1, height: msg.height || 1, is_boss: msg.is_boss, action: null, stateSeq: 0, correctionOffset: { x: 0, y: 0 }, spawnTime: Date.now() });
       break;
 
     // --- Stage 5: Monster attack messages ---
@@ -1438,7 +1440,7 @@ function handleMessage(msg) {
           id: m.id ?? idx, kind: m.kind, x: m.x, y: m.y,
           displayX: m.x, displayY: m.y,
           walk_time: m.walk_time || 0.25, seq: m.seq || 0, stateSeq: m.seq || 0,
-          width: m.width || 1, height: m.height || 1,
+          width: m.width || 1, height: m.height || 1, is_boss: m.is_boss,
           alive: true, action: null,
           walking: m.walking ? {
             from: m.walk_from, to: m.walk_to,

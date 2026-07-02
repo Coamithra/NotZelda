@@ -313,7 +313,8 @@ def _build_spectate_room_msg(room_id, target_name):
     for i, m in enumerate(get_room_monsters(room_id)):
         if m.alive:
             mdata = {"id": i, "kind": m.kind, "x": m.x, "y": m.y,
-                     "walk_time": m.walk_time, "seq": m.move_seq}
+                     "walk_time": m.walk_time, "seq": m.move_seq,
+                     "is_boss": m.is_boss}
             if m.width > 1:
                 mdata["width"] = m.width
             if m.height > 1:
@@ -907,7 +908,7 @@ async def _send_debug_state_snapshots():
         for m in game.room_monsters.get(room_id, []):
             monsters.append({
                 "x": m.x, "y": m.y, "w": m.width, "h": m.height,
-                "alive": m.alive, "kind": m.kind,
+                "alive": m.alive, "kind": m.kind, "is_boss": m.is_boss,
             })
         # Projectiles
         projectiles = []

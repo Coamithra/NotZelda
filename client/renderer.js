@@ -331,7 +331,7 @@ function updateDances() {
 function updateDyingMonsters() {
   const now = Date.now();
   G.room.dyingMonsters = G.room.dyingMonsters.filter(dm => {
-    const isBoss = (dm.width || 1) > 1 || (dm.height || 1) > 1;
+    const isBoss = dm.is_boss != null ? dm.is_boss : ((dm.width || 1) > 1 || (dm.height || 1) > 1);
     advanceFrame(dm, isBoss ? 400 : DYING_MONSTER_FRAME_MS, now);
     // Death sprites have up to 4 frames; last frame lingers as a corpse (rendered by renderCorpses)
     const deathSprite = customDeathSprites[dm.kind];
