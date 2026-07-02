@@ -340,10 +340,12 @@ function updateDyingMonsters() {
   });
 }
 
-function updateProjectiles() {
+function updateProjectiles(dt) {
+  // Frame-rate independent smoothing: identical to the old 0.4 lerp at 60Hz.
+  const f = 1 - Math.pow(1 - 0.4, dt / 16.67);
   for (const p of G.fx.projectiles) {
-    p.displayX += (p.x - p.displayX) * 0.4;
-    p.displayY += (p.y - p.displayY) * 0.4;
+    p.displayX += (p.x - p.displayX) * f;
+    p.displayY += (p.y - p.displayY) * f;
     if (Math.abs(p.x - p.displayX) < 0.05) p.displayX = p.x;
     if (Math.abs(p.y - p.displayY) < 0.05) p.displayY = p.y;
   }

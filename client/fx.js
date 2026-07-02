@@ -44,11 +44,12 @@ function spawnBurst(cx, cy, count, speed, life, colors, sizeRange, opts) {
 }
 
 function updateParticles(dt) {
+  const scale = dt / 16.67; // frame-rate independence: 1.0 at 60Hz reference
   for (let i = G.fx.particles.length - 1; i >= 0; i--) {
     const p = G.fx.particles[i];
-    p.x += p.vx;
-    p.y += p.vy;
-    if (p.gravity) p.vy += p.gravity;
+    p.x += p.vx * scale;
+    p.y += p.vy * scale;
+    if (p.gravity) p.vy += p.gravity * scale;
     p.life -= dt;
     if (p.life <= 0) {
       G.fx.particles.splice(i, 1);
