@@ -80,6 +80,8 @@ Detailed implementation notes for each game system:
 - [Items & Player](docs/SYSTEMS_ITEMS.md) — lantern, tide medallion, spirit jar, treasure chest, seal fragment, revival, item pickup, reveal tilemap, portal tiles
 - [Audio & SFX](docs/SYSTEMS_AUDIO.md) — AudioGen SFX pipeline, manifest format, generation tool, prompt tips
 
+A full-codebase correctness/quality review (July 2026) lives in [docs/CODE_REVIEW_2026-07.md](docs/CODE_REVIEW_2026-07.md) — findings by severity with verified line references.
+
 ## Key Gotchas
 
 - **Client script load order**: `game_state.js` → `tweak.js` → `title.js` → `tiles.js` → `sprite_data.js` → `sprites.js` → `music.js` → `renderer.js` → `fx.js` → `net.js` → inline init/gameLoop → `input.js`
