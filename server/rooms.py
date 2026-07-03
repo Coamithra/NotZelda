@@ -184,62 +184,68 @@ def load_room_files(directory: str = "rooms"):
                 if not line:
                     continue
                 tokens = line.split()
-                if tokens[0] == "npc" and len(tokens) >= 5:
-                    npc_name = tokens[1].replace("_", " ")
-                    npc_x = int(tokens[2])
-                    npc_y = int(tokens[3])
-                    npc_sprite = tokens[4]
-                    npc_rest = " ".join(tokens[5:]) if len(tokens) > 5 else ""
-                    # Split on | to separate: dialog | personality | gift
-                    pipe_parts = npc_rest.split("|")
-                    npc_dialog = pipe_parts[0].strip() if len(pipe_parts) > 0 else ""
-                    npc_personality = pipe_parts[1].strip() if len(pipe_parts) > 1 else ""
-                    npc_gift = None
-                    if len(pipe_parts) > 2:
-                        gift_str = pipe_parts[2].strip()
-                        # Format: Display Name:condition text
-                        gift_parts = gift_str.split(":", 1)
-                        if len(gift_parts) == 2:
-                            display_name = gift_parts[0].strip()
-                            # Auto-generate flag: gift_{room}_{npc}_{item}
-                            norm = lambda s: s.lower().replace(" ", "_")
-                            flag = f"gift_{norm(room_id)}_{norm(npc_name)}_{norm(display_name)}"
-                            npc_gift = {
-                                "flag": flag,
-                                "display_name": display_name,
-                                "condition": gift_parts[1].strip(),
-                            }
-                    if room_id not in game.guards:
-                        game.guards[room_id] = []
-                    guard_data = {
-                        "name": npc_name, "x": npc_x, "y": npc_y,
-                        "sprite": npc_sprite, "dialog": npc_dialog,
-                        "personality": npc_personality,
-                    }
-                    if npc_gift:
-                        guard_data["gift"] = npc_gift
-                    game.guards[room_id].append(guard_data)
-                elif tokens[0] == "monster" and len(tokens) >= 4:
-                    kind = tokens[1]
-                    mx = int(tokens[2])
-                    my = int(tokens[3])
-                    # Optional "debug" flag — monster only spawns in DEBUG_MODE
-                    if len(tokens) >= 5 and tokens[4] == "debug":
-                        if not DEBUG_MODE:
-                            continue
-                    if room_id not in game.monster_templates:
-                        game.monster_templates[room_id] = []
-                    game.monster_templates[room_id].append({"kind": kind, "x": mx, "y": my})
-                elif tokens[0] == "item" and len(tokens) >= 4:
-                    item_type = tokens[1]
-                    ix = int(tokens[2])
-                    iy = int(tokens[3])
-                    flag = f"ow_item_{room_id}_{ix}_{iy}"
-                    if room_id not in game.overworld_items:
-                        game.overworld_items[room_id] = []
-                    game.overworld_items[room_id].append({
-                        "item_type": item_type, "x": ix, "y": iy, "flag": flag,
-                    })
+                # Guard int() parsing so one typo in a hand-edited .room entity
+                # line skips that line instead of aborting server startup.
+                try:
+                    if tokens[0] == "npc" and len(tokens) >= 5:
+                        npc_name = tokens[1].replace("_", " ")
+                        npc_x = int(tokens[2])
+                        npc_y = int(tokens[3])
+                        npc_sprite = tokens[4]
+                        npc_rest = " ".join(tokens[5:]) if len(tokens) > 5 else ""
+                        # Split on | to separate: dialog | personality | gift
+                        pipe_parts = npc_rest.split("|")
+                        npc_dialog = pipe_parts[0].strip() if len(pipe_parts) > 0 else ""
+                        npc_personality = pipe_parts[1].strip() if len(pipe_parts) > 1 else ""
+                        npc_gift = None
+                        if len(pipe_parts) > 2:
+                            gift_str = pipe_parts[2].strip()
+                            # Format: Display Name:condition text
+                            gift_parts = gift_str.split(":", 1)
+                            if len(gift_parts) == 2:
+                                display_name = gift_parts[0].strip()
+                                # Auto-generate flag: gift_{room}_{npc}_{item}
+                                norm = lambda s: s.lower().replace(" ", "_")
+                                flag = f"gift_{norm(room_id)}_{norm(npc_name)}_{norm(display_name)}"
+                                npc_gift = {
+                                    "flag": flag,
+                                    "display_name": display_name,
+                                    "condition": gift_parts[1].strip(),
+                                }
+                        if room_id not in game.guards:
+                            game.guards[room_id] = []
+                        guard_data = {
+                            "name": npc_name, "x": npc_x, "y": npc_y,
+                            "sprite": npc_sprite, "dialog": npc_dialog,
+                            "personality": npc_personality,
+                        }
+                        if npc_gift:
+                            guard_data["gift"] = npc_gift
+                        game.guards[room_id].append(guard_data)
+                    elif tokens[0] == "monster" and len(tokens) >= 4:
+                        kind = tokens[1]
+                        mx = int(tokens[2])
+                        my = int(tokens[3])
+                        # Optional "debug" flag — monster only spawns in DEBUG_MODE
+                        if len(tokens) >= 5 and tokens[4] == "debug":
+                            if not DEBUG_MODE:
+                                continue
+                        if room_id not in game.monster_templates:
+                            game.monster_templates[room_id] = []
+                        game.monster_templates[room_id].append({"kind": kind, "x": mx, "y": my})
+                    elif tokens[0] == "item" and len(tokens) >= 4:
+                        item_type = tokens[1]
+                        ix = int(tokens[2])
+                        iy = int(tokens[3])
+                        flag = f"ow_item_{room_id}_{ix}_{iy}"
+                        if room_id not in game.overworld_items:
+                            game.overworld_items[room_id] = []
+                        game.overworld_items[room_id].append({
+                            "item_type": item_type, "x": ix, "y": iy, "flag": flag,
+                        })
+                except (ValueError, IndexError):
+                    log.debug(f"[ROOMS] Skipping malformed entity line in {room_file.name}: {line!r}")
+                    continue
 
         count += 1
 

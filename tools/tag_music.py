@@ -190,6 +190,7 @@ TRACKS = [
     ("dungeon3/desert_a.mp3",     "Desert Tomb I",         "desert"),
     ("dungeon3/desert_b.mp3",     "Desert Tomb II",        "desert"),
     ("dungeon3/desert_c.mp3",     "Desert Tomb III",       "desert"),
+    ("dungeon3/desert_d.mp3",     "Desert Tomb IV",        "desert"),
     # Desert Tomb — boss
     ("dungeon3/desert_boss1.mp3",      "Desert Tomb Boss I",          "desert_boss"),
     ("dungeon3/desert_boss1_choir.mp3","Desert Tomb Boss I (Choir)",  "desert_boss"),

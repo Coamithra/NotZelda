@@ -87,22 +87,28 @@ class GameState:
 
     def load_tiles(self):
         """Load all tile definitions from data/tiles.json."""
+        # Lazy import: log imports state, so importing at module level would be
+        # circular (import order: constants -> state -> log).
+        from server import log
         path = Path(__file__).parent.parent / "data" / "tiles.json"
         if not path.exists():
-            print("[STATE] WARNING: data/tiles.json not found")
+            log.debug("[STATE] WARNING: data/tiles.json not found")
             return
         tiles = json.loads(path.read_text(encoding="utf-8"))
         for tile_id, recipe in tiles.items():
             self.custom_tile_recipes[tile_id] = recipe
         self.builtin_tile_ids = set(tiles.keys())
-        print(f"[STATE] Loaded {len(tiles)} tile recipes")
+        log.debug(f"[STATE] Loaded {len(tiles)} tile recipes")
 
     def load_monsters(self):
         """Load all monster definitions from data/monsters.json."""
+        # Lazy import: log imports state, so importing at module level would be
+        # circular (import order: constants -> state -> log).
+        from server import log
         from server.validation import register_monster_type
         path = Path(__file__).parent.parent / "data" / "monsters.json"
         if not path.exists():
-            print("[STATE] WARNING: data/monsters.json not found")
+            log.debug("[STATE] WARNING: data/monsters.json not found")
             return
         monsters = json.loads(path.read_text(encoding="utf-8"))
         for kind, mdata in monsters.items():
@@ -110,19 +116,22 @@ class GameState:
             ok, errors = register_monster_type(mdata)
             if ok:
                 self.builtin_monster_ids.add(kind)
-                print(f"[STATE] Registered monster: {kind}")
+                log.debug(f"[STATE] Registered monster: {kind}")
             else:
-                print(f"[STATE] WARNING: Failed to register {kind}: {errors}")
-        print(f"[STATE] Loaded {len(monsters)} monsters")
+                log.debug(f"[STATE] WARNING: Failed to register {kind}: {errors}")
+        log.debug(f"[STATE] Loaded {len(monsters)} monsters")
 
     def load_npc_sprites(self):
         """Load NPC sprite definitions from data/npc_sprites.json."""
+        # Lazy import: log imports state, so importing at module level would be
+        # circular (import order: constants -> state -> log).
+        from server import log
         path = Path(__file__).parent.parent / "data" / "npc_sprites.json"
         if not path.exists():
-            print("[STATE] WARNING: data/npc_sprites.json not found")
+            log.debug("[STATE] WARNING: data/npc_sprites.json not found")
             return
         self.npc_sprites = json.loads(path.read_text(encoding="utf-8"))
-        print(f"[STATE] Loaded {len(self.npc_sprites)} NPC sprites")
+        log.debug(f"[STATE] Loaded {len(self.npc_sprites)} NPC sprites")
 
 
 game = GameState()

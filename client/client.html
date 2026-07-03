@@ -972,6 +972,16 @@ function gameLoop(timestamp) {
   const frozen = G.fx.hitPause && Date.now() < G.fx.hitPause;
 
   if (!frozen) {
+    // Real frame delta (ms), clamped so tab-switch/hit-pause gaps don't jump.
+    // dtScale == 1.0 at the 60Hz reference, so all scaled updates below are
+    // byte-for-byte identical to the old per-frame behavior at 60Hz.
+    const _nowFrame = performance.now();
+    const frameDt = Math.min(Math.max(_nowFrame - (G.ui.lastFrameTime || _nowFrame), 4), 100);
+    G.ui.lastFrameTime = _nowFrame;
+    const dtScale = frameDt / 16.67;
+    const corrKeep = Math.pow(1 - CORRECTION_RATE, dtScale);
+    const monKeep = Math.pow(1 - MONSTER_CORRECTION_RATE, dtScale);
+
     // Animation timer
     G.player.animTimer++;
     if (G.player.animTimer % 10 === 0) {
@@ -989,10 +999,10 @@ function gameLoop(timestamp) {
     updateAttacks();
     updateDyingMonsters();
     updateDyingOtherPlayers();
-    updateProjectiles();
+    updateProjectiles(frameDt);
     updateAttackEffects();
     updateItemPickups();
-    updateParticles(16.67); // ~60fps dt
+    updateParticles(frameDt);
 
     // Toggle monster hop frame every ~500ms
     G.room.monsterHopTimer++;
@@ -1018,8 +1028,8 @@ function gameLoop(timestamp) {
     }
     // Decay correction offset (smooth server reconciliation)
     const co = G.player.correctionOffset;
-    co.x *= (1 - CORRECTION_RATE);
-    co.y *= (1 - CORRECTION_RATE);
+    co.x *= corrKeep;
+    co.y *= corrKeep;
     if (Math.abs(co.x) < 0.005) co.x = 0;
     if (Math.abs(co.y) < 0.005) co.y = 0;
     // Compute display position from canonical position + knockback offset + correction
@@ -1110,12 +1120,14 @@ function gameLoop(timestamp) {
 
         switch (a.type) {
           case "walk": {
-            // Clamp: interpProgress must not lead trueProgress
-            const trueProgress = Math.min(elapsed / a.duration, 1.0);
-            const clampedProgress = Math.min(progress, trueProgress);
-            m.displayX = a.fromX + (a.toX - a.fromX) * clampedProgress;
-            m.displayY = a.fromY + (a.toY - a.fromY) * clampedProgress;
-            m.walkHop = clampedProgress >= 0.5 ? 1 : 0;
+            // Use effectiveDuration-based progress directly so dead reckoning
+            // (RTT/2 fast-forward baked into effectiveDuration) actually takes effect.
+            // The prior Math.min(progress, trueProgress) clamp pinned progress to the
+            // full-duration curve, silently neutralizing dead reckoning and — combined
+            // with the fast-forwarded correction offset — producing a backward jerk.
+            m.displayX = a.fromX + (a.toX - a.fromX) * progress;
+            m.displayY = a.fromY + (a.toY - a.fromY) * progress;
+            m.walkHop = progress >= 0.5 ? 1 : 0;
             break;
           }
           case "knockback": {
@@ -1144,8 +1156,8 @@ function gameLoop(timestamp) {
       } else {
         // No action: decay correction offset toward canonical position
         const co = m.correctionOffset;
-        co.x *= (1 - MONSTER_CORRECTION_RATE);
-        co.y *= (1 - MONSTER_CORRECTION_RATE);
+        co.x *= monKeep;
+        co.y *= monKeep;
         if (Math.abs(co.x) < 0.005) co.x = 0;
         if (Math.abs(co.y) < 0.005) co.y = 0;
         m.displayX = m.x + co.x;
@@ -1155,8 +1167,8 @@ function gameLoop(timestamp) {
       // Correction offset for walk actions (smooth visual transition)
       if (m.action && m.action.type === "walk") {
         const co = m.correctionOffset;
-        co.x *= (1 - MONSTER_CORRECTION_RATE);
-        co.y *= (1 - MONSTER_CORRECTION_RATE);
+        co.x *= monKeep;
+        co.y *= monKeep;
         if (Math.abs(co.x) < 0.005) co.x = 0;
         if (Math.abs(co.y) < 0.005) co.y = 0;
         m.displayX += co.x;
