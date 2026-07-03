@@ -7,6 +7,13 @@ generates graph structure — it only queries what it's given.
 
 from collections import deque
 
+# Sentinel distance for cells absent from a BFS cache (unreachable). A large
+# finite int — not float('inf') — so it stays valid in sort keys / max() and
+# arithmetic sums used by placement scoring, while ensuring an unreachable cell
+# never scores as distance-0 (indistinguishable from the origin). Reachable
+# cells are always present in the cache, so their distances are unaffected.
+UNREACHABLE_DIST = 10 ** 9
+
 
 # ---------------------------------------------------------------------------
 # Graph helpers (moved from dungeons.py)
@@ -160,9 +167,13 @@ class DungeonTopology:
                 _bfs_distances(self._adj, origin)
 
     def dist(self, cell, mark_name="entrance"):
-        """BFS distance from the cell marked with mark_name. Lazily cached."""
+        """BFS distance from the cell marked with mark_name. Lazily cached.
+
+        Cells absent from the cache (unreachable from the mark) return
+        UNREACHABLE_DIST so they never score as distance-0.
+        """
         self._ensure_bfs(mark_name)
-        return self._dist_cache[mark_name].get(cell, 0)
+        return self._dist_cache[mark_name].get(cell, UNREACHABLE_DIST)
 
     def max_dist(self, mark_name="entrance"):
         """Maximum BFS distance from the mark's cell."""

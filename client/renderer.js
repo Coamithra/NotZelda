@@ -30,6 +30,23 @@ const WATER_TILES = new Set();
 let _mistStrength;
 let _mistRoom;
 
+// Cache CanvasGradients keyed by quantized radius so we don't allocate one per tile
+// per frame. Each gradient is built at the origin (0,0) at full opacity; callers
+// translate the context to position it and use globalAlpha to modulate brightness
+// (all color stops scale linearly with the alpha multiplier, so this is exact).
+const _gradientCache = new Map();
+const _GRADIENT_CACHE_MAX = 128;
+function _cachedRadialGradient(key, radius, buildStops) {
+  let grad = _gradientCache.get(key);
+  if (grad === undefined) {
+    if (_gradientCache.size >= _GRADIENT_CACHE_MAX) _gradientCache.clear();
+    grad = G.ui.ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+    buildStops(grad);
+    _gradientCache.set(key, grad);
+  }
+  return grad;
+}
+
 function renderRoom() {
   if (!G.room.currentRoom) return;
   const tm = G.room.currentRoom.tilemap;
@@ -94,13 +111,19 @@ function renderBrightTiles() {
       const cy = tileCenterY(r);
       // Organic flicker from two sine waves at different frequencies
       const flicker = 0.3 + 0.15 * Math.sin(t * 8.3 + c * 2.1) + 0.1 * Math.sin(t * 13.7 + r * 3.3);
-      const radius = TS * 1.8 + TS * 0.4 * Math.sin(t * 5.1 + c + r);
-      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-      grad.addColorStop(0, `rgba(255, 170, 50, ${flicker * 0.35})`);
-      grad.addColorStop(0.5, `rgba(200, 100, 20, ${flicker * 0.12})`);
-      grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+      // Quantize radius to 2px buckets so the gradient can be cached across tiles/frames.
+      const radius = Math.round((TS * 1.8 + TS * 0.4 * Math.sin(t * 5.1 + c + r)) / 2) * 2;
+      const grad = _cachedRadialGradient(`b${radius}`, radius, (g) => {
+        g.addColorStop(0, "rgba(255, 170, 50, 0.35)");
+        g.addColorStop(0.5, "rgba(200, 100, 20, 0.12)");
+        g.addColorStop(1, "rgba(0, 0, 0, 0)");
+      });
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.globalAlpha = flicker;
       ctx.fillStyle = grad;
-      ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+      ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+      ctx.restore();
     }
   }
   ctx.restore();
@@ -135,12 +158,20 @@ function renderWaterMist() {
     const alpha = 0.04 + 0.03 * Math.sin(t * 1.2 + i * 2.3);
     const w = 100 + 40 * Math.sin(t * 0.5 + i);
     const h = 20 + 10 * Math.sin(t * 0.7 + i * 1.1);
-    const grad = ctx.createRadialGradient(baseX, baseY + wobble, 0, baseX, baseY + wobble, w / 2);
-    grad.addColorStop(0, `rgba(180, 210, 240, ${alpha})`);
-    grad.addColorStop(0.6, `rgba(140, 180, 220, ${alpha * 0.5})`);
-    grad.addColorStop(1, "rgba(100, 150, 200, 0)");
+    // Quantize radius to 2px buckets so the gradient can be cached; brightness comes
+    // from globalAlpha (all stops scale linearly with alpha, so output is identical).
+    const radius = Math.round((w / 2) / 2) * 2;
+    const grad = _cachedRadialGradient(`m${radius}`, radius, (g) => {
+      g.addColorStop(0, "rgba(180, 210, 240, 1)");
+      g.addColorStop(0.6, "rgba(140, 180, 220, 0.5)");
+      g.addColorStop(1, "rgba(100, 150, 200, 0)");
+    });
+    ctx.save();
+    ctx.translate(baseX, baseY + wobble);
+    ctx.globalAlpha = alpha;
     ctx.fillStyle = grad;
-    ctx.fillRect(baseX - w / 2, baseY + wobble - h, w, h * 2);
+    ctx.fillRect(-w / 2, -h, w, h * 2);
+    ctx.restore();
   }
   // Subtle overall blue tint
   const tintAlpha = 0.03 + 0.01 * Math.sin(t * 0.6);
@@ -161,8 +192,9 @@ function renderWaterWalkEffect() {
   if (G.player.playerFlags.has("has_tide_medallion")) {
     walkers.push({ x: G.player.displayX, y: G.player.displayY });
   }
-  for (const op of Object.values(G.room.otherPlayers)) {
-    if (G.room.medallionHolders.has(op.name)) {
+  for (const [name, op] of Object.entries(G.room.otherPlayers)) {
+    // Names are the dict keys, not a property on the player object.
+    if (G.room.medallionHolders.has(name)) {
       walkers.push({ x: op.displayX, y: op.displayY });
     }
   }
@@ -299,7 +331,7 @@ function updateDances() {
 function updateDyingMonsters() {
   const now = Date.now();
   G.room.dyingMonsters = G.room.dyingMonsters.filter(dm => {
-    const isBoss = (dm.width || 1) > 1 || (dm.height || 1) > 1;
+    const isBoss = dm.is_boss != null ? dm.is_boss : ((dm.width || 1) > 1 || (dm.height || 1) > 1);
     advanceFrame(dm, isBoss ? 400 : DYING_MONSTER_FRAME_MS, now);
     // Death sprites have up to 4 frames; last frame lingers as a corpse (rendered by renderCorpses)
     const deathSprite = customDeathSprites[dm.kind];
@@ -308,10 +340,12 @@ function updateDyingMonsters() {
   });
 }
 
-function updateProjectiles() {
+function updateProjectiles(dt) {
+  // Frame-rate independent smoothing: identical to the old 0.4 lerp at 60Hz.
+  const f = 1 - Math.pow(1 - 0.4, dt / 16.67);
   for (const p of G.fx.projectiles) {
-    p.displayX += (p.x - p.displayX) * 0.4;
-    p.displayY += (p.y - p.displayY) * 0.4;
+    p.displayX += (p.x - p.displayX) * f;
+    p.displayY += (p.y - p.displayY) * f;
     if (Math.abs(p.x - p.displayX) < 0.05) p.displayX = p.x;
     if (Math.abs(p.y - p.displayY) < 0.05) p.displayY = p.y;
   }
@@ -998,8 +1032,10 @@ function renderSpeechBubbles() {
     const alpha = timeLeft < 500 ? timeLeft / 500 : 1;
     G.ui.ctx.globalAlpha = alpha;
 
-    G.ui.ctx.font = "11px monospace";
-    const maxWidth = 200;
+    const mob = G.ui.isMobile;
+    const fontPx = mob ? 17 : 11;
+    G.ui.ctx.font = fontPx + "px monospace";
+    const maxWidth = mob ? 280 : 200;
     const maxLines = 3;
     const words = bubble.text.split(" ");
     const lines = [];
@@ -1027,8 +1063,11 @@ function renderSpeechBubbles() {
       }
     }
 
-    const lineHeight = 14;
-    const pad = 6;
+    const lineHeight = mob ? 21 : 14;
+    const pad = mob ? 9 : 6;
+    const radius = mob ? 9 : 6;
+    const tailHalf = mob ? 8 : 5;
+    const tailDrop = mob ? 9 : 6;
     const bw = Math.min(maxWidth, Math.max(...lines.map(l => G.ui.ctx.measureText(l).width))) + pad * 2;
     const bh = lines.length * lineHeight + pad * 2;
     const bx = px - bw / 2;
@@ -1036,24 +1075,25 @@ function renderSpeechBubbles() {
 
     G.ui.ctx.fillStyle = "rgba(255,255,255,0.95)";
     G.ui.ctx.beginPath();
-    roundRect(G.ui.ctx, bx, by, bw, bh, 6);
+    roundRect(G.ui.ctx, bx, by, bw, bh, radius);
     G.ui.ctx.fill();
 
     G.ui.ctx.beginPath();
-    G.ui.ctx.moveTo(px - 5, by + bh);
-    G.ui.ctx.lineTo(px, by + bh + 6);
-    G.ui.ctx.lineTo(px + 5, by + bh);
+    G.ui.ctx.moveTo(px - tailHalf, by + bh);
+    G.ui.ctx.lineTo(px, by + bh + tailDrop);
+    G.ui.ctx.lineTo(px + tailHalf, by + bh);
     G.ui.ctx.fill();
 
     G.ui.ctx.strokeStyle = "rgba(0,0,0,0.2)";
     G.ui.ctx.lineWidth = 1;
     G.ui.ctx.beginPath();
-    roundRect(G.ui.ctx, bx, by, bw, bh, 6);
+    roundRect(G.ui.ctx, bx, by, bw, bh, radius);
     G.ui.ctx.stroke();
 
     G.ui.ctx.fillStyle = "#111";
+    const textBaseline = mob ? 15 : 10;
     for (let i = 0; i < lines.length; i++) {
-      G.ui.ctx.fillText(lines[i], bx + pad, by + pad + 10 + i * lineHeight);
+      G.ui.ctx.fillText(lines[i], bx + pad, by + pad + textBaseline + i * lineHeight);
     }
 
     G.ui.ctx.globalAlpha = 1;
@@ -1077,39 +1117,44 @@ function renderNpcListening() {
     const px = tileCenterX(guard.x);
     const py = guard.y * TS - 16;
 
-    const iw = 14, ih = 11;
+    const mob = G.ui.isMobile;
+    const iw = mob ? 22 : 14, ih = mob ? 17 : 11;
     const ix = px - iw / 2;
     const iy = py - ih - 10 + bob;
+    const radius = mob ? 5 : 3;
+    const tailHalf = mob ? 3 : 2;
+    const tailDrop = mob ? 5 : 3;
+    const dotR = mob ? 2.25 : 1.5;
+    const dotSpacing = mob ? 6 : 4;
 
     G.ui.ctx.globalAlpha = alpha;
 
     // Bubble body
     G.ui.ctx.fillStyle = "rgba(255,255,255,0.95)";
     G.ui.ctx.beginPath();
-    roundRect(G.ui.ctx, ix, iy, iw, ih, 3);
+    roundRect(G.ui.ctx, ix, iy, iw, ih, radius);
     G.ui.ctx.fill();
 
     // Tail
     G.ui.ctx.beginPath();
-    G.ui.ctx.moveTo(px - 2, iy + ih);
-    G.ui.ctx.lineTo(px, iy + ih + 3);
-    G.ui.ctx.lineTo(px + 2, iy + ih);
+    G.ui.ctx.moveTo(px - tailHalf, iy + ih);
+    G.ui.ctx.lineTo(px, iy + ih + tailDrop);
+    G.ui.ctx.lineTo(px + tailHalf, iy + ih);
     G.ui.ctx.fill();
 
     // Border
     G.ui.ctx.strokeStyle = "rgba(0,0,0,0.25)";
     G.ui.ctx.lineWidth = 1;
     G.ui.ctx.beginPath();
-    roundRect(G.ui.ctx, ix, iy, iw, ih, 3);
+    roundRect(G.ui.ctx, ix, iy, iw, ih, radius);
     G.ui.ctx.stroke();
 
     // Three dots
     G.ui.ctx.fillStyle = "rgba(100,100,100,0.8)";
-    const dotR = 1.5;
     const dotY = iy + ih / 2;
     for (let d = -1; d <= 1; d++) {
       G.ui.ctx.beginPath();
-      G.ui.ctx.arc(px + d * 4, dotY, dotR, 0, Math.PI * 2);
+      G.ui.ctx.arc(px + d * dotSpacing, dotY, dotR, 0, Math.PI * 2);
       G.ui.ctx.fill();
     }
 
@@ -1135,36 +1180,41 @@ function renderNpcThinking() {
     const dotCount = (Math.floor((now - startTime) / 500) % 3) + 1;
     const text = ".".repeat(dotCount);
 
-    G.ui.ctx.font = "bold 13px monospace";
-    const pad = 6;
+    const mob = G.ui.isMobile;
+    const fontPx = mob ? 20 : 13;
+    G.ui.ctx.font = "bold " + fontPx + "px monospace";
+    const pad = mob ? 9 : 6;
+    const radius = mob ? 9 : 6;
+    const tailHalf = mob ? 8 : 5;
+    const tailDrop = mob ? 9 : 6;
     const bw = G.ui.ctx.measureText("...").width + pad * 2;
-    const bh = 14 + pad * 2;
+    const bh = (mob ? 21 : 14) + pad * 2;
     const bx = px - bw / 2;
     const by = py - bh - 8;
 
     // Bubble background
     G.ui.ctx.fillStyle = "rgba(255,255,255,0.9)";
     G.ui.ctx.beginPath();
-    roundRect(G.ui.ctx, bx, by, bw, bh, 6);
+    roundRect(G.ui.ctx, bx, by, bw, bh, radius);
     G.ui.ctx.fill();
 
     // Tail
     G.ui.ctx.beginPath();
-    G.ui.ctx.moveTo(px - 5, by + bh);
-    G.ui.ctx.lineTo(px, by + bh + 6);
-    G.ui.ctx.lineTo(px + 5, by + bh);
+    G.ui.ctx.moveTo(px - tailHalf, by + bh);
+    G.ui.ctx.lineTo(px, by + bh + tailDrop);
+    G.ui.ctx.lineTo(px + tailHalf, by + bh);
     G.ui.ctx.fill();
 
     // Border
     G.ui.ctx.strokeStyle = "rgba(0,0,0,0.2)";
     G.ui.ctx.lineWidth = 1;
     G.ui.ctx.beginPath();
-    roundRect(G.ui.ctx, bx, by, bw, bh, 6);
+    roundRect(G.ui.ctx, bx, by, bw, bh, radius);
     G.ui.ctx.stroke();
 
     // Dots
     G.ui.ctx.fillStyle = "#666";
-    G.ui.ctx.fillText(text, bx + pad, by + pad + 11);
+    G.ui.ctx.fillText(text, bx + pad, by + pad + (mob ? 17 : 11));
   }
 }
 

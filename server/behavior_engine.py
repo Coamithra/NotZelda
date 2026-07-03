@@ -29,7 +29,7 @@ import random
 import math
 
 from server.state import game
-from server.constants import ROOM_COLS, ROOM_ROWS, MOVE_STEP, SWIM_WATER_PREFERENCE
+from server.constants import ROOM_COLS, ROOM_ROWS, MOVE_STEP
 from server.models import WalkState, Projectile
 from server.net import avatars_in_room
 from server.lifecycle import set_monster_idle
@@ -79,17 +79,12 @@ class BehaviorEngine:
             "charge": self._resolve_charge,
             "teleport": self._resolve_teleport,
             "area": self._resolve_area,
-            "swim": self._resolve_swim,
-            "whirlpool": self._resolve_whirlpool,
-            "submerge": self._resolve_submerge,
         }
 
         self._warmup_handlers = {
             "charge": self._warmup_charge,
             "teleport": self._warmup_teleport,
             "area": self._warmup_area,
-            "whirlpool": self._warmup_whirlpool,
-            "submerge": self._warmup_submerge,
         }
 
         self._exec_handlers = {
@@ -97,8 +92,6 @@ class BehaviorEngine:
             "charge": self._exec_charge,
             "teleport": self._exec_teleport,
             "area": self._exec_area,
-            "whirlpool": self._exec_whirlpool,
-            "submerge": self._exec_submerge,
         }
 
     # -------------------------------------------------------------------
@@ -143,13 +136,23 @@ class BehaviorEngine:
 
 
     def _has_los(self, x1, y1, x2, y2, room_id):
-        """Check line of sight between two points on the same row or column."""
-        if x1 == x2:
+        """Check line of sight between two near-aligned points.
+
+        The only caller invokes this after a ``< 0.75`` alignment check on one
+        axis, so the endpoints share (approximately) a row or a column.  When
+        rounding leaves them exactly on-axis we scan that row/column directly.
+        When rounding pushes them off-axis (e.g. monster x=2.0, player x=2.6 ->
+        columns 2 and 3), we do NOT vacuously return True: we pick the axis the
+        caller aligned on — the one with the smaller separation — and scan that
+        row/column at the origin's coordinate between the endpoints.  Any
+        non-walkable tile blocks the line (conservative when in doubt)."""
+        col_aligned = (x1 == x2) or (y1 != y2 and abs(x2 - x1) <= abs(y2 - y1))
+        if col_aligned:
             step = 1 if y2 > y1 else -1
             for y in range(y1 + step, y2, step):
                 if not self._is_walkable(x1, y, room_id):
                     return False
-        elif y1 == y2:
+        else:
             step = 1 if x2 > x1 else -1
             for x in range(x1 + step, x2, step):
                 if not self._is_walkable(x, y1, room_id):
@@ -503,305 +506,6 @@ class BehaviorEngine:
             "range": rule.get("range", 2),
             "damage": rule.get("damage", monster.damage),
         }
-
-    # -------------------------------------------------------------------
-    # Swim — aquatic movement through water tiles
-    # -------------------------------------------------------------------
-
-    def _can_swim_to(self, x, y, room_id):
-        """Like can_move_to but treats WA (water) tiles as walkable."""
-        w = 1  # swim is for 1x1 monsters only
-        h = 1
-        room = game.rooms.get(room_id)
-        if not room:
-            return False
-        tilemap = room["tilemap"]
-        min_tx = math.floor(x)
-        max_tx = math.ceil(x + w) - 1
-        min_ty = math.floor(y)
-        max_ty = math.ceil(y + h) - 1
-        for ty in range(min_ty, max_ty + 1):
-            for tx in range(min_tx, max_tx + 1):
-                if tx < 0 or tx >= ROOM_COLS or ty < 0 or ty >= ROOM_ROWS:
-                    return False
-                tile = tilemap[ty][tx]
-                # Water tiles are swimable even if not walkable
-                if tile == "WA" or tile == "SH":
-                    continue
-                if not game.is_monster_walkable_tile(tile):
-                    return False
-        # Guard (NPC) overlap
-        for g in game.guards.get(room_id, []):
-            if (x < g["x"] + 1 and x + w > g["x"] and
-                y < g["y"] + 1 and y + h > g["y"]):
-                return False
-        return True
-
-    def _resolve_swim(self, rule, monster, room_id):
-        """Resolve swim action — movement that can traverse water tiles.
-
-        Uses the same direction logic as move, but with swim-aware walkability.
-        Prefers water tiles when wandering randomly.
-        """
-        direction = rule.get("direction", "random")
-        s = MOVE_STEP
-
-        if direction == "player":
-            target, _ = self._nearest_player(monster, room_id)
-            if target is None or target.avatar is None:
-                direction = "random"
-            else:
-                ta = target.avatar
-                best_dir = None
-                best_dist = float("inf")
-                dirs = [(0, -s), (0, s), (-s, 0), (s, 0)]
-                random.shuffle(dirs)
-                for dx, dy in dirs:
-                    nx, ny = monster.x + dx, monster.y + dy
-                    if not self._can_swim_to(nx, ny, room_id):
-                        continue
-                    dist = abs(ta.x - nx) + abs(ta.y - ny)
-                    if dist < best_dist:
-                        best_dist = dist
-                        best_dir = (dx, dy)
-                if best_dir:
-                    return {"action": "swim", "x": monster.x + best_dir[0],
-                            "y": monster.y + best_dir[1], "distance": 1}
-                return None
-
-        if direction == "away":
-            target, _ = self._nearest_player(monster, room_id)
-            if target is None or target.avatar is None:
-                direction = "random"
-            else:
-                ta = target.avatar
-                best_dir = None
-                best_dist = -1
-                dirs = [(0, -s), (0, s), (-s, 0), (s, 0)]
-                random.shuffle(dirs)
-                for dx, dy in dirs:
-                    nx, ny = monster.x + dx, monster.y + dy
-                    if not self._can_swim_to(nx, ny, room_id):
-                        continue
-                    dist = abs(ta.x - nx) + abs(ta.y - ny)
-                    if dist > best_dist:
-                        best_dist = dist
-                        best_dir = (dx, dy)
-                if best_dir:
-                    return {"action": "swim", "x": monster.x + best_dir[0],
-                            "y": monster.y + best_dir[1], "distance": 1}
-                return None
-
-        # Random — prefer water tiles for aquatic flavor
-        dirs = [(0, -s), (0, s), (-s, 0), (s, 0)]
-        random.shuffle(dirs)
-        water_moves = []
-        land_moves = []
-        room = game.rooms.get(room_id)
-        tilemap = room["tilemap"] if room else None
-        for dx, dy in dirs:
-            nx, ny = monster.x + dx, monster.y + dy
-            if self._can_swim_to(nx, ny, room_id):
-                tx, ty = int(round(nx)), int(round(ny))
-                if tilemap and 0 <= ty < ROOM_ROWS and 0 <= tx < ROOM_COLS and tilemap[ty][tx] in ("WA", "SH"):
-                    water_moves.append((nx, ny))
-                else:
-                    land_moves.append((nx, ny))
-        # Prefer water when available (controlled by SWIM_WATER_PREFERENCE)
-        if water_moves and (not land_moves or random.random() < SWIM_WATER_PREFERENCE):
-            nx, ny = random.choice(water_moves)
-        elif land_moves:
-            nx, ny = random.choice(land_moves)
-        elif water_moves:
-            nx, ny = random.choice(water_moves)
-        else:
-            return None
-        return {"action": "swim", "x": nx, "y": ny, "distance": 1}
-
-    # -------------------------------------------------------------------
-    # Whirlpool — area pull + damage
-    # -------------------------------------------------------------------
-
-    def _resolve_whirlpool(self, rule, monster, room_id):
-        """Resolve whirlpool action. Pulls players toward monster then damages."""
-        return {
-            "action": "whirlpool",
-            "x": monster.x,
-            "y": monster.y,
-            "width": getattr(monster, "width", 1),
-            "height": getattr(monster, "height", 1),
-            "range": rule.get("range", 3),
-            "pull_strength": rule.get("pull_strength", 2),
-            "damage": rule.get("damage", monster.damage),
-        }
-
-    def _warmup_whirlpool(self, monster, room_id, monster_idx, action, msgs):
-        """Send whirlpool warning visuals — uses area_warning with whirlpool flag."""
-        msg = {
-            "type": "area_warning",
-            "id": monster_idx,
-            "x": action["x"],
-            "y": action["y"],
-            "range": action["range"],
-            "duration": action.get("ticks", 1) * monster.decision_time,
-            "whirlpool": True,
-        }
-        if action.get("width", 1) > 1:
-            msg["width"] = action["width"]
-        if action.get("height", 1) > 1:
-            msg["height"] = action["height"]
-        msgs.append(("broadcast", room_id, msg, None))
-
-    def _exec_whirlpool(self, monster, room_id, monster_idx, action, msgs):
-        """Execute whirlpool — pull players toward monster, then damage."""
-        damage = action.get("damage", monster.damage)
-        range_val = action.get("range", 3)
-        pull_strength = action.get("pull_strength", 2)
-        ax = action.get("x", monster.x)
-        ay = action.get("y", monster.y)
-        aw = action.get("width", 1)
-        ah = action.get("height", 1)
-
-        atk_msg = {
-            "type": "area_attack",
-            "id": monster_idx,
-            "x": ax,
-            "y": ay,
-            "range": range_val,
-            "whirlpool": True,
-        }
-        if aw > 1:
-            atk_msg["width"] = aw
-        if ah > 1:
-            atk_msg["height"] = ah
-        msgs.append(("broadcast", room_id, atk_msg, None))
-
-        # Center of the monster for pull target
-        center_x = ax + aw / 2.0
-        center_y = ay + ah / 2.0
-
-        for p, a in avatars_in_room(room_id):
-            if p.hp <= 0:
-                continue
-            px, py = int(a.x), int(a.y)
-            nearest_x = max(ax, min(px, ax + aw - 1))
-            nearest_y = max(ay, min(py, ay + ah - 1))
-            dist = abs(px - nearest_x) + abs(py - nearest_y)
-            if dist <= range_val:
-                # Pull player toward center by pull_strength tiles
-                dx = center_x - a.x
-                dy = center_y - a.y
-                length = max(abs(dx), abs(dy), 0.1)
-                pull_x = dx / length * min(pull_strength, length)
-                pull_y = dy / length * min(pull_strength, length)
-                new_x = a.x + pull_x
-                new_y = a.y + pull_y
-                # Clamp to room bounds
-                new_x = max(0, min(ROOM_COLS - 1, new_x))
-                new_y = max(0, min(ROOM_ROWS - 1, new_y))
-                # Only pull if destination is walkable
-                room = game.rooms.get(room_id)
-                if room and game.is_walkable_tile(room["tilemap"][int(new_y)][int(new_x)]):
-                    a.x = new_x
-                    a.y = new_y
-                # Damage regardless of pull success
-                self._apply_damage(p, damage, room_id, msgs, ax, ay)
-
-    # -------------------------------------------------------------------
-    # Submerge — dive underwater, surface at target with damage
-    # -------------------------------------------------------------------
-
-    def _resolve_submerge(self, rule, monster, room_id):
-        """Resolve submerge action — like teleport but monster becomes invulnerable."""
-        target_mode = rule.get("target", "player")
-        drift = int(rule.get("drift", 1))
-        max_range = rule.get("range", 6)
-        damage = rule.get("damage", monster.damage)
-
-        if target_mode == "player":
-            player, player_dist = self._nearest_player(monster, room_id)
-            if player is None or player.avatar is None:
-                return None
-            if player_dist > max_range:
-                return None
-            pa = player.avatar
-            cx, cy = int(round(pa.x)), int(round(pa.y))
-        elif target_mode == "random":
-            cx = random.randint(0, ROOM_COLS - 1)
-            cy = random.randint(0, ROOM_ROWS - 1)
-        else:
-            cx, cy = int(round(monster.x)), int(round(monster.y))
-
-        # Find a walkable or swimmable position within drift of target
-        candidates = []
-        mx_r, my_r = round(monster.x), round(monster.y)
-        for ddx in range(-drift, drift + 1):
-            for ddy in range(-drift, drift + 1):
-                tx, ty = cx + ddx, cy + ddy
-                dist_from_monster = abs(tx - mx_r) + abs(ty - my_r)
-                if dist_from_monster > max_range:
-                    continue
-                if dist_from_monster == 0:
-                    continue
-                if self.can_move_to(monster, tx, ty, room_id) or self._can_swim_to(tx, ty, room_id):
-                    candidates.append((tx, ty))
-        if not candidates:
-            return None
-        target_pos = random.choice(candidates)
-
-        return {
-            "action": "submerge",
-            "target_x": target_pos[0],
-            "target_y": target_pos[1],
-            "damage": damage,
-            "damage_radius": rule.get("damage_radius", 1),
-        }
-
-    def _warmup_submerge(self, monster, room_id, monster_idx, action, msgs):
-        """Send submerge start visuals — monster dives underwater."""
-        # Make monster invulnerable during submerge
-        monster._submerged = True
-        msgs.append(("broadcast", room_id, {
-            "type": "submerge_start",
-            "id": monster_idx,
-            "target_x": action["target_x"],
-            "target_y": action["target_y"],
-            "delay": action.get("ticks", 1) * monster.decision_time,
-            "damage_radius": action.get("damage_radius", 1),
-        }, None))
-
-    def _exec_submerge(self, monster, room_id, monster_idx, action, msgs):
-        """Execute submerge — surface at target, deal splash damage."""
-        target_x = action["target_x"]
-        target_y = action["target_y"]
-        damage = action.get("damage", monster.damage)
-
-        # Restore vulnerability
-        monster._submerged = False
-
-        monster.x = target_x
-        monster.y = target_y
-        monster.move_seq += 1
-
-        msgs.append(("broadcast", room_id, {
-            "type": "submerge_end",
-            "id": monster_idx,
-            "x": target_x,
-            "y": target_y,
-            "seq": monster.move_seq,
-        }, None))
-
-        # Damage players within damage_radius of surfacing position
-        damage_radius = action.get("damage_radius", 1)
-        if damage > 0 and damage_radius >= 0:
-            w, h = monster.width, monster.height
-            for p, a in avatars_in_room(room_id):
-                if p.hp > 0:
-                    ax_i, ay_i = int(a.x), int(a.y)
-                    nearest_x = max(monster.x, min(ax_i, monster.x + w - 1))
-                    nearest_y = max(monster.y, min(ay_i, monster.y + h - 1))
-                    if abs(ax_i - nearest_x) + abs(ay_i - nearest_y) <= damage_radius:
-                        self._apply_damage(p, damage, room_id, msgs, monster.x, monster.y)
 
     def _resolve_move_with_distance(self, rule, monster, room_id):
         """Wrapper that attaches distance and direction to the resolved move."""
@@ -1171,7 +875,7 @@ class BehaviorEngine:
             # Knockback progression handled by _tick_all_monsters in combat.py
             return
 
-        if state in ("charging", "teleporting", "area", "whirlpooling", "submerging"):
+        if state in ("charging", "teleporting", "area"):
             # Warmup — time-based end
             sd = monster.state_data
             if now >= sd["end_time"]:
@@ -1198,7 +902,7 @@ class BehaviorEngine:
         action_name = result.get("action")
         warmup = result.get("warmup", 0)
 
-        if action_name in ("move", "swim"):
+        if action_name == "move":
             self.start_walk(monster, room_id, i, result, msgs, now)
             return
 
@@ -1212,12 +916,11 @@ class BehaviorEngine:
                 handler(monster, room_id, i, result, msgs)
             return
 
-        # Warmup actions: charge, teleport, area, whirlpool, submerge
+        # Warmup actions: charge, teleport, area
         if warmup > 0 and action_name in self._warmup_handlers:
             state_name = {
                 "charge": "charging", "teleport": "teleporting",
-                "area": "area", "whirlpool": "whirlpooling",
-                "submerge": "submerging",
+                "area": "area",
             }
             monster.state = state_name.get(action_name, "idle")
             warmup_duration = warmup * monster.decision_time

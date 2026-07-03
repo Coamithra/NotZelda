@@ -10,7 +10,16 @@ For detailed module descriptions and game system documentation, see [docs/ARCHIT
 
 **Project tracking:** [Trello — Legends of Amara](https://trello.com/b/FEqdR6QL/legends-of-amara). Bugs, features, and refactoring are tracked there. Use the `trello` CLI (installed from `C:\Programming\TrelloCLI`) with subcommand groups — `trello card ls <list>`, `trello card show <id>`, `trello card move <id> <list>`, `trello comment add <id> <text>`, etc. Config in `~/.trello-cli.json`. **Use real newlines in card descriptions, not `\n` escape sequences** — the CLI passes strings literally.
 
-**Contributing workflow:** See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for the step-by-step runbook for tackling any Trello card (pick up → worktree → research → design → implement → verify → review & ship). All feature work happens in git worktrees under `.trees/` — the root checkout stays on `master`.
+**Contributing workflow:** Follow `~/.claude/CONTRIBUTING.md` plus the **Contributing workflow** section below for the step-by-step runbook for tackling any Trello card (pick up → worktree → research → design → implement → verify → review & ship). All feature work happens in git worktrees under `.trees/` — the root checkout stays on `master`.
+
+## Contributing workflow
+
+Card -> worktree -> PR runbook: follow `~/.claude/CONTRIBUTING.md` (the global generic runbook). Legends of Amara specifics:
+
+- **Board:** Legends of Amara (https://trello.com/b/FEqdR6QL/legends-of-amara), id `69c1b01b`, remote `trello` backend. **No single "To Do" list** - work is bucketed into **Bugs**, **Future Features**, **Refactoring**; in-progress list is **Features (In Progress)**, then **Done**. Atomic pickup (pick the bucket): `trello --board 69c1b01b grab --from "Bugs" --to "Features (In Progress)"` (swap `--from` for "Future Features" / "Refactoring").
+- **Default branch:** `master`. **GitHub:** solo public repo (unprotected `master` -> PR + self-merge, no approval needed). Deploy target is the Hetzner VPS (`/opt/NotZelda`) - see the Hosting section.
+- **Worktrees:** `.trees/<branch>` (branch-named, gitignored). Tracker doc goes in `docs/`. Bootstrap: copy `.env` into the worktree (gitignored, doesn't carry over) so the server picks up `DEBUG_MODE` / `AI_BACKEND` / etc - `copy_env.sh <branch>`.
+- **Verification gate:** smoke `python -c "import mud_server"`; run the `tools/` test suites (`python tools/test_api_leak.py` - all 4 must pass - plus the others). If `ai_generator.py` / `content_viewer.py` / `.env` were touched, the API-leak test is mandatory. **NEVER run `worldgen.py`** without explicit permission (it overwrites hand-edited `.room` files). Flag in-browser checks for the user.
 
 ## General Rules
 
@@ -43,7 +52,7 @@ When pushing to git make sure to update CLAUDE.md first!
 ├── data/                  # tiles.json, monsters.json, npc_sprites.json
 ├── tools/                 # Dev utilities (renderers, content viewer, tests)
 ├── docs/                  # Architecture docs, system references, planning docs
-├── deploy/                # Nginx config, redirect page
+├── deploy/                # Nginx config, redirect page, llama-server install scripts + systemd unit
 └── local_ignore/          # Local-only files (SSH keys, archives) — gitignored
 ```
 
@@ -53,7 +62,7 @@ When pushing to git make sure to update CLAUDE.md first!
 - **Server state**: all mutable state on `GameState` singleton (`from server.state import game`).
 - **Player vs Avatar**: `Player` = session/identity (name, hp, room). `Avatar` = physical presence (x, y, direction). `player.avatar` is `None` during room transitions. Use `avatars_in_room()` for combat/targeting, `players_in_room()` for broadcasting.
 - **Data-driven**: tiles, monsters, NPC sprites loaded from JSON in `data/`. Tilemaps use 2-char codes (`"GR"`, `"DW"`). Sprites/tiles use `[colorKey, x, y, w, h]` rect layers. All rooms from `.room` files.
-- **AI backend**: Claude CLI by default (`AI_BACKEND=cli`). `.env` must NOT set `AI_BACKEND=api`. Supports `cli`, `api`, `ollama`.
+- **AI backend**: Claude CLI by default (`AI_BACKEND=cli`). `.env` must NOT set `AI_BACKEND=api`. Supports `cli`, `api`, `llamacpp` (local llama.cpp via [LLMFacade](https://github.com/Coamithra/LLMFacade) — formerly `ollama`, which is still accepted as a deprecated alias). Local-model knobs: `LLAMACPP_BASE_URL` (default `http://localhost:8080/v1`) and `LLAMACPP_MODEL`.
 - **Logging** via `server/log.py` — never use bare `print()`:
   - `log.debug(msg)` → sidebar + file + stdout
   - `log.server(msg)` → file + stdout only
@@ -71,6 +80,8 @@ Detailed implementation notes for each game system:
 - [Items & Player](docs/SYSTEMS_ITEMS.md) — lantern, tide medallion, spirit jar, treasure chest, seal fragment, revival, item pickup, reveal tilemap, portal tiles
 - [Audio & SFX](docs/SYSTEMS_AUDIO.md) — AudioGen SFX pipeline, manifest format, generation tool, prompt tips
 
+A full-codebase correctness/quality review (July 2026) lives in [docs/CODE_REVIEW_2026-07.md](docs/CODE_REVIEW_2026-07.md) — findings by severity with verified line references. All High/Medium findings and nearly all Lows were implemented in July 2026 (line numbers in the doc predate those fixes); intentionally skipped: the `_build_spectate_room_msg`/`send_room_enter` dedup refactor, the admin-endpoint plaintext-listener exposure (deployment topology), and the `WalkState.room_id`/`monster_idx` write-only fields.
+
 ## Key Gotchas
 
 - **Client script load order**: `game_state.js` → `tweak.js` → `title.js` → `tiles.js` → `sprite_data.js` → `sprites.js` → `music.js` → `renderer.js` → `fx.js` → `net.js` → inline init/gameLoop → `input.js`
@@ -80,7 +91,7 @@ Detailed implementation notes for each game system:
 - **Room transitions**: avatar set to `None` during `do_room_transition()`. `avatars_in_room()` excludes avatar-less players.
 - **Dungeon room resolution is synchronous** — no JIT AI generation. Custom rooms from library pool or precreated fallback.
 - **Tile properties** in `custom_tile_recipes[tile_id]` — no separate walkability sets.
-- **`websockets` must stay at 12.0** — v16+ breaks `process_request` API. HTTP routing lives in `_GameServerProtocol.process_request()` (a subclass of `WebSocketServerProtocol`), not a standalone function, because websockets 12.0 only accepts GET — the subclass overrides `read_http_request()` to also accept POST for `/clear-log`.
+- **`websockets` is pinned at 16.0** (modern `asyncio` API). HTTP routing lives in the standalone `process_request(connection, request)` callback passed to `websockets.asyncio.server.serve()` — it returns a `websockets.http11.Response` to serve files/admin endpoints, or `None` to let `/ws` upgrade. The handshake is GET-only and v16's `http11.Request.parse()` rejects non-GET *before* `process_request` runs, so a module-level shim (`_parse_request_allowing_post`) monkeypatches `Request.parse` to also accept POST (stashing the method on the request) — this keeps the POST-only `/clear-log` endpoint working. (Pre-16 used a `_GameServerProtocol(WebSocketServerProtocol)` subclass overriding `read_http_request()`; that legacy API was removed in v13+.)
 - **WebSocket bypasses nginx** — client connects `wss://` directly to Python on port 8443 (TLS via Python `ssl`). nginx only serves static files.
 
 ### Debug Draw Mode
@@ -101,7 +112,7 @@ Detailed implementation notes for each game system:
 
 - **Panel layout**: right sidebar (380px), coexists with `/draw` palette, collapsible groups with filter bar
 - **Client constants**: `const` changed to `let` in game_state.js, fx.js, renderer.js, music.js; registered via `registerTweak()` getter/setter pattern in `client/tweak.js`
-- **Server constants**: whitelist in `TWEAKABLE_SERVER_CONSTANTS` dict in `server/commands.py` (50 constants across 9 groups: Combat, HP & Items, Monsters, Movement, Dungeon, Lifecycle, Gauntlet, NPC & Guards, Variants); updates via `setattr()` on constants module; sent to client on `/tweak` toggle
+- **Server constants**: whitelist in `TWEAKABLE_SERVER_CONSTANTS` dict in `server/commands.py` (49 constants across 9 groups: Combat, HP & Items, Monsters, Movement, Dungeon, Lifecycle, Gauntlet, NPC & Guards, Variants); updates via `setattr()` on constants module; sent to client on `/tweak` toggle
 - **Monster scripts**: per-kind stats + behavior rule params; server sends built-in monster registry (excludes AI-generated); patches existing instances on change
 - **Controls**: direct input field + slider (when min/max defined) + -/+ buttons + reset per param
 - **Export**: copies all non-default values to clipboard as readable text
@@ -122,16 +133,23 @@ python mud_server.py
 
 Opens on http://localhost:8080.
 
+## OST Site (`/ost`)
+
+Standalone soundtrack player (`client/ost.html`) served at `/ost`. It's an installable, offline-capable PWA: a "Store locally" button caches all tracks via the Cache API, served back offline by `client/sw.js`. The service worker is root-scoped (the audio/icons live at `/`) but only ever *handles* a fixed allowlist of OST assets — every other request, including the game, passes straight through. `client/manifest.json` + `icon-*.png` provide install metadata; regenerate the icons (ported from the canvas album art) with `python tools/gen_ost_icons.py`. Asset routes live in `STATIC_FILES` in `mud_server.py`. Offline support requires a secure context (prod HTTPS is fine; `localhost` is exempt). **When adding/removing a track, update the list in BOTH `ost.html` (`TRACKS`) and `sw.js` (`TRACK_URLS`).**
+
 ## Hosting (Hetzner Cloud VPS)
 
 - **Server:** Hetzner CX22, Ubuntu 24.04 — IP `46.225.218.207`
 - **SSH:** `ssh root@46.225.218.207` — Code at `/opt/NotZelda/`
-- **Service:** `notzelda` systemd service — `systemctl restart notzelda`, `journalctl -u notzelda -f`
-- **Ollama:** `gemma2:2b` for NPC chat, `OLLAMA_NUM_PARALLEL=2`, `.env` sets `AI_BACKEND=ollama`
-- **Deploy:** `cd /opt/NotZelda && git pull && systemctl restart notzelda`
+- **Services:** `notzelda` (game) + `notzelda-llama` (llama-server for NPC chat).
+  - `systemctl restart notzelda` / `journalctl -u notzelda -f`
+  - `systemctl restart notzelda-llama` / `journalctl -u notzelda-llama -f`
+- **NPC chat backend:** `llama-server` (llama.cpp) reached via [LLMFacade](https://github.com/Coamithra/LLMFacade) external mode. Hetzner runs it on port **8081** (port 8080 is the game server); local dev typically uses 8080. `.env` sets `AI_BACKEND=llamacpp` (`ollama` is a deprecated alias). Model + URL come from `LLAMACPP_MODEL` / `LLAMACPP_BASE_URL`. CPU-only — keep `--parallel` low and `--ctx-size` matched to `MAX_HISTORY * avg-msg-len + system prompt + max_tokens`.
+- **Deploy:** `cd /opt/NotZelda && git pull && bash deploy/setup_llamacpp.sh && systemctl restart notzelda`. The setup script is idempotent — it only installs/updates llama.cpp + the GGUF when something is missing or `LLAMACPP_VERSION` changed. Full first-time setup (including Ollama removal) is documented in `deploy/README.md`.
 
 ## Dependencies
 
 - Python 3.12+
-- `websockets` (12.0 — pinned, v16+ breaks the `process_request` API)
+- `websockets` (16.0 — pinned; modern `asyncio` API — the pre-13 legacy `process_request`/`WebSocketServerProtocol` API was removed. See the websockets gotcha under Key Gotchas.)
+- `llmfacade[llamacpp]` (for local NPC chat against `llama-server`)
 - `pyngrok` (optional, for local dev tunneling)

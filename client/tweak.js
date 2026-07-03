@@ -25,7 +25,11 @@ function registerTweak(name, opts) {
     min: opts.min,
     max: opts.max,
     step: opts.step || (opts.type === "int" ? 1 : 0.01),
-    type: opts.type || (Number.isInteger(def) && typeof def === "number" ? "int" : "float"),
+    // Infer "int" only for an integer default with no fractional step; an
+    // explicit opts.type always wins. (A float param like MOVE_SPEED = 4.0 with
+    // step 0.5 must stay "float" so applyTweakValue doesn't round it.)
+    type: opts.type || (typeof def === "number" && Number.isInteger(def)
+      && (opts.step == null || Number.isInteger(opts.step)) ? "int" : "float"),
     default: def,
     server: !!opts.server,
   };
@@ -228,7 +232,6 @@ function renderTweakPanel() {
         const e = TWEAK_REGISTRY[name];
         const val = e.get();
         const isDefault = val === e.default;
-        const isFocused = _tweakFocusedInput === name;
         html += '<div class="tweak-row' + (e.server ? " tweak-server" : "") + '">';
         html += '<label class="tweak-label" title="' + escAttr(name) + '">' + escHtmlTweak(e.label) + '</label>';
         html += '<div class="tweak-controls">';
@@ -236,8 +239,7 @@ function renderTweakPanel() {
         // Input field
         html += '<input class="tweak-input" data-name="' + escAttr(name) + '" '
               + 'type="number" '
-              + 'value="' + (isFocused ? "" : formatVal(val, e.type)) + '" '
-              + (isFocused ? 'data-focused="1"' : '')
+              + 'value="' + formatVal(val, e.type) + '" '
               + (e.step ? ' step="' + e.step + '"' : '')
               + (e.min != null ? ' min="' + e.min + '"' : '')
               + (e.max != null ? ' max="' + e.max + '"' : '')
@@ -273,17 +275,9 @@ function renderTweakPanel() {
   }
 
   container.innerHTML = html;
-
-  // Restore focus to the input that was being edited
-  if (_tweakFocusedInput) {
-    const inp = container.querySelector('.tweak-input[data-focused="1"]');
-    if (inp) {
-      const reg = TWEAK_REGISTRY[_tweakFocusedInput];
-      if (reg) inp.value = formatVal(reg.get(), reg.type);
-      inp.focus();
-      inp.select();
-    }
-  }
+  // Note: renderTweakPanel early-returns while an input is focused (see top), so
+  // we never rebuild the DOM under an active edit and never need to restore focus
+  // here. Committed values are re-formatted by the focusout handler's re-render.
 }
 
 function formatVal(v, type) {
@@ -406,16 +400,23 @@ function initTweakPanel() {
     }
   });
 
-  // Track slider drag to prevent re-renders mid-drag
-  _tweakPanelEl.addEventListener("mousedown", function (e) {
+  // Track slider drag to prevent re-renders mid-drag. Guard both mouse and touch:
+  // on touch devices dragging fires `input`, which would rebuild container.innerHTML
+  // (destroying the slider under the finger) unless _tweakSliderActive suppresses it.
+  const _sliderDragStart = function (e) {
     if (e.target.classList.contains("tweak-slider")) _tweakSliderActive = true;
-  });
-  document.addEventListener("mouseup", function () {
+  };
+  const _sliderDragEnd = function () {
     if (_tweakSliderActive) {
       _tweakSliderActive = false;
       renderTweakPanel();
     }
-  });
+  };
+  _tweakPanelEl.addEventListener("mousedown", _sliderDragStart);
+  _tweakPanelEl.addEventListener("touchstart", _sliderDragStart);
+  document.addEventListener("mouseup", _sliderDragEnd);
+  document.addEventListener("touchend", _sliderDragEnd);
+  document.addEventListener("touchcancel", _sliderDragEnd);
 
   // Prevent game input while typing in tweak inputs
   _tweakPanelEl.addEventListener("keydown", function (e) {
