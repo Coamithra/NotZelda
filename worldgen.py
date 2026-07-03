@@ -17,7 +17,7 @@ ROOMS_DIR = Path(__file__).parent / "rooms"
 ROOMS_DIR.mkdir(exist_ok=True)
 
 # ---------------------------------------------------------------------------
-# 16x8 biome grid (row, col) — "." means empty
+# 16x11 biome grid (row, col) — "." means empty
 # ---------------------------------------------------------------------------
 # F=Forest M=Mountain D=Desert S=Swamp G=Graveyard C=Castle P=Plains L=Lake R=River
 BIOME_GRID = [
@@ -319,10 +319,10 @@ def make_tilemap(biome, exits):
         r1, r2 = min(er, center[0]), max(er, center[0])
         for r in range(r1, r2 + 1):
             tm[r][ec] = path_tile
-            if ec > 0 and tm[r][ec-1] == border:
+            if ec < COLS - 1 and tm[r][ec+1] == border:
                 pass  # don't widen into border
             elif ec < COLS - 1:
-                tm[r][min(ec+1, COLS-1)] = path_tile if random.random() < 0.3 else tm[r][min(ec+1, COLS-1)]
+                tm[r][ec+1] = path_tile if random.random() < 0.3 else tm[r][ec+1]
 
         # Horizontal path from exit column to center column
         c1, c2 = min(ec, center[1]), max(ec, center[1])
@@ -708,7 +708,8 @@ def write_room_file(room_id, name, biome, music, exits, tilemap, npcs=None, mons
                 npc_name, nx, ny, dialog = npc
                 npc_sprite = "guard"
             else:
-                npc_name, nx, ny, npc_sprite, dialog = npc[0], npc[1], npc[2], "guard", npc[3]
+                print(f"  WARNING: skipping NPC with unexpected tuple length {len(npc)}: {npc!r}")
+                continue
             lines.append(f"npc {npc_name} {nx} {ny} {npc_sprite} {dialog}")
     if monsters:
         for m in monsters:
@@ -736,18 +737,30 @@ def generate():
     reachable = validate_connectivity(connections, (0, 7))
     unreachable = all_cells - reachable
     if unreachable:
-        print(f"  WARNING: {len(unreachable)} unreachable rooms! Re-running with different seed...")
-        # Force-connect unreachable rooms
-        for cell in unreachable:
-            # Find nearest reachable neighbor
-            r, c = cell
-            for dr, dc, d, rev in [(0,1,"east","west"),(0,-1,"west","east"),(1,0,"south","north"),(-1,0,"north","south")]:
-                nr, nc = r+dr, c+dc
-                if (nr, nc) in reachable:
-                    connections[cell][d] = (nr, nc)
-                    connections[(nr, nc)][rev] = cell
-                    reachable.add(cell)
-                    break
+        print(f"  WARNING: {len(unreachable)} unreachable rooms — force-connecting them in place to the nearest reachable cell...")
+        # Force-connect unreachable rooms. Repeatedly link any pending cell that
+        # has a now-reachable orthogonal neighbor; this propagates through
+        # clusters of mutually-unreachable cells (each newly connected cell
+        # becomes a connection target for the rest) until none remain or no
+        # further progress is possible.
+        dirs = [(0,1,"east","west"),(0,-1,"west","east"),(1,0,"south","north"),(-1,0,"north","south")]
+        pending = set(unreachable)
+        progress = True
+        while pending and progress:
+            progress = False
+            for cell in list(pending):
+                r, c = cell
+                for dr, dc, d, rev in dirs:
+                    nr, nc = r+dr, c+dc
+                    if (nr, nc) in reachable:
+                        connections[cell][d] = (nr, nc)
+                        connections[(nr, nc)][rev] = cell
+                        reachable.add(cell)
+                        pending.discard(cell)
+                        progress = True
+                        break
+        if pending:
+            print(f"  WARNING: {len(pending)} rooms still unreachable (no adjacent reachable cell): {sorted(pending)}")
 
     print(f"  Reachable rooms: {len(reachable)}")
 

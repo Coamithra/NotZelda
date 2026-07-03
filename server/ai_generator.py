@@ -20,7 +20,7 @@ import time
 import asyncio
 import re as _re
 from collections import deque
-from server.constants import ROOM_COLS, ROOM_ROWS, ALL_DOORWAY_TILES, bfs_reachable
+from server.constants import ROOM_COLS, ROOM_ROWS, ALL_DOORWAY_TILES, bfs_reachable, DEBUG_MODE
 from server import log
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -465,7 +465,9 @@ def validate_layout(data: dict, valid_tile_ids: set[str],
                 errors.append(f"monster_groups[{gi}] must be a dict")
                 continue
             k = g.get("kind")
-            if k and k not in valid_monster_kinds:
+            if not isinstance(k, str) or not k:
+                errors.append(f"monster_groups[{gi}] missing 'kind'")
+            elif k not in valid_monster_kinds:
                 errors.append(f"monster_groups[{gi}].kind {k!r} not in available monsters")
             frac = g.get("fraction")
             if not isinstance(frac, (int, float)) or frac <= 0:
@@ -823,11 +825,34 @@ def auto_patch(data: dict, existing_walkable: set[str],
 # ---------------------------------------------------------------------------
 
 _PROMPT_DIR = Path(__file__).parent.parent / "tmp_prompts"
+_DUMP_MAX_AGE_SECS = 7 * 86400   # prune dumps older than 7 days
+_pruned_dumps = False
+
+
+def _prune_old_dumps() -> None:
+    """Delete dump files older than 7 days. Cheap, best-effort — ignores errors."""
+    global _pruned_dumps
+    if _pruned_dumps:
+        return
+    _pruned_dumps = True
+    try:
+        if not _PROMPT_DIR.exists():
+            return
+        cutoff = time.time() - _DUMP_MAX_AGE_SECS
+        for f in _PROMPT_DIR.glob("*.txt"):
+            try:
+                if f.stat().st_mtime < cutoff:
+                    f.unlink()
+            except OSError:
+                pass
+    except OSError:
+        pass
 
 
 def _dump_text(text: str, prefix: str, label: str = "") -> str:
     """Save text to a timestamped file in tmp_prompts/. Returns the filename."""
     from datetime import datetime
+    _prune_old_dumps()
     _PROMPT_DIR.mkdir(exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{prefix}_{ts}.txt"
@@ -982,7 +1007,8 @@ async def _call_ai(
         if validation_error:
             prompt += f"\n\nYour previous response had validation errors. Fix them:\n{validation_error}"
 
-        _dump_prompt(system_prompt, prompt, f"{label} attempt {attempt + 1}")
+        if DEBUG_MODE:
+            _dump_prompt(system_prompt, prompt, f"{label} attempt {attempt + 1}")
 
         raw_text = None
         try:
@@ -1013,7 +1039,8 @@ async def _call_ai(
                 raw_text = "\n".join(raw_lines)
 
             data = json.loads(raw_text)
-            _dump_ai_output(raw_text, f"{label} raw")
+            if DEBUG_MODE:
+                _dump_ai_output(raw_text, f"{label} raw")
 
             # Auto-patch
             if patch_fn:
@@ -1580,7 +1607,8 @@ async def generate_room(
     ai_groups = layout.get("monster_groups", [])
     monster_groups = [
         {"kind": g["kind"], "count": g["fraction"]}
-        for g in ai_groups if isinstance(g, dict)
+        for g in ai_groups
+        if isinstance(g, dict) and g.get("kind") and "fraction" in g
     ]
     result = {
         "name": layout["name"],

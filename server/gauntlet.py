@@ -19,8 +19,9 @@ import time
 from datetime import datetime
 
 from server.state import game
+from server import log
 from server.constants import (
-    EDGE_SPAWN_POINTS, DEFAULT_SPAWN,
+    EDGE_SPAWN_POINTS, DEFAULT_SPAWN, STARTING_ROOM,
     ROOM_COLS, ROOM_ROWS,
     GAUNTLET_STARTING_HP, GAUNTLET_SPIRIT_JARS,
     GAUNTLET_HARD_HP_THRESHOLD, GAUNTLET_GOOD_HP_THRESHOLD,
@@ -87,6 +88,8 @@ class GauntletSession:
         self.easy_config = {}    # default values (floor for halving)
         self.entry_hp = 0
         self.entry_time = 0.0
+        self.saved_hp = 0          # player's real HP at gauntlet entry (restored on exit)
+        self.saved_spirit_jars = 0 # player's real spirit jars at entry (restored on exit)
         self.deaths = 0          # spirit jar revives this wave
         self.original_count = 0    # initial count (for full resets)
         self.consecutive_good = 0  # reset to max-hard after 2 in a row
@@ -235,7 +238,16 @@ def on_gauntlet_enter(player):
 
 
 def on_gauntlet_death(player, now, msgs):
-    """Player died in gauntlet — log as TOO HARD, advance to next wave."""
+    """Player died in gauntlet — count the death and auto-revive in the SAME wave.
+
+    Per the module docstring the gauntlet grants "infinite spirit jars": a death
+    consumes one jar exactly like normal play, but the budget is immediately
+    topped back up to GAUNTLET_SPIRIT_JARS so the player never runs out. The
+    death is tallied on the session (never reset here) and the player revives
+    in-place — monsters keep the damage already dealt, so the wave can still be
+    cleared. That surviving death count is what makes the room-clear handler log
+    the wave as TOO HARD (see on_gauntlet_room_cleared).
+    """
     from server.lifecycle import on_player_enter_room, send_room_enter
     from server.models import Avatar
 
@@ -244,57 +256,37 @@ def on_gauntlet_death(player, now, msgs):
         return
 
     session.deaths += 1
-    elapsed = time.monotonic() - session.entry_time
-    hp_lost = session.entry_hp  # lost all HP (dead)
+    room_id = player.death_room
 
-    _log_result(session, hp_lost, elapsed, "TOO HARD")
+    # Consume one spirit jar (as in normal play), then top the budget back up —
+    # the gauntlet grants an infinite supply so the player keeps reviving.
+    player.spirit_jar_count = max(0, player.spirit_jar_count - 1)
+    player.spirit_jar_count = GAUNTLET_SPIRIT_JARS
 
-    # Auto-adjust one random param
-    adjustment = _auto_adjust(session, "TOO HARD", msgs)
-
-    config = session.config
-    adj_str = f" | Next: {adjustment}" if adjustment else ""
-    result_text = (
-        f"Wave {session.wave + 1}: DIED | "
-        f"{config.get('kind', '?')} x{config.get('count', '?')} | "
-        f"Deaths: {session.deaths} | "
-        f"Time: {elapsed:.1f}s | "
-        f"[TOO HARD]{adj_str}"
-    )
-
-    # Clean up old room (monsters still ticking if not cleaned)
-    old_room = player.death_room
-    from server.lifecycle import on_player_leave_room
-    on_player_leave_room(old_room, msgs)
-
-    # Advance wave
-    session.wave += 1
-    next_room = _create_gauntlet_room(session)
-
-    # Revive player into the next room
+    # Revive in-place into the same wave at the west spawn (buffered from
+    # monsters). Do NOT leave the room — that would tear down the partially
+    # cleared monster list and let the wave respawn from scratch.
     player.dead = False
     player.death_time = 0.0
     player.death_room = None
     player.death_x = 0.0
     player.death_y = 0.0
     player.chose_respawn = False
-    player.room = next_room
+    player.room = room_id
     player.hp = min(GAUNTLET_STARTING_HP, player.max_hp)
     player.flags.discard("invulnerable")
-    player.spirit_jar_count = GAUNTLET_SPIRIT_JARS
     player.avatar = Avatar(1.0, 5.0, "right")
     player.command_queue.clear()
     player.active_attack = None
     player.last_damage_time = now  # brief invincibility
 
-    on_player_enter_room(next_room)
-
-    session.entry_hp = player.hp
-    session.entry_time = time.monotonic()
-    session.deaths = 0
-
+    on_player_enter_room(room_id)
     send_room_enter(player, msgs)
-    msgs.append(("send", player, {"type": "info", "text": result_text}))
+    msgs.append(("send", player, {
+        "type": "info",
+        "text": f"Spirit jar revive! Deaths this wave: {session.deaths}",
+    }))
+    log.event("GAUNTLET", f"{player.name} died in {room_id} (deaths: {session.deaths})")
 
 
 def on_gauntlet_room_cleared(player, room_id, msgs):
@@ -347,6 +339,16 @@ def on_gauntlet_exit(player_name):
     session = _sessions.pop(player_name, None)
     if not session:
         return
+    # Restore the player's pre-gauntlet HP + spirit jars (snapshotted at entry).
+    # HP is capped to the player's current max_hp; spirit jars restored exactly.
+    # Covers every exit path that funnels through here: /gauntlet stop, walking
+    # out to the overworld (lifecycle), and disconnect (mud_server). On disconnect
+    # the player is already removed from game.players, so the lookup no-ops — which
+    # is fine, the Player object is being discarded.
+    player = next((p for p in game.players.values() if p.name == player_name), None)
+    if player is not None:
+        player.hp = min(session.saved_hp, player.max_hp)
+        player.spirit_jar_count = session.saved_spirit_jars
     for i in range(session.wave + 2):
         rid = f"gauntlet_{player_name}_{i}"
         game.rooms.pop(rid, None)
@@ -444,6 +446,9 @@ def cmd_gauntlet(player, args, msgs):
     defaults = game.monster_stats[kind]
     session = GauntletSession(player.name, player.room)
     session.original_count = count
+    # Snapshot the player's real HP + spirit jars so we can restore them on exit.
+    session.saved_hp = player.hp
+    session.saved_spirit_jars = player.spirit_jar_count
     session.config = _max_hard_config(kind, count, defaults)
     _init_bounds(session, defaults)
     _sessions[player.name] = session
@@ -629,6 +634,10 @@ def _cmd_stop(player, msgs):
         on_player_leave_room(player.room, msgs)
 
     on_gauntlet_exit(player.name)
+    # The return room may have been torn down while we were in the gauntlet (e.g. a
+    # dungeon destroyed when its last player left). Fall back to the overworld spawn.
+    if return_room not in game.rooms:
+        return_room = STARTING_ROOM
     player.room = return_room
     spawn = game.rooms[return_room]["spawn_points"]["default"]
     player.avatar = Avatar(float(spawn[0]), float(spawn[1]), "down")
@@ -700,9 +709,21 @@ def cmd_gt(player, args, msgs):
             return
         session.config["kind"] = val_str
     elif key in INT_PARAMS:
-        session.config[key] = max(1, int(val_str))
+        try:
+            session.config[key] = max(1, int(val_str))
+        except ValueError:
+            msgs.append(("send", player, {
+                "type": "info", "text": f"Invalid integer for {key}: {val_str!r}",
+            }))
+            return
     elif key in FLOAT_PARAMS:
-        session.config[key] = round(float(val_str), 3)
+        try:
+            session.config[key] = round(float(val_str), 3)
+        except ValueError:
+            msgs.append(("send", player, {
+                "type": "info", "text": f"Invalid number for {key}: {val_str!r}",
+            }))
+            return
     else:
         msgs.append(("send", player, {"type": "info", "text": f"Unknown param: {key}"}))
         return
@@ -718,6 +739,25 @@ def cmd_gt(player, args, msgs):
     }))
 
 
+def _param_default(kind, key):
+    """Default value to halve a param toward.
+
+    Direct stats (hp, damage, walk_time, ...) live in game.monster_stats; rule-level
+    params (cooldown, warmup, range, drift, distance, damage_radius) live in the
+    monster's behavior rules instead. Returns None when the param has no known
+    default anywhere (so callers can report it instead of a bogus no-op).
+    """
+    stats = game.monster_stats.get(kind, {})
+    if key in stats:
+        return stats[key]
+    behavior = game.monster_behaviors.get(kind)
+    if behavior:
+        for rule in behavior.get("rules", []):
+            if key in rule:
+                return rule[key]
+    return None
+
+
 def _cmd_halve(player, session, parts, msgs):
     """Halve a parameter toward its default, or halve all."""
     if not parts:
@@ -728,7 +768,6 @@ def _cmd_halve(player, session, parts, msgs):
 
     target = parts[0].lower()
     kind = session.config.get("kind", "bat")
-    defaults = game.monster_stats.get(kind, {})
     config = session.config
 
     if target == "all":
@@ -737,6 +776,7 @@ def _cmd_halve(player, session, parts, msgs):
         keys = [target]
 
     changed = []
+    skipped = []
     for key in keys:
         if key == "count":
             old = config.get("count", 2)
@@ -747,7 +787,10 @@ def _cmd_halve(player, session, parts, msgs):
             old = config.get(key)
             if old is None:
                 continue
-            default = defaults.get(key, old)
+            default = _param_default(kind, key)
+            if default is None:
+                skipped.append(key)
+                continue
             new = round((old + default) / 2, 3)
             config[key] = new
             changed.append(f"{key}: {old}→{new}")
@@ -755,17 +798,22 @@ def _cmd_halve(player, session, parts, msgs):
             old = config.get(key)
             if old is None:
                 continue
-            default = defaults.get(key, old)
-            new = max(1, (old + default) // 2)
+            default = _param_default(kind, key)
+            if default is None:
+                skipped.append(key)
+                continue
+            new = max(1, (old + int(default)) // 2)
             config[key] = new
             changed.append(f"{key}: {old}→{new}")
 
+    text_parts = []
     if changed:
-        msgs.append(("send", player, {
-            "type": "info", "text": "Halved: " + ", ".join(changed),
-        }))
-    else:
-        msgs.append(("send", player, {"type": "info", "text": "Nothing to halve."}))
+        text_parts.append("Halved: " + ", ".join(changed))
+    if skipped:
+        text_parts.append("No default to halve toward: " + ", ".join(skipped))
+    if not text_parts:
+        text_parts.append("Nothing to halve.")
+    msgs.append(("send", player, {"type": "info", "text": " | ".join(text_parts)}))
 
 
 def _cmd_hard(player, session, parts, msgs):

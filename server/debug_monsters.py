@@ -1,6 +1,8 @@
 """Debug monster definitions and /debug_spawn command handler."""
 
+import asyncio
 import time
+import traceback
 
 from server import log
 from server.state import game
@@ -495,12 +497,36 @@ def _find_base_monster(kind: str) -> dict | None:
     return None
 
 
+def _log_task_exceptions(task: "asyncio.Task") -> None:
+    """Done-callback for fire-and-forget tasks: surface otherwise-swallowed exceptions.
+
+    Tasks launched via ``asyncio.ensure_future`` drop uncaught exceptions as an
+    "unretrieved task exception" unless something reads ``.exception()``. Attach
+    this so the failure is logged (with traceback) via the project logger instead
+    of vanishing silently.
+    """
+    try:
+        exc = task.exception()
+    except asyncio.CancelledError:
+        return
+    if exc is not None:
+        tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+        log.server(f"[DEBUG_SPAWN] fire-and-forget task failed: {exc!r}\n{tb}")
+
+
 async def handle_debug_spawn(player, args: str):
     """Handle /debug_spawn <kind> — register and spawn a test monster near the player.
 
     Also supports variant:<base_kind> and variant:<base_kind>:<tier> to create
     programmatic variants (recolored + stat-boosted).
     """
+    # This coroutine is dispatched via asyncio.ensure_future, so any uncaught
+    # exception would otherwise be swallowed as an unretrieved task exception.
+    # Attach a done-callback to the running task so failures get logged.
+    _task = asyncio.current_task()
+    if _task is not None:
+        _task.add_done_callback(_log_task_exceptions)
+
     args = args.strip()
     if not args:
         existing_custom = [k for k in game.monster_stats if k not in ("slime", "bat", "scorpion", "skeleton", "swamp_blob")]
@@ -560,8 +586,10 @@ async def handle_debug_spawn(player, args: str):
     tilemap = room["tilemap"]
     guards = game.guards.get(player.room, [])
     spawn_x, spawn_y = None, None
+    # avatar.x/y are floats; round to int tile coords before indexing the tilemap.
+    ax, ay = int(round(player.avatar.x)), int(round(player.avatar.y))
     for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1), (2, 0), (-2, 0), (0, 2), (0, -2)]:
-        nx, ny = player.avatar.x + dx, player.avatar.y + dy
+        nx, ny = ax + dx, ay + dy
         if 0 <= nx < ROOM_COLS and 0 <= ny < ROOM_ROWS:
             if game.is_walkable_tile(tilemap[ny][nx]):
                 if not any(g["x"] == nx and g["y"] == ny for g in guards):
@@ -588,6 +616,7 @@ async def handle_debug_spawn(player, args: str):
         "kind": kind,
         "x": spawn_x,
         "y": spawn_y,
+        "is_boss": monster.is_boss,
     }
     if kind in game.custom_sprites:
         spawn_msg["custom_sprites"] = {kind: game.custom_sprites[kind]}

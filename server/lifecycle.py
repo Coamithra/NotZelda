@@ -1,6 +1,5 @@
 """Room lifecycle — monster spawning, room enter/leave, room transitions."""
 
-import os
 import random
 import time
 
@@ -9,7 +8,7 @@ from server.state import game
 from server.constants import (
     ROOM_RESET_COOLDOWN, MONSTER_SPAWN_DELAY, MONSTER_SPAWN_STAGGER,
     ENTRY_DIR, EDGE_SPAWN_POINTS, DEFAULT_SPAWN,
-    ROOM_COLS, ROOM_ROWS, DOORWAY_TILES, STARTING_ROOM,
+    ROOM_COLS, ROOM_ROWS, DOORWAY_TILES, STARTING_ROOM, DEBUG_MODE,
 )
 from server.models import Monster
 from server.net import avatars_in_room, player_info
@@ -295,7 +294,7 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
     room = game.rooms.get(player.room)
     if not room:
         log.debug(f"[BUG] send_room_enter: room {player.room} missing for {player.name}! Redirecting to spawn.")
-        assert os.environ.get("DEBUG_MODE", "").lower() not in ("1", "true"), \
+        assert not DEBUG_MODE, \
             f"send_room_enter called with destroyed room {player.room} — this should never happen"
         player.room = STARTING_ROOM
         spawn = game.rooms[STARTING_ROOM]["spawn_points"]["default"]
@@ -311,7 +310,8 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
     for i, m in enumerate(get_room_monsters(player.room)):
         if m.alive:
             mdata = {"id": i, "kind": m.kind, "x": m.x, "y": m.y,
-                     "walk_time": m.walk_time, "seq": m.move_seq}
+                     "walk_time": m.walk_time, "seq": m.move_seq,
+                     "is_boss": m.is_boss}
             if m.width > 1:
                 mdata["width"] = m.width
             if m.height > 1:
@@ -528,7 +528,7 @@ def send_room_enter(player, msgs: list, exit_direction: str = None):
 
         # Minimap data — always sent (simplified for non-debug)
         entrance_col, entrance_row = inst.layout["entrance"]
-        is_debug = os.environ.get("DEBUG_MODE", "").lower() in ("1", "true")
+        is_debug = DEBUG_MODE
         cells = []
         for (c, r), asn in inst.cell_assignments.items():
             cell_info = {"c": c, "r": r, "res": asn["resolved"]}
@@ -736,7 +736,7 @@ def do_room_transition(player, exit_direction: str, msgs: list):
         # Defensive: verify destination room wasn't destroyed by dungeon teardown.
         if new_room_id not in game.rooms:
             log.debug(f"[BUG] Room {new_room_id} destroyed mid-transition for {player.name}! Redirecting to spawn.")
-            assert os.environ.get("DEBUG_MODE", "").lower() not in ("1", "true"), \
+            assert not DEBUG_MODE, \
                 f"Room {new_room_id} destroyed during do_room_transition — this should never happen"
             new_room_id = STARTING_ROOM
             player.room = STARTING_ROOM
