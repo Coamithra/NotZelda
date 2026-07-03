@@ -498,6 +498,24 @@
     z-index: 30;
     border: 2px solid #e6b422;
   }
+
+  /* ---------- Mobile landscape: overlay controls on canvas corners ---------- */
+  body.mobile.landscape #game-screen { height: 100vh; justify-content: center; }
+  body.mobile.landscape #mobile-chat-btn,
+  body.mobile.landscape #mobile-sword-btn {
+    background: rgba(255,255,255,0.1);
+    border-color: rgba(255,255,255,0.25);
+  }
+  body.mobile.landscape #joystick {
+    bottom: 12px;
+    left: 12px;
+    width: 132px;
+    height: 132px;
+  }
+  body.mobile.landscape #mobile-sword-btn { bottom: 72px;  right: 12px; width: 56px; height: 56px; font-size: 24px; }
+  body.mobile.landscape #mobile-chat-btn  { bottom: 12px;  right: 12px; width: 48px; height: 48px; font-size: 22px; }
+  body.mobile.landscape #debug-btn        { bottom: 12px;  right: 76px; width: 32px; height: 32px; font-size: 16px; }
+  body.mobile.landscape #chat-bar.focused { max-width: 600px; left: 50%; transform: translateX(-50%); }
 </style>
 </head>
 <body>
@@ -594,8 +612,12 @@ if (G.ui.isMobile) {
 function scaleForMobile() {
   if (!G.ui.isMobile) return;
   const gameCanvas = document.getElementById("game");
+  const landscape = window.innerWidth > window.innerHeight;
+  document.body.classList.toggle("landscape", landscape);
   const vw = window.innerWidth;
-  const vh = window.innerHeight - 180;
+  // Landscape overlays controls on canvas corners, so no vertical reserve.
+  // Portrait keeps controls below the canvas (180px reserve).
+  const vh = landscape ? window.innerHeight : window.innerHeight - 180;
   const scaleX = vw / CW;
   const scaleY = vh / CH;
   const s = Math.min(scaleX, scaleY);
@@ -605,6 +627,7 @@ function scaleForMobile() {
 
 if (G.ui.isMobile) {
   window.addEventListener("resize", scaleForMobile);
+  window.addEventListener("orientationchange", scaleForMobile);
   scaleForMobile();
 }
 
