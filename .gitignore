@@ -16,3 +16,12 @@ tmp_prompts/
 desktop.ini
 .trees/
 /models/
+log_*.txt
+event_log_live.txt
+gauntlet_*.txt
+guard.txt
+audio/**/peaks/
+audio/sfx/_variants/
+experiments/
+tools/artwork_preview/
+tools/*.avi
