@@ -1032,8 +1032,10 @@ function renderSpeechBubbles() {
     const alpha = timeLeft < 500 ? timeLeft / 500 : 1;
     G.ui.ctx.globalAlpha = alpha;
 
-    G.ui.ctx.font = "11px monospace";
-    const maxWidth = 200;
+    const mob = G.ui.isMobile;
+    const fontPx = mob ? 17 : 11;
+    G.ui.ctx.font = fontPx + "px monospace";
+    const maxWidth = mob ? 280 : 200;
     const maxLines = 3;
     const words = bubble.text.split(" ");
     const lines = [];
@@ -1061,8 +1063,11 @@ function renderSpeechBubbles() {
       }
     }
 
-    const lineHeight = 14;
-    const pad = 6;
+    const lineHeight = mob ? 21 : 14;
+    const pad = mob ? 9 : 6;
+    const radius = mob ? 9 : 6;
+    const tailHalf = mob ? 8 : 5;
+    const tailDrop = mob ? 9 : 6;
     const bw = Math.min(maxWidth, Math.max(...lines.map(l => G.ui.ctx.measureText(l).width))) + pad * 2;
     const bh = lines.length * lineHeight + pad * 2;
     const bx = px - bw / 2;
@@ -1070,24 +1075,25 @@ function renderSpeechBubbles() {
 
     G.ui.ctx.fillStyle = "rgba(255,255,255,0.95)";
     G.ui.ctx.beginPath();
-    roundRect(G.ui.ctx, bx, by, bw, bh, 6);
+    roundRect(G.ui.ctx, bx, by, bw, bh, radius);
     G.ui.ctx.fill();
 
     G.ui.ctx.beginPath();
-    G.ui.ctx.moveTo(px - 5, by + bh);
-    G.ui.ctx.lineTo(px, by + bh + 6);
-    G.ui.ctx.lineTo(px + 5, by + bh);
+    G.ui.ctx.moveTo(px - tailHalf, by + bh);
+    G.ui.ctx.lineTo(px, by + bh + tailDrop);
+    G.ui.ctx.lineTo(px + tailHalf, by + bh);
     G.ui.ctx.fill();
 
     G.ui.ctx.strokeStyle = "rgba(0,0,0,0.2)";
     G.ui.ctx.lineWidth = 1;
     G.ui.ctx.beginPath();
-    roundRect(G.ui.ctx, bx, by, bw, bh, 6);
+    roundRect(G.ui.ctx, bx, by, bw, bh, radius);
     G.ui.ctx.stroke();
 
     G.ui.ctx.fillStyle = "#111";
+    const textBaseline = mob ? 15 : 10;
     for (let i = 0; i < lines.length; i++) {
-      G.ui.ctx.fillText(lines[i], bx + pad, by + pad + 10 + i * lineHeight);
+      G.ui.ctx.fillText(lines[i], bx + pad, by + pad + textBaseline + i * lineHeight);
     }
 
     G.ui.ctx.globalAlpha = 1;
@@ -1111,39 +1117,44 @@ function renderNpcListening() {
     const px = tileCenterX(guard.x);
     const py = guard.y * TS - 16;
 
-    const iw = 14, ih = 11;
+    const mob = G.ui.isMobile;
+    const iw = mob ? 22 : 14, ih = mob ? 17 : 11;
     const ix = px - iw / 2;
     const iy = py - ih - 10 + bob;
+    const radius = mob ? 5 : 3;
+    const tailHalf = mob ? 3 : 2;
+    const tailDrop = mob ? 5 : 3;
+    const dotR = mob ? 2.25 : 1.5;
+    const dotSpacing = mob ? 6 : 4;
 
     G.ui.ctx.globalAlpha = alpha;
 
     // Bubble body
     G.ui.ctx.fillStyle = "rgba(255,255,255,0.95)";
     G.ui.ctx.beginPath();
-    roundRect(G.ui.ctx, ix, iy, iw, ih, 3);
+    roundRect(G.ui.ctx, ix, iy, iw, ih, radius);
     G.ui.ctx.fill();
 
     // Tail
     G.ui.ctx.beginPath();
-    G.ui.ctx.moveTo(px - 2, iy + ih);
-    G.ui.ctx.lineTo(px, iy + ih + 3);
-    G.ui.ctx.lineTo(px + 2, iy + ih);
+    G.ui.ctx.moveTo(px - tailHalf, iy + ih);
+    G.ui.ctx.lineTo(px, iy + ih + tailDrop);
+    G.ui.ctx.lineTo(px + tailHalf, iy + ih);
     G.ui.ctx.fill();
 
     // Border
     G.ui.ctx.strokeStyle = "rgba(0,0,0,0.25)";
     G.ui.ctx.lineWidth = 1;
     G.ui.ctx.beginPath();
-    roundRect(G.ui.ctx, ix, iy, iw, ih, 3);
+    roundRect(G.ui.ctx, ix, iy, iw, ih, radius);
     G.ui.ctx.stroke();
 
     // Three dots
     G.ui.ctx.fillStyle = "rgba(100,100,100,0.8)";
-    const dotR = 1.5;
     const dotY = iy + ih / 2;
     for (let d = -1; d <= 1; d++) {
       G.ui.ctx.beginPath();
-      G.ui.ctx.arc(px + d * 4, dotY, dotR, 0, Math.PI * 2);
+      G.ui.ctx.arc(px + d * dotSpacing, dotY, dotR, 0, Math.PI * 2);
       G.ui.ctx.fill();
     }
 
@@ -1169,36 +1180,41 @@ function renderNpcThinking() {
     const dotCount = (Math.floor((now - startTime) / 500) % 3) + 1;
     const text = ".".repeat(dotCount);
 
-    G.ui.ctx.font = "bold 13px monospace";
-    const pad = 6;
+    const mob = G.ui.isMobile;
+    const fontPx = mob ? 20 : 13;
+    G.ui.ctx.font = "bold " + fontPx + "px monospace";
+    const pad = mob ? 9 : 6;
+    const radius = mob ? 9 : 6;
+    const tailHalf = mob ? 8 : 5;
+    const tailDrop = mob ? 9 : 6;
     const bw = G.ui.ctx.measureText("...").width + pad * 2;
-    const bh = 14 + pad * 2;
+    const bh = (mob ? 21 : 14) + pad * 2;
     const bx = px - bw / 2;
     const by = py - bh - 8;
 
     // Bubble background
     G.ui.ctx.fillStyle = "rgba(255,255,255,0.9)";
     G.ui.ctx.beginPath();
-    roundRect(G.ui.ctx, bx, by, bw, bh, 6);
+    roundRect(G.ui.ctx, bx, by, bw, bh, radius);
     G.ui.ctx.fill();
 
     // Tail
     G.ui.ctx.beginPath();
-    G.ui.ctx.moveTo(px - 5, by + bh);
-    G.ui.ctx.lineTo(px, by + bh + 6);
-    G.ui.ctx.lineTo(px + 5, by + bh);
+    G.ui.ctx.moveTo(px - tailHalf, by + bh);
+    G.ui.ctx.lineTo(px, by + bh + tailDrop);
+    G.ui.ctx.lineTo(px + tailHalf, by + bh);
     G.ui.ctx.fill();
 
     // Border
     G.ui.ctx.strokeStyle = "rgba(0,0,0,0.2)";
     G.ui.ctx.lineWidth = 1;
     G.ui.ctx.beginPath();
-    roundRect(G.ui.ctx, bx, by, bw, bh, 6);
+    roundRect(G.ui.ctx, bx, by, bw, bh, radius);
     G.ui.ctx.stroke();
 
     // Dots
     G.ui.ctx.fillStyle = "#666";
-    G.ui.ctx.fillText(text, bx + pad, by + pad + 11);
+    G.ui.ctx.fillText(text, bx + pad, by + pad + (mob ? 17 : 11));
   }
 }
 
