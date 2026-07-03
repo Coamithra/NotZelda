@@ -5,6 +5,7 @@ import json
 
 import websockets
 
+from server.constants import DEBUG_MODE
 from server.state import game
 
 
@@ -75,7 +76,11 @@ def broadcast_debug(text: str):
     """Send a debug_log message to all connected players (fire-and-forget).
 
     Safe to call from synchronous code — schedules sends on the event loop.
+    Gated on DEBUG_MODE (mirrors log.py) so production players never receive
+    internal debug telemetry.
     """
+    if not DEBUG_MODE:
+        return
     msg = {"type": "debug_log", "text": text}
     for p in list(game.players.values()):
         task = asyncio.ensure_future(_safe_debug_send(p, msg))

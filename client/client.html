@@ -367,13 +367,12 @@
   }
   #draw-all-section summary:hover { color: #8b949e; }
 
-  /* ---------- Mobile D-pad ---------- */
-  #dpad {
+  /* ---------- Mobile Joystick ---------- */
+  #joystick {
     display: none;
     position: fixed;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
+    bottom: 30px;
+    left: 30px;
     width: 150px;
     height: 150px;
     z-index: 20;
@@ -381,30 +380,47 @@
     user-select: none;
     -webkit-user-select: none;
   }
-  .dpad-btn {
+  #joystick-base {
     position: absolute;
-    width: 50px;
-    height: 50px;
-    background: rgba(255,255,255,0.15);
-    border: 2px solid rgba(255,255,255,0.3);
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 22px;
-    color: rgba(255,255,255,0.7);
-    touch-action: none;
-    user-select: none;
-    -webkit-user-select: none;
+    inset: 0;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 50% 50%, rgba(230,180,34,0.06) 0%, rgba(230,180,34,0.02) 55%, transparent 70%),
+      rgba(0,0,0,0.35);
+    border: 2px solid rgba(230,180,34,0.45);
+    box-shadow:
+      inset 0 0 18px rgba(230,180,34,0.18),
+      0 0 12px rgba(0,0,0,0.4);
   }
-  .dpad-btn:active, .dpad-btn.active {
-    background: rgba(230,180,34,0.4);
-    border-color: #e6b422;
+  #joystick-base::before,
+  #joystick-base::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    border: 1px dashed rgba(230,180,34,0.22);
+    pointer-events: none;
   }
-  .dpad-up    { top: 0;   left: 50px; }
-  .dpad-down  { bottom: 0; left: 50px; }
-  .dpad-left  { top: 50px; left: 0; }
-  .dpad-right { top: 50px; right: 0; }
+  #joystick-base::before { inset: 12%; }
+  #joystick-base::after  { inset: 30%; border-style: solid; border-color: rgba(230,180,34,0.15); }
+  #joystick-knob {
+    position: absolute;
+    width: 60px;
+    height: 60px;
+    left: 50%;
+    top: 50%;
+    margin: -30px 0 0 -30px;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 35% 30%, rgba(255,220,120,0.9) 0%, rgba(230,180,34,0.85) 45%, rgba(140,100,10,0.9) 100%);
+    border: 2px solid rgba(255,230,150,0.75);
+    box-shadow:
+      0 4px 10px rgba(0,0,0,0.5),
+      inset 0 -6px 10px rgba(0,0,0,0.25),
+      0 0 14px rgba(230,180,34,0.35);
+    transition: transform 0.12s ease-out;
+    pointer-events: none;
+  }
+  #joystick.active #joystick-knob { transition: none; }
 
   /* ---------- Mobile action buttons ---------- */
   #mobile-chat-btn, #mobile-sword-btn {
@@ -453,8 +469,23 @@
   }
 
   /* ---------- Mobile overrides ---------- */
-  body.mobile #chat-log { display: none; }
-  body.mobile #dpad { display: block; }
+  body.mobile #chat-log {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 90px;
+    background: rgba(13,17,23,0.55);
+    border: none;
+    border-bottom: 1px solid rgba(48,54,61,0.6);
+    font-size: 0.75rem;
+    color: #c9d1d9;
+    text-shadow: 0 0 3px #000, 0 1px 2px #000;
+    z-index: 15;
+    pointer-events: auto;
+  }
+  body.mobile #joystick { display: block; }
   body.mobile #mobile-chat-btn, body.mobile #mobile-sword-btn { display: flex; align-items: center; justify-content: center; }
   body.mobile #debug-btn { bottom: 20px; right: 20px; width: 36px; height: 36px; font-size: 18px; }
   body.mobile #chat-bar { display: none; }
@@ -553,11 +584,9 @@
 </div>
 
 <!-- Mobile controls -->
-<div id="dpad">
-  <div class="dpad-btn dpad-up" data-dir="up">&#9650;</div>
-  <div class="dpad-btn dpad-down" data-dir="down">&#9660;</div>
-  <div class="dpad-btn dpad-left" data-dir="left">&#9664;</div>
-  <div class="dpad-btn dpad-right" data-dir="right">&#9654;</div>
+<div id="joystick">
+  <div id="joystick-base"></div>
+  <div id="joystick-knob"></div>
 </div>
 <button id="mobile-sword-btn">&#9876;</button>
 <button id="mobile-chat-btn">&#128172;</button>
@@ -987,6 +1016,16 @@ function gameLoop(timestamp) {
   const frozen = G.fx.hitPause && Date.now() < G.fx.hitPause;
 
   if (!frozen) {
+    // Real frame delta (ms), clamped so tab-switch/hit-pause gaps don't jump.
+    // dtScale == 1.0 at the 60Hz reference, so all scaled updates below are
+    // byte-for-byte identical to the old per-frame behavior at 60Hz.
+    const _nowFrame = performance.now();
+    const frameDt = Math.min(Math.max(_nowFrame - (G.ui.lastFrameTime || _nowFrame), 4), 100);
+    G.ui.lastFrameTime = _nowFrame;
+    const dtScale = frameDt / 16.67;
+    const corrKeep = Math.pow(1 - CORRECTION_RATE, dtScale);
+    const monKeep = Math.pow(1 - MONSTER_CORRECTION_RATE, dtScale);
+
     // Animation timer
     G.player.animTimer++;
     if (G.player.animTimer % 10 === 0) {
@@ -1004,10 +1043,10 @@ function gameLoop(timestamp) {
     updateAttacks();
     updateDyingMonsters();
     updateDyingOtherPlayers();
-    updateProjectiles();
+    updateProjectiles(frameDt);
     updateAttackEffects();
     updateItemPickups();
-    updateParticles(16.67); // ~60fps dt
+    updateParticles(frameDt);
 
     // Toggle monster hop frame every ~500ms
     G.room.monsterHopTimer++;
@@ -1033,8 +1072,8 @@ function gameLoop(timestamp) {
     }
     // Decay correction offset (smooth server reconciliation)
     const co = G.player.correctionOffset;
-    co.x *= (1 - CORRECTION_RATE);
-    co.y *= (1 - CORRECTION_RATE);
+    co.x *= corrKeep;
+    co.y *= corrKeep;
     if (Math.abs(co.x) < 0.005) co.x = 0;
     if (Math.abs(co.y) < 0.005) co.y = 0;
     // Compute display position from canonical position + knockback offset + correction
@@ -1125,12 +1164,14 @@ function gameLoop(timestamp) {
 
         switch (a.type) {
           case "walk": {
-            // Clamp: interpProgress must not lead trueProgress
-            const trueProgress = Math.min(elapsed / a.duration, 1.0);
-            const clampedProgress = Math.min(progress, trueProgress);
-            m.displayX = a.fromX + (a.toX - a.fromX) * clampedProgress;
-            m.displayY = a.fromY + (a.toY - a.fromY) * clampedProgress;
-            m.walkHop = clampedProgress >= 0.5 ? 1 : 0;
+            // Use effectiveDuration-based progress directly so dead reckoning
+            // (RTT/2 fast-forward baked into effectiveDuration) actually takes effect.
+            // The prior Math.min(progress, trueProgress) clamp pinned progress to the
+            // full-duration curve, silently neutralizing dead reckoning and — combined
+            // with the fast-forwarded correction offset — producing a backward jerk.
+            m.displayX = a.fromX + (a.toX - a.fromX) * progress;
+            m.displayY = a.fromY + (a.toY - a.fromY) * progress;
+            m.walkHop = progress >= 0.5 ? 1 : 0;
             break;
           }
           case "knockback": {
@@ -1159,8 +1200,8 @@ function gameLoop(timestamp) {
       } else {
         // No action: decay correction offset toward canonical position
         const co = m.correctionOffset;
-        co.x *= (1 - MONSTER_CORRECTION_RATE);
-        co.y *= (1 - MONSTER_CORRECTION_RATE);
+        co.x *= monKeep;
+        co.y *= monKeep;
         if (Math.abs(co.x) < 0.005) co.x = 0;
         if (Math.abs(co.y) < 0.005) co.y = 0;
         m.displayX = m.x + co.x;
@@ -1170,8 +1211,8 @@ function gameLoop(timestamp) {
       // Correction offset for walk actions (smooth visual transition)
       if (m.action && m.action.type === "walk") {
         const co = m.correctionOffset;
-        co.x *= (1 - MONSTER_CORRECTION_RATE);
-        co.y *= (1 - MONSTER_CORRECTION_RATE);
+        co.x *= monKeep;
+        co.y *= monKeep;
         if (Math.abs(co.x) < 0.005) co.x = 0;
         if (Math.abs(co.y) < 0.005) co.y = 0;
         m.displayX += co.x;

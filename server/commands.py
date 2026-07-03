@@ -9,6 +9,7 @@ from server.constants import (
     DIRECTIONS, ROOM_COLS, ROOM_ROWS, DOORWAY_TILES,
     ATTACK_COOLDOWN, TICK_INTERVAL, HEART_DROP_CHANCE, HEART_RESTORE_HP,
     MAX_MOVE_PER_UPDATE, PLAYER_SPEED, DT_CLAMP, MAX_INPUTS_PER_TICK,
+    MAX_COMMANDS_PER_TICK, MAX_COMMAND_QUEUE,
     COLLISION_GRACE_PERIOD, ITEM_PICKUP_FREEZE_DURATION,
     SEAL_FRAGMENT_HP_BONUS, SWORD_PERP_WIDTH, PLAYER_COLLISION_MARGIN,
     KNOCKBACK_DURATION, SWORD_DAMAGE, KNOCKBACK_TILES,
@@ -27,9 +28,27 @@ from server.constants import GHOST_ELIGIBLE
 
 
 def process_player_commands(player, now, msgs):
-    """Drain and process all queued commands for a player."""
-    while player.command_queue:
-        cmd_type, data = player.command_queue.popleft()
+    """Drain and process queued commands for a player.
+
+    Caps work per tick (``MAX_COMMANDS_PER_TICK``) so a flooding client can't
+    claim N× the per-frame movement/attack budget in a single tick, and bounds
+    the backlog (``MAX_COMMAND_QUEUE``) so the queue can't grow unboundedly
+    between ticks.
+    """
+    queue = player.command_queue
+    # Drop the oldest excess so a flood can't grow the backlog without limit.
+    dropped = 0
+    while len(queue) > MAX_COMMAND_QUEUE:
+        queue.popleft()
+        dropped += 1
+    if dropped:
+        log.debug(f"[FLOOD] {player.name}: dropped {dropped} queued command(s) "
+                  f"(backlog > {MAX_COMMAND_QUEUE})")
+
+    processed = 0
+    while queue and processed < MAX_COMMANDS_PER_TICK:
+        cmd_type, data = queue.popleft()
+        processed += 1
         if cmd_type == "player_input":
             _process_player_input(player, data, now, msgs)
         elif cmd_type == "player_state":
@@ -340,12 +359,14 @@ def _process_player_state(player, data, now, msgs):
     # Dance state from client frame
     a.dancing = bool(data.get("dancing", False))
 
-    # Attack edge detection — rising edge triggers the attack
-    client_attacking = data.get("attacking")
-    if client_attacking and not a.last_reported_attacking:
-        _initiate_attack(player, client_attacking, now, msgs)
+    # Attack edge detection — rising edge triggers the attack.
+    # Only a dict payload counts as an attack; a truthy non-dict (e.g. `true`)
+    # is ignored rather than raising AttributeError in _initiate_attack.
+    is_attacking = isinstance(data.get("attacking"), dict)
+    if is_attacking and not a.last_reported_attacking:
+        _initiate_attack(player, data["attacking"], now, msgs)
         a.last_reported_attacking = True
-    elif not client_attacking and a.last_reported_attacking:
+    elif not is_attacking and a.last_reported_attacking:
         a.last_reported_attacking = False
 
     # Edge detection (room transition)
@@ -985,12 +1006,17 @@ def _initiate_attack(player, attack_data, now, msgs):
         a.direction = direction
 
     # Use client-supplied position for precise hitbox placement (the server
-    # may not have the latest position yet)
+    # may not have the latest position yet). Harden types (non-numeric must
+    # not raise) and clamp the anchor to near the server-side avatar so a
+    # cheating client can't hit monsters from across the room — a legit anchor
+    # is the client's own position, which is already within MAX_MOVE_PER_UPDATE
+    # of the avatar; allow a small epsilon of slop on top of that.
     anchor_x = attack_data.get("x")
     anchor_y = attack_data.get("y")
-    if anchor_x is not None and anchor_y is not None:
-        anchor_x = float(anchor_x)
-        anchor_y = float(anchor_y)
+    if isinstance(anchor_x, (int, float)) and isinstance(anchor_y, (int, float)):
+        max_off = MAX_MOVE_PER_UPDATE + 0.1
+        anchor_x = min(max(float(anchor_x), a.x - max_off), a.x + max_off)
+        anchor_y = min(max(float(anchor_y), a.y - max_off), a.y + max_off)
     else:
         anchor_x = a.x
         anchor_y = a.y
@@ -1017,7 +1043,12 @@ def _initiate_attack(player, attack_data, now, msgs):
 
 def _process_chat(player, data, msgs):
     """Handle chat message — slash commands and normal chat."""
-    text = data.get("text", "").strip()
+    text = data.get("text", "")
+    if not isinstance(text, str):
+        return
+    # Cap length (mirrors login name [:20] / description [:80]) so a client
+    # can't broadcast/log/feed-to-LLM a multi-KB frame.
+    text = text.strip()[:300]
     if not text:
         return
 
@@ -1204,6 +1235,9 @@ _CONSTANTS_CONSUMERS = [
     "server.commands", "server.combat", "server.lifecycle",
     "server.dungeons", "server.behavior_engine", "server.models",
     "server.net", "mud_server",
+    # from-import tweakable constants too: npc_chat (NPC_*/GUARD_SPAWN_*),
+    # gauntlet (GAUNTLET_*), variants (VARIANT_MIN_*).
+    "server.npc_chat", "server.gauntlet", "server.variants",
 ]
 
 # Server constants exposed to the tweak console (name -> {min, max, step, type, group, label})
@@ -1225,7 +1259,6 @@ TWEAKABLE_SERVER_CONSTANTS = {
     "SEAL_FRAGMENT_HP_BONUS":{"group": "HP & Items", "label": "Seal Fragment HP Bonus", "min": 0, "max": 10, "step": 1, "type": "int"},
     "ITEM_PICKUP_FREEZE_DURATION": {"group": "HP & Items", "label": "Pickup Freeze (s)", "min": 0, "max": 10, "step": 0.5},
     # Monsters
-    "WALK_TIME":             {"group": "Monsters (Global)", "label": "Default Walk Time (s)", "min": 0.05, "max": 2, "step": 0.05},
     "ROOM_RESET_COOLDOWN":   {"group": "Monsters (Global)", "label": "Room Reset Cooldown (s)", "min": 0, "max": 600, "step": 30},
     "PROJECTILE_TICK_RATE":  {"group": "Monsters (Global)", "label": "Projectile Tick Rate (s)", "min": 0.01, "max": 1, "step": 0.05},
     "MONSTER_SPAWN_DELAY":   {"group": "Monsters (Global)", "label": "Spawn Delay (s)", "min": 0, "max": 5, "step": 0.25},

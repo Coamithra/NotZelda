@@ -47,9 +47,6 @@ ROOM_ROWS = 11
 # ---------------------------------------------------------------------------
 
 STARTING_ROOM = "town_square"
-WALK_TIME = 0.250          # seconds — monster tile-to-tile walk duration (kept for monster walks)
-CANCEL_TIME = 0.090        # seconds — legacy (kept for backward compat)
-LATENCY_COMP = 0.066       # seconds — legacy (kept for backward compat)
 ATTACK_COOLDOWN = 0.27  # 1.5 * SWORD_ACTIVE_DURATION (0.18) — gap = 0.5 * active
 SWORD_ACTIVE_DURATION = 0.18
 SWORD_DAMAGE = 1        # HP per sword hit on monsters
@@ -66,6 +63,13 @@ MAX_MOVE_PER_UPDATE = 1.25      # max distance per player_state frame (tiles, Ma
 PLAYER_SPEED = 4.0              # tiles/sec (server-authoritative movement simulation)
 DT_CLAMP = 0.05                 # max dt per input frame (50ms — matches client clamp)
 MAX_INPUTS_PER_TICK = 5          # anti-spam: max inputs processed per player per tick
+# anti-spam: cap queued commands drained per player per tick so a flooding client
+# can't get N× the per-frame movement/attack budget in one tick. Generous enough
+# for a legit input burst + a couple of state frames + chat/backlog.
+MAX_COMMANDS_PER_TICK = 10
+# hard bound on the per-player command backlog; excess (oldest) is dropped so the
+# queue can't grow unboundedly between ticks under a flood.
+MAX_COMMAND_QUEUE = 100
 HEART_RESTORE_HP = 2
 PLAYER_MAX_HP = 6
 PLAYER_RESPAWN_DELAY = 5.5

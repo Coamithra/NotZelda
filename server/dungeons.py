@@ -461,7 +461,6 @@ _INWARD_FROM_DOORWAY = {
 }
 
 TRAP_ROOM_CHANCE = 1 / 3
-TRAP_ROOM_MIN_MONSTERS = 3
 _MONSTER_MIN_SPACING = 2  # minimum Manhattan distance between dynamically placed monsters
 
 
@@ -827,6 +826,14 @@ def create_dungeon(type_id) -> DungeonInstance | None:
     permanent_entries = [e for e in room_library.real_entries if e.permanent]
     custom_entries = [e for e in room_library.real_entries if not e.permanent]
     has_placeholders = room_library.placeholder_count > 0
+
+    # Precreated cells (including the always-precreated entrance) require at least
+    # one permanent entry. If the library has only custom entries, there is no
+    # precreated pool to fall back to — bail like the real_count == 0 guard above
+    # rather than divide by zero on permanent_entries below.
+    if not permanent_entries:
+        log.debug(f"[DUNGEON] No permanent room library entries for type '{type_id}', cannot create dungeon")
+        return None
     max_custom_slots = 15
 
     random.shuffle(permanent_entries)
