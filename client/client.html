@@ -453,7 +453,22 @@
   }
 
   /* ---------- Mobile overrides ---------- */
-  body.mobile #chat-log { display: none; }
+  body.mobile #chat-log {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 90px;
+    background: rgba(13,17,23,0.55);
+    border: none;
+    border-bottom: 1px solid rgba(48,54,61,0.6);
+    font-size: 0.75rem;
+    color: #c9d1d9;
+    text-shadow: 0 0 3px #000, 0 1px 2px #000;
+    z-index: 15;
+    pointer-events: auto;
+  }
   body.mobile #dpad { display: block; }
   body.mobile #mobile-chat-btn, body.mobile #mobile-sword-btn { display: flex; align-items: center; justify-content: center; }
   body.mobile #debug-btn { bottom: 20px; right: 20px; width: 36px; height: 36px; font-size: 18px; }
